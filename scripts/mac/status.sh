@@ -32,6 +32,11 @@ if [[ "${STORAGE_TYPE:-hybrid}" == "hybrid" || "${STORAGE_TYPE}" == "ssd-data" ]
   else
     echo "data symlink: BOZUK ($(ls -la "$REMOTE_DIR/data" 2>/dev/null || echo yok))"
   fi
+  if [[ -f /mnt/ssd/.docker-data-root ]]; then
+    echo "--- docker root ---"
+    docker info 2>/dev/null | awk -F': ' '/Docker Root Dir/{print "Docker Root:", $2}'
+    du -sh /mnt/ssd/docker 2>/dev/null || true
+  fi
 fi
 echo "--- health ---"
 REMOTE_DIR="$REMOTE_DIR" bash "$REMOTE_DIR/scripts/pi/health-check.sh" && echo "health: OK" || echo "health: FAIL"

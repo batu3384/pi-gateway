@@ -33,6 +33,10 @@ run_check() {
 if [[ "${STORAGE_TYPE:-hybrid}" == "hybrid" || "${STORAGE_TYPE}" == "ssd-data" ]]; then
   run_check "data-ssd-symlink" bash -c \
     "[[ -L '${REMOTE_DIR}/data' ]] && [[ \"\$(readlink -f '${REMOTE_DIR}/data')\" == '/mnt/ssd/pi-gateway-data' ]]"
+  if [[ -f /mnt/ssd/.docker-data-root ]]; then
+    run_check "docker-ssd-root" bash -c \
+      "docker info 2>/dev/null | grep -q 'Docker Root Dir: ${DOCKER_SSD_ROOT:-/mnt/ssd/docker}'"
+  fi
 fi
 
 run_check "unbound-5335" dig +time=3 +tries=1 @127.0.0.1 -p 5335 cloudflare.com A

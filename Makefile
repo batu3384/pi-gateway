@@ -1,4 +1,4 @@
-.PHONY: setup validate render deploy deploy-fast install discover mac-dns harden status dns-test test-remote backup-pull backup-cron verify-data pi-access telegram-menu firewall morning-test sync-configs
+.PHONY: setup validate render deploy deploy-fast install discover mac-dns harden status dns-test test-remote backup-pull backup-cron verify-data pi-access telegram-menu firewall morning-test sync-configs docker-ssd
 
 setup:
 	@cp -n .env.example .env 2>/dev/null || true
@@ -78,3 +78,7 @@ backup-cron:
 
 firewall:
 	@ssh "$${PI_USER:-batu}@$${PI_STATIC_IP:-192.168.1.112}" 'R=/home/$${USER:-batu}/pi-gateway; REMOTE_DIR="$$R" bash "$$R/scripts/pi/setup-firewall.sh"'
+
+docker-ssd:
+	@scp scripts/pi/setup-docker-ssd.sh $${PI_USER:-batu}@$${PI_STATIC_IP:-192.168.1.112}:/home/$${PI_USER:-batu}/pi-gateway/scripts/pi/setup-docker-ssd.sh
+	@ssh "$${PI_USER:-batu}@$${PI_STATIC_IP:-192.168.1.112}" 'R=/home/$${USER:-batu}/pi-gateway; REMOTE_DIR="$$R" bash "$$R/scripts/pi/setup-docker-ssd.sh"'

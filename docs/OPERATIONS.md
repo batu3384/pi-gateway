@@ -79,14 +79,15 @@ ssh pi 'REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/setup-firewall.sh'
 
 ## Disk dolu
 
-SD (`/`) veya SSD (`/mnt/ssd`) %80 üzerindeyse Telegram uyarısı gelir.
+SD (`/`) boot + OS; **Docker imajlari** hybrid modda `/mnt/ssd/docker` uzerinde olmalidir.
 
 ```bash
 df -h / /mnt/ssd
-docker system df
+docker info | grep "Docker Root Dir"
+make docker-ssd   # ilk tasima (bir kez)
 ```
 
-`docker system prune` (dikkatli). Restic `forget --prune` günlük çalışır.
+`docker system prune` (dikkatli). Restic `forget --prune` gunluk calisir.
 
 ## Bildirimler
 

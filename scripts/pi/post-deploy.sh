@@ -77,6 +77,12 @@ if [[ "${ENABLE_UFW:-true}" == "true" ]]; then
   run_step_optional "UFW firewall" "$SCRIPT_DIR/setup-firewall.sh"
 fi
 
+if [[ "${STORAGE_TYPE:-hybrid}" == "hybrid" || "${STORAGE_TYPE}" == "ssd-data" ]]; then
+  if [[ "${ENABLE_DOCKER_SSD:-true}" == "true" ]] && [[ ! -f /mnt/ssd/.docker-data-root ]]; then
+    run_step_optional "Docker SSD tasima" "$SCRIPT_DIR/setup-docker-ssd.sh"
+  fi
+fi
+
 if [[ "${ENABLE_N8N:-true}" == "true" ]]; then
   run_step_optional "Sabah ozeti timer" "$SCRIPT_DIR/setup-morning-timer.sh"
   run_step_optional "n8n workflow (opsiyonel)" "$SCRIPT_DIR/setup-n8n-morning.sh"
