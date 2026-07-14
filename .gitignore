@@ -1,5 +1,6 @@
 .env
 .env.bak
+.DS_Store
 data/
 config/adguard/AdGuardHome.yaml
 config/caddy/Caddyfile

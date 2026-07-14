@@ -29,7 +29,9 @@ STAMP="$(date +%Y%m%d-%H%M%S)"
 rsync -avz \
   --exclude '.env' \
   --exclude 'data/**' \
+  --exclude 'homepage/logs/**' \
+  --exclude 'crowdsec/bouncer/local_api_credentials.yaml' \
   "$PI_USER@$PI_HOST:$REMOTE_DIR/config/" \
-  "$LOCAL_DEST/config-snapshots/$STAMP/"
+  "$LOCAL_DEST/config-snapshots/$STAMP/" || log "WARN: config snapshot kismi basarisiz (restic OK)"
 
 log "Tamamlandi: $LOCAL_DEST"
