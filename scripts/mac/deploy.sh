@@ -12,6 +12,7 @@ REMOTE_DIR="${REMOTE_DIR:-/home/$PI_USER/pi-gateway}"
 
 [[ -n "$PI_HOST" ]] || die "PI_HOST required"
 
+"$SCRIPT_DIR/render-config.sh"
 "$SCRIPT_DIR/validate.sh"
 "$SCRIPT_DIR/pre-deploy-check.sh"
 
@@ -37,14 +38,20 @@ rsync -avz --delete \
   --exclude 'data' \
   --filter 'protect data' \
   --filter 'protect data/**' \
+  --filter 'protect config/homepage/logs' \
+  --filter 'protect config/homepage/logs/**' \
   --exclude 'config/adguard/AdGuardHome.yaml' \
-  --exclude 'config/homepage/logs' \
+  --exclude 'config/homepage/services.yaml' \
+  --exclude 'config/caddy/Caddyfile' \
+  --exclude 'config/homepage/logs/**' \
   --exclude 'backups' \
   --exclude '*.bak' \
   --exclude 'legacy/' \
   "$PROJECT_DIR/" "$PI_USER@$PI_HOST:$REMOTE_DIR/"
 
 scp "$PROJECT_DIR/.env" "$PI_USER@$PI_HOST:$REMOTE_DIR/.env"
+
+"$SCRIPT_DIR/sync-rendered-configs.sh" || log "WARN: rendered config sync atlandi"
 
 ssh "$PI_USER@$PI_HOST" "REMOTE_DIR='$REMOTE_DIR' TAILSCALE_AUTHKEY='${TAILSCALE_AUTHKEY:-}' TAILSCALE_HOSTNAME='${TAILSCALE_HOSTNAME:-pi-gateway}' STORAGE_TYPE='${STORAGE_TYPE:-hybrid}' PI_INTERFACE='${PI_INTERFACE:-eth0}' bash -s" \
   < "$SCRIPT_DIR/../pi/bootstrap.sh"
@@ -53,7 +60,12 @@ DEPLOY_HOST="${PI_STATIC_IP:-$PI_HOST}"
 sleep 5
 
 PROFILE_ARGS="${PROFILES[*]}"
-ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" "cd '$REMOTE_DIR/compose' && docker compose --env-file ../.env $PROFILE_ARGS pull && docker compose --env-file ../.env $PROFILE_ARGS up -d"
+if [[ "${DEPLOY_SKIP_PULL:-false}" == "true" ]]; then
+  log "docker compose up -d (pull atlandi — DEPLOY_SKIP_PULL=true)"
+  ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" "cd '$REMOTE_DIR/compose' && docker compose --env-file ../.env $PROFILE_ARGS up -d"
+else
+  ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" "cd '$REMOTE_DIR/compose' && docker compose --env-file ../.env $PROFILE_ARGS pull && docker compose --env-file ../.env $PROFILE_ARGS up -d"
+fi
 
 sleep 12
 ssh "$PI_USER@$DEPLOY_HOST" "REMOTE_DIR='$REMOTE_DIR' bash -s" < "$SCRIPT_DIR/../pi/post-deploy.sh"

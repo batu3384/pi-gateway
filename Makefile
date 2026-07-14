@@ -1,4 +1,4 @@
-.PHONY: setup validate render deploy install discover mac-dns harden status dns-test test-remote backup-pull backup-cron verify-data pi-access telegram-menu firewall
+.PHONY: setup validate render deploy deploy-fast install discover mac-dns harden status dns-test test-remote backup-pull backup-cron verify-data pi-access telegram-menu firewall morning-test sync-configs
 
 setup:
 	@cp -n .env.example .env 2>/dev/null || true
@@ -16,6 +16,17 @@ discover:
 
 deploy:
 	@./scripts/mac/deploy.sh
+
+deploy-fast:
+	@chmod +x scripts/mac/deploy-fast.sh 2>/dev/null || true
+	@./scripts/mac/deploy-fast.sh
+
+sync-configs:
+	@chmod +x scripts/mac/sync-rendered-configs.sh 2>/dev/null || true
+	@make render && ./scripts/mac/sync-rendered-configs.sh
+
+morning-test:
+	@ssh "$${PI_USER:-batu}@$${PI_STATIC_IP:-192.168.1.112}" 'R=/home/$${USER:-batu}/pi-gateway; REMOTE_DIR="$$R" bash "$$R/scripts/pi/morning-summary.sh"'
 
 verify-data:
 	@chmod +x scripts/mac/pre-deploy-check.sh scripts/lib/ensure-data-symlink.sh scripts/pi/ensure-data-symlink.sh 2>/dev/null || true

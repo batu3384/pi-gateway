@@ -3,7 +3,7 @@
 set -euo pipefail
 
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="${REMOTE_DIR}/scripts/pi"
 
 log() { echo "[post-deploy] $*"; }
 
@@ -26,6 +26,8 @@ run_step_optional() {
 
 # shellcheck source=/dev/null
 source "$REMOTE_DIR/.env"
+
+run_step_optional "Config izinleri" "$SCRIPT_DIR/fix-config-perms.sh"
 
 # SSD symlink (hybrid)
 if [[ "${STORAGE_TYPE:-hybrid}" == "hybrid" || "${STORAGE_TYPE}" == "ssd-data" ]]; then
@@ -76,7 +78,8 @@ if [[ "${ENABLE_UFW:-true}" == "true" ]]; then
 fi
 
 if [[ "${ENABLE_N8N:-true}" == "true" ]]; then
-  run_step_optional "n8n sabah ozeti" "$SCRIPT_DIR/setup-n8n-morning.sh"
+  run_step_optional "Sabah ozeti timer" "$SCRIPT_DIR/setup-morning-timer.sh"
+  run_step_optional "n8n workflow (opsiyonel)" "$SCRIPT_DIR/setup-n8n-morning.sh"
 fi
 
 log "Post-deploy tamamlandi"

@@ -44,6 +44,8 @@ Uzaktan erişim: Tailscale açık + MagicDNS (`home` split DNS). Ayrıntı: `doc
 
 ```bash
 make render && make validate && make deploy
+# veya hizli (pull yok):
+make deploy-fast
 ```
 
 Sıra: ön kontrol → rsync (data hariç) → bootstrap → docker compose → post-deploy → smoke test.
@@ -94,6 +96,7 @@ docker system df
 - Disk %80+
 - Restic yedek başarılı
 - n8n sabah özeti (08:00, workflow kuruluysa)
+- **Sabah özeti (08:00):** systemd timer + Telegram (`make morning-test`)
 
 Test: `make telegram-test`
 

@@ -42,7 +42,8 @@ if [[ -f "$REMOTE_DIR/host/dhcpcd/pi-gateway.conf" ]]; then
 fi
 
 if ! command -v log2ram >/dev/null 2>&1; then
-  curl -fsSL https://github.com/azlux/log2ram/raw/master/install.sh | sudo bash || echo "[bootstrap] log2ram install skipped"
+  curl -fsSL https://github.com/azlux/log2ram/raw/master/install.sh 2>/dev/null | sudo bash 2>/dev/null || \
+    echo "[bootstrap] log2ram install skipped"
 fi
 
 if ! grep -q '^dtparam=watchdog=on' /boot/firmware/config.txt 2>/dev/null; then
@@ -69,10 +70,10 @@ elif [[ -f "$REMOTE_DIR/scripts/pi/setup-firewall.sh" ]]; then
     echo "[bootstrap] WARN: firewall setup atlandi"
 fi
 
-for unit in pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-crowdsec-ufw.timer; do
+for unit in pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-crowdsec-ufw.timer pi-gateway-morning.timer; do
   [[ -f "$REMOTE_DIR/host/systemd/$unit" ]] && sudo cp "$REMOTE_DIR/host/systemd/$unit" "/etc/systemd/system/$unit"
 done
-for svc in pi-gateway-health.service pi-gateway-backup.service pi-gateway-adguard-config.service pi-gateway-health-failure.service pi-gateway-crowdsec-ufw.service pi-data-symlink.service; do
+for svc in pi-gateway-health.service pi-gateway-backup.service pi-gateway-adguard-config.service pi-gateway-health-failure.service pi-gateway-crowdsec-ufw.service pi-data-symlink.service pi-gateway-morning.service; do
   if [[ -f "$REMOTE_DIR/host/systemd/$svc" ]]; then
     sudo cp "$REMOTE_DIR/host/systemd/$svc" "/etc/systemd/system/$svc"
     sudo sed -i "s|PI_USER|${USER}|g" "/etc/systemd/system/$svc" 2>/dev/null || \
@@ -84,11 +85,11 @@ for svc in pi-gateway-health.service pi-gateway-backup.service pi-gateway-adguar
   fi
 done
 sudo systemctl daemon-reload
-sudo systemctl enable pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-adguard-config.service pi-data-symlink.service 2>/dev/null || true
+sudo systemctl enable pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-adguard-config.service pi-data-symlink.service pi-gateway-morning.timer 2>/dev/null || true
 if [[ "${ENABLE_CROWDSEC:-true}" == "true" ]]; then
   sudo systemctl enable --now pi-gateway-crowdsec-ufw.timer 2>/dev/null || true
 fi
-sudo systemctl start pi-gateway-health.timer pi-gateway-backup.timer 2>/dev/null || true
+sudo systemctl start pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-morning.timer 2>/dev/null || true
 
 if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
   if [[ -x /usr/local/sbin/pi-setup-ssd-data.sh ]]; then

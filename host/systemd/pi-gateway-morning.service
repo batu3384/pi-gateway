@@ -1,0 +1,13 @@
+[Unit]
+Description=Pi Gateway sabah ozeti (Telegram)
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=PI_USER
+WorkingDirectory=/home/PI_USER/pi-gateway
+Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
+ExecStart=/home/PI_USER/pi-gateway/scripts/pi/morning-summary.sh
+StandardOutput=journal
+StandardError=journal
