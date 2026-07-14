@@ -1,0 +1,15 @@
+[Unit]
+Description=Pi Gateway USB SSD data disk setup
+After=local-fs-pre.target
+Before=remote-fs.target
+ConditionPathExists=!/mnt/ssd/.pi-gateway-initialized
+DefaultDependencies=no
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/pi-setup-ssd-data.sh
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,11 @@
+[Unit]
+Description=Pi Gateway daily backup
+After=docker.service
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=900
+
+[Install]
+WantedBy=timers.target

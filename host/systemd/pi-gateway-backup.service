@@ -1,0 +1,11 @@
+[Unit]
+Description=Pi Gateway backup job
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/home/PI_USER/pi-gateway/scripts/pi/backup.sh
+Nice=19
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,243 @@
+services:
+  unbound:
+    image: klutchell/unbound:latest
+    container_name: unbound
+    restart: unless-stopped
+    labels:
+      autoheal: "true"
+    volumes:
+      - ../config/unbound/unbound.conf:/etc/unbound/custom.conf.d/pi-gateway.conf:ro
+    ports:
+      - "127.0.0.1:5335:5335/tcp"
+      - "127.0.0.1:5335:5335/udp"
+    healthcheck:
+      test: ["CMD", "unbound-host", "-t", "A", "cloudflare.com"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  adguard:
+    image: adguard/adguardhome:v0.107.61
+    container_name: adguard
+    restart: unless-stopped
+    network_mode: host
+    labels:
+      autoheal: "true"
+    depends_on:
+      unbound:
+        condition: service_healthy
+    volumes:
+      - ../data/adguard/work:/opt/adguardhome/work
+      - ../config/adguard:/opt/adguardhome/conf
+    healthcheck:
+      test: ["CMD-SHELL", "nslookup -timeout=2 cloudflare.com 127.0.0.1 >/dev/null 2>&1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+
+  autoheal:
+    image: willfarrell/autoheal:latest
+    container_name: autoheal
+    restart: unless-stopped
+    profiles: ["autoheal"]
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: autoheal
+      AUTOHEAL_INTERVAL: 30
+      AUTOHEAL_START_PERIOD: 120
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    restart: unless-stopped
+    profiles: ["caddy"]
+    labels:
+      autoheal: "true"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ../config/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      homepage:
+        condition: service_started
+
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: homepage
+    restart: unless-stopped
+    labels:
+      autoheal: "true"
+    ports:
+      - "3040:3000"
+    volumes:
+      - ../config/homepage:/app/config
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      HOMEPAGE_ALLOWED_HOSTS: "*"
+
+  uptime-kuma:
+    image: louislam/uptime-kuma:2
+    container_name: uptime-kuma
+    restart: unless-stopped
+    labels:
+      autoheal: "true"
+    ports:
+      - "3001:3001"
+    volumes:
+      - ../data/uptime-kuma:/app/data
+
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: dozzle
+    restart: unless-stopped
+    profiles: ["dozzle"]
+    labels:
+      autoheal: "true"
+    ports:
+      - "${DOZZLE_PORT:-9999}:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ../data/dozzle:/data
+    environment:
+      DOZZLE_LEVEL: info
+      DOZZLE_FILTER: "status=running"
+      DOZZLE_AUTH_PROVIDER: simple
+
+  forgejo:
+    image: codeberg.org/forgejo/forgejo:9
+    container_name: forgejo
+    restart: unless-stopped
+    profiles: ["forgejo"]
+    labels:
+      autoheal: "true"
+    environment:
+      USER_UID: ${FORGEJO_UID:-1000}
+      USER_GID: ${FORGEJO_GID:-1000}
+      FORGEJO__server__DOMAIN: ${FORGEJO_DOMAIN:-git.home}
+      FORGEJO__server__ROOT_URL: http://${FORGEJO_DOMAIN:-git.home}/
+      FORGEJO__server__HTTP_PORT: 3000
+      FORGEJO__server__DISABLE_SSH: "true"
+    volumes:
+      - ../data/forgejo:/data
+    ports:
+      - "${FORGEJO_PORT:-3002}:3000"
+
+  syncthing:
+    image: syncthing/syncthing:latest
+    container_name: syncthing
+    restart: unless-stopped
+    profiles: ["syncthing"]
+    labels:
+      autoheal: "true"
+    environment:
+      PUID: ${SYNCTHING_UID:-1000}
+      PGID: ${SYNCTHING_GID:-1000}
+      STGUIADDRESS: 0.0.0.0:8384
+      STGUIUSER: ${SYNCTHING_GUI_USER:-}
+      STGUIPASSWORD: ${SYNCTHING_GUI_PASSWORD:-}
+    volumes:
+      - ../data/syncthing:/var/syncthing
+      - ../data/projects:/var/syncthing/Projects
+    ports:
+      - "${SYNCTHING_PORT:-8384}:8384"
+      - "22000:22000/tcp"
+      - "22000:22000/udp"
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    profiles: ["redis"]
+    labels:
+      autoheal: "true"
+    command: redis-server --appendonly yes
+    volumes:
+      - ../data/redis:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    profiles: ["n8n"]
+    labels:
+      autoheal: "true"
+    ports:
+      - "${N8N_PORT:-5678}:5678"
+    environment:
+      N8N_HOST: n8n.${LAN_DOMAIN:-home}
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      N8N_SECURE_COOKIE: "${N8N_SECURE_COOKIE:-false}"
+      WEBHOOK_URL: http://n8n.${LAN_DOMAIN:-home}/
+      GENERIC_TIMEZONE: ${TZ:-Europe/Istanbul}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+    volumes:
+      - ../data/n8n:/home/node/.n8n
+
+  crowdsec:
+    image: crowdsecurity/crowdsec:v1.6.4
+    container_name: crowdsec
+    restart: unless-stopped
+    profiles: ["crowdsec"]
+    labels:
+      autoheal: "true"
+    environment:
+      GID: "1000"
+      COLLECTIONS: "crowdsecurity/linux crowdsecurity/sshd"
+      DISABLE_ONLINE_API: "true"
+    volumes:
+      - ../data/crowdsec/config:/etc/crowdsec
+      - ../data/crowdsec/db:/var/lib/crowdsec/data
+      - /var/log/journal:/var/log/journal:ro
+    ports:
+      - "127.0.0.1:8082:8080"
+    healthcheck:
+      test: ["CMD", "cscli", "lapi", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    profiles: ["cloudflare"]
+    command: tunnel run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    network_mode: host
+
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: watchtower
+    restart: unless-stopped
+    profiles: ["watchtower"]
+    environment:
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_SCHEDULE: "0 4 * * 0"
+      WATCHTOWER_MONITOR_ONLY: "true"
+      WATCHTOWER_NOTIFICATION_URL: ${WATCHTOWER_NOTIFICATION_URL:-}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+volumes:
+  caddy_data:
+  caddy_config:

@@ -1,0 +1,5 @@
+interface ${PI_INTERFACE}
+static ip_address=${PI_STATIC_IP}/${LAN_PREFIX}
+static routers=${LAN_GATEWAY}
+static domain_name_servers=127.0.0.1 ${LAN_GATEWAY}
+nohook lookup-hostname

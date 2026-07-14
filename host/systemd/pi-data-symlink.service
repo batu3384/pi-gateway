@@ -1,0 +1,15 @@
+[Unit]
+Description=Pi Gateway SSD data symlink guard
+After=local-fs.target mnt-ssd.mount
+Wants=mnt-ssd.mount
+ConditionPathIsMountPoint=/mnt/ssd
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=PI_USER
+Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
+ExecStart=/home/PI_USER/pi-gateway/scripts/pi/ensure-data-symlink.sh repair
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,9 @@
+[Unit]
+Description=Pi Gateway health check failure alert
+After=pi-gateway-health.service
+
+[Service]
+Type=oneshot
+User=PI_USER
+Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
+ExecStart=/home/PI_USER/pi-gateway/scripts/pi/notify-failure.sh

@@ -1,0 +1,51 @@
+title: Pi Gateway
+description: Ev agi DNS ve homelab paneli
+
+server:
+  base: docker
+  showStats: true
+
+services:
+  - AdGuard Home:
+      href: http://dns.${LAN_DOMAIN}
+      description: DNS filtreleme
+      icon: adguard-home.png
+
+  - Homepage:
+      href: http://gateway.${LAN_DOMAIN}
+      description: Kontrol paneli
+      icon: homepage.png
+
+  - Uptime Kuma:
+      href: http://status.${LAN_DOMAIN}
+      description: Servis izleme
+      icon: uptime-kuma.png
+
+  - Dozzle:
+      href: http://logs.${LAN_DOMAIN}
+      description: Container loglari
+      icon: dozzle.png
+
+  - Forgejo:
+      href: http://git.${LAN_DOMAIN}
+      description: Git sunucusu
+      icon: forgejo.png
+
+  - Syncthing:
+      href: http://sync.${LAN_DOMAIN}
+      description: Dosya senkronu
+      icon: syncthing.png
+
+  - n8n:
+      href: http://n8n.${LAN_DOMAIN}
+      description: Otomasyon
+      icon: n8n.png
+
+widgets:
+  - resources:
+      cpu: true
+      memory: true
+      disk: /
+  - uptimekuma:
+      url: http://status.${LAN_DOMAIN}
+      slug: ${UPTIME_KUMA_STATUS_SLUG}

@@ -1,0 +1,44 @@
+// Tailscale ACL — https://login.tailscale.com/admin/acls
+// Kopyala-yapistir: Admin Console > Access Controls > Edit
+//
+// Amac: Yalnizca sahip cihazlar Pi'ye erisebilsin; misafir cihazlar engellensin.
+// Cihaz etiketlerini kendi tailnet'ine gore guncelle.
+
+{
+  "groups": {
+    "group:owners": ["batuhan@github.com"]
+  },
+
+  "tagOwners": {
+    "tag:pi-gateway": ["group:owners"],
+    "tag:owner-device": ["group:owners"]
+  },
+
+  "acls": [
+    {
+      "action": "accept",
+      "src": ["tag:owner-device"],
+      "dst": ["tag:pi-gateway:22", "tag:pi-gateway:80", "tag:pi-gateway:443"]
+    },
+    {
+      "action": "accept",
+      "src": ["tag:owner-device"],
+      "dst": ["192.168.1.0/24:*"]
+    }
+  ],
+
+  "autoApprovers": {
+    "routes": {
+      "192.168.1.0/24": ["group:owners"]
+    }
+  },
+
+  "ssh": [
+    {
+      "action": "accept",
+      "src": ["tag:owner-device"],
+      "dst": ["tag:pi-gateway"],
+      "users": ["autogroup:nonroot", "root"]
+    }
+  ]
+}

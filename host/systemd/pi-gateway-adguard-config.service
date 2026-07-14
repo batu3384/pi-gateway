@@ -1,0 +1,17 @@
+[Unit]
+Description=Pi Gateway AdGuard DNS configuration
+After=docker.service network-online.target
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=PI_USER
+Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
+ExecStart=/home/PI_USER/pi-gateway/scripts/pi/configure-adguard.sh
+TimeoutStartSec=300
+Nice=5
+
+[Install]
+WantedBy=multi-user.target
