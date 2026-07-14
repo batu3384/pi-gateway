@@ -20,9 +20,11 @@ log() { echo "[backup-pull] $*"; }
 mkdir -p "$LOCAL_DEST/restic" "$LOCAL_DEST/config-snapshots"
 
 log "Restic repo: $PI_USER@$PI_HOST:$RESTIC_REMOTE -> $LOCAL_DEST/restic"
-rsync -avz --delete \
+if ! rsync -avz --delete --ignore-errors \
   "$PI_USER@$PI_HOST:$RESTIC_REMOTE/" \
-  "$LOCAL_DEST/restic/"
+  "$LOCAL_DEST/restic/"; then
+  log "WARN: restic rsync kismi hata (izin/boş dosya — mevcut yedek korunur)"
+fi
 
 log "Config snapshot (secrets haric)"
 STAMP="$(date +%Y%m%d-%H%M%S)"

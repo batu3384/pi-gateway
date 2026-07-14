@@ -57,6 +57,9 @@ run_restic backup \
 run_restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune
 run_restic snapshots --last
 
+# Mac backup-pull icin repo sahipligi (docker root olabilir)
+sudo chown -R "${USER}:${USER}" "$REPO_HOST_PATH" 2>/dev/null || true
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../lib/notify.sh
 source "$SCRIPT_DIR/../lib/notify.sh"
