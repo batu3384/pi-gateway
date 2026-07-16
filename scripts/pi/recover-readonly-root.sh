@@ -20,7 +20,7 @@ run_root() {
 }
 
 # shellcheck source=/dev/null
-[[ -f "$REMOTE_DIR/.env" ]] && source "$REMOTE_DIR/.env"
+[[ -f "$REMOTE_DIR/.env" ]] && set -a && source "$REMOTE_DIR/.env" && set +a
 # shellcheck source=../lib/compose-profiles.sh
 source "$SCRIPT_DIR/../lib/compose-profiles.sh"
 # shellcheck source=../lib/stack-health.sh

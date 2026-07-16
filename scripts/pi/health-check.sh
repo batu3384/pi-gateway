@@ -4,7 +4,7 @@ set -euo pipefail
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
-[[ -f "$REMOTE_DIR/.env" ]] && source "$REMOTE_DIR/.env"
+[[ -f "$REMOTE_DIR/.env" ]] && set -a && source "$REMOTE_DIR/.env" && set +a
 # shellcheck source=../lib/adguard-api.sh
 source "$SCRIPT_DIR/../lib/adguard-api.sh"
 # shellcheck source=../lib/stack-health.sh
