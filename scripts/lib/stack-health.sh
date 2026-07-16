@@ -51,11 +51,14 @@ wait_for_recover_service() {
 }
 
 acquire_recover_lock_wait() {
-  exec {STACK_LOCK_FD}>"$STACK_LOCK_FILE"
+  touch "$STACK_LOCK_FILE" 2>/dev/null || return 1
+  chmod 666 "$STACK_LOCK_FILE" 2>/dev/null || true
+  exec {STACK_LOCK_FD}>>"$STACK_LOCK_FILE" || return 1
   flock -w "${STACK_RECOVER_WAIT_SEC}" "$STACK_LOCK_FD" || return 1
 }
 
 release_recover_lock() {
+  [[ -n "${STACK_LOCK_FD:-}" ]] || return 0
   flock -u "$STACK_LOCK_FD" 2>/dev/null || true
 }
 

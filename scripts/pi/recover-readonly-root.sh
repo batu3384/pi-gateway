@@ -103,8 +103,12 @@ main() {
   if stack_core_broken; then
     if [[ -d "$REMOTE_DIR/compose" ]]; then
       log "docker compose up -d"
-      run_compose_up "$REMOTE_DIR" "$PI_GATEWAY_USER" || log "WARN: compose up basarisiz"
-      sleep 5
+      if ! run_compose_up "$REMOTE_DIR" "$PI_GATEWAY_USER"; then
+        log "WARN: compose up basarisiz — ikinci deneme"
+        sleep 2
+        run_compose_up "$REMOTE_DIR" "$PI_GATEWAY_USER" || log "WARN: compose up basarisiz"
+      fi
+      sleep 10
     fi
   fi
 
