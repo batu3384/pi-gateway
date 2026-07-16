@@ -2,7 +2,7 @@
 # Stack sagligi ve kurtarma kilidi (health-check, watchdog, recover-ro)
 set -euo pipefail
 
-STACK_LOCK_FILE="${STACK_LOCK_FILE:-/tmp/pi-gateway-recover.lock}"
+STACK_LOCK_FILE="${STACK_LOCK_FILE:-${REMOTE_DIR:-/tmp}/.stack-recover.lock}"
 STACK_RECOVER_WAIT_SEC="${STACK_RECOVER_WAIT_SEC:-120}"
 
 needs_ssd_storage() {
@@ -33,7 +33,9 @@ stack_gateway_ok() {
 }
 
 stack_fully_healthy() {
-  stack_core_broken && return 1
+  if ! stack_core_broken; then
+    return 1
+  fi
   stack_gateway_ok
 }
 

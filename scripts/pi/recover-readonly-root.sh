@@ -100,7 +100,7 @@ main() {
     sleep 3
   fi
 
-  if stack_core_broken; then
+  if ! stack_core_broken; then
     if [[ -d "$REMOTE_DIR/compose" ]]; then
       log "docker compose up -d"
       if ! run_compose_up "$REMOTE_DIR" "$PI_GATEWAY_USER"; then
