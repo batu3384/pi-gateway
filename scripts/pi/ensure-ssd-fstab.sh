@@ -38,6 +38,7 @@ partition_id() {
 
 find_ssd_partition() {
   local by_label root base dev part existing_id expected_part
+  export PATH="/usr/sbin:/sbin:${PATH}"
   by_label="$(blkid -L "$LABEL" 2>/dev/null || true)"
   if [[ -n "$by_label" && -b "$by_label" ]]; then
     echo "$by_label"

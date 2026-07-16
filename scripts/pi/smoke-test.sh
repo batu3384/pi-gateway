@@ -59,7 +59,7 @@ run_check "adguard-ui" curl -fsS "http://127.0.0.1:${ADGUARD_WEB_PORT}/"
 
 if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
   run_check "caddy-logs.home" bash -c \
-    "code=\$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: logs.${LAN_DOMAIN}' http://127.0.0.1/); [[ \"\$code\" == \"200\" || \"\$code\" == \"401\" || \"\$code\" == \"307\" || \"\$code\" == \"302\" ]]"
+    'if [[ "${ENABLE_TLS:-false}" == "true" ]]; then code=$(curl -sk -o /dev/null -w "%{http_code}" -H "Host: logs.'"${LAN_DOMAIN}"'" https://127.0.0.1/); else code=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: logs.'"${LAN_DOMAIN}"'" http://127.0.0.1/); fi; [[ "$code" == "200" || "$code" == "401" || "$code" == "307" || "$code" == "302" ]]'
 fi
 
 if [[ "${ENABLE_DOZZLE:-true}" == "true" ]]; then
