@@ -24,8 +24,9 @@ stack_core_broken() {
 stack_gateway_ok() {
   local domain="${LAN_DOMAIN:-home}"
   if [[ "${ENABLE_TLS:-false}" == "true" ]]; then
-    curl -sfk -o /dev/null --max-time 5 -H "Host: gateway.${domain}" "https://127.0.0.1/" 2>/dev/null \
-      || curl -sf -o /dev/null --max-time 5 -H "Host: gateway.${domain}" "http://127.0.0.1/" 2>/dev/null
+    curl -sfk -o /dev/null --max-time 5 \
+      --resolve "gateway.${domain}:443:127.0.0.1" \
+      "https://gateway.${domain}/" 2>/dev/null
   else
     curl -sf -o /dev/null --max-time 5 -H "Host: gateway.${domain}" "http://127.0.0.1/" 2>/dev/null
   fi

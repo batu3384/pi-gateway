@@ -52,14 +52,14 @@ run_check "dns-rewrite" bash -c \
 run_check "dns-rewrite-logs" bash -c \
   "dig +time=3 +tries=1 @${PI_STATIC_IP} logs.${LAN_DOMAIN} A +short | grep -qx '${PI_STATIC_IP}'"
 run_check "gateway-http" bash -c \
-  'if [[ "${ENABLE_TLS:-false}" == "true" ]]; then curl -sfk -o /dev/null --max-time 5 -H "Host: gateway.'"${LAN_DOMAIN}"'" https://127.0.0.1/; else curl -sf -o /dev/null --max-time 5 -H "Host: gateway.'"${LAN_DOMAIN}"'" http://127.0.0.1/; fi'
+  'if [[ "${ENABLE_TLS:-false}" == "true" ]]; then curl -sfk -o /dev/null --max-time 5 --resolve "gateway.'"${LAN_DOMAIN}"':443:127.0.0.1" "https://gateway.'"${LAN_DOMAIN}"'/"; else curl -sf -o /dev/null --max-time 5 -H "Host: gateway.'"${LAN_DOMAIN}"'" http://127.0.0.1/; fi'
 run_check "homepage" curl -fsS "http://127.0.0.1:3040"
 run_check "uptime-kuma" curl -fsS "http://127.0.0.1:3001"
 run_check "adguard-ui" curl -fsS "http://127.0.0.1:${ADGUARD_WEB_PORT}/"
 
 if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
   run_check "caddy-logs.home" bash -c \
-    'if [[ "${ENABLE_TLS:-false}" == "true" ]]; then code=$(curl -sk -o /dev/null -w "%{http_code}" -H "Host: logs.'"${LAN_DOMAIN}"'" https://127.0.0.1/); else code=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: logs.'"${LAN_DOMAIN}"'" http://127.0.0.1/); fi; [[ "$code" == "200" || "$code" == "401" || "$code" == "307" || "$code" == "302" ]]'
+    'if [[ "${ENABLE_TLS:-false}" == "true" ]]; then code=$(curl -sk -o /dev/null -w "%{http_code}" --resolve "logs.'"${LAN_DOMAIN}"':443:127.0.0.1" "https://logs.'"${LAN_DOMAIN}"'/"); else code=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: logs.'"${LAN_DOMAIN}"'" http://127.0.0.1/); fi; [[ "$code" == "200" || "$code" == "401" || "$code" == "307" || "$code" == "302" ]]'
 fi
 
 if [[ "${ENABLE_DOZZLE:-true}" == "true" ]]; then
