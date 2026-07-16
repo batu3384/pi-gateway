@@ -1,34 +1,41 @@
 gateway.__LAN_DOMAIN__, panel.__LAN_DOMAIN__ {
   tls /etc/caddy/certs/__LAN_DOMAIN__.pem /etc/caddy/certs/__LAN_DOMAIN__-key.pem
+  __CADDY_BASIC_AUTH__
   reverse_proxy homepage:3000
 }
 
 status.__LAN_DOMAIN__ {
   tls /etc/caddy/certs/__LAN_DOMAIN__.pem /etc/caddy/certs/__LAN_DOMAIN__-key.pem
+  __CADDY_BASIC_AUTH__
   reverse_proxy uptime-kuma:3001
 }
 
 dns.__LAN_DOMAIN__ {
   tls /etc/caddy/certs/__LAN_DOMAIN__.pem /etc/caddy/certs/__LAN_DOMAIN__-key.pem
+  __CADDY_BASIC_AUTH__
   reverse_proxy __PI_STATIC_IP__:__ADGUARD_WEB_PORT__
 }
 
 git.__LAN_DOMAIN__ {
   tls /etc/caddy/certs/__LAN_DOMAIN__.pem /etc/caddy/certs/__LAN_DOMAIN__-key.pem
+  __CADDY_BASIC_AUTH__
   reverse_proxy forgejo:3000
 }
 
 sync.__LAN_DOMAIN__ {
   tls /etc/caddy/certs/__LAN_DOMAIN__.pem /etc/caddy/certs/__LAN_DOMAIN__-key.pem
+  __CADDY_BASIC_AUTH__
   reverse_proxy syncthing:8384
 }
 
 n8n.__LAN_DOMAIN__ {
   tls /etc/caddy/certs/__LAN_DOMAIN__.pem /etc/caddy/certs/__LAN_DOMAIN__-key.pem
+  __CADDY_BASIC_AUTH__
   reverse_proxy n8n:5678
 }
 
 logs.__LAN_DOMAIN__ {
   tls /etc/caddy/certs/__LAN_DOMAIN__.pem /etc/caddy/certs/__LAN_DOMAIN__-key.pem
+  __CADDY_BASIC_AUTH__
   reverse_proxy dozzle:8080
 }

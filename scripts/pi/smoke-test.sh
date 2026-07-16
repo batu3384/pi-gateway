@@ -52,7 +52,7 @@ run_check "dns-rewrite" bash -c \
 run_check "dns-rewrite-logs" bash -c \
   "dig +time=3 +tries=1 @${PI_STATIC_IP} logs.${LAN_DOMAIN} A +short | grep -qx '${PI_STATIC_IP}'"
 run_check "gateway-http" bash -c \
-  'if [[ "${ENABLE_TLS:-false}" == "true" ]]; then curl -sfk -o /dev/null --max-time 5 --resolve "gateway.'"${LAN_DOMAIN}"':443:127.0.0.1" "https://gateway.'"${LAN_DOMAIN}"'/"; else curl -sf -o /dev/null --max-time 5 -H "Host: gateway.'"${LAN_DOMAIN}"'" http://127.0.0.1/; fi'
+  'if [[ "${ENABLE_TLS:-false}" == "true" ]]; then code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 --resolve "gateway.'"${LAN_DOMAIN}"':443:127.0.0.1" "https://gateway.'"${LAN_DOMAIN}"'/"); else code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 -H "Host: gateway.'"${LAN_DOMAIN}"'" http://127.0.0.1/); fi; [[ "$code" == "200" || "$code" == "401" || "$code" == "307" || "$code" == "302" ]]'
 run_check "homepage" curl -fsS "http://127.0.0.1:3040"
 run_check "uptime-kuma" curl -fsS "http://127.0.0.1:3001"
 run_check "adguard-ui" curl -fsS "http://127.0.0.1:${ADGUARD_WEB_PORT}/"
@@ -96,6 +96,9 @@ if [[ "${ENABLE_UFW:-true}" == "true" ]] && [[ -x /usr/sbin/ufw ]]; then
   if [[ "$UFW_ADMIN_EXPOSURE" == "caddy-only" ]]; then
     run_check "ufw-caddy-only" bash -c \
       "! sudo -n /usr/sbin/ufw status | grep -E 'pi-gateway (9999|8080|3001|8384)' | grep -q '${LAN_SUBNET_CIDR:-192.168.1.0/24}'"
+    # Docker UFW'yi bypass eder — bind gercekten localhost olmali
+    run_check "admin-ports-localhost" bash -c \
+      '! ss -lnt | grep -E ":(3040|3001|5678|9999|3002|8384)\\b" | grep -vE "127\\.0\\.0\\.1|\\[::1\\]" | grep -q .'
   fi
 fi
 

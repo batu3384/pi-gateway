@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_TAG="pi-gateway-sd-health"
 
 # shellcheck source=/dev/null
-[[ -f "$REMOTE_DIR/.env" ]] && source "$REMOTE_DIR/.env"
+[[ -f "$REMOTE_DIR/.env" ]] && set -a && source "$REMOTE_DIR/.env" && set +a
 # shellcheck source=../lib/stack-health.sh
 source "$SCRIPT_DIR/../lib/stack-health.sh"
 
@@ -32,8 +32,12 @@ run_recover() {
 if root_readonly; then
   log "Root read-only tespit edildi"
   if run_recover; then
-    RECOVERED=1
-    log "Otomatik kurtarma basarili"
+    if root_readonly; then
+      log "Kurtarma tamamlandi ama root hala read-only"
+    else
+      RECOVERED=1
+      log "Otomatik kurtarma basarili — root tekrar yazilabilir"
+    fi
   else
     log "Otomatik kurtarma basarisiz"
   fi
@@ -60,6 +64,16 @@ RECENT_KERNEL_ERRORS="$(
 if [[ -n "$RECENT_KERNEL_ERRORS" ]]; then
   ISSUES+=("kernel-io-errors")
   log "Son 15 dk kernel I/O uyarisi"
+fi
+
+USB_SSD_ERRORS="$(
+  journalctl -k -b --no-pager --since "15 min ago" 2>/dev/null \
+    | grep -iE 'usb .*disconnect|I/O error.*sd[a-z]|Buffer I/O error on dev sd|reset.*USB' \
+    | tail -5 || true
+)"
+if [[ -n "$USB_SSD_ERRORS" ]]; then
+  ISSUES+=("usb-ssd-disconnect")
+  log "Son 15 dk USB/SSD kopma veya I/O hatasi"
 fi
 
 if [[ ${#ISSUES[@]} -eq 0 ]]; then

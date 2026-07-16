@@ -20,16 +20,33 @@ root_disk() {
 }
 
 find_usb_data_disk() {
-  local root base dev
+  local root base dev candidates=()
   root="$(root_disk)"
+  if [[ -n "${PI_SSD_DISK:-}" ]]; then
+    [[ -b "$PI_SSD_DISK" ]] || die "PI_SSD_DISK gecersiz: $PI_SSD_DISK"
+    base="$(basename "$PI_SSD_DISK")"
+    [[ "$root" == *"$base"* ]] && die "PI_SSD_DISK root diski gosteriyor: $PI_SSD_DISK"
+    echo "$PI_SSD_DISK"
+    return 0
+  fi
   for dev in /dev/sd? /dev/sd?? /dev/nvme?n?; do
     [[ -b "$dev" ]] || continue
     base="$(basename "$dev")"
     [[ "$root" == *"$base"* ]] && continue
-    echo "$dev"
-    return 0
+    candidates+=("$dev")
   done
-  return 1
+  if [[ ${#candidates[@]} -eq 0 ]]; then
+    return 1
+  fi
+  if [[ ${#candidates[@]} -gt 1 ]]; then
+    die "Birden fazla USB disk: ${candidates[*]} — PI_SSD_DISK=/dev/sdX belirt"
+  fi
+  echo "${candidates[0]}"
+}
+
+disk_size_gb() {
+  local dev="$1"
+  lsblk -bdno SIZE "$dev" 2>/dev/null | awk '{printf "%d", ($1+1073741823)/1073741824}'
 }
 
 partition_for_disk() {
@@ -42,7 +59,7 @@ partition_for_disk() {
 }
 
 ensure_ext4_partition() {
-  local disk="$1" part="$2"
+  local disk="$1" part="$2" size_gb
 
   if blkid -o value -s TYPE "$part" 2>/dev/null | grep -q ext4; then
     local current_label
@@ -51,10 +68,22 @@ ensure_ext4_partition() {
       e2label "$part" "$LABEL" || true
     fi
     log "Mevcut ext4 partition kullaniliyor: $part ($LABEL)"
+    echo "$part"
     return 0
   fi
 
-  log "SSD hazirlaniyor: $disk -> tek ext4 partition ($LABEL)"
+  size_gb="$(disk_size_gb "$disk")"
+  if [[ -z "$size_gb" || "$size_gb" -lt 8 ]]; then
+    die "Disk cok kucuk veya okunamadi (${size_gb:-?}GB): $disk"
+  fi
+  if findmnt -n "$part" "$disk" 2>/dev/null | grep -q .; then
+    die "Disk/partition mount durumda — format iptal: $disk $part"
+  fi
+  if [[ "${PI_SSD_CONFIRM_FORMAT:-}" != "yes" ]]; then
+    die "Yeni format icin PI_SSD_CONFIRM_FORMAT=yes gerekli (disk: $disk, ~${size_gb}GB)"
+  fi
+
+  log "SSD hazirlaniyor: $disk (~${size_gb}GB) -> tek ext4 partition ($LABEL)"
   wipefs -a "$disk" || true
   parted -s "$disk" mklabel msdos
   parted -s "$disk" mkpart primary ext4 4MiB 100%
@@ -108,7 +137,8 @@ prepare_data_tree() {
     "${DATA_ROOT}/backups" \
     "${DATA_ROOT}/redis" \
     "${DATA_ROOT}/n8n" \
-    "${DATA_ROOT}/crowdsec"
+    "${DATA_ROOT}/crowdsec" \
+    "${MOUNT}/.disk-probe"
 
   chown -R "${user}:${user}" "$DATA_ROOT"
 

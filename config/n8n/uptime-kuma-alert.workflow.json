@@ -6,7 +6,7 @@
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "uptime-kuma-alert",
+        "path": "uptime-kuma-alert-__N8N_WEBHOOK_SECRET__",
         "responseMode": "onReceived",
         "options": {}
       },

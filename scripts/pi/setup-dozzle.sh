@@ -12,7 +12,10 @@ DATA_DIR="${REMOTE_DIR}/data/dozzle"
 
 log() { echo "[dozzle-setup] $*"; }
 
-[[ -n "$DOZZLE_ADMIN_PASSWORD" ]] || { log "DOZZLE_ADMIN_PASSWORD bos — atlandi"; exit 0; }
+[[ -n "$DOZZLE_ADMIN_PASSWORD" ]] || { log "HATA: DOZZLE_ADMIN_PASSWORD bos — fail-closed"; exit 1; }
+case "$DOZZLE_ADMIN_PASSWORD" in
+  CHANGE_ME*|Degistir*|changeme*|password) log "HATA: DOZZLE_ADMIN_PASSWORD placeholder"; exit 1 ;;
+esac
 
 mkdir -p "$DATA_DIR"
 

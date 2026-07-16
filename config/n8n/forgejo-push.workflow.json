@@ -6,7 +6,7 @@
     {
       "parameters": {
         "httpMethod": "POST",
-        "path": "forgejo-push",
+        "path": "forgejo-push-__N8N_WEBHOOK_SECRET__",
         "responseMode": "onReceived",
         "options": {}
       },

@@ -3,16 +3,15 @@ Description=Pi Gateway recover read-only root and Docker stack
 DefaultDependencies=no
 After=local-fs.target mnt-ssd.mount
 Wants=mnt-ssd.mount
-# SSD + symlink hazir olsun; docker.service ile yarismaz (recover docker'i kendisi acar)
-ConditionPathExists=/home/PI_USER/pi-gateway/scripts/pi/recover-readonly-root.sh
+ConditionPathExists=/usr/local/lib/pi-gateway/scripts/pi/recover-readonly-root.sh
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-TimeoutStartSec=120
+TimeoutStartSec=300
 Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
-ExecStart=/home/PI_USER/pi-gateway/scripts/pi/recover-readonly-root.sh
-# docker.service Before= ile bloklamaz; recover kendi docker'ini baslatir
+# root-owned kopya — kullanici yazilabilir repo yolu yok
+ExecStart=/usr/local/lib/pi-gateway/scripts/pi/recover-readonly-root.sh
 
 [Install]
 WantedBy=multi-user.target

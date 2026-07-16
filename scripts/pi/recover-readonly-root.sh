@@ -42,19 +42,23 @@ ensure_ssd_mounted() {
   if mountpoint -q /mnt/ssd 2>/dev/null; then
     return 0
   fi
-  log "SSD bagli degil — mount deneniyor"
-  if systemctl start mnt-ssd.mount 2>/dev/null; then
-    sleep 1
-  fi
-  if mountpoint -q /mnt/ssd 2>/dev/null; then
-    log "SSD mount OK (systemd)"
-    return 0
-  fi
-  if run_root mount /mnt/ssd 2>/dev/null; then
-    log "SSD mount OK (fstab)"
-    return 0
-  fi
-  log "WARN: SSD mount basarisiz"
+  local attempt
+  for attempt in 1 2 3; do
+    log "SSD bagli degil — mount denemesi $attempt/3"
+    if systemctl start mnt-ssd.mount 2>/dev/null; then
+      sleep 2
+    fi
+    if mountpoint -q /mnt/ssd 2>/dev/null; then
+      log "SSD mount OK (systemd)"
+      return 0
+    fi
+    if run_root mount /mnt/ssd 2>/dev/null; then
+      log "SSD mount OK (fstab)"
+      return 0
+    fi
+    sleep 3
+  done
+  log "WARN: SSD mount basarisiz (USB kablo/port kontrol et)"
   return 1
 }
 
@@ -76,6 +80,7 @@ main() {
 
   if stack_fully_healthy; then
     log "Stack zaten saglikli — kurtarma gerekmedi"
+    apply_adguard_rewrites_best_effort "$REMOTE_DIR"
     release_recover_lock
     exit 0
   fi
@@ -87,6 +92,9 @@ main() {
 
   ensure_ssd_mounted || true
   ensure_data_symlink || true
+  if needs_ssd && mountpoint -q /mnt/ssd 2>/dev/null; then
+    mkdir -p /mnt/ssd/.disk-probe 2>/dev/null || true
+  fi
 
   if ! systemctl is-active --quiet containerd 2>/dev/null; then
     log "containerd baslatiliyor"
@@ -100,7 +108,7 @@ main() {
     sleep 3
   fi
 
-  if ! stack_core_broken; then
+  if ! stack_core_ok; then
     if [[ -d "$REMOTE_DIR/compose" ]]; then
       log "docker compose up -d"
       if ! run_compose_up "$REMOTE_DIR" "$PI_GATEWAY_USER"; then
@@ -114,6 +122,7 @@ main() {
 
   if stack_fully_healthy; then
     log "OK stack ayakta (adguard, unbound, caddy, gateway)"
+    apply_adguard_rewrites_best_effort "$REMOTE_DIR"
     release_recover_lock
     exit 0
   fi

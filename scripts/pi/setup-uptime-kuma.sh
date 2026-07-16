@@ -33,7 +33,16 @@ export TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
 export TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:-}"
 export UPTIME_KUMA_STATUS_SLUG="${UPTIME_KUMA_STATUS_SLUG:-pi-gateway}"
 export ENABLE_N8N="${ENABLE_N8N:-true}"
-export N8N_KUMA_WEBHOOK_URL="${N8N_KUMA_WEBHOOK_URL:-http://n8n:5678/webhook/uptime-kuma-alert}"
+if [[ -n "${N8N_KUMA_WEBHOOK_URL:-}" ]]; then
+  :
+else
+  secret="${N8N_WEBHOOK_SECRET:-}"
+  case "$secret" in
+    ""|CHANGE_ME*) log "HATA: N8N_WEBHOOK_SECRET gerekli"; exit 1 ;;
+  esac
+  N8N_KUMA_WEBHOOK_URL="http://n8n:5678/webhook/uptime-kuma-alert-${secret}"
+fi
+export N8N_KUMA_WEBHOOK_URL
 
 docker run --rm --network host \
   -e KUMA_URL -e KUMA_USER -e KUMA_PASS -e PI_IP -e DOCKER_GW \

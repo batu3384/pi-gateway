@@ -1,2 +1,3 @@
 ---
-# Homepage docker integration
+# Docker sock bilerek baglanmiyor (auth'suz panel + sock = Docker API riski).
+# Konteyner loglari: logs.home (Dozzle, auth'lu).

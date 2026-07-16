@@ -27,16 +27,22 @@ if ! grep -q 'net.ipv4.ip_forward' "$TS_DNS_CONF" 2>/dev/null; then
   sudo sysctl -p "$TS_DNS_CONF" >/dev/null
 fi
 
+# Subnet router icin UFW forward gerekir; sadece tailscale0 -> LAN route (asagida).
+# Global ACCEPT riskli ama route allow calismasi icin sart — yan etki: Pi router olabilir.
 if [[ -f /etc/default/ufw ]] && grep -q '^DEFAULT_FORWARD_POLICY=' /etc/default/ufw; then
   if ! grep -q '^DEFAULT_FORWARD_POLICY="ACCEPT"' /etc/default/ufw; then
-    log "UFW forward policy ACCEPT"
+    log "UFW forward policy ACCEPT (Tailscale subnet router — bilerek)"
     sudo sed -i 's/^DEFAULT_FORWARD_POLICY=.*/DEFAULT_FORWARD_POLICY="ACCEPT"/' /etc/default/ufw
     sudo ufw reload >/dev/null 2>&1 || true
   fi
 fi
 
-sudo ufw route allow in on tailscale0 out on "${PI_INTERFACE}" comment 'pi-gateway ts-subnet' 2>/dev/null || \
-  sudo ufw route allow in on tailscale0 2>/dev/null || true
+# Sadece tailscale0 -> LAN; genel forward acik ama route kurali dar
+sudo ufw route delete allow in on tailscale0 2>/dev/null || true
+sudo ufw route allow in on tailscale0 out on "${PI_INTERFACE}" to "${LAN_SUBNET}" \
+  comment 'pi-gateway ts-subnet' 2>/dev/null || \
+  sudo ufw route allow in on tailscale0 out on "${PI_INTERFACE}" \
+  comment 'pi-gateway ts-subnet' 2>/dev/null || true
 
 TS_IP="$(tailscale ip -4 2>/dev/null | head -1)"
 log "Subnet route reklam: ${LAN_SUBNET}"

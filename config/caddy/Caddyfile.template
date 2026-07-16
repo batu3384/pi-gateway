@@ -3,29 +3,36 @@
 }
 
 http://gateway.__LAN_DOMAIN__, http://panel.__LAN_DOMAIN__ {
+  __CADDY_BASIC_AUTH__
   reverse_proxy homepage:3000
 }
 
 http://status.__LAN_DOMAIN__ {
+  __CADDY_BASIC_AUTH__
   reverse_proxy uptime-kuma:3001
 }
 
 http://dns.__LAN_DOMAIN__ {
+  __CADDY_BASIC_AUTH__
   reverse_proxy __PI_STATIC_IP__:__ADGUARD_WEB_PORT__
 }
 
 http://git.__LAN_DOMAIN__ {
+  __CADDY_BASIC_AUTH__
   reverse_proxy forgejo:3000
 }
 
 http://sync.__LAN_DOMAIN__ {
+  __CADDY_BASIC_AUTH__
   reverse_proxy syncthing:8384
 }
 
 http://n8n.__LAN_DOMAIN__ {
+  __CADDY_BASIC_AUTH__
   reverse_proxy n8n:5678
 }
 
 http://logs.__LAN_DOMAIN__ {
+  __CADDY_BASIC_AUTH__
   reverse_proxy dozzle:8080
 }

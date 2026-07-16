@@ -3,7 +3,7 @@ description: Ev agi DNS ve homelab paneli
 
 server:
   base: docker
-  showStats: true
+  showStats: false
 
 services:
   - AdGuard Home:

@@ -9,7 +9,14 @@ REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 FORGEJO_PORT="${FORGEJO_PORT:-3002}"
 FORGEJO_ADMIN_USER="${FORGEJO_ADMIN_USER:-batu}"
 FORGEJO_REPO_NAME="${FORGEJO_REPO_NAME:-pi-gateway}"
-N8N_WEBHOOK_URL="${N8N_FORGEJO_WEBHOOK_URL:-http://n8n:5678/webhook/forgejo-push}"
+N8N_WEBHOOK_URL="${N8N_FORGEJO_WEBHOOK_URL:-}"
+if [[ -z "$N8N_WEBHOOK_URL" ]]; then
+  secret="${N8N_WEBHOOK_SECRET:-}"
+  case "$secret" in
+    ""|CHANGE_ME*) echo "[forgejo-webhook] HATA: N8N_WEBHOOK_SECRET gerekli"; exit 1 ;;
+  esac
+  N8N_WEBHOOK_URL="http://n8n:5678/webhook/forgejo-push-${secret}"
+fi
 TOKEN_FILE="${REMOTE_DIR}/data/forgejo/.n8n-api-token"
 TOKEN_NAME="pi-gateway-n8n"
 

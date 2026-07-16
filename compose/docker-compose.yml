@@ -37,6 +37,20 @@ services:
       retries: 5
       start_period: 120s
 
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:latest
+    container_name: docker-socket-proxy
+    restart: unless-stopped
+    profiles: ["dozzle"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      # Dozzle: sadece container listesi + log okuma (exec/image/pull yok)
+      CONTAINERS: 1
+      LOGS: 1
+      EVENTS: 1
+      NETWORKS: 1
+
   autoheal:
     image: willfarrell/autoheal:latest
     container_name: autoheal
@@ -77,12 +91,12 @@ services:
     labels:
       autoheal: "true"
     ports:
-      - "3040:3000"
+      - "127.0.0.1:3040:3000"
     volumes:
       - ../config/homepage:/app/config
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # ponytail: docker.sock yok — LAN'da auth'suz panel + sock = Docker API yuzeyi
     environment:
-      HOMEPAGE_ALLOWED_HOSTS: "*"
+      HOMEPAGE_ALLOWED_HOSTS: "gateway.${LAN_DOMAIN:-home},panel.${LAN_DOMAIN:-home},localhost,127.0.0.1"
 
   uptime-kuma:
     image: louislam/uptime-kuma:2
@@ -91,7 +105,7 @@ services:
     labels:
       autoheal: "true"
     ports:
-      - "3001:3001"
+      - "127.0.0.1:3001:3001"
     volumes:
       - ../data/uptime-kuma:/app/data
 
@@ -102,12 +116,14 @@ services:
     profiles: ["dozzle"]
     labels:
       autoheal: "true"
+    depends_on:
+      - docker-socket-proxy
     ports:
-      - "${DOZZLE_PORT:-9999}:8080"
+      - "127.0.0.1:${DOZZLE_PORT:-9999}:8080"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - ../data/dozzle:/data
     environment:
+      DOZZLE_REMOTE_HOST: tcp://docker-socket-proxy:2375
       DOZZLE_LEVEL: info
       DOZZLE_FILTER: "status=running"
       DOZZLE_AUTH_PROVIDER: simple
@@ -129,7 +145,7 @@ services:
     volumes:
       - ../data/forgejo:/data
     ports:
-      - "${FORGEJO_PORT:-3002}:3000"
+      - "127.0.0.1:${FORGEJO_PORT:-3002}:3000"
 
   syncthing:
     image: syncthing/syncthing:latest
@@ -148,7 +164,7 @@ services:
       - ../data/syncthing:/var/syncthing
       - ../data/projects:/var/syncthing/Projects
     ports:
-      - "${SYNCTHING_PORT:-8384}:8384"
+      - "127.0.0.1:${SYNCTHING_PORT:-8384}:8384"
       - "22000:22000/tcp"
       - "22000:22000/udp"
 
@@ -178,7 +194,7 @@ services:
     labels:
       autoheal: "true"
     ports:
-      - "${N8N_PORT:-5678}:5678"
+      - "127.0.0.1:${N8N_PORT:-5678}:5678"
     environment:
       N8N_HOST: n8n.${LAN_DOMAIN:-home}
       N8N_PORT: 5678
@@ -189,12 +205,14 @@ services:
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
       N8N_DIAGNOSTICS_ENABLED: "false"
       N8N_PERSONALIZATION_ENABLED: "false"
-      NODES_EXCLUDE: "[]"
+      # executeCommand = host komut yuzeyi; disk/morning host scriptlerinde
+      NODES_EXCLUDE: '["n8n-nodes-base.executeCommand"]'
       PI_TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       PI_TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
     volumes:
       - ../data/n8n:/home/node/.n8n
-      - /mnt/ssd:/host-ssd:ro
+      # ponytail: sadece df probe — tum SSD okuma yok; health-check zaten disk uyarisi gonderir
+      - /mnt/ssd/.disk-probe:/host-ssd:ro
 
   crowdsec:
     image: crowdsecurity/crowdsec:v1.6.4

@@ -92,7 +92,9 @@ setup_ufw() {
   sudo ufw allow from "$LAN_SUBNET" to any port 22000 proto udp comment 'pi-gateway syncthing-udp'
 
   delete_ufw_rules_matching 'pi-gateway docker-adguard'
-  sudo ufw allow from 172.16.0.0/12 to any port 8080 proto tcp comment 'pi-gateway docker-adguard'
+  # Sadece docker0 / compose aglari — 172.16.0.0/12 cok genis
+  sudo ufw allow from 172.17.0.0/16 to any port 8080 proto tcp comment 'pi-gateway docker-adguard'
+  sudo ufw allow from 172.18.0.0/16 to any port 8080 proto tcp comment 'pi-gateway docker-adguard'
 
   delete_ufw_rules_matching 'pi-gateway tailscale'
   delete_ufw_rules_matching 'pi-gateway ts-subnet'

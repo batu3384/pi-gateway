@@ -81,7 +81,8 @@ fi
 
 cat > "$PROJECT_DIR/config/homepage/docker.yaml" <<'EOF'
 ---
-# Homepage docker integration
+# Docker sock bilerek baglanmiyor (auth'suz panel + sock = Docker API riski).
+# Konteyner loglari: logs.home (Dozzle, auth'lu).
 EOF
 
 if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
@@ -94,8 +95,30 @@ if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
   else
     log "Caddy: HTTP (LAN)"
   fi
-  sed "s|__LAN_DOMAIN__|${LAN_DOMAIN}|g; s|__ADGUARD_WEB_PORT__|${ADGUARD_WEB_PORT}|g; s|__PI_STATIC_IP__|${PI_STATIC_IP}|g" \
-    "$caddy_tpl" > "$PROJECT_DIR/config/caddy/Caddyfile"
+
+  # Hassas paneller (dns/git/sync/n8n/logs) — Caddy basic_auth
+  CADDY_AUTH_USER="${CADDY_AUTH_USER:-${AGH_ADMIN_USER:-admin}}"
+  CADDY_AUTH_PASSWORD="${CADDY_AUTH_PASSWORD:-${AGH_ADMIN_PASSWORD:-}}"
+  [[ -n "$CADDY_AUTH_PASSWORD" ]] || die "CADDY_AUTH_PASSWORD veya AGH_ADMIN_PASSWORD gerekli (Caddy basic_auth)"
+  case "$CADDY_AUTH_PASSWORD" in
+    CHANGE_ME*|Degistir*|changeme*|password|admin) die "Caddy sifresi varsayilan/placeholder — .env degistir" ;;
+  esac
+  CADDY_AUTH_HASH="$(generate_password_hash "$CADDY_AUTH_USER" "$CADDY_AUTH_PASSWORD")"
+  # htpasswd -nbB ciktisi $2y$... — Caddy basic_auth bcrypt kabul eder
+  AUTH_BLOCK="$(printf 'basic_auth {\n\t%s %s\n}' "$CADDY_AUTH_USER" "$CADDY_AUTH_HASH")"
+
+  python3 - "$caddy_tpl" "$PROJECT_DIR/config/caddy/Caddyfile" "$LAN_DOMAIN" "$ADGUARD_WEB_PORT" "$PI_STATIC_IP" "$AUTH_BLOCK" <<'PY'
+from pathlib import Path
+import sys
+src, dst, domain, port, ip, auth = sys.argv[1:7]
+text = Path(src).read_text()
+text = (text
+  .replace("__LAN_DOMAIN__", domain)
+  .replace("__ADGUARD_WEB_PORT__", port)
+  .replace("__PI_STATIC_IP__", ip)
+  .replace("__CADDY_BASIC_AUTH__", auth))
+Path(dst).write_text(text)
+PY
 fi
 
 envsubst '${PI_STATIC_IP} ${LAN_PREFIX} ${LAN_GATEWAY} ${PI_INTERFACE}' \

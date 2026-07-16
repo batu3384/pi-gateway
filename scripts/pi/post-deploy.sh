@@ -25,11 +25,33 @@ run_step_optional() {
 [[ -f "$REMOTE_DIR/.env" ]] || { log "HATA: .env yok"; exit 1; }
 
 # shellcheck source=/dev/null
-source "$REMOTE_DIR/.env"
+set -a && source "$REMOTE_DIR/.env" && set +a
 
+# Placeholder sifreleri fail-closed
+for key in AGH_ADMIN_PASSWORD DOZZLE_ADMIN_PASSWORD RESTIC_PASSWORD FORGEJO_ADMIN_PASSWORD N8N_WEBHOOK_SECRET; do
+  val="${!key:-}"
+  case "$val" in
+    ""|CHANGE_ME*|Degistir*)
+      if [[ "$key" == "DOZZLE_ADMIN_PASSWORD" && "${ENABLE_DOZZLE:-true}" != "true" ]]; then
+        continue
+      fi
+      if [[ "$key" == "RESTIC_PASSWORD" && "${ENABLE_RESTIC:-true}" != "true" ]]; then
+        continue
+      fi
+      if [[ "$key" == "FORGEJO_ADMIN_PASSWORD" && "${ENABLE_FORGEJO:-true}" != "true" ]]; then
+        continue
+      fi
+      if [[ "$key" == "N8N_WEBHOOK_SECRET" && "${ENABLE_N8N:-true}" != "true" ]]; then
+        continue
+      fi
+      log "HATA: $key bos veya placeholder — .env duzelt"
+      exit 1
+      ;;
+  esac
+done
+
+run_step_critical "Privileged scripts (root-owned)" "$SCRIPT_DIR/install-privileged-scripts.sh"
 run_step_optional "Config izinleri" "$SCRIPT_DIR/fix-config-perms.sh"
-
-# SSD symlink (hybrid)
 if [[ "${STORAGE_TYPE:-hybrid}" == "hybrid" || "${STORAGE_TYPE}" == "ssd-data" ]]; then
   run_step_optional "SSD fstab" "$SCRIPT_DIR/ensure-ssd-fstab.sh"
   log ">> SSD data symlink"
@@ -61,7 +83,7 @@ if [[ "${ENABLE_RESTIC:-true}" == "true" ]]; then
 fi
 
 if [[ "${ENABLE_DOZZLE:-true}" == "true" ]]; then
-  run_step_optional "Dozzle auth" "$SCRIPT_DIR/setup-dozzle.sh"
+  run_step_critical "Dozzle auth" "$SCRIPT_DIR/setup-dozzle.sh"
 fi
 
 if [[ "${ENABLE_N8N:-true}" == "true" ]]; then

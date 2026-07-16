@@ -5,9 +5,9 @@ After=network-online.target
 [Service]
 Type=oneshot
 Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
-ExecStart=/home/PI_USER/pi-gateway/scripts/pi/stack-watchdog.sh
+ExecStart=/usr/local/lib/pi-gateway/scripts/pi/stack-watchdog.sh
 Nice=10
-TimeoutStartSec=180
+TimeoutStartSec=300
 
 [Install]
 WantedBy=multi-user.target

@@ -42,7 +42,7 @@ if [[ -f "$REMOTE_DIR/host/dhcpcd/pi-gateway.conf" ]]; then
 fi
 
 if ! command -v log2ram >/dev/null 2>&1; then
-  curl -fsSL https://github.com/azlux/log2ram/raw/master/install.sh 2>/dev/null | sudo bash 2>/dev/null || \
+  timeout 180 bash -c 'curl -fsSL https://github.com/azlux/log2ram/raw/master/install.sh 2>/dev/null | sudo bash' 2>/dev/null || \
     echo "[bootstrap] log2ram install skipped"
 fi
 
@@ -55,7 +55,7 @@ if ! command -v tailscale >/dev/null 2>&1; then
   curl -fsSL https://tailscale.com/install.sh | sh
 fi
 if [[ -n "$TAILSCALE_AUTHKEY" ]]; then
-  sudo tailscale up --auth-key="$TAILSCALE_AUTHKEY" --hostname="$TAILSCALE_HOSTNAME" || true
+  timeout 120 sudo tailscale up --auth-key="$TAILSCALE_AUTHKEY" --hostname="$TAILSCALE_HOSTNAME" || true
 fi
 
 if [[ -f "$REMOTE_DIR/scripts/pi/harden-host.sh" ]]; then
@@ -83,6 +83,13 @@ install_systemd_unit() {
       -e "s|User=PI_USER|User=${USER}|g" \
       "$src" | sudo tee "$dst" >/dev/null
 }
+
+if [[ -x "$REMOTE_DIR/scripts/pi/install-privileged-scripts.sh" ]]; then
+  echo "[bootstrap] Root-owned privileged scriptler kuruluyor..."
+  REMOTE_DIR="$REMOTE_DIR" bash "$REMOTE_DIR/scripts/pi/install-privileged-scripts.sh" || \
+    echo "[bootstrap] WARN: privileged script install atlandi"
+fi
+
 for svc in pi-gateway-health.service pi-gateway-backup.service pi-gateway-adguard-config.service pi-gateway-health-failure.service pi-gateway-crowdsec-ufw.service pi-data-symlink.service pi-gateway-morning.service pi-gateway-recover-ro.service pi-gateway-stack-watchdog.service pi-gateway-ensure-fstab.service; do
   install_systemd_unit "$svc"
 done
