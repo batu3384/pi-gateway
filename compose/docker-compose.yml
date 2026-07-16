@@ -61,6 +61,7 @@ services:
       - "443:443"
     volumes:
       - ../config/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../config/caddy/certs:/etc/caddy/certs:ro
       - caddy_data:/data
       - caddy_config:/config
     extra_hosts:
@@ -122,7 +123,7 @@ services:
       USER_UID: ${FORGEJO_UID:-1000}
       USER_GID: ${FORGEJO_GID:-1000}
       FORGEJO__server__DOMAIN: ${FORGEJO_DOMAIN:-git.home}
-      FORGEJO__server__ROOT_URL: http://${FORGEJO_DOMAIN:-git.home}/
+      FORGEJO__server__ROOT_URL: ${FORGEJO_ROOT_URL:-http://${FORGEJO_DOMAIN:-git.home}}/
       FORGEJO__server__HTTP_PORT: 3000
       FORGEJO__server__DISABLE_SSH: "true"
     volumes:
@@ -181,15 +182,19 @@ services:
     environment:
       N8N_HOST: n8n.${LAN_DOMAIN:-home}
       N8N_PORT: 5678
-      N8N_PROTOCOL: http
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
       N8N_SECURE_COOKIE: "${N8N_SECURE_COOKIE:-false}"
-      WEBHOOK_URL: http://n8n.${LAN_DOMAIN:-home}/
+      WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://n8n.${LAN_DOMAIN:-home}/}
       GENERIC_TIMEZONE: ${TZ:-Europe/Istanbul}
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
       N8N_DIAGNOSTICS_ENABLED: "false"
       N8N_PERSONALIZATION_ENABLED: "false"
+      NODES_EXCLUDE: "[]"
+      PI_TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      PI_TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
     volumes:
       - ../data/n8n:/home/node/.n8n
+      - /mnt/ssd:/host-ssd:ro
 
   crowdsec:
     image: crowdsecurity/crowdsec:v1.6.4

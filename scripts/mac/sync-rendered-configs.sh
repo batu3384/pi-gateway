@@ -30,6 +30,9 @@ cp /tmp/AdGuardHome.yaml "${R}/config/adguard/AdGuardHome.yaml"
 cp /tmp/homepage-services.yaml "${R}/config/homepage/services.yaml"
 [[ -f /tmp/Caddyfile ]] && cp /tmp/Caddyfile "${R}/config/caddy/Caddyfile"
 REMOTE_DIR="${R}" bash "${R}/scripts/pi/fix-config-perms.sh"
+if docker ps --format '{{.Names}}' | grep -q '^homepage$'; then
+  docker restart homepage >/dev/null 2>&1 || true
+fi
 REMOTE
 
 log "Tamamlandi"

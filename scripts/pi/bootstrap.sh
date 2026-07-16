@@ -70,28 +70,35 @@ elif [[ -f "$REMOTE_DIR/scripts/pi/setup-firewall.sh" ]]; then
     echo "[bootstrap] WARN: firewall setup atlandi"
 fi
 
-for unit in pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-crowdsec-ufw.timer pi-gateway-morning.timer; do
+for unit in pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-crowdsec-ufw.timer pi-gateway-morning.timer pi-gateway-stack-watchdog.timer; do
   [[ -f "$REMOTE_DIR/host/systemd/$unit" ]] && sudo cp "$REMOTE_DIR/host/systemd/$unit" "/etc/systemd/system/$unit"
 done
-for svc in pi-gateway-health.service pi-gateway-backup.service pi-gateway-adguard-config.service pi-gateway-health-failure.service pi-gateway-crowdsec-ufw.service pi-data-symlink.service pi-gateway-morning.service; do
-  if [[ -f "$REMOTE_DIR/host/systemd/$svc" ]]; then
-    sudo cp "$REMOTE_DIR/host/systemd/$svc" "/etc/systemd/system/$svc"
-    sudo sed -i "s|PI_USER|${USER}|g" "/etc/systemd/system/$svc" 2>/dev/null || \
-      sudo sed -i '' "s|PI_USER|${USER}|g" "/etc/systemd/system/$svc" 2>/dev/null || true
-    sudo sed -i "s|/home/PI_USER/pi-gateway|$REMOTE_DIR|g" "/etc/systemd/system/$svc" 2>/dev/null || \
-      sudo sed -i '' "s|/home/PI_USER/pi-gateway|$REMOTE_DIR|g" "/etc/systemd/system/$svc" 2>/dev/null || true
-    sudo sed -i "s|/opt/pi-gateway|$REMOTE_DIR|g" "/etc/systemd/system/$svc" 2>/dev/null || \
-      sudo sed -i '' "s|/opt/pi-gateway|$REMOTE_DIR|g" "/etc/systemd/system/$svc" 2>/dev/null || true
-  fi
+install_systemd_unit() {
+  local svc="$1"
+  local src="$REMOTE_DIR/host/systemd/$svc"
+  local dst="/etc/systemd/system/$svc"
+  [[ -f "$src" ]] || return 0
+  sed -e "s|/home/PI_USER/pi-gateway|${REMOTE_DIR}|g" \
+      -e "s|/opt/pi-gateway|${REMOTE_DIR}|g" \
+      -e "s|User=PI_USER|User=${USER}|g" \
+      "$src" | sudo tee "$dst" >/dev/null
+}
+for svc in pi-gateway-health.service pi-gateway-backup.service pi-gateway-adguard-config.service pi-gateway-health-failure.service pi-gateway-crowdsec-ufw.service pi-data-symlink.service pi-gateway-morning.service pi-gateway-recover-ro.service pi-gateway-stack-watchdog.service pi-gateway-ensure-fstab.service; do
+  install_systemd_unit "$svc"
 done
 sudo systemctl daemon-reload
-sudo systemctl enable pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-adguard-config.service pi-data-symlink.service pi-gateway-morning.timer 2>/dev/null || true
+sudo systemctl enable pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-adguard-config.service pi-data-symlink.service pi-gateway-morning.timer pi-gateway-recover-ro.service pi-gateway-ensure-fstab.service pi-gateway-stack-watchdog.timer 2>/dev/null || true
 if [[ "${ENABLE_CROWDSEC:-true}" == "true" ]]; then
   sudo systemctl enable --now pi-gateway-crowdsec-ufw.timer 2>/dev/null || true
 fi
-sudo systemctl start pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-morning.timer 2>/dev/null || true
+sudo systemctl start pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-morning.timer pi-gateway-stack-watchdog.timer 2>/dev/null || true
 
 if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
+  if [[ -x "$REMOTE_DIR/scripts/pi/ensure-ssd-fstab.sh" ]]; then
+    echo "[bootstrap] SSD fstab kontrolu..."
+    sudo bash "$REMOTE_DIR/scripts/pi/ensure-ssd-fstab.sh" || \
+      echo "[bootstrap] WARN: fstab kontrolu atlandi"
+  fi
   if [[ -x /usr/local/sbin/pi-setup-ssd-data.sh ]]; then
     echo "[bootstrap] SSD veri diski hazirlaniyor..."
     sudo PI_USER="$USER" REMOTE_DIR="$REMOTE_DIR" /usr/local/sbin/pi-setup-ssd-data.sh || \

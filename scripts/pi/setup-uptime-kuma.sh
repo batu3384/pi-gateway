@@ -32,10 +32,13 @@ export KUMA_URL KUMA_USER KUMA_PASS PI_IP DOCKER_GW
 export TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
 export TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:-}"
 export UPTIME_KUMA_STATUS_SLUG="${UPTIME_KUMA_STATUS_SLUG:-pi-gateway}"
+export ENABLE_N8N="${ENABLE_N8N:-true}"
+export N8N_KUMA_WEBHOOK_URL="${N8N_KUMA_WEBHOOK_URL:-http://n8n:5678/webhook/uptime-kuma-alert}"
 
 docker run --rm --network host \
   -e KUMA_URL -e KUMA_USER -e KUMA_PASS -e PI_IP -e DOCKER_GW \
   -e TELEGRAM_BOT_TOKEN -e TELEGRAM_CHAT_ID -e UPTIME_KUMA_STATUS_SLUG \
+  -e ENABLE_N8N -e N8N_KUMA_WEBHOOK_URL \
   python:3.12-alpine sh -c '
     pip install -q uptime-kuma-api2
     python - <<'"'"'PY'"'"'
@@ -50,17 +53,25 @@ gw = os.environ["DOCKER_GW"]
 tg_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 tg_chat = os.environ.get("TELEGRAM_CHAT_ID", "")
 
-ok = ["200-299", "301", "302", "401"]
+ok = ["200-299", "301", "302", "307", "308", "401"]
 
 monitors = [
     ("Pi Gateway", MonitorType.PING, {"hostname": pi_ip}),
     ("Homepage", MonitorType.HTTP, {"url": "http://homepage:3000", "accepted_statuscodes": ok}),
     ("AdGuard", MonitorType.HTTP, {"url": f"http://{gw}:8080", "accepted_statuscodes": ok}),
-    ("Caddy", MonitorType.HTTP, {"url": "http://caddy:80", "accepted_statuscodes": ok}),
-    ("logs.home", MonitorType.HTTP, {
-        "url": f"http://{pi_ip}",
-        "headers": "Host: logs.home",
+    ("Caddy", MonitorType.HTTP, {
+        "url": "https://caddy:443",
+        "headers": "{\"Host\": \"gateway.home\"}",
         "accepted_statuscodes": ok,
+        "ignoreTls": True,
+        "maxredirects": 0,
+    }),
+    ("logs.home", MonitorType.HTTP, {
+        "url": f"https://{pi_ip}",
+        "headers": "{\"Host\": \"logs.home\"}",
+        "accepted_statuscodes": ok,
+        "ignoreTls": True,
+        "maxredirects": 0,
     }),
     ("Forgejo", MonitorType.HTTP, {"url": "http://forgejo:3000", "accepted_statuscodes": ok}),
     ("Syncthing", MonitorType.HTTP, {"url": "http://syncthing:8384", "accepted_statuscodes": ok}),
@@ -82,17 +93,47 @@ if status_slug not in pages:
 else:
     print(f"status-page: {status_slug} zaten var")
 
-if tg_token and tg_chat:
-    existing = {n.get("name") for n in api.get_notifications()}
+use_n8n = os.environ.get("ENABLE_N8N", "true") == "true"
+n8n_hook = os.environ.get("N8N_KUMA_WEBHOOK_URL", "http://n8n:5678/webhook/uptime-kuma-alert")
+existing = {n.get("name") for n in api.get_notifications()}
+
+if use_n8n:
+    if "n8n Webhook" not in existing:
+        api.add_notification(
+            name="n8n Webhook",
+            type="webhook",
+            isDefault=True,
+            applyExisting=True,
+            webhookURL=n8n_hook,
+            webhookContentType="application/json",
+        )
+        print(f"notification: n8n Webhook eklendi ({n8n_hook})")
+    else:
+        notifs = {n.get("name"): n for n in api.get_notifications()}
+        nid = notifs.get("n8n Webhook", {}).get("id")
+        if nid:
+            api.edit_notification(
+                nid,
+                name="n8n Webhook",
+                type="webhook",
+                isDefault=True,
+                applyExisting=True,
+                webhookURL=n8n_hook,
+                webhookContentType="application/json",
+            )
+            print(f"notification: n8n Webhook guncellendi ({n8n_hook})")
+        else:
+            print("notification: n8n Webhook zaten var")
+elif tg_token and tg_chat:
     if "Telegram" not in existing:
-        api.add_notification({
-            "name": "Telegram",
-            "type": "telegram",
-            "isDefault": True,
-            "applyExisting": True,
-            "telegramBotToken": tg_token,
-            "telegramChatID": tg_chat,
-        })
+        api.add_notification(
+            name="Telegram",
+            type="telegram",
+            isDefault=True,
+            applyExisting=True,
+            telegramBotToken=tg_token,
+            telegramChatID=tg_chat,
+        )
         print("notification: Telegram eklendi")
     else:
         print("notification: Telegram zaten var")

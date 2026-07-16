@@ -37,6 +37,10 @@ if [[ "${STORAGE_TYPE:-hybrid}" == "hybrid" || "${STORAGE_TYPE}" == "ssd-data" ]
     run_check "docker-ssd-root" bash -c \
       "docker info 2>/dev/null | grep -q 'Docker Root Dir: ${DOCKER_SSD_ROOT:-/mnt/ssd/docker}'"
   fi
+  run_check "root-rw" bash -c '! findmnt -n -o OPTIONS / | tr "," "\n" | grep -qx ro'
+  run_check "ssd-fstab" bash -c 'grep -qE "[[:space:]]/mnt/ssd[[:space:]]" /etc/fstab'
+  run_check "ssd-mounted" mountpoint -q /mnt/ssd
+  run_check "sd-health" bash -c "REMOTE_DIR='${REMOTE_DIR}' bash '${REMOTE_DIR}/scripts/pi/check-sd-health.sh'"
 fi
 
 run_check "unbound-5335" dig +time=3 +tries=1 @127.0.0.1 -p 5335 cloudflare.com A
@@ -47,13 +51,15 @@ run_check "dns-rewrite" bash -c \
   "dig +time=3 +tries=1 @${PI_STATIC_IP} git.${LAN_DOMAIN} A +short | grep -qx '${PI_STATIC_IP}'"
 run_check "dns-rewrite-logs" bash -c \
   "dig +time=3 +tries=1 @${PI_STATIC_IP} logs.${LAN_DOMAIN} A +short | grep -qx '${PI_STATIC_IP}'"
+run_check "gateway-http" bash -c \
+  'if [[ "${ENABLE_TLS:-false}" == "true" ]]; then curl -sfk -o /dev/null --max-time 5 -H "Host: gateway.'"${LAN_DOMAIN}"'" https://127.0.0.1/; else curl -sf -o /dev/null --max-time 5 -H "Host: gateway.'"${LAN_DOMAIN}"'" http://127.0.0.1/; fi'
 run_check "homepage" curl -fsS "http://127.0.0.1:3040"
 run_check "uptime-kuma" curl -fsS "http://127.0.0.1:3001"
 run_check "adguard-ui" curl -fsS "http://127.0.0.1:${ADGUARD_WEB_PORT}/"
 
 if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
   run_check "caddy-logs.home" bash -c \
-    "code=\$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: logs.${LAN_DOMAIN}' \"http://127.0.0.1/\"); [[ \"\$code\" == \"200\" || \"\$code\" == \"401\" || \"\$code\" == \"307\" || \"\$code\" == \"302\" ]]"
+    "code=\$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: logs.${LAN_DOMAIN}' http://127.0.0.1/); [[ \"\$code\" == \"200\" || \"\$code\" == \"401\" || \"\$code\" == \"307\" || \"\$code\" == \"302\" ]]"
 fi
 
 if [[ "${ENABLE_DOZZLE:-true}" == "true" ]]; then

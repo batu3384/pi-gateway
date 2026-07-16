@@ -1,4 +1,4 @@
-.PHONY: setup validate render deploy deploy-fast install discover mac-dns harden status dns-test test-remote backup-pull backup-cron verify-data pi-access telegram-menu firewall morning-test sync-configs docker-ssd
+.PHONY: setup validate render deploy deploy-fast install discover mac-dns harden status dns-test test-remote backup-pull backup-cron verify-data pi-access trust-ca tls-certs telegram-menu firewall morning-test sync-configs docker-ssd
 
 setup:
 	@cp -n .env.example .env 2>/dev/null || true
@@ -38,6 +38,10 @@ install:
 mac-dns:
 	@./scripts/mac/setup-local-dns.sh
 
+dns-fallback:
+	@chmod +x scripts/mac/setup-dns-fallback.sh 2>/dev/null || true
+	@./scripts/mac/setup-dns-fallback.sh
+
 syncthing:
 	@./scripts/mac/setup-syncthing.sh
 
@@ -65,6 +69,14 @@ pi-access:
 	@chmod +x scripts/mac/setup-pi-access.sh 2>/dev/null || true
 	@./scripts/mac/setup-pi-access.sh
 
+trust-ca:
+	@chmod +x scripts/mac/trust-caddy-ca.sh 2>/dev/null || true
+	@./scripts/mac/trust-caddy-ca.sh
+
+tls-certs:
+	@chmod +x scripts/mac/setup-tls-certs.sh 2>/dev/null || true
+	@./scripts/mac/setup-tls-certs.sh
+
 pi-open:
 	@open "http://gateway.$${LAN_DOMAIN:-home}"
 
@@ -82,3 +94,11 @@ firewall:
 docker-ssd:
 	@scp scripts/pi/setup-docker-ssd.sh $${PI_USER:-batu}@$${PI_STATIC_IP:-192.168.1.112}:/home/$${PI_USER:-batu}/pi-gateway/scripts/pi/setup-docker-ssd.sh
 	@ssh "$${PI_USER:-batu}@$${PI_STATIC_IP:-192.168.1.112}" 'R=/home/$${USER:-batu}/pi-gateway; REMOTE_DIR="$$R" bash "$$R/scripts/pi/setup-docker-ssd.sh"'
+
+tailscale-acl:
+	@chmod +x scripts/pi/setup-tailscale-acl.sh 2>/dev/null || true
+	@ssh "$${PI_USER:-batu}@$${PI_STATIC_IP:-192.168.1.112}" 'R=/home/$${USER:-batu}/pi-gateway; REMOTE_DIR="$$R" bash "$$R/scripts/pi/setup-tailscale-acl.sh"'
+
+n8n-workflows:
+	@chmod +x scripts/pi/setup-n8n-workflows.sh scripts/pi/setup-forgejo-webhook.sh 2>/dev/null || true
+	@ssh "$${PI_USER:-batu}@$${PI_STATIC_IP:-192.168.1.112}" 'R=/home/$${USER:-batu}/pi-gateway; REMOTE_DIR="$$R" bash "$$R/scripts/pi/setup-n8n-workflows.sh" && REMOTE_DIR="$$R" bash "$$R/scripts/pi/setup-uptime-kuma.sh" && REMOTE_DIR="$$R" bash "$$R/scripts/pi/setup-forgejo-webhook.sh"'

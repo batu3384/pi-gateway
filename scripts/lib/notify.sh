@@ -5,8 +5,23 @@ set -euo pipefail
 NOTIFY_STATE_DIR="${NOTIFY_STATE_DIR:-/tmp/pi-gateway-notify}"
 NOTIFY_COOLDOWN_SEC="${NOTIFY_COOLDOWN_SEC:-300}"
 
+LAN_DOMAIN="${LAN_DOMAIN:-home}"
+
 notify_enabled() {
   [[ -n "${TELEGRAM_BOT_TOKEN:-}" && -n "${TELEGRAM_CHAT_ID:-}" ]]
+}
+
+panel_url() {
+  local host="$1"
+  local proto="${PANEL_PROTOCOL:-}"
+  if [[ -z "$proto" ]]; then
+    if [[ "${ENABLE_TLS:-false}" == "true" ]]; then
+      proto=https
+    else
+      proto=http
+    fi
+  fi
+  printf '%s://%s.%s' "$proto" "$host" "${LAN_DOMAIN}"
 }
 
 notify_rate_ok() {
@@ -22,57 +37,113 @@ notify_rate_ok() {
   return 0
 }
 
+notify_escape_html() {
+  local text="$1"
+  text="${text//&/&amp;}"
+  text="${text//</&lt;}"
+  text="${text//>/&gt;}"
+  text="${text//\'/&#39;}"
+  printf '%s' "$text"
+}
+
 notify_telegram() {
   local title="$1"
   local body="$2"
   local key="${3:-alert}"
+  local parse_mode="${4:-}"
 
   notify_enabled || return 0
   notify_rate_ok "$key" || return 0
 
   local text
-  text="$(printf '%s\n%s' "$title" "$body")"
-  curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-    -d "chat_id=${TELEGRAM_CHAT_ID}" \
-    --data-urlencode "text=${text}" \
-    --data-urlencode "disable_web_page_preview=true" >/dev/null 2>&1 || true
+  text="$(printf '%s\n\n%s' "$title" "$body")"
+  if [[ -n "$parse_mode" ]]; then
+    curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+      -d "chat_id=${TELEGRAM_CHAT_ID}" \
+      -d "parse_mode=${parse_mode}" \
+      --data-urlencode "text=${text}" \
+      -d "disable_web_page_preview=true" >/dev/null 2>&1 || true
+  else
+    curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+      -d "chat_id=${TELEGRAM_CHAT_ID}" \
+      --data-urlencode "text=${text}" \
+      -d "disable_web_page_preview=true" >/dev/null 2>&1 || true
+  fi
 }
 
 # Kullanıcıya giden standart Türkçe mesajlar (UTF-8)
 notify_dns_fail() {
   local host="$1"
   local details="$2"
+  local gateway
+  gateway="$(panel_url gateway)"
   local body
-  body="$(printf '%s\n%s' "${host}: DNS sağlık kontrolü başarısız." "$details")"
-  notify_telegram "⚠️ Pi Gateway — DNS sorunu" "$body" "health-fail"
+  body="$(printf '<b>%s</b> — DNS sağlık kontrolü başarısız.\n\n<code>%s</code>\n\n<b>Ne yapmalı?</b>\n• Pi açık mı kontrol edin\n• Geçici: router DNS → 8.8.8.8\n• Panel: %s' \
+    "$host" "$(notify_escape_html "$details")" "$gateway")"
+  notify_telegram "⚠️ Pi Gateway" "$body" "health-dns" "HTML"
 }
 
 notify_backup_ok() {
   local stamp="$1"
   local body
-  body="$(printf 'Restic yedeklemesi tamamlandı.\nZaman: %s' "$stamp")"
-  notify_telegram "✅ Pi Gateway — Yedek" "$body" "restic-ok"
+  body="$(printf 'Restic yedeklemesi tamamlandı.\n<b>Zaman:</b> %s' "$stamp")"
+  notify_telegram "✅ Pi Gateway — Yedek" "$body" "restic-ok" "HTML"
 }
 
 notify_health_systemd_fail() {
   local host="$1"
-  notify_telegram "⚠️ Pi Gateway — Uyarı" \
-    "${host}: Zamanlanmış sağlık kontrolü başarısız." \
-    "health-fail"
+  local body
+  body="$(printf '<b>%s</b> — zamanlanmış sağlık kontrolü başarısız.\n\nDetay için Pi üzerinde:\n<code>journalctl -t pi-gateway-health -n 20</code>' "$host")"
+  notify_telegram "⚠️ Pi Gateway — Sağlık" "$body" "health-systemd" "HTML"
 }
 
 notify_disk_warn() {
   local mount="$1"
   local pct="$2"
   local body
-  body="$(printf '%s diski %%%.0f dolu.\nKontrol: df -h %s' "$mount" "$pct" "$mount")"
-  notify_telegram "⚠️ Pi Gateway — Disk uyarısı" "$body" "disk-warn"
+  body="$(printf '<b>%s</b> diski <b>%%%s</b> dolu.\n\n<code>df -h %s</code>' "$mount" "$pct" "$mount")"
+  notify_telegram "⚠️ Pi Gateway — Disk" "$body" "disk-warn" "HTML"
+}
+
+notify_sd_warn() {
+  local host="$1"
+  local details="$2"
+  local recovered="${3:-0}"
+  local body
+  if [[ "$recovered" == "1" ]]; then
+    body="$(printf '<b>%s</b> — SD kart / root dosya sistemi sorunu.\nOtomatik kurtarma denendi ama sorun suruyor.\n\n<code>%s</code>\n\n<b>Ne yapmalı?</b>\n• Pi''yi guvenli kapatip acin\n• SD kart sagligini kontrol edin\n• Uzun vadede SSD''den boot dusunun' \
+      "$host" "$(notify_escape_html "$details")")"
+  else
+    body="$(printf '<b>%s</b> — SD kart read-only veya yazilamiyor.\n\n<code>%s</code>\n\n<b>Ne yapmalı?</b>\n• Pi''yi yeniden baslatin\n• Sorun tekrarlarsa SD karti degistirin' \
+      "$host" "$(notify_escape_html "$details")")"
+  fi
+  notify_telegram "⚠️ Pi Gateway — SD Kart" "$body" "sd-warn" "HTML"
+}
+
+notify_sd_recovered() {
+  local host="$1"
+  local body
+  body="$(printf '<b>%s</b> — root read-only tespit edildi, otomatik kurtarma yapildi.\n\nServisler yeniden ayaga kalkti.\nSD karti izlemeye devam ediyoruz.' "$host")"
+  notify_telegram "✅ Pi Gateway — SD Kurtarma" "$body" "sd-recovered" "HTML"
+}
+
+notify_stack_recovered() {
+  local host="$1"
+  local details="$2"
+  local gateway
+  gateway="$(panel_url gateway)"
+  local body
+  body="$(printf '<b>%s</b> — stack otomatik kurtarildi.\n\n<code>%s</code>\n\nPanel: %s' \
+    "$host" "$(notify_escape_html "$details")" "$gateway")"
+  notify_telegram "✅ Pi Gateway — Stack Kurtarma" "$body" "stack-recovered" "HTML"
 }
 
 notify_test() {
+  local gateway
+  gateway="$(panel_url gateway)"
   local body
-  body="$(printf 'Telegram bildirimleri aktif.\nBu bot yalnızca uyarı gönderir; mesajlarınıza cevap vermez.')"
-  notify_telegram "✅ Pi Gateway" "$body" "test-once"
+  body="$(printf 'Bildirimler aktif.\n\n<b>Ana panel:</b> %s\n<b>Menü:</b> Mac''te <code>make telegram-menu</code>\n\n<i>Bu bot yalnızca uyarı gönderir; mesajlarınıza cevap vermez.</i>' "$gateway")"
+  notify_telegram "✅ Pi Gateway" "$body" "test-once" "HTML"
 }
 
 watchtower_notification_url() {

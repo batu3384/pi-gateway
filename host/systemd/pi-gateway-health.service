@@ -1,7 +1,6 @@
 [Unit]
 Description=Pi Gateway DNS health check
-After=docker.service
-Requires=docker.service
+After=network-online.target docker.service
 OnFailure=pi-gateway-health-failure.service
 
 [Service]

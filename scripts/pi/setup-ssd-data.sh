@@ -149,8 +149,10 @@ main() {
   disk="$(find_usb_data_disk)" || die "USB veri diski bulunamadi (SSD takili mi?)"
   part="$(partition_for_disk "$disk")"
 
-  if [[ -f "$MARKER" ]] && mountpoint -q "$MOUNT"; then
-    log "Zaten hazir ($MARKER) — symlink kontrol"
+  if [[ -f "$MARKER" ]]; then
+    log "Zaten hazir ($MARKER) — fstab + symlink kontrol"
+    mount_ssd "$part" || true
+    ensure_fstab "$part"
     prepare_data_tree
     exit 0
   fi

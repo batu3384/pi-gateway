@@ -42,6 +42,7 @@ rsync -avz --delete \
   --filter 'protect config/homepage/logs/**' \
   --exclude 'config/adguard/AdGuardHome.yaml' \
   --exclude 'config/homepage/services.yaml' \
+  # Caddyfile: rsync disinda; render sonrasi sync-rendered-configs.sh ile gider
   --exclude 'config/caddy/Caddyfile' \
   --exclude 'config/homepage/logs/**' \
   --exclude 'backups' \
@@ -74,13 +75,13 @@ ssh "$PI_USER@$DEPLOY_HOST" "REMOTE_DIR='$REMOTE_DIR' bash -s" < "$SCRIPT_DIR/..
 
 log "Deploy complete"
 DOMAIN="${LAN_DOMAIN:-home}"
-log "  Gateway : http://gateway.${DOMAIN}"
-log "  Status  : http://status.${DOMAIN}"
-log "  Logs    : http://logs.${DOMAIN}"
-log "  DNS     : http://dns.${DOMAIN}"
-log "  Git     : http://git.${DOMAIN}"
-log "  Sync    : http://sync.${DOMAIN}"
-log "  n8n     : http://n8n.${DOMAIN}"
+log "  Gateway : https://gateway.${DOMAIN}"
+log "  Status  : https://status.${DOMAIN}"
+log "  Logs    : https://logs.${DOMAIN}"
+log "  DNS     : https://dns.${DOMAIN}"
+log "  Git     : https://git.${DOMAIN}"
+log "  Sync    : https://sync.${DOMAIN}"
+log "  n8n     : https://n8n.${DOMAIN}"
 log "  UFW     : ${UFW_ADMIN_EXPOSURE:-caddy-only}"
 
 if [[ "${NETWORK_MODE:-router-dns}" == "router-dns" ]]; then

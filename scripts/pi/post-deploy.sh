@@ -31,6 +31,7 @@ run_step_optional "Config izinleri" "$SCRIPT_DIR/fix-config-perms.sh"
 
 # SSD symlink (hybrid)
 if [[ "${STORAGE_TYPE:-hybrid}" == "hybrid" || "${STORAGE_TYPE}" == "ssd-data" ]]; then
+  run_step_optional "SSD fstab" "$SCRIPT_DIR/ensure-ssd-fstab.sh"
   log ">> SSD data symlink"
   REMOTE_DIR="$REMOTE_DIR" STORAGE_TYPE="${STORAGE_TYPE}" bash "$SCRIPT_DIR/ensure-data-symlink.sh" repair || {
     log "HATA: data symlink onarilamadi"
@@ -39,6 +40,9 @@ if [[ "${STORAGE_TYPE:-hybrid}" == "hybrid" || "${STORAGE_TYPE}" == "ssd-data" ]
 fi
 
 run_step_critical "AdGuard yapilandirma" "$SCRIPT_DIR/configure-adguard.sh"
+if [[ "${SYNC_SERVICE_PASSWORDS:-false}" == "true" ]]; then
+  run_step_optional "Servis sifreleri" "$SCRIPT_DIR/sync-service-passwords.sh"
+fi
 run_step_optional "Host sertlestirme" "$SCRIPT_DIR/harden-host.sh"
 
 if [[ "${ENABLE_FORGEJO:-true}" == "true" ]]; then
@@ -60,12 +64,23 @@ if [[ "${ENABLE_DOZZLE:-true}" == "true" ]]; then
   run_step_optional "Dozzle auth" "$SCRIPT_DIR/setup-dozzle.sh"
 fi
 
+if [[ "${ENABLE_N8N:-true}" == "true" ]]; then
+  run_step_optional "Sabah ozeti timer" "$SCRIPT_DIR/setup-morning-timer.sh"
+  run_step_optional "n8n workflow (opsiyonel)" "$SCRIPT_DIR/setup-n8n-morning.sh"
+  run_step_optional "n8n otomasyonlar" "$SCRIPT_DIR/setup-n8n-workflows.sh"
+fi
+
 if docker ps --format '{{.Names}}' | grep -q '^uptime-kuma$'; then
   run_step_optional "Uptime Kuma monitorler" "$SCRIPT_DIR/setup-uptime-kuma.sh"
 fi
 
+if [[ "${ENABLE_N8N:-true}" == "true" ]] && [[ "${ENABLE_FORGEJO:-true}" == "true" ]]; then
+  run_step_optional "Forgejo n8n webhook" "$SCRIPT_DIR/setup-forgejo-webhook.sh"
+fi
+
 if command -v tailscale >/dev/null 2>&1 && tailscale status >/dev/null 2>&1; then
   run_step_optional "Tailscale uzaktan erisim" "$SCRIPT_DIR/setup-tailscale-remote.sh"
+  run_step_optional "Tailscale ACL" "$SCRIPT_DIR/setup-tailscale-acl.sh"
 fi
 
 if [[ "${ENABLE_CROWDSEC:-true}" == "true" ]]; then
@@ -78,14 +93,11 @@ if [[ "${ENABLE_UFW:-true}" == "true" ]]; then
 fi
 
 if [[ "${STORAGE_TYPE:-hybrid}" == "hybrid" || "${STORAGE_TYPE}" == "ssd-data" ]]; then
-  if [[ "${ENABLE_DOCKER_SSD:-true}" == "true" ]] && [[ ! -f /mnt/ssd/.docker-data-root ]]; then
-    run_step_optional "Docker SSD tasima" "$SCRIPT_DIR/setup-docker-ssd.sh"
+  if [[ "${ENABLE_DOCKER_SSD:-true}" == "true" ]]; then
+    if [[ ! -f /mnt/ssd/.docker-data-root ]] || [[ ! -f /etc/systemd/system/docker.service.d/pi-gateway-ssd.conf ]]; then
+      run_step_optional "Docker SSD tasima" "$SCRIPT_DIR/setup-docker-ssd.sh"
+    fi
   fi
-fi
-
-if [[ "${ENABLE_N8N:-true}" == "true" ]]; then
-  run_step_optional "Sabah ozeti timer" "$SCRIPT_DIR/setup-morning-timer.sh"
-  run_step_optional "n8n workflow (opsiyonel)" "$SCRIPT_DIR/setup-n8n-morning.sh"
 fi
 
 log "Post-deploy tamamlandi"

@@ -1,0 +1,14 @@
+[Unit]
+Description=Pi Gateway ensure SSD fstab entry
+DefaultDependencies=no
+After=local-fs.target
+Before=mnt-ssd.mount pi-gateway-recover-ro.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+TimeoutStartSec=30
+ExecStart=/home/PI_USER/pi-gateway/scripts/pi/ensure-ssd-fstab.sh
+
+[Install]
+WantedBy=multi-user.target

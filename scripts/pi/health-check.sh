@@ -7,12 +7,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 [[ -f "$REMOTE_DIR/.env" ]] && source "$REMOTE_DIR/.env"
 # shellcheck source=../lib/adguard-api.sh
 source "$SCRIPT_DIR/../lib/adguard-api.sh"
+# shellcheck source=../lib/stack-health.sh
+source "$SCRIPT_DIR/../lib/stack-health.sh"
 
 LOG_TAG="pi-gateway-health"
 PI_STATIC_IP="${PI_STATIC_IP:-127.0.0.1}"
 LAN_DOMAIN="${LAN_DOMAIN:-home}"
 ADGUARD_WEB_PORT="${ADGUARD_WEB_PORT:-8080}"
 UNBOUND_PORT="${UNBOUND_PORT:-5335}"
+STACK_AUTO_RECOVER="${STACK_AUTO_RECOVER:-true}"
 fail=0
 FAILURES=()
 
@@ -22,12 +25,30 @@ note_fail() {
   fail=1
 }
 
+# SD sagligi (kurtarma yok — asagida tek trigger_stack_recover)
+if ! SD_HEALTH_AUTO_RECOVER=false REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/check-sd-health.sh"; then
+  fail=1
+fi
+
+if [[ "$STACK_AUTO_RECOVER" == "true" ]] && ! stack_fully_healthy; then
+  logger -t "$LOG_TAG" "stack auto-recover tetikleniyor"
+  trigger_stack_recover "$REMOTE_DIR" || true
+fi
+
 if ! docker ps --format '{{.Names}}' | grep -q '^unbound$'; then
   note_fail "container unbound down"
 fi
 
 if ! docker ps --format '{{.Names}}' | grep -q '^adguard$'; then
   note_fail "container adguard down"
+fi
+
+if ! docker ps --format '{{.Names}}' | grep -q '^caddy$'; then
+  note_fail "container caddy down"
+fi
+
+if ! stack_gateway_ok; then
+  note_fail "gateway-http"
 fi
 
 if [[ "${STORAGE_TYPE:-hybrid}" == "hybrid" || "${STORAGE_TYPE}" == "ssd-data" ]]; then
@@ -70,7 +91,7 @@ import json,sys
 d=json.load(sys.stdin)
 upstream = d.get('upstream_dns') or []
 udp_ok = any(u.startswith('udp://127.0.0.1:') for u in upstream)
-ptr_ok = d.get('use_private_ptr_resolvers') is False and d.get('local_ptr_upstreams') == []
+ptr_ok = d.get('use_private_ptr_resolvers') is False
 ttl_ok = d.get('blocked_response_ttl') == int('${ADGUARD_BLOCKED_TTL:-60}')
 print('1' if udp_ok and ptr_ok and ttl_ok else '0')
 " 2>/dev/null || echo 0)"

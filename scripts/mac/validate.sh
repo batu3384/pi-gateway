@@ -23,6 +23,9 @@ fi
 
 "$SCRIPT_DIR/render-config.sh"
 
+chmod +x "$SCRIPT_DIR/validate-stack-health.sh" 2>/dev/null || true
+"$SCRIPT_DIR/validate-stack-health.sh"
+
 docker compose -f "$PROJECT_DIR/compose/docker-compose.yml" --env-file "$PROJECT_DIR/.env" config -q
 log "docker-compose validation: OK"
 

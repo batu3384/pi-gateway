@@ -65,6 +65,13 @@ if api_ready; then
       --password "${FORGEJO_ADMIN_PASSWORD}" 2>/dev/null \
       && log "Admin sifresi guncellendi: ${FORGEJO_ADMIN_USER}" \
       || log "Sifre guncelleme atlandi (zaten guncel veya yetki yok)"
+    if [[ "${FORGEJO_ADMIN_USER}" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+      docker exec forgejo sqlite3 /data/gitea/gitea.db \
+        "UPDATE user SET must_change_password=0 WHERE lower_name='${FORGEJO_ADMIN_USER}';" \
+        2>/dev/null || true
+    else
+      log "WARN: Forgejo kullanici adi gecersiz — must_change_password atlandi"
+    fi
   fi
   exit 0
 fi
