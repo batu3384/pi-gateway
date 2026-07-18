@@ -110,6 +110,7 @@ if [[ "${ENABLE_FORGEJO:-true}" == "true" ]]; then
 fi
 
 if [[ "${ENABLE_SYNCTHING:-true}" == "true" ]] && docker ps --format '{{.Names}}' | grep -q '^syncthing$'; then
+  run_step_critical "Syncthing GUI auth" "$SCRIPT_DIR/setup-syncthing-auth.sh"
   run_step_optional "Syncthing eslestirme" "$SCRIPT_DIR/setup-syncthing.sh"
   DEVICE_ID="$(docker exec syncthing cat /var/syncthing/config/config.xml 2>/dev/null | sed -n 's:.*<device id="\([^"]*\)".*:\1:p' | head -1 || true)"
   log "Syncthing Pi Device ID: ${DEVICE_ID:-bilinmiyor}"

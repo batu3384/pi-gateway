@@ -161,8 +161,7 @@ monitors = [
         "maxredirects": 0,
     }),
     (f"logs.{lan}", MonitorType.HTTP, {
-        "url": f"https://{pi_ip}",
-        "headers": json.dumps({"Host": f"logs.{lan}"}),
+        "url": f"https://logs.{lan}",
         "accepted_statuscodes": ok,
         "ignoreTls": True,
         "maxredirects": 0,

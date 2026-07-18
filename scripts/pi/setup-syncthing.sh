@@ -71,6 +71,73 @@ else
   log "Mac cihazi zaten kayitli"
 fi
 
+# Pi'nin LAN uzerinden sync adresini duyur (Docker NAT)
+export BASE APIKEY PI_STATIC_IP
+python3 <<'PY'
+import json, os, subprocess, sys
+
+base = os.environ["BASE"]
+apikey = os.environ["APIKEY"]
+pi_ip = os.environ["PI_STATIC_IP"]
+addr = f"tcp://{pi_ip}:22000"
+
+raw = subprocess.check_output(
+    ["curl", "-fsS", "-H", f"X-API-Key: {apikey}", f"{base}/rest/config/options"],
+    text=True,
+)
+opts = json.loads(raw)
+changed = False
+for key, val in [
+    ("globalAnnounceEnabled", True),
+    ("localAnnounceEnabled", True),
+    ("natEnabled", True),
+]:
+    if opts.get(key) is not val:
+        opts[key] = val
+        changed = True
+
+if changed:
+    subprocess.run(
+        [
+            "curl", "-fsS", "-X", "PUT",
+            "-H", f"X-API-Key: {apikey}",
+            "-H", "Content-Type: application/json",
+            "-d", json.dumps(opts),
+            f"{base}/rest/config/options",
+        ],
+        check=True,
+    )
+    print("[syncthing-setup] announce/nat secenekleri guncellendi")
+
+devices = json.loads(subprocess.check_output(
+    ["curl", "-fsS", "-H", f"X-API-Key: {apikey}", f"{base}/rest/config/devices"],
+    text=True,
+))
+my_id = json.loads(subprocess.check_output(
+    ["curl", "-fsS", "-H", f"X-API-Key: {apikey}", f"{base}/rest/system/status"],
+    text=True,
+)).get("myID")
+for dev in devices:
+    if dev.get("deviceID") != my_id:
+        continue
+    addrs = list(dev.get("addresses") or [])
+    if addr not in addrs:
+        addrs.insert(0, addr)
+        dev["addresses"] = addrs
+        subprocess.run(
+            [
+                "curl", "-fsS", "-X", "PUT",
+                "-H", f"X-API-Key: {apikey}",
+                "-H", "Content-Type: application/json",
+                "-d", json.dumps(dev),
+                f"{base}/rest/config/devices/{my_id}",
+            ],
+            check=True,
+        )
+        print(f"[syncthing-setup] Pi sync adresi: {addr}")
+    break
+PY
+
 mkdir -p "${REMOTE_DIR}/data/projects"
 docker exec syncthing mkdir -p "/var/syncthing/Projects"
 

@@ -164,8 +164,9 @@ services:
       - ../data/projects:/var/syncthing/Projects
     ports:
       - "127.0.0.1:${SYNCTHING_PORT:-8384}:8384"
-      - "127.0.0.1:22000:22000/tcp"
-      - "127.0.0.1:22000:22000/udp"
+      # Sync: LAN (UFW kisitli); 127.0.0.1 bind Mac eslestirmesini kirar
+      - "22000:22000/tcp"
+      - "22000:22000/udp"
 
   redis:
     image: redis:7-alpine

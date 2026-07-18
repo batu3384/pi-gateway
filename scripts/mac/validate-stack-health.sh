@@ -240,9 +240,13 @@ grep -q 'insecure_ssl' "$PROJECT_DIR/scripts/pi/setup-forgejo-webhook.sh" \
   && die "forgejo webhook insecure_ssl hala var"
 ok "forgejo webhook ssl guvenli"
 
+grep -q '127.0.0.1:.*8384' "$compose" \
+  || die "syncthing GUI localhost bind yok"
+grep -q '22000:22000/tcp' "$compose" \
+  || die "syncthing sync port publish yok"
 grep -q '127.0.0.1:22000' "$compose" \
-  || die "syncthing 22000 localhost bind degil"
-ok "syncthing sync port localhost"
+  && die "syncthing 22000 localhost bind — Mac sync kirilir"
+ok "syncthing GUI localhost, sync LAN"
 
 grep -q 'STORAGE_TYPE=hybrid' "$PROJECT_DIR/.env.example" \
   || die ".env.example hybrid varsayilan degil"
