@@ -37,6 +37,7 @@ Client DNS query
 | Dashboard | Homepage | Service links |
 | Logs | Dozzle | Live Docker container logs |
 | Monitoring | Uptime Kuma + systemd health timer | Uptime + DNS layer checks |
+| Network inventory | NetAlertX | LAN cihaz keşfi, yeni/offline uyarıları |
 | Recovery | autoheal | Restart unhealthy containers |
 | Security | UFW + fail2ban | LAN-scoped admin ports, SSH protection |
 | Host | log2ram, sysctl tuning, watchdog | SD longevity, UDP performance |
@@ -51,6 +52,7 @@ Client DNS query
 | 1 DNS stack | Done | Unbound, AdGuard, Homepage, Uptime Kuma, Caddy, Dozzle |
 | 2 Dev & sync | Done | Forgejo, Syncthing, Restic (timer) |
 | 3 Advanced | Done | CrowdSec, Redis, n8n; Cloudflare Tunnel (token ile) |
+| 4 Network visibility | Done | NetAlertX — `devices.home`, n8n webhook uyarıları |
 
 ## Network modes
 
@@ -85,6 +87,7 @@ USB SSD:      /mnt/ssd/
                   forgejo/
                   syncthing/
                   n8n/
+                  netalertx/
                   backups/restic/
                   projects/
 ```

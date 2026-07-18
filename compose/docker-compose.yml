@@ -213,6 +213,31 @@ services:
       - ../data/n8n:/home/node/.n8n
       - ../data/.disk-probe:/host-ssd:ro
 
+  netalertx:
+    image: ghcr.io/netalertx/netalertx:latest
+    container_name: netalertx
+    restart: unless-stopped
+    profiles: ["netalert"]
+    network_mode: host
+    cap_add:
+      - NET_RAW
+      - NET_ADMIN
+      - NET_BIND_SERVICE
+    labels:
+      autoheal: "true"
+    environment:
+      PORT: ${NETALERTX_PORT:-20211}
+      LISTEN_ADDR: ${NETALERTX_LISTEN_ADDR:-0.0.0.0}
+      PUID: ${NETALERTX_UID:-20211}
+      PGID: ${NETALERTX_GID:-20211}
+      LOADED_PLUGINS: '["ARPSCAN","DIGSCAN","NSLOOKUP","ICMP","WEBHOOK","NEWDEV","NTFPRCS","DBCLNP","CUSTPROP","SETPWD","SYNC","UI","MAINT","VNDRPDT"]'
+      APP_CONF_OVERRIDE: '{"GRAPHQL_PORT":"20214"}'
+    volumes:
+      - ../data/netalertx:/data
+      - /etc/localtime:/etc/localtime:ro
+    tmpfs:
+      - /tmp:uid=20211,gid=20211,mode=1700
+
   crowdsec:
     image: crowdsecurity/crowdsec:v1.6.4
     container_name: crowdsec

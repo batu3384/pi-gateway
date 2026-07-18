@@ -248,6 +248,17 @@ grep -q '127.0.0.1:22000' "$compose" \
   && die "syncthing 22000 localhost bind — Mac sync kirilir"
 ok "syncthing GUI localhost, sync LAN"
 
+grep -q 'network_mode: host' "$compose" \
+  && grep -q 'container_name: netalertx' "$compose" \
+  || die "netalertx host network yok"
+grep -q 'docker-netalertx' "$PROJECT_DIR/scripts/pi/setup-firewall.sh" \
+  || die "netalertx docker ufw kurali yok"
+grep -q 'setup-netalertx.sh' "$PROJECT_DIR/scripts/pi/post-deploy.sh" \
+  || die "post-deploy netalertx yok"
+grep -q 'netalert-device-alert' "$PROJECT_DIR/config/n8n/netalert-device-alert.workflow.json" \
+  || die "n8n netalert workflow yok"
+ok "netalertx host network + webhook"
+
 grep -q 'STORAGE_TYPE=hybrid' "$PROJECT_DIR/.env.example" \
   || die ".env.example hybrid varsayilan degil"
 ok "hybrid varsayilan"

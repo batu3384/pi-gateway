@@ -115,6 +115,8 @@ export TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
 export TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:-}"
 export UPTIME_KUMA_STATUS_SLUG="${UPTIME_KUMA_STATUS_SLUG:-pi-gateway}"
 export ENABLE_N8N="${ENABLE_N8N:-true}"
+export ENABLE_NETALERTX="${ENABLE_NETALERTX:-true}"
+export NETALERTX_PORT="${NETALERTX_PORT:-20211}"
 export LAN_DOMAIN="${LAN_DOMAIN:-home}"
 if [[ -n "${N8N_KUMA_WEBHOOK_URL:-}" ]]; then
   :
@@ -130,7 +132,7 @@ export N8N_KUMA_WEBHOOK_URL
 docker run --rm --network host \
   -e KUMA_URL -e KUMA_USER -e KUMA_PASS -e PI_IP -e DOCKER_GW -e LAN_DOMAIN \
   -e TELEGRAM_BOT_TOKEN -e TELEGRAM_CHAT_ID -e UPTIME_KUMA_STATUS_SLUG \
-  -e ENABLE_N8N -e N8N_KUMA_WEBHOOK_URL \
+  -e ENABLE_N8N -e N8N_KUMA_WEBHOOK_URL -e ENABLE_NETALERTX -e NETALERTX_PORT \
   python:3.12-alpine sh -c '
     pip install -q uptime-kuma-api2
     python - <<'"'"'PY'"'"'
@@ -146,6 +148,7 @@ gw = os.environ["DOCKER_GW"]
 lan = os.environ.get("LAN_DOMAIN", "home")
 tg_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 tg_chat = os.environ.get("TELEGRAM_CHAT_ID", "")
+netalertx_port = os.environ.get("NETALERTX_PORT", "20211")
 
 ok = ["200-299", "301", "302", "307", "308", "401"]
 
@@ -174,6 +177,18 @@ monitors = [
     ("Unbound DNS", MonitorType.PORT, {"hostname": "unbound", "port": 5335}),
     ("Redis", MonitorType.PORT, {"hostname": "redis", "port": 6379}),
 ]
+
+if os.environ.get("ENABLE_NETALERTX", "true") == "true":
+    monitors.append((f"devices.{lan}", MonitorType.HTTP, {
+        "url": f"https://devices.{lan}",
+        "accepted_statuscodes": ok,
+        "ignoreTls": True,
+        "maxredirects": 0,
+    }))
+    monitors.append(("NetAlertX", MonitorType.HTTP, {
+        "url": f"http://127.0.0.1:{netalertx_port}",
+        "accepted_statuscodes": ok,
+    }))
 
 api = UptimeKumaApi(url, timeout=30)
 api.login(user, password)

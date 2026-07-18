@@ -15,6 +15,8 @@ FORGEJO_PORT="${FORGEJO_PORT:-3002}"
 SYNCTHING_PORT="${SYNCTHING_PORT:-8384}"
 N8N_PORT="${N8N_PORT:-5678}"
 DOZZLE_PORT="${DOZZLE_PORT:-9999}"
+NETALERTX_PORT="${NETALERTX_PORT:-20211}"
+NETALERTX_LISTEN_ADDR="${NETALERTX_LISTEN_ADDR:-172.17.0.1}"
 UFW_ADMIN_EXPOSURE="${UFW_ADMIN_EXPOSURE:-caddy-only}"
 
 checks=0
@@ -74,6 +76,8 @@ run_check "dns-rewrite" bash -c \
   "dig +time=3 +tries=1 @${PI_STATIC_IP} git.${LAN_DOMAIN} A +short | grep -qx '${PI_STATIC_IP}'"
 run_check "dns-rewrite-logs" bash -c \
   "dig +time=3 +tries=1 @${PI_STATIC_IP} logs.${LAN_DOMAIN} A +short | grep -qx '${PI_STATIC_IP}'"
+run_check "dns-rewrite-devices" bash -c \
+  "dig +time=3 +tries=1 @${PI_STATIC_IP} devices.${LAN_DOMAIN} A +short | grep -qx '${PI_STATIC_IP}'"
 
 if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
   auth_pass="${CADDY_AUTH_PASSWORD:-${AGH_ADMIN_PASSWORD:-}}"
@@ -86,6 +90,9 @@ if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
       run_caddy_auth_checks "dns"
       if [[ "${ENABLE_N8N:-true}" == "true" ]]; then
         run_caddy_auth_checks "n8n"
+      fi
+      if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
+        run_caddy_auth_checks "devices"
       fi
       ;;
   esac
@@ -133,6 +140,24 @@ if [[ "${ENABLE_N8N:-true}" == "true" ]]; then
   esac
 fi
 
+if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
+  run_check "netalertx" bash -c \
+    "for _ in 1 2 3 4 5 6; do curl -fsS \"http://127.0.0.1:${NETALERTX_PORT}/\" >/dev/null && exit 0; sleep 5; done; exit 1"
+  case "${N8N_WEBHOOK_SECRET:-}" in
+    ""|CHANGE_ME*) ;;
+    *)
+      if [[ "${ENABLE_N8N:-true}" == "true" ]]; then
+        run_check "n8n-netalert-webhook" bash -c \
+          'code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 -X POST \
+            "http://127.0.0.1:'"${N8N_PORT}"'/webhook/netalert-device-alert-'"${N8N_WEBHOOK_SECRET}"'" \
+            -H "Content-Type: application/json" \
+            -d "{\"body\":{\"attachments\":[{\"text\":{\"new_devices\":[{\"MAC\":\"aa:bb:cc:dd:ee:ff\",\"IP\":\"192.168.1.99\",\"Device name\":\"Smoke Test\"}]}}]}}"); \
+            [[ "$code" == "200" ]]'
+      fi
+      ;;
+  esac
+fi
+
 run_check "privileged-lib-installed" test -x /usr/local/lib/pi-gateway/scripts/pi/recover-readonly-root.sh
 run_check "privileged-lib-sync" diff -q \
   "${REMOTE_DIR}/scripts/lib/stack-health.sh" \
@@ -152,7 +177,11 @@ if [[ "${ENABLE_UFW:-true}" == "true" ]] && [[ -x /usr/sbin/ufw ]]; then
       "! sudo -n /usr/sbin/ufw status | grep -E 'pi-gateway (9999|8080|3001|8384)' | grep -q '${LAN_SUBNET_CIDR:-192.168.1.0/24}'"
     # Docker UFW'yi bypass eder — bind gercekten localhost olmali
     run_check "admin-ports-localhost" bash -c \
-      '! ss -lnt | grep -E ":(3040|3001|5678|9999|3002|8384|22000)\\b" | grep -vE "127\\.0\\.0\\.1|\\[::1\\]" | grep -q .'
+      '! ss -lnt | grep -E ":(3040|3001|5678|9999|3002|8384)\\b" | grep -vE "127\\.0\\.0\\.1|\\[::1\\]" | grep -q .'
+    if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
+      run_check "netalertx-ufw-caddy-only" bash -c \
+        '! sudo -n /usr/sbin/ufw status | grep -E ":'"${NETALERTX_PORT:-20211}"'\\b" | grep -q "${LAN_SUBNET_CIDR:-192.168.1.0/24}"'
+    fi
   fi
 fi
 

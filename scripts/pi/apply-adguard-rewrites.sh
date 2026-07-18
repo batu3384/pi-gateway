@@ -65,7 +65,7 @@ print(len(json.load(sys.stdin)))
   fi
 }
 
-DOMAINS=(gateway dns status panel git sync n8n logs)
+DOMAINS=(gateway dns status panel git sync n8n logs devices)
 for sub in "${DOMAINS[@]}"; do
   add_rewrite "${sub}.${LAN_DOMAIN}" "$PI_STATIC_IP"
 done

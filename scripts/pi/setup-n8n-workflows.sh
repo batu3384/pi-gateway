@@ -50,9 +50,10 @@ panel_protocol() {
 }
 
 render_hash() {
-  local proto
+  local proto netalert
   proto="$(panel_protocol)"
-  printf '%s|%s' "${N8N_WEBHOOK_SECRET:-}" "$proto" | sha256sum | awk '{print $1}'
+  netalert="${ENABLE_NETALERTX:-true}"
+  printf '%s|%s|%s|netalert' "${N8N_WEBHOOK_SECRET:-}" "$proto" "$netalert" | sha256sum | awk '{print $1}'
 }
 
 case "${N8N_WEBHOOK_SECRET:-}" in
@@ -140,6 +141,9 @@ needs_restart=false
 if [[ "$needs_import" == "true" ]]; then
   import_workflow "Pi Gateway — Uptime Kuma Alert" "${N8N_DIR}/uptime-kuma-alert.workflow.json" || fail=1
   import_workflow "Pi Gateway — Forgejo Push" "${N8N_DIR}/forgejo-push.workflow.json" || fail=1
+  if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
+    import_workflow "Pi Gateway — NetAlertX Alert" "${N8N_DIR}/netalert-device-alert.workflow.json" || fail=1
+  fi
   if [[ "$fail" -eq 0 ]]; then
     render_hash >"$RENDER_MARKER"
     needs_restart=true
@@ -147,6 +151,9 @@ if [[ "$needs_import" == "true" ]]; then
 else
   activate_workflow "Pi Gateway — Uptime Kuma Alert" || fail=1
   activate_workflow "Pi Gateway — Forgejo Push" || fail=1
+  if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
+    activate_workflow "Pi Gateway — NetAlertX Alert" || fail=1
+  fi
   needs_restart=true
 fi
 

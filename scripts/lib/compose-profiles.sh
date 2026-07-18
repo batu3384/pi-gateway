@@ -11,6 +11,7 @@ compose_profiles() {
   [[ "${ENABLE_SYNCTHING:-true}" == "true" ]] && profiles+=(--profile syncthing)
   [[ "${ENABLE_REDIS:-true}" == "true" ]] && profiles+=(--profile redis)
   [[ "${ENABLE_N8N:-true}" == "true" ]] && profiles+=(--profile n8n)
+  [[ "${ENABLE_NETALERTX:-true}" == "true" ]] && profiles+=(--profile netalert)
   [[ "${ENABLE_CROWDSEC:-true}" == "true" ]] && profiles+=(--profile crowdsec)
   [[ -n "${CLOUDFLARE_TUNNEL_TOKEN:-}" ]] && profiles+=(--profile cloudflare)
   [[ "${ENABLE_WATCHTOWER:-false}" == "true" ]] && profiles+=(--profile watchtower)

@@ -40,6 +40,7 @@ keyboard = [
         {"text": "Syncthing", "url": url("sync")},
         {"text": "n8n", "url": url("n8n")},
     ],
+    [{"text": "Ağ Cihazları", "url": url("devices")}],
 ]
 print(json.dumps({"inline_keyboard": keyboard}, ensure_ascii=False))
 PY

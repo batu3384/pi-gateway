@@ -31,7 +31,7 @@ needs_ssd_symlink() {
 
 data_tree_dirs() {
   printf '%s\n' \
-    adguard/work uptime-kuma docker-volumes logs forgejo syncthing \
+    adguard/work uptime-kuma docker-volumes logs forgejo syncthing netalertx \
     restic projects backups redis n8n crowdsec/config crowdsec/db dozzle .disk-probe
 }
 

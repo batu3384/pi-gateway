@@ -75,3 +75,13 @@ Tam liste: `.env.example`
 | `N8N_FORGEJO_WEBHOOK_URL` | İsteğe bağlı; boşsa secret ile otomatik |
 
 Pi'de `N8N_ENCRYPTION_KEY` boşsa `ensure-n8n-encryption-key.sh` post-deploy sırasında üretir. **Değiştirmeyin** — mevcut n8n credential'ları okunamaz hale gelir.
+
+## NetAlertX (ağ envanteri)
+
+| Değişken | Varsayılan | Açıklama |
+|----------|------------|----------|
+| `ENABLE_NETALERTX` | `true` | NetAlertX container + kurulum |
+| `NETALERTX_PORT` | `20211` | UI (yalnızca localhost; Caddy `devices.home`) |
+| `NETALERTX_SCAN_SUBNETS` | (boş) | ARP tarama; boşsa `LAN_SUBNET_CIDR` + `PI_INTERFACE` |
+
+Ayrıntı: `docs/FAZ4.md`

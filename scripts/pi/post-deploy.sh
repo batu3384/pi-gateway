@@ -131,6 +131,10 @@ if [[ "${ENABLE_N8N:-true}" == "true" ]]; then
   run_step_critical "n8n otomasyonlar" "$SCRIPT_DIR/setup-n8n-workflows.sh"
 fi
 
+if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
+  run_step_critical "NetAlertX ag envanteri" "$SCRIPT_DIR/setup-netalertx.sh"
+fi
+
 if docker ps --format '{{.Names}}' | grep -q '^uptime-kuma$'; then
   run_step_critical "Uptime Kuma monitorler" "$SCRIPT_DIR/setup-uptime-kuma.sh"
 fi

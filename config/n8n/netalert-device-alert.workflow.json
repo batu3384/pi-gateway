@@ -1,0 +1,67 @@
+{
+  "id": "f4444444-4444-4444-8444-444444444401",
+  "versionId": "f4444444-4444-4444-8444-444444444402",
+  "name": "Pi Gateway — NetAlertX Alert",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "netalert-device-alert-__N8N_WEBHOOK_SECRET__",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "d1b2c3d4-4444-4000-8000-000000000001",
+      "name": "NetAlertX Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 300],
+      "webhookId": "pi-gateway-netalert-device-alert"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst body = raw.body ?? raw;\nconst block = body.attachments?.[0]?.text ?? body;\nconst lines = [];\n\nfor (const d of block.new_devices || []) {\n  const name = d['Device name'] || d.devName || 'Bilinmeyen';\n  lines.push(`🆕 Yeni cihaz\\n📛 ${name}\\n🔧 ${d.MAC || d.eveMac || '?'}\\n🌐 ${d.IP || d.eveIp || '?'}`);\n}\n\nfor (const d of block.down_devices || []) {\n  const name = d.devName || d['Device name'] || 'Bilinmeyen';\n  lines.push(`🔴 Cihaz offline\\n📛 ${name}\\n🔧 ${d.eveMac || d.MAC || '?'}\\n🌐 ${d.eveIp || d.IP || '?'}`);\n}\n\nfor (const e of block.events || []) {\n  const type = String(e['Event Type'] || e.eveEventType || '');\n  if (!/disconnect|down|offline/i.test(type)) continue;\n  const name = e['Device name'] || e.devName || 'Bilinmeyen';\n  lines.push(`⚠️ ${type}\\n📛 ${name}\\n🔧 ${e.MAC || e.eveMac || '?'}\\n🌐 ${e.IP || e.eveIp || '?'}`);\n}\n\nif (lines.length === 0) return [];\n\nconst panel = '__PANEL_PROTOCOL__://devices.__LAN_DOMAIN__';\nconst text = `📡 Pi Gateway — Ağ uyarısı\\n\\n${lines.join('\\n\\n')}\\n\\n🔗 ${panel}`;\nreturn [{ json: { text } }];"
+      },
+      "id": "d1b2c3d4-4444-4000-8000-000000000002",
+      "name": "Mesaj hazirla",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [520, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://api.telegram.org/bot' + $env.PI_TELEGRAM_BOT_TOKEN + '/sendMessage' }}",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "chat_id", "value": "={{ $env.PI_TELEGRAM_CHAT_ID }}" },
+            { "name": "text", "value": "={{ $json.text }}" },
+            { "name": "disable_web_page_preview", "value": "true" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d1b2c3d4-4444-4000-8000-000000000003",
+      "name": "Telegram",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [780, 300]
+    }
+  ],
+  "connections": {
+    "NetAlertX Webhook": {
+      "main": [[{ "node": "Mesaj hazirla", "type": "main", "index": 0 }]]
+    },
+    "Mesaj hazirla": {
+      "main": [[{ "node": "Telegram", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "timezone": "Europe/Istanbul",
+    "executionOrder": "v1"
+  },
+  "meta": { "templateCredsSetupCompleted": true },
+  "tags": []
+}

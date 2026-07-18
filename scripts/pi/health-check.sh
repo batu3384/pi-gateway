@@ -78,6 +78,7 @@ else
   }
   [[ "${ENABLE_FORGEJO:-true}" == "true" ]] && optional_down forgejo
   [[ "${ENABLE_N8N:-true}" == "true" ]] && optional_down n8n
+  [[ "${ENABLE_NETALERTX:-true}" == "true" ]] && optional_down netalertx
   [[ "${ENABLE_SYNCTHING:-true}" == "true" ]] && optional_down syncthing
   [[ "${ENABLE_REDIS:-true}" == "true" ]] && optional_down redis
   [[ "${ENABLE_DOZZLE:-true}" == "true" ]] && optional_down dozzle

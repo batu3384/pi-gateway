@@ -140,6 +140,7 @@ prepare_data_tree() {
     "${DATA_ROOT}/logs" \
     "${DATA_ROOT}/forgejo" \
     "${DATA_ROOT}/syncthing" \
+    "${DATA_ROOT}/netalertx" \
     "${DATA_ROOT}/restic" \
     "${DATA_ROOT}/projects" \
     "${DATA_ROOT}/backups" \

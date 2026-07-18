@@ -48,6 +48,7 @@ Kurulum: `make pi-access`
 | https://git.home | Forgejo | aynı | `FORGEJO_ADMIN_*` |
 | https://sync.home | Syncthing | aynı | `SYNCTHING_GUI_*` |
 | https://n8n.home | n8n | aynı | Owner (ilk kurulumda web UI) |
+| https://devices.home | NetAlertX (ağ envanteri) | aynı | NetAlertX UI (ilk açılışta şifre) |
 
 Public durum sayfası: `https://status.home/status/pi-gateway` (Caddy auth sonrası).
 
@@ -126,6 +127,7 @@ docker info | grep "Docker Root Dir"
 | `morning-summary.sh` (08:00 timer) | Günlük sabah özeti |
 | n8n ← Uptime Kuma webhook | Servis düştü / tekrar ayakta |
 | n8n ← Forgejo push webhook | Git push (repo: `FORGEJO_REPO_NAME`) |
+| n8n ← NetAlertX webhook | Yeni cihaz, offline / disconnect |
 
 | Komut | Açıklama |
 |-------|----------|

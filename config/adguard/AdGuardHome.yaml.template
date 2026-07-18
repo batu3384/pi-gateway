@@ -50,6 +50,8 @@ dns:
       answer: ${PI_STATIC_IP}
     - domain: logs.${LAN_DOMAIN}
       answer: ${PI_STATIC_IP}
+    - domain: devices.${LAN_DOMAIN}
+      answer: ${PI_STATIC_IP}
 
 # DNS-only stack (telefon AdGuard HTTPS/CSS degil). OISD Pro++ icinde — tekrar yok.
 filters:

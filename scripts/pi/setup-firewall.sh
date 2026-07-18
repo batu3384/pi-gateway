@@ -96,6 +96,11 @@ setup_ufw() {
   compose_subnet="$(docker network inspect compose_default -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}' 2>/dev/null || true)"
   if [[ -n "$compose_subnet" ]]; then
     sudo ufw allow from "$compose_subnet" to any port 8080 proto tcp comment 'pi-gateway docker-adguard'
+    if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
+      delete_ufw_rules_matching 'pi-gateway docker-netalertx'
+      netalert_port="${NETALERTX_PORT:-20211}"
+      sudo ufw allow from "$compose_subnet" to any port "$netalert_port" proto tcp comment 'pi-gateway docker-netalertx'
+    fi
   else
     log "WARN: compose_default subnet bulunamadi — docker-adguard UFW kurali atlandi"
   fi

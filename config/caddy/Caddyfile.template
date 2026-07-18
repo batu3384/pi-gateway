@@ -36,3 +36,8 @@ http://logs.__LAN_DOMAIN__ {
   __CADDY_BASIC_AUTH__
   reverse_proxy dozzle:8080
 }
+
+http://devices.__LAN_DOMAIN__ {
+  __CADDY_BASIC_AUTH__
+  reverse_proxy __PI_STATIC_IP__:__NETALERTX_PORT__
+}

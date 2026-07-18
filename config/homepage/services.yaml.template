@@ -41,6 +41,11 @@ services:
       description: Otomasyon
       icon: n8n.png
 
+  - NetAlertX:
+      href: ${PANEL_PROTOCOL}://devices.${LAN_DOMAIN}
+      description: Ag cihaz envanteri
+      icon: mdi-lan
+
 widgets:
   - resources:
       cpu: true

@@ -39,3 +39,9 @@ logs.__LAN_DOMAIN__ {
   __CADDY_BASIC_AUTH__
   reverse_proxy dozzle:8080
 }
+
+devices.__LAN_DOMAIN__ {
+  tls /etc/caddy/certs/__LAN_DOMAIN__.pem /etc/caddy/certs/__LAN_DOMAIN__-key.pem
+  __CADDY_BASIC_AUTH__
+  reverse_proxy __PI_STATIC_IP__:__NETALERTX_PORT__
+}

@@ -16,6 +16,7 @@ if [[ -z "${PI_STATIC_IP:-}" || -z "${LAN_GATEWAY:-}" || -z "${LAN_SUBNET_CIDR:-
 fi
 
 export AGH_ADMIN_USER ADGUARD_WEB_PORT="${ADGUARD_WEB_PORT:-8080}" DOZZLE_PORT="${DOZZLE_PORT:-9999}"
+export NETALERTX_PORT="${NETALERTX_PORT:-20211}"
 export PI_STATIC_IP LAN_DOMAIN="${LAN_DOMAIN:-home}" PI_INTERFACE="${PI_INTERFACE:-eth0}"
 export UPTIME_KUMA_STATUS_SLUG="${UPTIME_KUMA_STATUS_SLUG:-pi-gateway}"
 if [[ "${ENABLE_TLS:-false}" == "true" ]]; then
@@ -107,15 +108,16 @@ if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
   # htpasswd -nbB ciktisi $2y$... — Caddy basic_auth bcrypt kabul eder
   AUTH_BLOCK="$(printf 'basic_auth {\n\t%s %s\n}' "$CADDY_AUTH_USER" "$CADDY_AUTH_HASH")"
 
-  python3 - "$caddy_tpl" "$PROJECT_DIR/config/caddy/Caddyfile" "$LAN_DOMAIN" "$ADGUARD_WEB_PORT" "$PI_STATIC_IP" "$AUTH_BLOCK" <<'PY'
+  python3 - "$caddy_tpl" "$PROJECT_DIR/config/caddy/Caddyfile" "$LAN_DOMAIN" "$ADGUARD_WEB_PORT" "$PI_STATIC_IP" "$AUTH_BLOCK" "${NETALERTX_PORT:-20211}" <<'PY'
 from pathlib import Path
 import sys
-src, dst, domain, port, ip, auth = sys.argv[1:7]
+src, dst, domain, port, ip, auth, netalert_port = sys.argv[1:8]
 text = Path(src).read_text()
 text = (text
   .replace("__LAN_DOMAIN__", domain)
   .replace("__ADGUARD_WEB_PORT__", port)
   .replace("__PI_STATIC_IP__", ip)
+  .replace("__NETALERTX_PORT__", netalert_port)
   .replace("__CADDY_BASIC_AUTH__", auth))
 Path(dst).write_text(text)
 PY
