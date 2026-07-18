@@ -92,7 +92,8 @@ if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
         run_caddy_auth_checks "n8n"
       fi
       if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
-        run_caddy_auth_checks "devices"
+        run_check "devices-no-caddy-basic-auth" bash -c \
+          'code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 --resolve "devices.'"${LAN_DOMAIN}"':443:127.0.0.1" "https://devices.'"${LAN_DOMAIN}"'/devices.php"); [[ "$code" == "200" || "$code" == "302" ]] && ! curl -skI --max-time 5 --resolve "devices.'"${LAN_DOMAIN}"':443:127.0.0.1" "https://devices.'"${LAN_DOMAIN}"'/js/api.js" | grep -qi "www-authenticate: Basic"'
       fi
       ;;
   esac

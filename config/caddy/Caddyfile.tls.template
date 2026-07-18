@@ -42,7 +42,6 @@ logs.__LAN_DOMAIN__ {
 
 devices.__LAN_DOMAIN__ {
   tls /etc/caddy/certs/__LAN_DOMAIN__.pem /etc/caddy/certs/__LAN_DOMAIN__-key.pem
-  __CADDY_BASIC_AUTH__
   reverse_proxy __PI_STATIC_IP__:__NETALERTX_PORT__ {
     header_up X-Forwarded-Proto {scheme}
     header_up X-Forwarded-Host {host}

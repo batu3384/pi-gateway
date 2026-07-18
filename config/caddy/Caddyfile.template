@@ -38,7 +38,6 @@ http://logs.__LAN_DOMAIN__ {
 }
 
 http://devices.__LAN_DOMAIN__ {
-  __CADDY_BASIC_AUTH__
   reverse_proxy __PI_STATIC_IP__:__NETALERTX_PORT__ {
     header_up X-Forwarded-Proto {scheme}
     header_up X-Forwarded-Host {host}

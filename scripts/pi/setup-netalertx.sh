@@ -8,6 +8,7 @@ REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 
 NETALERTX_PORT="${NETALERTX_PORT:-20211}"
 NETALERTX_LISTEN_ADDR="${NETALERTX_LISTEN_ADDR:-0.0.0.0}"
+NETALERTX_PASSWORD="${NETALERTX_PASSWORD:-${AGH_ADMIN_PASSWORD:-}}"
 PI_STATIC_IP="${PI_STATIC_IP:-192.168.1.112}"
 PI_INTERFACE="${PI_INTERFACE:-eth0}"
 LAN_SUBNET_CIDR="${LAN_SUBNET_CIDR:-192.168.1.0/24}"
@@ -24,6 +25,7 @@ MARKER="${DATA_DIR}/.pi-gateway-configured"
 log() { echo "[netalertx-setup] $*"; }
 
 [[ "${ENABLE_NETALERTX:-true}" == "true" ]] || { log "NetAlertX kapali"; exit 0; }
+[[ -n "${NETALERTX_PASSWORD:-}" ]] || { log "HATA: NETALERTX_PASSWORD veya AGH_ADMIN_PASSWORD gerekli"; exit 1; }
 docker ps --format '{{.Names}}' | grep -q '^netalertx$' || { log "HATA: netalertx container yok"; exit 1; }
 
 case "${N8N_WEBHOOK_SECRET:-}" in
@@ -62,7 +64,7 @@ chown -R 20211:20211 "${DATA_DIR}" 2>/dev/null || sudo chown -R 20211:20211 "${D
 
 wait_http
 
-export CONF_FILE SCAN_SUBNET WEBHOOK_URL MARKER PANEL_PROTOCOL LAN_DOMAIN
+export CONF_FILE SCAN_SUBNET WEBHOOK_URL MARKER PANEL_PROTOCOL LAN_DOMAIN NETALERTX_PASSWORD
 SCAN_SUBNET="$(scan_subnet)"
 WEBHOOK_URL="$(webhook_url)"
 export SCAN_SUBNET WEBHOOK_URL
@@ -77,6 +79,7 @@ conf = Path(os.environ["CONF_FILE"])
 marker = Path(os.environ["MARKER"])
 subnet = os.environ["SCAN_SUBNET"]
 webhook = os.environ["WEBHOOK_URL"]
+password = os.environ["NETALERTX_PASSWORD"]
 lan = os.environ.get("LAN_DOMAIN", "home")
 proto = os.environ.get("PANEL_PROTOCOL", "https")
 dashboard = f"{proto}://devices.{lan}"
@@ -99,7 +102,8 @@ updates = {
     "ICMP_RUN": "'schedule'",
     "ARPSCAN_RUN": "'schedule'",
     "DIGSCAN_RUN": "'schedule'",
-    "SETPWD_enable_password": "False",
+    "SETPWD_enable_password": "True",
+    "SETPWD_password": "'" + password.replace("'", "\\'") + "'",
     "BACKEND_API_URL": "'/server'",
     "REPORT_DASHBOARD_URL": f"'{dashboard}'",
 }
@@ -140,4 +144,4 @@ if [[ "$(cat "$MARKER" 2>/dev/null)" == "ok" ]]; then
 fi
 
 log "Tamamlandi — https://devices.${LAN_DOMAIN:-home}"
-log "Giris: Caddy basic_auth (${CADDY_AUTH_USER:-${AGH_ADMIN_USER:-admin}}) — logs.home ile ayni sifre"
+log "Giris: NetAlertX UI sifresi (NETALERTX_PASSWORD veya AGH_ADMIN_PASSWORD)"
