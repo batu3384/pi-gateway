@@ -18,8 +18,9 @@ log() { echo "[syncthing-setup] $*"; }
 
 docker ps --format '{{.Names}}' | grep -q '^syncthing$' || { log "syncthing container yok"; exit 0; }
 
-APIKEY="$(docker exec syncthing sed -n 's:.*<apikey>\([^<]*\)</apikey>.*:\1:p' /var/syncthing/config/config.xml | head -1)"
-PI_ID="$(docker exec syncthing sed -n 's:.*<device id="\([^"]*\)".*:\1:p' /var/syncthing/config/config.xml | head -1)"
+APIKEY="$(docker exec syncthing sed -n 's:.*<apikey>\([^<]*\)</apikey>.*:\1:p' /var/syncthing/config/config.xml 2>/dev/null | head -1 || true)"
+PI_ID="$(docker exec syncthing sed -n 's:.*<device id="\([^"]*\)".*:\1:p' /var/syncthing/config/config.xml 2>/dev/null | head -1 || true)"
+[[ -n "$APIKEY" && -n "$PI_ID" ]] || { log "Syncthing config okunamadi"; exit 1; }
 BASE="http://127.0.0.1:${SYNCTHING_PORT}"
 
 api() {
