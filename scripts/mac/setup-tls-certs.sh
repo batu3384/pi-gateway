@@ -40,6 +40,7 @@ hosts=(
   "sync.${LAN_DOMAIN}"
   "n8n.${LAN_DOMAIN}"
   "logs.${LAN_DOMAIN}"
+  "devices.${LAN_DOMAIN}"
 )
 
 log "Sertifika uretiliyor: ${hosts[*]}"

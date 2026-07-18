@@ -11,7 +11,12 @@ NETALERTX_LISTEN_ADDR="${NETALERTX_LISTEN_ADDR:-0.0.0.0}"
 PI_STATIC_IP="${PI_STATIC_IP:-192.168.1.112}"
 PI_INTERFACE="${PI_INTERFACE:-eth0}"
 LAN_SUBNET_CIDR="${LAN_SUBNET_CIDR:-192.168.1.0/24}"
+LAN_DOMAIN="${LAN_DOMAIN:-home}"
 N8N_PORT="${N8N_PORT:-5678}"
+PANEL_PROTOCOL="${PANEL_PROTOCOL:-https}"
+if [[ "${ENABLE_TLS:-false}" != "true" ]]; then
+  PANEL_PROTOCOL=http
+fi
 DATA_DIR="${REMOTE_DIR}/data/netalertx"
 CONF_FILE="${DATA_DIR}/config/app.conf"
 MARKER="${DATA_DIR}/.pi-gateway-configured"
@@ -57,7 +62,7 @@ chown -R 20211:20211 "${DATA_DIR}" 2>/dev/null || sudo chown -R 20211:20211 "${D
 
 wait_http
 
-export CONF_FILE SCAN_SUBNET WEBHOOK_URL MARKER
+export CONF_FILE SCAN_SUBNET WEBHOOK_URL MARKER PANEL_PROTOCOL LAN_DOMAIN
 SCAN_SUBNET="$(scan_subnet)"
 WEBHOOK_URL="$(webhook_url)"
 export SCAN_SUBNET WEBHOOK_URL
@@ -72,6 +77,9 @@ conf = Path(os.environ["CONF_FILE"])
 marker = Path(os.environ["MARKER"])
 subnet = os.environ["SCAN_SUBNET"]
 webhook = os.environ["WEBHOOK_URL"]
+lan = os.environ.get("LAN_DOMAIN", "home")
+proto = os.environ.get("PANEL_PROTOCOL", "https")
+dashboard = f"{proto}://devices.{lan}"
 scan_value = f"['{subnet}']"
 
 for _ in range(36):
@@ -91,6 +99,9 @@ updates = {
     "ICMP_RUN": "'schedule'",
     "ARPSCAN_RUN": "'schedule'",
     "DIGSCAN_RUN": "'schedule'",
+    "SETPWD_enable_password": "False",
+    "BACKEND_API_URL": "'/server'",
+    "REPORT_DASHBOARD_URL": f"'{dashboard}'",
 }
 changed = False
 
@@ -129,3 +140,4 @@ if [[ "$(cat "$MARKER" 2>/dev/null)" == "ok" ]]; then
 fi
 
 log "Tamamlandi — https://devices.${LAN_DOMAIN:-home}"
+log "Giris: Caddy basic_auth (${CADDY_AUTH_USER:-${AGH_ADMIN_USER:-admin}}) — logs.home ile ayni sifre"
