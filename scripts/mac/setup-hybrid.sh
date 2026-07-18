@@ -33,6 +33,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 PI_SETUP_SCRIPT="${PI_SETUP_SCRIPT:-$PROJECT_DIR/scripts/pi/setup-ssd-data.sh}"
 [[ -f "$PI_SETUP_SCRIPT" ]] || die "Eksik: $PI_SETUP_SCRIPT"
+# shellcheck source=../lib/hybrid-cloud-init.sh
+source "$SCRIPT_DIR/../lib/hybrid-cloud-init.sh"
 
 disk_size_gb() {
   diskutil info "$1" 2>/dev/null | awk -F': *' '/Disk Size/ {print $2}' | grep -oE '[0-9]+' | head -1
@@ -71,95 +73,9 @@ find_ssd_disk() {
 
 write_cloud_init_files() {
   local dir="$1"
-  local script_b64
-  mkdir -p "$dir"
-  script_b64="$(base64 < "$PI_SETUP_SCRIPT" | tr -d '\n')"
-
-  cat > "$dir/user-data" <<EOF
-#cloud-config
-hostname: ${PI_HOSTNAME}
-manage_etc_hosts: true
-timezone: ${PI_TIMEZONE}
-locale: ${PI_LOCALE}
-
-keyboard:
-  layout: tr
-  model: pc105
-
-users:
-  - name: ${PI_USER}
-    gecos: Pi Gateway
-    groups: users,adm,dialout,audio,netdev,video,plugdev,cdrom,games,input,gpio,spi,i2c,render,sudo
-    shell: /bin/bash
-    lock_passwd: false
-    plain_text_password: "${PI_PASSWORD}"
-    sudo: ALL=(ALL) NOPASSWD:ALL
-
-enable_ssh: true
-ssh_pwauth: true
-
-package_update: true
-package_upgrade: false
-
-growpart:
-  mode: off
-resize_rootfs: false
-
-write_files:
-  - path: /usr/local/sbin/pi-setup-ssd-data.sh
-    encoding: b64
-    permissions: '0755'
-    content: ${script_b64}
-
-  - path: /etc/systemd/system/pi-ssd-data.service
-    permissions: '0644'
-    content: |
-      [Unit]
-      Description=Pi Gateway USB SSD data disk setup
-      After=local-fs-pre.target
-      Before=remote-fs.target
-      ConditionPathExists=!${SSD_MOUNT}/.pi-gateway-initialized
-      DefaultDependencies=no
-
-      [Service]
-      Type=oneshot
-      RemainAfterExit=yes
-      Environment=PI_USER=${PI_USER}
-      Environment=REMOTE_DIR=/home/${PI_USER}/pi-gateway
-      ExecStart=/usr/local/sbin/pi-setup-ssd-data.sh
-      TimeoutStartSec=300
-
-      [Install]
-      WantedBy=multi-user.target
-
-runcmd:
-  - [ localectl, set-locale, LANG=tr_TR.UTF-8, LC_ALL=tr_TR.UTF-8, LANGUAGE=tr_TR.UTF-8 ]
-  - [ localectl, set-keymap, tr ]
-  - [ timedatectl, set-timezone, Europe/Istanbul ]
-  - [ bash, -lc, "raspi-config nonint do_configure_keyboard tr || true" ]
-  - [ systemctl, daemon-reload ]
-  - [ systemctl, enable, pi-ssd-data.service ]
-  - [ systemctl, start, pi-ssd-data.service ]
-EOF
-
-  cat > "$dir/network-config" <<EOF
-network:
-  version: 2
-  ethernets:
-    eth0:
-      dhcp4: true
-      optional: false
-EOF
-
-  cat > "$dir/meta-data" <<EOF
-instance-id: pi-gateway-hybrid-001
-local-hostname: ${PI_HOSTNAME}
-EOF
-
-  HASH=$(echo -n "$PI_PASSWORD" | openssl passwd -6 -stdin)
-  cat > "$dir/userconf" <<EOF
-${PI_USER}:${HASH}
-EOF
+  hybrid_write_fresh_install_cloud_init \
+    "$dir" "$PI_SETUP_SCRIPT" "$PI_USER" "$PI_HOSTNAME" "$PI_PASSWORD" \
+    "$PI_TIMEZONE" "$PI_LOCALE" "$SSD_MOUNT"
 }
 
 apply_sd_post_flash() {
@@ -251,7 +167,6 @@ dd if=/dev/zero of="$SD_R" bs=1m count=64 >>"$LOG" 2>&1 || die "SD sifirlanamadi
 
 log "3/5 SD'ye Raspberry Pi OS yaziliyor (10-25 dk)..."
 "$IMAGER" --cli \
-  --disable-verify \
   --enable-writing-system-drives \
   --disable-eject \
   --cloudinit-userdata "$CLOUD_INIT_DIR/user-data" \

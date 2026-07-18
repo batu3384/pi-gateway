@@ -29,8 +29,16 @@ find_usb_data_disk() {
     echo "$PI_SSD_DISK"
     return 0
   fi
-  for dev in /dev/sd? /dev/sd?? /dev/nvme?n?; do
+  # Yalnizca whole-disk node'lari (sda1 gibi partition'lari sd? glob'i karistirir)
+  for dev in /dev/sd[a-z]; do
     [[ -b "$dev" ]] || continue
+    base="$(basename "$dev")"
+    [[ "$root" == *"$base"* ]] && continue
+    candidates+=("$dev")
+  done
+  for dev in /dev/nvme*n*; do
+    [[ -b "$dev" ]] || continue
+    [[ "$dev" =~ p[0-9]+$ ]] && continue
     base="$(basename "$dev")"
     [[ "$root" == *"$base"* ]] && continue
     candidates+=("$dev")
@@ -175,7 +183,30 @@ write_health_hint() {
 
 main() {
   require_root
-  local disk part
+  # shellcheck source=/dev/null
+  [[ -f "${REMOTE_DIR:-/home/${PI_USER:-batu}/pi-gateway}/.env" ]] && \
+    source "${REMOTE_DIR:-/home/${PI_USER:-batu}/pi-gateway}/.env" 2>/dev/null || true
+  STORAGE_TYPE="${STORAGE_TYPE:-hybrid}"
+  if [[ "$STORAGE_TYPE" == "ssd-root" || "$STORAGE_TYPE" == "ssd" ]]; then
+    log "STORAGE_TYPE=${STORAGE_TYPE} — ayri veri diski kurulumu gerekmez (root=SSD)"
+    exit 0
+  fi
+
+  local disk part mounted_part
+  if mountpoint -q "$MOUNT" 2>/dev/null; then
+    mounted_part="$(findmnt -n -o SOURCE "$MOUNT" 2>/dev/null || true)"
+    if [[ -n "$mounted_part" ]] && blkid -o value -s TYPE "$mounted_part" 2>/dev/null | grep -q ext4; then
+      log "SSD zaten mount: $mounted_part -> $MOUNT"
+      ensure_fstab "$mounted_part"
+      prepare_data_tree
+      write_health_hint
+      [[ -f "$MARKER" ]] || touch "$MARKER"
+      chmod 644 "$MARKER"
+      log "Tamamlandi (mevcut mount)"
+      exit 0
+    fi
+  fi
+
   disk="$(find_usb_data_disk)" || die "USB veri diski bulunamadi (SSD takili mi?)"
   part="$(partition_for_disk "$disk")"
 

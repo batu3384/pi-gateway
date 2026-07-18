@@ -11,21 +11,31 @@ Güncelleme: 2026-07-11
 
 ## Mac'te yapılanlar (`harden-ssd-boot.sh`)
 
-- quirks + rootdelay=15
+- quirks + rootdelay=25
 - quiet/splash kaldırıldı (boot log görünsün)
 - boot_delay=5, hdmi_force_hotplug, usb_max_current
 - ssh + cloud-init kontrolü
 
-## Pi'de zorunlu — SD ile (elle)
+## Pi'de zorunlu — SD ile (elle veya script)
 
+**A mimarisi (SD boot + SSD root):** `BOOT_ORDER=0xf41` (SD once)
+**B mimarisi (tam USB boot, SD cikarilir):** `BOOT_ORDER=0xf14` (USB once)
+
+Otomatik (A):
+```bash
+CONFIRM_EEPROM_FIX=yes sudo bash ~/pi-gateway/scripts/pi/fix-eeprom-usb-ssd.sh
+sudo reboot
+```
+
+Elle:
 ```bash
 sudo -E rpi-eeprom-config --edit
 ```
 
-Ekle / guncelle:
+A mimarisi icin ekle / guncelle:
 
 ```
-BOOT_ORDER=0xf14
+BOOT_ORDER=0xf41
 USB_MSD_PWR_OFF_TIME=0
 USB_MSD_DISCOVER_TIMEOUT=25000
 USB_MSD_STARTUP_DELAY=5000

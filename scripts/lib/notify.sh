@@ -138,6 +138,22 @@ notify_stack_recovered() {
   notify_telegram "✅ Pi Gateway — Stack Kurtarma" "$body" "stack-recovered" "HTML"
 }
 
+notify_ssd_degraded() {
+  local host="$1"
+  local details="$2"
+  local body
+  body="$(printf '<b>%s</b> — SSD veri diski yok; <b>degraded mod</b> (DNS SD uzerinde).\n\n<code>%s</code>\n\nSSD takilinca otomatik tam stack restore denenir.' \
+    "$host" "$(notify_escape_html "$details")")"
+  notify_telegram "⚠️ Pi Gateway — SSD Degraded" "$body" "ssd-degraded" "HTML"
+}
+
+notify_ssd_restored() {
+  local host="$1"
+  local body
+  body="$(printf '<b>%s</b> — SSD tekrar baglandi; tam stack restore baslatildi.' "$host")"
+  notify_telegram "✅ Pi Gateway — SSD Geri" "$body" "ssd-restored" "HTML"
+}
+
 notify_test() {
   local gateway
   gateway="$(panel_url gateway)"

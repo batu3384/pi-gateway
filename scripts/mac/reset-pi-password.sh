@@ -42,17 +42,15 @@ echo "${PI_USER}:${HASH}" > "$BOOT/userconf"
 
 # cloud-init user-data guncelle (varsa)
 if [[ -f "$BOOT/user-data" ]]; then
-  python3 - "$BOOT/user-data" "$NEW_PASSWORD" <<'PY'
-import re, sys
-path, pw = sys.argv[1], sys.argv[2]
-text = open(path).read()
-if "plain_text_password:" in text:
-    text = re.sub(r'plain_text_password:\s*"[^"]*"', f'plain_text_password: "{pw}"', text)
-    open(path, "w").write(text)
-    print("user-data guncellendi")
-else:
-    print("user-data: plain_text_password yok (atlandi)")
-PY
+  if grep -q 'plain_text_password:' "$BOOT/user-data"; then
+    sed -i '' -E "s|^[[:space:]]*plain_text_password:.*$|    passwd: '$HASH'|" "$BOOT/user-data"
+    log "user-data: acik parola hash'e cevrildi"
+  elif grep -q '^[[:space:]]*passwd:' "$BOOT/user-data"; then
+    sed -i '' -E "s|^[[:space:]]*passwd:.*$|    passwd: '$HASH'|" "$BOOT/user-data"
+    log "user-data: hash guncellendi"
+  else
+    log "WARN: user-data passwd alani yok (atlandi)"
+  fi
 fi
 
 # init=/bin/bash ile tek seferlik sifre sifirlama (userconf yetmezse)

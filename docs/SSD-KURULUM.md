@@ -1,19 +1,37 @@
 # SSD Boot Gecisi - Raspberry Pi 4B
 
-Bu rehber, yazilim kurulumundan ONCE yapilir.
+> **Üretim varsayılanı (2026-07):** **Hybrid** — SD = OS root, SSD = veri (`/mnt/ssd`)
+> Script: `scripts/mac/setup-hybrid.sh` veya cutover sonrası `scripts/mac/restore-hybrid-boot.sh`
+>
+> **Deneysel:** [SSD-ROOT.md](SSD-ROOT.md) — SD bootfs + SSD rootfs (JMicron/EEPROM riski)
 
-## Dogru mimari
+## Mimari özeti
+
+```
+Hybrid (önerilen, varsayılan):
+  Pi -> SD (boot + root) + SSD (ext4 /mnt/ssd, Docker + pi-gateway data)
+
+A (ssd-root, deneysel):
+  Pi -> SD bootfs + SSD rootfs (OS + Docker + veri)
+
+B (tam USB boot):
+  Pi -> SSD (OS + her şey), SD çıkarılır
+```
+
+Bu dosyanın geri kalanı **B** (tam USB SSD boot) içindir. Hybrid için `setup-hybrid.sh`; ssd-root için `SSD-ROOT.md`.
+
+---
+
+## Dogru mimari (B — tam USB boot)
 
 ```
 ONCE (yanlis uzun vadede):
   Pi -> SD kart (OS + veri) + SSD takili ama kullanilmiyor
 
-SONRA (dogru):
+SONRA (B):
   Pi -> SSD (OS + Docker + tum veri)
   SD kart -> cikarilir veya sadece recovery yedegi olarak saklanir
 ```
-
-Evet: **isletim sistemi dahil her seyin SSD uzerinde olmasi** dogru mimari.
 
 ---
 

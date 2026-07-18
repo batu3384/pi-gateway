@@ -2,6 +2,8 @@
 # /mnt/ssd fstab satirini dogrular — silinirse veya yanlissa duzeltir
 set -euo pipefail
 
+export PATH="/usr/sbin:/sbin:${PATH}"
+
 MOUNT="/mnt/ssd"
 LABEL="pi-data"
 LOG_TAG="pi-gateway-fstab"
@@ -56,15 +58,23 @@ find_ssd_partition() {
   fi
 
   root="$(root_disk)"
-  for dev in /dev/sd? /dev/nvme?n?; do
+  for dev in /dev/sd[a-z]; do
     [[ -b "$dev" ]] || continue
     base="$(basename "$dev")"
     [[ "$root" == *"$base"* ]] && continue
-    if [[ "$dev" == /dev/nvme* ]]; then
-      part="${dev}p1"
-    else
-      part="${dev}1"
-    fi
+    part="${dev}1"
+    [[ -b "$part" ]] || continue
+    blkid -o value -s LABEL "$part" 2>/dev/null | grep -qx "$LABEL" || continue
+    blkid -o value -s TYPE "$part" 2>/dev/null | grep -qx ext4 || continue
+    echo "$part"
+    return 0
+  done
+  for dev in /dev/nvme*n*; do
+    [[ -b "$dev" ]] || continue
+    [[ "$dev" =~ p[0-9]+$ ]] && continue
+    base="$(basename "$dev")"
+    [[ "$root" == *"$base"* ]] && continue
+    part="${dev}p1"
     [[ -b "$part" ]] || continue
     blkid -o value -s LABEL "$part" 2>/dev/null | grep -qx "$LABEL" || continue
     blkid -o value -s TYPE "$part" 2>/dev/null | grep -qx ext4 || continue
@@ -113,12 +123,27 @@ write_fstab_entry() {
 }
 
 main() {
-  local part
-  part="$(find_ssd_partition)" || {
-    log "USB veri diski yok — fstab atlandi"
+  # shellcheck source=/dev/null
+  [[ -f "${REMOTE_DIR:-/home/${USER}/pi-gateway}/.env" ]] && source "${REMOTE_DIR:-/home/${USER}/pi-gateway}/.env" 2>/dev/null || true
+  STORAGE_TYPE="${STORAGE_TYPE:-hybrid}"
+  if [[ "$STORAGE_TYPE" == "ssd-root" || "$STORAGE_TYPE" == "ssd" ]]; then
+    log "STORAGE_TYPE=${STORAGE_TYPE} — ayri /mnt/ssd fstab gerekmez, atlandi"
     exit 0
-  }
-  write_fstab_entry "$part"
+  fi
+
+  local part attempt
+  for attempt in $(seq 1 15); do
+    if part="$(find_ssd_partition)"; then
+      write_fstab_entry "$part"
+      exit 0
+    fi
+    if (( attempt < 15 )); then
+      log "USB veri diski henuz yok — deneme $attempt/15"
+      sleep 2
+    fi
+  done
+  log "HATA: USB veri diski bulunamadi (15 deneme)"
+  exit 1
 }
 
 main "$@"

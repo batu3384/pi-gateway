@@ -1,16 +1,15 @@
 [Unit]
 Description=Pi Gateway recover read-only root and Docker stack
 DefaultDependencies=no
-After=local-fs.target mnt-ssd.mount
-Wants=mnt-ssd.mount
+After=systemd-udevd.service local-fs.target network-online.target docker.service
+Wants=network-online.target
 ConditionPathExists=/usr/local/lib/pi-gateway/scripts/pi/recover-readonly-root.sh
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-TimeoutStartSec=300
+TimeoutStartSec=360
 Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
-# root-owned kopya — kullanici yazilabilir repo yolu yok
 ExecStart=/usr/local/lib/pi-gateway/scripts/pi/recover-readonly-root.sh
 
 [Install]

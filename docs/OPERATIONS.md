@@ -2,6 +2,20 @@
 
 Pi Gateway homelab — günlük kullanım, deploy ve sorun giderme.
 
+## Depolama (hybrid — varsayılan)
+
+Üretim: **SD = boot + root**, **SSD = veri** (`/mnt/ssd`). Ayrıntı: `docs/SSD-KURULUM.md`.
+
+```bash
+findmnt -n -o SOURCE /          # mmcblk0p2 (SD root)
+findmnt -n -o SOURCE /mnt/ssd    # /dev/sda1
+readlink -f ~/pi-gateway/data    # /mnt/ssd/pi-gateway-data
+docker info | grep "Docker Root Dir"   # /var/lib/docker (varsayılan)
+```
+
+SSD imaj / hybrid boot: `scripts/mac/restore-hybrid-boot.sh`  
+Deneysel ssd-root: `docs/SSD-ROOT.md`
+
 ## Hızlı erişim (Mac)
 
 | Komut | Açıklama |
@@ -36,7 +50,7 @@ Uzaktan erişim: Tailscale açık + MagicDNS (`home` split DNS). Ayrıntı: `doc
 | `make status` | Pi uptime, docker, health |
 | `make dns-test` | DNS engel + rewrite testi |
 | `make test-remote` | health + smoke (16+ kontrol) |
-| `make verify-data` | SSD symlink doğrulama |
+| `make verify-data` | Hybrid SSD symlink doğrulama |
 | `make backup-pull` | Restic + config offsite kopya |
 | `make backup-cron` | Haftalık backup-pull (Pazar 03:00) |
 
@@ -50,7 +64,7 @@ make deploy-fast
 
 Sıra: ön kontrol → rsync (data hariç) → bootstrap → docker compose → post-deploy → smoke test.
 
-Deploy başarısız olursa: `make verify-data` ile symlink kontrol et; `data/` asla rsync ile silinmemeli.
+Deploy başarısız olursa: `make verify-data` ile `data/` symlink kontrol et; `data/` asla rsync ile silinmemeli.
 
 ## Güvenlik (varsayılan)
 
@@ -68,7 +82,7 @@ ssh pi 'REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/setup-firewall.sh'
 
 1. 2–3 dk bekleyin (AdGuard filtre yüklemesi)
 2. `make dns-test` veya `dig google.com @192.168.1.112`
-3. `pi-data-symlink.service` SSD symlink'i onarır
+3. `pi-gateway-recover-ro.service` root ve stack kurtarmayı dener
 
 ## DNS çalışmıyor
 
@@ -79,12 +93,11 @@ ssh pi 'REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/setup-firewall.sh'
 
 ## Disk dolu
 
-SD (`/`) boot + OS; **Docker imajlari** hybrid modda `/mnt/ssd/docker` uzerinde olmalidir.
+Hybrid modda: **SD** OS + Docker imajları; **SSD** uygulama verisi.
 
 ```bash
 df -h / /mnt/ssd
 docker info | grep "Docker Root Dir"
-make docker-ssd   # ilk tasima (bir kez)
 ```
 
 `docker system prune` (dikkatli). Restic `forget --prune` gunluk calisir.

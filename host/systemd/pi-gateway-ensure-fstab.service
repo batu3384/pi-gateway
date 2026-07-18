@@ -1,13 +1,13 @@
 [Unit]
 Description=Pi Gateway ensure SSD fstab entry
 DefaultDependencies=no
-After=local-fs.target
-Before=mnt-ssd.mount pi-gateway-recover-ro.service
+After=systemd-udevd.service local-fs.target pi-ssd-data.service
+Before=remote-fs.target mnt-ssd.mount pi-gateway-recover-ro.service
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-TimeoutStartSec=30
+TimeoutStartSec=60
 Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
 ExecStart=/usr/local/lib/pi-gateway/scripts/pi/ensure-ssd-fstab.sh
 

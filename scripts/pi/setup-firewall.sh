@@ -92,9 +92,13 @@ setup_ufw() {
   sudo ufw allow from "$LAN_SUBNET" to any port 22000 proto udp comment 'pi-gateway syncthing-udp'
 
   delete_ufw_rules_matching 'pi-gateway docker-adguard'
-  # Sadece docker0 / compose aglari — 172.16.0.0/12 cok genis
-  sudo ufw allow from 172.17.0.0/16 to any port 8080 proto tcp comment 'pi-gateway docker-adguard'
-  sudo ufw allow from 172.18.0.0/16 to any port 8080 proto tcp comment 'pi-gateway docker-adguard'
+  # AdGuard host network — yalnizca compose agi (Caddy -> AdGuard :8080)
+  compose_subnet="$(docker network inspect compose_default -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}' 2>/dev/null || true)"
+  if [[ -n "$compose_subnet" ]]; then
+    sudo ufw allow from "$compose_subnet" to any port 8080 proto tcp comment 'pi-gateway docker-adguard'
+  else
+    log "WARN: compose_default subnet bulunamadi — docker-adguard UFW kurali atlandi"
+  fi
 
   delete_ufw_rules_matching 'pi-gateway tailscale'
   delete_ufw_rules_matching 'pi-gateway ts-subnet'

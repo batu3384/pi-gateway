@@ -3,18 +3,35 @@
 set -euo pipefail
 
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/stack-health.sh
+source "$SCRIPT_DIR/../lib/stack-health.sh"
 # shellcheck source=/dev/null
 [[ -f "$REMOTE_DIR/.env" ]] && source "$REMOTE_DIR/.env"
 
 ENABLE_RESTIC="${ENABLE_RESTIC:-false}"
 RESTIC_PASSWORD="${RESTIC_PASSWORD:-}"
-RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-/mnt/ssd/pi-gateway-data/backups/restic}"
+if is_ssd_root_mode; then
+  RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-${REMOTE_DIR}/data/backups/restic}"
+else
+  RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-/mnt/ssd/pi-gateway-data/backups/restic}"
+fi
 RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic:latest}"
 
 log() { echo "[restic] $*"; }
 
 [[ "$ENABLE_RESTIC" == "true" ]] || { log "atlandi (ENABLE_RESTIC=false)"; exit 0; }
 [[ -n "$RESTIC_PASSWORD" ]] || { log "HATA: RESTIC_PASSWORD .env icinde bos"; exit 1; }
+
+if is_ssd_root_mode; then
+  if ! root_on_ssd; then
+    log "HATA: ssd-root modunda root SSD degil — yedek atlandi"
+    exit 1
+  fi
+elif [[ -f /run/pi-gateway/storage-degraded ]] || ! mountpoint -q /mnt/ssd 2>/dev/null; then
+  log "SSD mount yok veya degraded mod — yedek atlandi"
+  exit 0
+fi
 
 DATA_ROOT="${REMOTE_DIR}/data"
 if [[ -L "$DATA_ROOT" ]]; then

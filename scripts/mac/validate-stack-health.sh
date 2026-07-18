@@ -48,15 +48,15 @@ if bash -c "REMOTE_DIR=/tmp source '$stack_health'; stack_core_ok"; then
 fi
 ok "stack_core_ok bozuk ortamda fail"
 
-grep -q 'STACK_RECOVER_WAIT_SEC:-300' "$stack_health" \
-  || die "STACK_RECOVER_WAIT_SEC default 300 degil"
-grep -q 'TimeoutStartSec=300' "$PROJECT_DIR/host/systemd/pi-gateway-recover-ro.service" \
-  || die "recover-ro TimeoutStartSec 300 degil"
-ok "recover wait/timeout 300s hizali"
+grep -q 'STACK_RECOVER_WAIT_SEC:-330' "$stack_health" \
+  || die "STACK_RECOVER_WAIT_SEC default 330 degil"
+grep -q 'TimeoutStartSec=360' "$PROJECT_DIR/host/systemd/pi-gateway-recover-ro.service" \
+  || die "recover-ro TimeoutStartSec 360 degil"
+ok "recover wait/timeout 330/360s hizali"
 
 grep -q 'apply_adguard_rewrites_best_effort' "$recover" \
   || die "recover rewrite best-effort cagirmiyor"
-grep -A3 'Stack zaten saglikli' "$recover" | grep -q 'apply_adguard_rewrites' \
+grep -A3 'Stack saglikli ve root rw' "$recover" | grep -q 'apply_adguard_rewrites' \
   || die "early healthy exit rewrite uygulamıyor"
 ok "recover rewrite early+success yollari"
 
@@ -75,7 +75,7 @@ grep -q 'PI_TELEGRAM_BOT_TOKEN' "$compose" \
   || die "n8n PI_TELEGRAM env yok"
 ok "n8n telegram env compose'da"
 
-grep -q '/mnt/ssd/.disk-probe:/host-ssd:ro' "$compose" \
+grep -q '/data/.disk-probe:/host-ssd:ro' "$compose" \
   || die "n8n hala genis /mnt/ssd mount kullaniyor"
 ok "n8n disk-probe mount"
 
@@ -118,9 +118,9 @@ echo "$soft" | grep -q 'force-recreate' \
 grep -q 'force-recreate' "$compose_up" || die "son care force-recreate kayboldu"
 ok "recover-compose soft sonra force"
 
-grep -q 'TimeoutStartSec=300' "$PROJECT_DIR/host/systemd/pi-gateway-stack-watchdog.service" \
-  || die "watchdog TimeoutStartSec 300 degil"
-ok "watchdog timeout 300s"
+grep -q 'TimeoutStartSec=360' "$PROJECT_DIR/host/systemd/pi-gateway-stack-watchdog.service" \
+  || die "watchdog TimeoutStartSec 360 degil"
+ok "watchdog timeout 360s"
 
 grep -q '/usr/local/lib/pi-gateway' "$PROJECT_DIR/host/systemd/pi-gateway-recover-ro.service" \
   || die "recover-ro hala kullanici repo path"
@@ -178,6 +178,113 @@ ok "gateway/status Caddy auth"
 
 grep -q 'SECRET_MARKER' "$PROJECT_DIR/scripts/pi/setup-n8n-workflows.sh" \
   || die "n8n workflow webhook guncelleme yok"
-ok "n8n webhook guncelleme"
+grep -q 'update:workflow.*active=true' "$PROJECT_DIR/scripts/pi/setup-n8n-workflows.sh" \
+  || die "n8n workflow aktivasyonu yok"
+ok "n8n webhook guncelleme + aktivasyon"
+
+grep -q '/run/pi-gateway/stack-recover.lock' "$stack_health" \
+  || die "STACK_LOCK_FILE tmpfs degil"
+ok "lock tmpfs path"
+
+grep -q 'ensure_root_rw' "$recover" \
+  || die "recover ensure_root_rw yok"
+grep -q 'stack_fully_healthy && root_rw_ok' "$recover" \
+  || die "recover early exit root_rw_ok yok"
+ok "recover remount-before-lock + root_rw_ok early exit"
+
+grep -q '! stack_fully_healthy || ! root_rw_ok' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check root RO recover tetiklemesi yok"
+ok "health-check recover tetiklemesi"
+
+grep -q 'STORAGE_FALLBACK_SD' "$PROJECT_DIR/.env.example" \
+  || die "STORAGE_FALLBACK_SD .env.example yok"
+ok "STORAGE_FALLBACK_SD tanimli"
+
+[[ -f "$PROJECT_DIR/scripts/pi/setup-docker-fallback.sh" ]] \
+  || die "setup-docker-fallback.sh yok"
+ok "docker SD fallback script"
+
+grep -q '/usr/local/lib/pi-gateway/scripts/pi/health-check.sh' \
+  "$PROJECT_DIR/host/systemd/pi-gateway-health.service" \
+  || die "health-check privileged lib path degil"
+ok "health-check privileged lib path"
+
+[[ -f "$PROJECT_DIR/scripts/pi/reboot-smoke.sh" ]] \
+  || die "reboot-smoke.sh yok"
+ok "reboot-smoke script"
+
+morning_wf=""
+for wf in "$PROJECT_DIR"/config/n8n/*.workflow.json; do
+  [[ -f "$wf" ]] || continue
+  if grep -q 'executeCommand' "$wf" 2>/dev/null; then
+    morning_wf="$wf"
+    break
+  fi
+done
+[[ -z "$morning_wf" ]] || die "workflow executeCommand kullaniyor: $morning_wf"
+ok "n8n workflow executeCommand yok (aktif set)"
+
+grep -q 'caddy-.*-auth-deny' "$PROJECT_DIR/scripts/pi/smoke-test.sh" \
+  || die "smoke Caddy auth deny testi yok"
+ok "smoke auth iki yonlu"
+
+grep -q 'n8n-kuma-webhook' "$PROJECT_DIR/scripts/pi/smoke-test.sh" \
+  || die "smoke n8n webhook e2e yok"
+ok "smoke n8n webhook e2e"
+
+grep -q 'insecure_ssl' "$PROJECT_DIR/scripts/pi/setup-forgejo-webhook.sh" \
+  && die "forgejo webhook insecure_ssl hala var"
+ok "forgejo webhook ssl guvenli"
+
+grep -q '127.0.0.1:22000' "$compose" \
+  || die "syncthing 22000 localhost bind degil"
+ok "syncthing sync port localhost"
+
+grep -q 'STORAGE_TYPE=hybrid' "$PROJECT_DIR/.env.example" \
+  || die ".env.example hybrid varsayilan degil"
+ok "hybrid varsayilan"
+
+[[ -f "$PROJECT_DIR/scripts/mac/restore-hybrid-boot.sh" ]] \
+  || die "restore-hybrid-boot.sh yok"
+[[ -f "$PROJECT_DIR/scripts/mac/verify-hybrid-boot.sh" ]] \
+  || die "verify-hybrid-boot.sh yok"
+ok "hybrid mac scriptleri"
+
+grep -q 'root_on_ssd\|is_ssd_root_mode' "$stack_health" \
+  || die "stack-health ssd-root helper yok"
+ok "ssd-root helpers"
+
+[[ -f "$PROJECT_DIR/scripts/mac/migrate-sd-boot-ssd-root.sh" ]] \
+  || die "migrate-sd-boot-ssd-root.sh yok"
+[[ -f "$PROJECT_DIR/scripts/mac/verify-ssd-root.sh" ]] \
+  || die "verify-ssd-root.sh yok"
+[[ -f "$PROJECT_DIR/docs/SSD-ROOT.md" ]] \
+  || die "docs/SSD-ROOT.md yok"
+ok "ssd-root migration artefaktlari"
+
+grep -q 'root-on-ssd' "$PROJECT_DIR/scripts/pi/smoke-test.sh" \
+  || die "smoke root-on-ssd yok"
+ok "smoke ssd-root check"
+
+# verify false-green onleme: SD/SSD disk eslesmesi zorunlu
+grep -q 'SD root.*SSD root\|SD ve SSD ayni root' "$PROJECT_DIR/scripts/mac/verify-ssd-root.sh" \
+  || die "verify-ssd-root SD==SSD root kontrati yok"
+grep -q 'yanlis disk\|path uyusmuyor' "$PROJECT_DIR/scripts/mac/verify-ssd-root.sh" \
+  || die "verify-ssd-root disk eslesme kontrolu yok"
+grep -q 'SD_ROOT_BEFORE\|flash oncesi SD root' "$PROJECT_DIR/scripts/mac/migrate-sd-boot-ssd-root.sh" \
+  || die "migrate eski SD root carpismasi kontrolu yok"
+ok "migrate/verify PARTUUID guvenlik kontrati"
+
+[[ -f "$PROJECT_DIR/scripts/pi/neutralize-legacy-sd-root.sh" ]] \
+  || die "neutralize-legacy-sd-root.sh yok"
+ok "legacy SD root neutralize script"
+
+[[ -f "$PROJECT_DIR/scripts/mac/validate-ssd-root-contract.sh" ]] \
+  || die "validate-ssd-root-contract.sh yok"
+ok "ssd-root contract test script"
+
+[[ -f "$PROJECT_DIR/scripts/pi/ssd-root-harden.sh" ]] \
+  || die "ssd-root-harden.sh yok"
+ok "ssd-root-harden script"
 
 echo "[validate-stack] Tum kontroller gecti"

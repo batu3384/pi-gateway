@@ -2,12 +2,31 @@
 # Stack sagligi ve kurtarma kilidi (health-check, watchdog, recover-ro)
 set -euo pipefail
 
-# recover-ro TimeoutStartSec ile ayni tutulmali
-STACK_RECOVER_WAIT_SEC="${STACK_RECOVER_WAIT_SEC:-300}"
-STACK_LOCK_FILE="${STACK_LOCK_FILE:-${REMOTE_DIR:-/tmp}/.stack-recover.lock}"
+# recover-ro TimeoutStartSec (360) altinda kalmali; waiter biraz daha uzun bekler
+STACK_RECOVER_WAIT_SEC="${STACK_RECOVER_WAIT_SEC:-330}"
+STACK_LOCK_FILE="${STACK_LOCK_FILE:-/run/pi-gateway/stack-recover.lock}"
+STORAGE_DEGRADED_FLAG="${STORAGE_DEGRADED_FLAG:-/run/pi-gateway/storage-degraded}"
+STACK_RECOVER_COOLDOWN_SEC="${STACK_RECOVER_COOLDOWN_SEC:-180}"
+STACK_RECOVER_COOLDOWN_FILE="${STACK_RECOVER_COOLDOWN_FILE:-/run/pi-gateway/stack-recover-cooldown}"
+STACK_BOOT_GRACE_SEC="${STACK_BOOT_GRACE_SEC:-120}"
+SSD_HOTPLUG_STATE_FILE="${SSD_HOTPLUG_STATE_FILE:-/var/lib/pi-gateway/ssd-hotplug-mounted}"
+SSD_HOTPLUG_DEBOUNCE_SEC="${SSD_HOTPLUG_DEBOUNCE_SEC:-120}"
 
 needs_ssd_storage() {
+  # hybrid/ssd-data: ayri /mnt/ssd veri diski
   [[ "${STORAGE_TYPE:-hybrid}" == "hybrid" || "${STORAGE_TYPE:-}" == "ssd-data" ]]
+}
+
+# ssd-root: OS root USB/SSD uzerinde olmali (mmcblk yasak)
+is_ssd_root_mode() {
+  [[ "${STORAGE_TYPE:-hybrid}" == "ssd-root" || "${STORAGE_TYPE:-hybrid}" == "ssd" ]]
+}
+
+root_on_ssd() {
+  local src
+  src="$(findmnt -n -o SOURCE / 2>/dev/null || true)"
+  [[ -n "$src" ]] || return 1
+  ! echo "$src" | grep -q 'mmcblk'
 }
 
 pi_user_from_remote_dir() {
@@ -23,6 +42,43 @@ root_rw_ok() {
   ! findmnt -n -o OPTIONS / 2>/dev/null | tr ',' '\n' | grep -qx 'ro'
 }
 
+storage_degraded() {
+  [[ -f "${STORAGE_DEGRADED_FLAG}" ]]
+}
+
+set_storage_degraded() {
+  mkdir -p "$(dirname "$STORAGE_DEGRADED_FLAG")" 2>/dev/null || true
+  touch "$STORAGE_DEGRADED_FLAG" 2>/dev/null || true
+}
+
+clear_storage_degraded() {
+  rm -f "$STORAGE_DEGRADED_FLAG" 2>/dev/null || true
+}
+
+mark_stack_recover_cooldown() {
+  mkdir -p "$(dirname "$STACK_RECOVER_COOLDOWN_FILE")" 2>/dev/null || true
+  date +%s >"$STACK_RECOVER_COOLDOWN_FILE" 2>/dev/null || true
+}
+
+stack_recover_suppressed() {
+  local then now uptime_sec
+  if recover_service_running; then
+    return 0
+  fi
+  if [[ -f "$STACK_RECOVER_COOLDOWN_FILE" ]]; then
+    then="$(cat "$STACK_RECOVER_COOLDOWN_FILE" 2>/dev/null || echo 0)"
+    now="$(date +%s)"
+    if (( now - then < STACK_RECOVER_COOLDOWN_SEC )); then
+      return 0
+    fi
+  fi
+  uptime_sec="$(awk '{print int($1)}' /proc/uptime 2>/dev/null || echo 9999)"
+  if (( uptime_sec < STACK_BOOT_GRACE_SEC )) && ! stack_fully_healthy; then
+    return 0
+  fi
+  return 1
+}
+
 # 0 = saglikli, 1 = unhealthy/none/missing
 container_health_ok() {
   local name="$1"
@@ -34,7 +90,7 @@ container_health_ok() {
 
 # 0 = core ayakta, 1 = bozuk (isim = donus kodu)
 stack_core_ok() {
-  if needs_ssd_storage; then
+  if needs_ssd_storage && ! storage_degraded; then
     mountpoint -q /mnt/ssd 2>/dev/null || return 1
   fi
   systemctl is-active --quiet docker 2>/dev/null || return 1
@@ -64,7 +120,11 @@ stack_fully_healthy() {
 }
 
 recover_service_running() {
-  [[ "$(systemctl show -p ActiveState --value pi-gateway-recover-ro.service 2>/dev/null || true)" == "activating" ]]
+  local state
+  state="$(systemctl show -p ActiveState --value pi-gateway-recover-ro.service 2>/dev/null || true)"
+  [[ "$state" == "activating" || "$state" == "start" ]] && return 0
+  # Script dogrudan cagrildiginda systemd activating olmayabilir — lock dosyasi
+  [[ -f "$STACK_LOCK_FILE" ]] && fuser -s "$STACK_LOCK_FILE" 2>/dev/null
 }
 
 wait_for_recover_service() {
@@ -79,6 +139,7 @@ wait_for_recover_service() {
 acquire_recover_lock_wait() {
   local owner
   owner="$(pi_user_from_remote_dir "${REMOTE_DIR:-/home/${PI_USER:-batu}/pi-gateway}")"
+  mkdir -p "$(dirname "$STACK_LOCK_FILE")" 2>/dev/null || return 1
   touch "$STACK_LOCK_FILE" 2>/dev/null || return 1
   if [[ "$(id -u)" -eq 0 ]]; then
     chown "${owner}:${owner}" "$STACK_LOCK_FILE" 2>/dev/null || true
@@ -150,8 +211,14 @@ trigger_stack_recover() {
     return 0
   fi
 
+  if stack_recover_suppressed; then
+    logger -t pi-gateway-recover "recover atlandi (cooldown/boot grace)"
+    return 1
+  fi
+
   if REMOTE_DIR="$remote_dir" bash "$script"; then
-    stack_fully_healthy
+    mark_stack_recover_cooldown
+    stack_fully_healthy && root_rw_ok
   else
     return 1
   fi

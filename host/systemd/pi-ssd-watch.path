@@ -1,0 +1,9 @@
+[Unit]
+Description=Pi Gateway SSD device watch (USB hotplug)
+DefaultInstance=
+
+[Path]
+PathChanged=/dev/disk/by-label/pi-data
+
+[Install]
+WantedBy=multi-user.target

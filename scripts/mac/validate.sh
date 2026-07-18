@@ -25,6 +25,18 @@ fi
 
 chmod +x "$SCRIPT_DIR/validate-stack-health.sh" 2>/dev/null || true
 "$SCRIPT_DIR/validate-stack-health.sh"
+chmod +x "$SCRIPT_DIR/validate-ssd-root-contract.sh" 2>/dev/null || true
+if [[ -f "$SCRIPT_DIR/validate-ssd-root-contract.sh" ]]; then
+  "$SCRIPT_DIR/validate-ssd-root-contract.sh"
+fi
+chmod +x "$SCRIPT_DIR/validate-recovery-contract.sh" 2>/dev/null || true
+if [[ -f "$SCRIPT_DIR/validate-recovery-contract.sh" ]]; then
+  "$SCRIPT_DIR/validate-recovery-contract.sh"
+fi
+chmod +x "$SCRIPT_DIR/validate-hybrid-contract.sh" 2>/dev/null || true
+if [[ -f "$SCRIPT_DIR/validate-hybrid-contract.sh" ]]; then
+  "$SCRIPT_DIR/validate-hybrid-contract.sh"
+fi
 
 docker compose -f "$PROJECT_DIR/compose/docker-compose.yml" --env-file "$PROJECT_DIR/.env" config -q
 log "docker-compose validation: OK"

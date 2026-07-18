@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 # Root systemd unit'lerinin calistiracagi scriptleri root-owned lib'e kopyalar.
-# Repo (~/pi-gateway) kullanici yazilabilir; privilege escalation riskini keser.
 set -euo pipefail
 
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
@@ -17,6 +16,8 @@ SCRIPTS=(
   scripts/pi/apply-adguard-rewrites.sh
   scripts/pi/health-check.sh
   scripts/pi/check-sd-health.sh
+  scripts/pi/setup-docker-fallback.sh
+  scripts/pi/ssd-hotplug-handler.sh
   scripts/lib/stack-health.sh
   scripts/lib/compose-profiles.sh
   scripts/lib/notify.sh
@@ -32,7 +33,7 @@ run_root() {
   fi
 }
 
-run_root mkdir -p "$LIB_DIR/scripts/pi" "$LIB_DIR/scripts/lib"
+run_root mkdir -p "$LIB_DIR/scripts/pi" "$LIB_DIR/scripts/lib" /run/pi-gateway /usr/local/sbin
 
 for rel in "${SCRIPTS[@]}"; do
   src="${REMOTE_DIR}/${rel}"
@@ -44,5 +45,18 @@ for rel in "${SCRIPTS[@]}"; do
   run_root install -o root -g root -m 755 -D "$src" "$dst"
 done
 
-# recover/watchdog REMOTE_DIR'deki .env + compose'u kullanmaya devam eder
+ssd_src="${REMOTE_DIR}/scripts/pi/setup-ssd-data.sh"
+if [[ -f "$ssd_src" ]]; then
+  run_root install -o root -g root -m 755 -D "$ssd_src" /usr/local/sbin/pi-setup-ssd-data.sh
+  log "OK /usr/local/sbin/pi-setup-ssd-data.sh"
+fi
+
+# Deploy drift kontrolu
+if command -v sha256sum >/dev/null 2>&1; then
+  tmp_sha="$(mktemp)"
+  (cd "$REMOTE_DIR" && sha256sum "${SCRIPTS[@]}" 2>/dev/null) >"$tmp_sha" || true
+  run_root install -o root -g root -m 644 "$tmp_sha" "$LIB_DIR/.scripts-sha256"
+  rm -f "$tmp_sha"
+fi
+
 log "OK root-owned lib: $LIB_DIR"

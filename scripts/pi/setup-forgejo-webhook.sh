@@ -24,8 +24,8 @@ log() { echo "[forgejo-webhook] $*"; }
 
 [[ "${ENABLE_FORGEJO:-true}" == "true" ]] || exit 0
 [[ "${ENABLE_N8N:-true}" == "true" ]] || exit 0
-docker ps --format '{{.Names}}' | grep -q '^forgejo$' || { log "forgejo yok"; exit 0; }
-docker ps --format '{{.Names}}' | grep -q '^n8n$' || { log "n8n yok"; exit 0; }
+docker ps --format '{{.Names}}' | grep -q '^forgejo$' || { log "HATA: forgejo yok"; exit 1; }
+docker ps --format '{{.Names}}' | grep -q '^n8n$' || { log "HATA: n8n yok"; exit 1; }
 
 api_token() {
   if [[ -f "$TOKEN_FILE" ]]; then
@@ -46,7 +46,7 @@ api_token() {
 }
 
 TOKEN="$(api_token || true)"
-[[ -n "$TOKEN" ]] || { log "Forgejo API token alinamadi"; exit 0; }
+[[ -n "$TOKEN" ]] || { log "HATA: Forgejo API token alinamadi"; exit 1; }
 
 API="http://127.0.0.1:${FORGEJO_PORT}/api/v1"
 AUTH=(-H "Authorization: token ${TOKEN}")
@@ -84,8 +84,7 @@ print(json.dumps({
   "events": ["push"],
   "config": {
     "url": "${N8N_WEBHOOK_URL}",
-    "content_type": "json",
-    "insecure_ssl": "1"
+    "content_type": "json"
   }
 }))
 PY
@@ -99,5 +98,6 @@ code="$(curl -fsS "${AUTH[@]}" -o /dev/null -w '%{http_code}' \
 if [[ "$code" == "201" ]]; then
   log "Webhook eklendi: ${FORGEJO_ADMIN_USER}/${FORGEJO_REPO_NAME} -> $N8N_WEBHOOK_URL"
 else
-  log "UYARI: webhook eklenemedi (HTTP $code)"
+  log "HATA: webhook eklenemedi (HTTP $code)"
+  exit 1
 fi

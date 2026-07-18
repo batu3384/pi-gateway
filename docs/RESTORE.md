@@ -3,7 +3,7 @@
 ## Ön koşul
 
 - `RESTIC_PASSWORD` (`.env` veya güvenli kasada)
-- Yerel repo: `/mnt/ssd/pi-gateway-data/backups/restic`
+- Yerel repo: `/mnt/ssd/pi-gateway-data/backups/restic` (symlink: `~/pi-gateway/data/backups/restic`)
 - Mac kopyası: `make backup-pull` → `~/Backups/pi-gateway/restic`
 
 ## Snapshot listesi
@@ -40,7 +40,10 @@ docker run --rm -e RESTIC_PASSWORD \
 ```
 
 5. `docker compose up -d` + `configure-adguard.sh`
-6. `smoke-test.sh` (15/15 beklenir)
+6. `scripts/pi/smoke-test.sh` (tüm kontroller yeşil)
+7. İsteğe bağlı: `scripts/pi/reboot-smoke.sh post` (reboot sonrası `recover-ro` + smoke)
+
+SSD yokken veya degraded modda Restic yedek atlanır (`restic-backup.sh`).
 
 ## Aylık drill
 

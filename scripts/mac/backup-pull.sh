@@ -11,7 +11,7 @@ PI_USER="${PI_USER:-batu}"
 PI_HOST="${PI_STATIC_IP:-${PI_HOST:-}}"
 REMOTE_DIR="${REMOTE_DIR:-/home/$PI_USER/pi-gateway}"
 LOCAL_DEST="${MAC_BACKUP_DEST:-$HOME/Backups/pi-gateway}"
-RESTIC_REMOTE="${RESTIC_REPOSITORY:-/mnt/ssd/pi-gateway-data/backups/restic}"
+RESTIC_REMOTE="${RESTIC_REPOSITORY:-${REMOTE_DIR}/data/backups/restic}"
 
 [[ -n "$PI_HOST" ]] || die "PI_STATIC_IP gerekli"
 

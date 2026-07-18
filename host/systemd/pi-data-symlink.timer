@@ -1,0 +1,11 @@
+[Unit]
+Description=Pi Gateway data symlink repair (boot window)
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+AccuracySec=30s
+Unit=pi-data-symlink-repair.service
+
+[Install]
+WantedBy=timers.target

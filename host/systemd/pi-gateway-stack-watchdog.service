@@ -1,13 +1,14 @@
 [Unit]
 Description=Pi Gateway stack watchdog (SSD, Docker, AdGuard)
-After=network-online.target
+After=network-online.target docker.service pi-gateway-recover-ro.service
+Wants=network-online.target
 
 [Service]
 Type=oneshot
 Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
 ExecStart=/usr/local/lib/pi-gateway/scripts/pi/stack-watchdog.sh
 Nice=10
-TimeoutStartSec=300
+TimeoutStartSec=360
 
 [Install]
 WantedBy=multi-user.target

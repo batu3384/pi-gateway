@@ -119,19 +119,13 @@ sync
 cat <<EOF
 
 === MAC TARAFI TAMAM ===
-SSD bootfs hazir. AMA: rainbow/bootloader sorunu icin Pi EEPROM sart.
+SSD bootfs hazir. Rainbow/bootloader icin Pi EEPROM: scripts/pi/fix-eeprom-usb-ssd.sh
 
-Pi'de (SD ile acikken) calistir:
-  bash <(curl -fsSL ...)   # veya:
-  ~/pi-gateway yoksa asagidaki scripti kopyala:
+A mimarisi (SD boot + SSD root) icin migrate kullan:
+  ./scripts/mac/migrate-sd-boot-ssd-root.sh
 
-  $(dirname "$0")/../pi/fix-eeprom-usb-ssd.sh
-
-Sonra:
-  1. SSD'yi Mac'ten cikar
-  2. SD ile Pi ac → EEPROM script
-  3. Kapat, SD cikar
-  4. SSD → SIYAH USB 2.0, baska USB yok, HDMI 0, 5V/3A
-  5. Ac (2-3 dk)
+B mimarisi (tam USB boot, SD cikar) test:
+  1. Pi SD ile ac → CONFIRM_EEPROM_FIX=yes ARCH=B fix-eeprom-usb-ssd.sh
+  2. SD cikar, SSD USB 2.0 → ac
 
 EOF

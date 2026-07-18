@@ -4,7 +4,7 @@ set -euo pipefail
 
 compose_profiles() {
   local -a profiles=()
-  [[ "${ENABLE_AUTOHEAL:-true}" == "true" ]] && profiles+=(--profile autoheal)
+  [[ "${ENABLE_AUTOHEAL:-false}" == "true" ]] && profiles+=(--profile autoheal)
   [[ "${ENABLE_CADDY:-true}" == "true" ]] && profiles+=(--profile caddy)
   [[ "${ENABLE_DOZZLE:-true}" == "true" ]] && profiles+=(--profile dozzle)
   [[ "${ENABLE_FORGEJO:-true}" == "true" ]] && profiles+=(--profile forgejo)

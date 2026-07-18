@@ -5,6 +5,7 @@ set -euo pipefail
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 # shellcheck source=/dev/null
 [[ -f "$REMOTE_DIR/.env" ]] && source "$REMOTE_DIR/.env"
+STORAGE_TYPE="${STORAGE_TYPE:-hybrid}"
 
 DOCKER_SSD_ROOT="${DOCKER_SSD_ROOT:-/mnt/ssd/docker}"
 DOCKER_LEGACY="/var/lib/docker"
@@ -16,12 +17,17 @@ DROPIN_FILE="${DROPIN_DIR}/pi-gateway-ssd.conf"
 log() { echo "[docker-ssd] $*"; }
 die() { log "HATA: $*"; exit 1; }
 
-[[ "${STORAGE_TYPE:-hybrid}" == "hybrid" || "${STORAGE_TYPE}" == "ssd-data" ]] || {
+if [[ "$STORAGE_TYPE" == "ssd-root" || "$STORAGE_TYPE" == "ssd" ]]; then
+  log "STORAGE_TYPE=${STORAGE_TYPE} — docker zaten rootfs (SSD) uzerinde, atlandi"
+  exit 0
+fi
+
+[[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]] || {
   log "STORAGE_TYPE=${STORAGE_TYPE:-?} — SSD docker yalnizca hybrid/ssd-data icin"
   exit 0
 }
 
-[[ "${ENABLE_DOCKER_SSD:-true}" == "true" ]] || { log "ENABLE_DOCKER_SSD=false — atlandi"; exit 0; }
+[[ "${ENABLE_DOCKER_SSD:-false}" == "true" ]] || { log "ENABLE_DOCKER_SSD=false — atlandi"; exit 0; }
 
 mountpoint -q /mnt/ssd || die "/mnt/ssd mount degil — once SSD kurulumu"
 
@@ -56,12 +62,12 @@ PY
 }
 
 configure_systemd() {
-  log "docker.service: SSD mount sonrasi baslasin"
+  log "docker.service: SSD mount tercih (RequiresMountsFor yok — degraded fallback mumkun)"
   sudo mkdir -p "$DROPIN_DIR"
   sudo tee "$DROPIN_FILE" >/dev/null <<'EOF'
 [Unit]
 After=mnt-ssd.mount local-fs.target
-RequiresMountsFor=/mnt/ssd
+Wants=mnt-ssd.mount
 EOF
   sudo systemctl daemon-reload
 }
@@ -84,7 +90,8 @@ migrate_data() {
 
 backup_legacy() {
   if [[ -d "$DOCKER_LEGACY" ]] && [[ ! -L "$DOCKER_LEGACY" ]]; then
-    local bak="${DOCKER_LEGACY}.sd-backup-$(date +%Y%m%d)"
+    local bak
+    bak="${DOCKER_LEGACY}.sd-backup-$(date +%Y%m%d)"
     if [[ ! -d "$bak" ]]; then
       log "Eski root yedek: $bak"
       sudo mv "$DOCKER_LEGACY" "$bak"

@@ -33,6 +33,19 @@
 | `SYNCTHING_MAC_DEVICE_ID` | Mac cihaz ID |
 | `SYNCTHING_GUI_USER` / `SYNCTHING_GUI_PASSWORD` | Web arayüzü |
 
+## SSD / depolama
+
+| Değişken | Varsayılan | Açıklama |
+|----------|------------|----------|
+| `STORAGE_TYPE` | `hybrid` | **Üretim:** SD root + SSD veri (`/mnt/ssd`). `ssd-data` alias. |
+| `STORAGE_FALLBACK_SD` | `false` | SSD yokken SD üzerinde core DNS (fail-closed varsayılan) |
+| `ENABLE_DOCKER_SSD` | `false` | `true`: Docker `data-root` SSD'ye; JMicron USB'de I/O riski |
+| `DOCKER_SSD_ROOT` | `/mnt/ssd/docker` | `ENABLE_DOCKER_SSD=true` iken hedef |
+| `STACK_RECOVER_COOLDOWN_SEC` | `180` | compose up sonrası otomatik recover bekleme |
+| `STACK_BOOT_GRACE_SEC` | `120` | Boot sonrası recover erteleme |
+
+Deneysel `ssd-root`: `docs/SSD-ROOT.md` + `scripts/mac/migrate-sd-boot-ssd-root.sh`
+
 ## Yedekleme
 
 | Değişken | Açıklama |

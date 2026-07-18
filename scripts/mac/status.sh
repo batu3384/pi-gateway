@@ -18,6 +18,7 @@ set -euo pipefail
 REMOTE_DIR="${REMOTE_DIR:-$HOME/pi-gateway}"
 # shellcheck source=/dev/null
 [[ -f "$REMOTE_DIR/.env" ]] && source "$REMOTE_DIR/.env"
+STORAGE_TYPE="${STORAGE_TYPE:-hybrid}"
 
 echo "--- uptime ---"
 uptime
@@ -25,7 +26,7 @@ echo "--- docker ---"
 docker ps --format 'table {{.Names}}\t{{.Status}}' | head -20
 echo "--- disk ---"
 df -h / /mnt/ssd 2>/dev/null | grep -v tmpfs || df -h / | grep -v tmpfs
-if [[ "${STORAGE_TYPE:-hybrid}" == "hybrid" || "${STORAGE_TYPE}" == "ssd-data" ]]; then
+if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
   echo "--- data symlink ---"
   if [[ -L "$REMOTE_DIR/data" ]] && [[ "$(readlink -f "$REMOTE_DIR/data")" == "/mnt/ssd/pi-gateway-data" ]]; then
     echo "data -> $(readlink -f "$REMOTE_DIR/data") OK"

@@ -6,6 +6,7 @@ export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 # shellcheck source=/dev/null
 [[ -f "$REMOTE_DIR/.env" ]] && set -a && source "$REMOTE_DIR/.env" && set +a
+STORAGE_TYPE="${STORAGE_TYPE:-hybrid}"
 
 PI_STATIC_IP="${PI_STATIC_IP:-127.0.0.1}"
 ADGUARD_WEB_PORT="${ADGUARD_WEB_PORT:-8080}"
@@ -30,9 +31,31 @@ run_check() {
   fi
 }
 
-if [[ "${STORAGE_TYPE:-hybrid}" == "hybrid" || "${STORAGE_TYPE}" == "ssd-data" ]]; then
-  run_check "data-ssd-symlink" bash -c \
-    "[[ -L '${REMOTE_DIR}/data' ]] && [[ \"\$(readlink -f '${REMOTE_DIR}/data')\" == '/mnt/ssd/pi-gateway-data' ]]"
+CADDY_AUTH_USER="${CADDY_AUTH_USER:-${AGH_ADMIN_USER:-admin}}"
+CADDY_AUTH_PASSWORD="${CADDY_AUTH_PASSWORD:-${AGH_ADMIN_PASSWORD:-}}"
+
+run_caddy_auth_checks() {
+  local host="$1"
+  run_check "caddy-${host}-auth-deny" bash -c \
+    'if [[ "${ENABLE_TLS:-false}" == "true" ]]; then code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 --resolve "'"${host}"'.'"${LAN_DOMAIN}"':443:127.0.0.1" "https://'"${host}"'.'"${LAN_DOMAIN}"'/"); else code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 -H "Host: '"${host}"'.'"${LAN_DOMAIN}"'" http://127.0.0.1/); fi; [[ "$code" == "401" ]]'
+  run_check "caddy-${host}-auth-ok" bash -c \
+    'if [[ "${ENABLE_TLS:-false}" == "true" ]]; then code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 -u "'"${CADDY_AUTH_USER}"':'"${CADDY_AUTH_PASSWORD}"'" --resolve "'"${host}"'.'"${LAN_DOMAIN}"':443:127.0.0.1" "https://'"${host}"'.'"${LAN_DOMAIN}"'/"); else code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 -u "'"${CADDY_AUTH_USER}"':'"${CADDY_AUTH_PASSWORD}"'" -H "Host: '"${host}"'.'"${LAN_DOMAIN}"'" http://127.0.0.1/); fi; [[ "$code" == "200" || "$code" == "302" || "$code" == "307" ]]'
+}
+
+if [[ "$STORAGE_TYPE" == "ssd-root" || "$STORAGE_TYPE" == "ssd" ]]; then
+  run_check "root-on-ssd" bash -c '! findmnt -n -o SOURCE / | grep -q mmcblk'
+  run_check "root-rw" bash -c '! findmnt -n -o OPTIONS / | tr "," "\n" | grep -qx ro'
+  run_check "data-native" bash -c \
+    "[[ -d '${REMOTE_DIR}/data' && ! -L '${REMOTE_DIR}/data' ]]"
+  run_check "sd-health" bash -c "REMOTE_DIR='${REMOTE_DIR}' bash '${REMOTE_DIR}/scripts/pi/check-sd-health.sh'"
+elif [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
+  if [[ -f /run/pi-gateway/storage-degraded ]]; then
+    run_check "data-sd-fallback" bash -c \
+      "[[ -d '${REMOTE_DIR}/data' && ! -L '${REMOTE_DIR}/data' ]]"
+  else
+    run_check "data-ssd-symlink" bash -c \
+      "[[ -L '${REMOTE_DIR}/data' ]] && [[ \"\$(readlink -f '${REMOTE_DIR}/data')\" == '/mnt/ssd/pi-gateway-data' ]]"
+  fi
   if [[ -f /mnt/ssd/.docker-data-root ]]; then
     run_check "docker-ssd-root" bash -c \
       "docker info 2>/dev/null | grep -q 'Docker Root Dir: ${DOCKER_SSD_ROOT:-/mnt/ssd/docker}'"
@@ -51,15 +74,30 @@ run_check "dns-rewrite" bash -c \
   "dig +time=3 +tries=1 @${PI_STATIC_IP} git.${LAN_DOMAIN} A +short | grep -qx '${PI_STATIC_IP}'"
 run_check "dns-rewrite-logs" bash -c \
   "dig +time=3 +tries=1 @${PI_STATIC_IP} logs.${LAN_DOMAIN} A +short | grep -qx '${PI_STATIC_IP}'"
-run_check "gateway-http" bash -c \
-  'if [[ "${ENABLE_TLS:-false}" == "true" ]]; then code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 --resolve "gateway.'"${LAN_DOMAIN}"':443:127.0.0.1" "https://gateway.'"${LAN_DOMAIN}"'/"); else code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 -H "Host: gateway.'"${LAN_DOMAIN}"'" http://127.0.0.1/); fi; [[ "$code" == "200" || "$code" == "401" || "$code" == "307" || "$code" == "302" ]]'
+
+if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
+  auth_pass="${CADDY_AUTH_PASSWORD:-${AGH_ADMIN_PASSWORD:-}}"
+  case "${auth_pass}" in
+    ""|CHANGE_ME*|Degistir*) ;;
+    *)
+      run_caddy_auth_checks "gateway"
+      run_caddy_auth_checks "status"
+      run_caddy_auth_checks "logs"
+      run_caddy_auth_checks "dns"
+      if [[ "${ENABLE_N8N:-true}" == "true" ]]; then
+        run_caddy_auth_checks "n8n"
+      fi
+      ;;
+  esac
+fi
+
 run_check "homepage" curl -fsS "http://127.0.0.1:3040"
 run_check "uptime-kuma" curl -fsS "http://127.0.0.1:3001"
 run_check "adguard-ui" curl -fsS "http://127.0.0.1:${ADGUARD_WEB_PORT}/"
 
-if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
-  run_check "caddy-logs.home" bash -c \
-    'if [[ "${ENABLE_TLS:-false}" == "true" ]]; then code=$(curl -sk -o /dev/null -w "%{http_code}" --resolve "logs.'"${LAN_DOMAIN}"':443:127.0.0.1" "https://logs.'"${LAN_DOMAIN}"'/"); else code=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: logs.'"${LAN_DOMAIN}"'" http://127.0.0.1/); fi; [[ "$code" == "200" || "$code" == "401" || "$code" == "307" || "$code" == "302" ]]'
+if [[ "${ENABLE_CADDY:-true}" == "true" ]] && [[ -z "${CADDY_AUTH_PASSWORD:-}" ]]; then
+  run_check "gateway-http" bash -c \
+    'if [[ "${ENABLE_TLS:-false}" == "true" ]]; then code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 --resolve "gateway.'"${LAN_DOMAIN}"':443:127.0.0.1" "https://gateway.'"${LAN_DOMAIN}"'/"); else code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 -H "Host: gateway.'"${LAN_DOMAIN}"'" http://127.0.0.1/); fi; [[ "$code" == "200" || "$code" == "401" || "$code" == "302" ]]'
 fi
 
 if [[ "${ENABLE_DOZZLE:-true}" == "true" ]]; then
@@ -82,7 +120,23 @@ fi
 if [[ "${ENABLE_N8N:-true}" == "true" ]]; then
   run_check "n8n" bash -c \
     "for _ in 1 2 3 4 5; do curl -fsS \"http://127.0.0.1:${N8N_PORT}/\" >/dev/null && exit 0; sleep 4; done; exit 1"
+  case "${N8N_WEBHOOK_SECRET:-}" in
+    ""|CHANGE_ME*) ;;
+    *)
+      run_check "n8n-kuma-webhook" bash -c \
+        'code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 -X POST \
+          "http://127.0.0.1:'"${N8N_PORT}"'/webhook/uptime-kuma-alert-'"${N8N_WEBHOOK_SECRET}"'" \
+          -H "Content-Type: application/json" \
+          -d "{\"heartbeat\":{\"status\":1,\"msg\":\"smoke\"},\"monitor\":{\"name\":\"Smoke Test\"}}"); \
+          [[ "$code" == "200" ]]'
+      ;;
+  esac
 fi
+
+run_check "privileged-lib-installed" test -x /usr/local/lib/pi-gateway/scripts/pi/recover-readonly-root.sh
+run_check "privileged-lib-sync" diff -q \
+  "${REMOTE_DIR}/scripts/lib/stack-health.sh" \
+  /usr/local/lib/pi-gateway/scripts/lib/stack-health.sh
 
 if [[ "${ENABLE_CROWDSEC:-true}" == "true" ]]; then
   run_check "crowdsec" bash -c \
@@ -98,7 +152,7 @@ if [[ "${ENABLE_UFW:-true}" == "true" ]] && [[ -x /usr/sbin/ufw ]]; then
       "! sudo -n /usr/sbin/ufw status | grep -E 'pi-gateway (9999|8080|3001|8384)' | grep -q '${LAN_SUBNET_CIDR:-192.168.1.0/24}'"
     # Docker UFW'yi bypass eder — bind gercekten localhost olmali
     run_check "admin-ports-localhost" bash -c \
-      '! ss -lnt | grep -E ":(3040|3001|5678|9999|3002|8384)\\b" | grep -vE "127\\.0\\.0\\.1|\\[::1\\]" | grep -q .'
+      '! ss -lnt | grep -E ":(3040|3001|5678|9999|3002|8384|22000)\\b" | grep -vE "127\\.0\\.0\\.1|\\[::1\\]" | grep -q .'
   fi
 fi
 

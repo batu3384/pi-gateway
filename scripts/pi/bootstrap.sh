@@ -63,14 +63,15 @@ if [[ -f "$REMOTE_DIR/scripts/pi/harden-host.sh" ]]; then
   export REMOTE_DIR
   bash "$REMOTE_DIR/scripts/pi/harden-host.sh" || \
     echo "[bootstrap] WARN: harden-host atlandi"
-elif [[ -f "$REMOTE_DIR/scripts/pi/setup-firewall.sh" ]]; then
-  echo "[bootstrap] Host guvenligi (UFW + fail2ban)..."
+fi
+if [[ -f "$REMOTE_DIR/scripts/pi/setup-firewall.sh" ]] && [[ "${ENABLE_UFW:-true}" == "true" ]]; then
+  echo "[bootstrap] UFW firewall..."
   export REMOTE_DIR
   bash "$REMOTE_DIR/scripts/pi/setup-firewall.sh" || \
     echo "[bootstrap] WARN: firewall setup atlandi"
 fi
 
-for unit in pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-crowdsec-ufw.timer pi-gateway-morning.timer pi-gateway-stack-watchdog.timer; do
+for unit in pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-crowdsec-ufw.timer pi-gateway-morning.timer pi-gateway-stack-watchdog.timer pi-data-symlink.timer pi-ssd-watch.path; do
   [[ -f "$REMOTE_DIR/host/systemd/$unit" ]] && sudo cp "$REMOTE_DIR/host/systemd/$unit" "/etc/systemd/system/$unit"
 done
 install_systemd_unit() {
@@ -86,15 +87,18 @@ install_systemd_unit() {
 
 if [[ -x "$REMOTE_DIR/scripts/pi/install-privileged-scripts.sh" ]]; then
   echo "[bootstrap] Root-owned privileged scriptler kuruluyor..."
-  REMOTE_DIR="$REMOTE_DIR" bash "$REMOTE_DIR/scripts/pi/install-privileged-scripts.sh" || \
-    echo "[bootstrap] WARN: privileged script install atlandi"
+  privileged_script="$REMOTE_DIR/scripts/pi/install-privileged-scripts.sh"
+  REMOTE_DIR="$REMOTE_DIR" bash "$privileged_script"
 fi
 
-for svc in pi-gateway-health.service pi-gateway-backup.service pi-gateway-adguard-config.service pi-gateway-health-failure.service pi-gateway-crowdsec-ufw.service pi-data-symlink.service pi-gateway-morning.service pi-gateway-recover-ro.service pi-gateway-stack-watchdog.service pi-gateway-ensure-fstab.service; do
+for svc in pi-gateway-health.service pi-gateway-backup.service pi-gateway-adguard-config.service pi-gateway-health-failure.service pi-gateway-crowdsec-ufw.service pi-data-symlink.service pi-data-symlink-repair.service pi-gateway-morning.service pi-gateway-recover-ro.service pi-gateway-stack-watchdog.service pi-gateway-ensure-fstab.service pi-ssd-data.service pi-ssd-watch.service; do
   install_systemd_unit "$svc"
 done
 sudo systemctl daemon-reload
-sudo systemctl enable pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-adguard-config.service pi-data-symlink.service pi-gateway-morning.timer pi-gateway-recover-ro.service pi-gateway-ensure-fstab.service pi-gateway-stack-watchdog.timer 2>/dev/null || true
+sudo systemctl enable pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-adguard-config.service pi-gateway-morning.timer pi-gateway-recover-ro.service pi-gateway-stack-watchdog.timer 2>/dev/null || true
+if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
+  sudo systemctl enable pi-data-symlink.service pi-gateway-ensure-fstab.service pi-data-symlink.timer pi-ssd-watch.path pi-ssd-data.service 2>/dev/null || true
+fi
 if [[ "${ENABLE_CROWDSEC:-true}" == "true" ]]; then
   sudo systemctl enable --now pi-gateway-crowdsec-ufw.timer 2>/dev/null || true
 fi
@@ -103,13 +107,26 @@ sudo systemctl start pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-
 if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
   if [[ -x "$REMOTE_DIR/scripts/pi/ensure-ssd-fstab.sh" ]]; then
     echo "[bootstrap] SSD fstab kontrolu..."
-    sudo bash "$REMOTE_DIR/scripts/pi/ensure-ssd-fstab.sh" || \
-      echo "[bootstrap] WARN: fstab kontrolu atlandi"
+    sudo bash "$REMOTE_DIR/scripts/pi/ensure-ssd-fstab.sh" || {
+      echo "[bootstrap] HATA: SSD fstab kontrolu basarisiz"
+      exit 1
+    }
   fi
-  if [[ -x /usr/local/sbin/pi-setup-ssd-data.sh ]]; then
+  ssd_script="$REMOTE_DIR/scripts/pi/setup-ssd-data.sh"
+  if [[ -f "$ssd_script" ]]; then
     echo "[bootstrap] SSD veri diski hazirlaniyor..."
-    sudo PI_USER="$USER" REMOTE_DIR="$REMOTE_DIR" /usr/local/sbin/pi-setup-ssd-data.sh || \
-      echo "[bootstrap] WARN: SSD setup atlandi (disk takili degil veya henuz hazir degil)"
+    ssd_env=(REMOTE_DIR="$REMOTE_DIR" STORAGE_TYPE="$STORAGE_TYPE" PI_USER="$USER")
+    if [[ ! -f /mnt/ssd/.pi-gateway-initialized ]]; then
+      ssd_env+=(PI_SSD_CONFIRM_FORMAT=yes)
+    fi
+    if ! sudo env "${ssd_env[@]}" bash "$ssd_script"; then
+      echo "[bootstrap] HATA: SSD veri diski hazirlanamadi (disk takili mi?)"
+      exit 1
+    fi
+    echo "[bootstrap] SSD veri diski OK"
+  else
+    echo "[bootstrap] HATA: setup-ssd-data.sh yok"
+    exit 1
   fi
   if mountpoint -q /mnt/ssd 2>/dev/null; then
     echo "[bootstrap] Veri diski: /mnt/ssd"
@@ -117,11 +134,19 @@ if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
   fi
 fi
 
-# Veri dizini: SSD symlink (hybrid) — mkdir ile SD uzerinde data/ OLUSTURMA
+# Veri dizini: hybrid=symlink, ssd-root=native
 if [[ -f "$REMOTE_DIR/scripts/pi/ensure-data-symlink.sh" ]]; then
-  echo "[bootstrap] Veri dizini symlink kontrolu..."
-  REMOTE_DIR="$REMOTE_DIR" STORAGE_TYPE="$STORAGE_TYPE" bash "$REMOTE_DIR/scripts/pi/ensure-data-symlink.sh" repair || \
-    echo "[bootstrap] WARN: data symlink atlandi"
+  echo "[bootstrap] Veri dizini kontrolu..."
+  data_script="$REMOTE_DIR/scripts/pi/ensure-data-symlink.sh"
+  if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
+    REMOTE_DIR="$REMOTE_DIR" STORAGE_TYPE="$STORAGE_TYPE" bash "$data_script" repair || {
+      echo "[bootstrap] HATA: data symlink onarilamadi (/mnt/ssd ve STORAGE_FALLBACK_SD kontrol)"
+      exit 1
+    }
+  else
+    REMOTE_DIR="$REMOTE_DIR" STORAGE_TYPE="$STORAGE_TYPE" bash "$data_script" repair || \
+      echo "[bootstrap] WARN: data dizin kontrolu atlandi"
+  fi
 else
   mkdir -p "$REMOTE_DIR/data/adguard/work" "$REMOTE_DIR/data/uptime-kuma" \
     "$REMOTE_DIR/data/forgejo" "$REMOTE_DIR/data/syncthing" "$REMOTE_DIR/data/projects" \
@@ -129,13 +154,14 @@ else
 fi
 sudo chown -R "$USER:$USER" "$REMOTE_DIR/config/adguard" 2>/dev/null || true
 
-if [[ "$STORAGE_TYPE" == "ssd" ]]; then
-  ROOT_DEV="$(findmnt -n -o SOURCE / | sed 's/p[0-9]*$//')"
-  if echo "$ROOT_DEV" | grep -q mmcblk; then
-    echo "[bootstrap] WARN: OS still on SD card. Migrate to USB SSD for production use."
-  else
-    echo "[bootstrap] Storage: non-SD root detected ($ROOT_DEV)"
+if [[ "$STORAGE_TYPE" == "ssd-root" || "$STORAGE_TYPE" == "ssd" ]]; then
+  ROOT_SRC="$(findmnt -n -o SOURCE / 2>/dev/null || true)"
+  if echo "$ROOT_SRC" | grep -q mmcblk; then
+    echo "[bootstrap] HATA: STORAGE_TYPE=$STORAGE_TYPE ama root hala SD ($ROOT_SRC)"
+    echo "[bootstrap]       scripts/mac/migrate-sd-boot-ssd-root.sh calistir"
+    exit 1
   fi
+  echo "[bootstrap] Storage: SSD root OK ($ROOT_SRC)"
 fi
 
 echo "[bootstrap] complete"

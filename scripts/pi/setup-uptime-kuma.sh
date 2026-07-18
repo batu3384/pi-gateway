@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC1083
 # Uptime Kuma monitorlerini otomatik ekler
 set -euo pipefail
 
@@ -13,7 +14,10 @@ PI_IP="${PI_STATIC_IP:-192.168.1.112}"
 
 log() { echo "[uptime-kuma-setup] $*"; }
 
-[[ -n "$KUMA_PASS" ]] || { log "UPTIME_KUMA_ADMIN_PASSWORD bos — atlandi"; exit 0; }
+[[ -n "$KUMA_PASS" ]] || { log "HATA: UPTIME_KUMA_ADMIN_PASSWORD bos"; exit 1; }
+case "$KUMA_PASS" in
+  CHANGE_ME*|Degistir*) log "HATA: UPTIME_KUMA_ADMIN_PASSWORD placeholder"; exit 1 ;;
+esac
 
 docker ps --format '{{.Names}}' | grep -q '^uptime-kuma$' || { log "uptime-kuma container yok"; exit 1; }
 
@@ -28,11 +32,12 @@ sync_password() {
 sync_password
 
 DOCKER_GW="${DOCKER_GATEWAY:-172.18.0.1}"
-export KUMA_URL KUMA_USER KUMA_PASS PI_IP DOCKER_GW
+export KUMA_URL KUMA_USER KUMA_PASS PI_IP DOCKER_GW LAN_DOMAIN
 export TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
 export TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:-}"
 export UPTIME_KUMA_STATUS_SLUG="${UPTIME_KUMA_STATUS_SLUG:-pi-gateway}"
 export ENABLE_N8N="${ENABLE_N8N:-true}"
+export LAN_DOMAIN="${LAN_DOMAIN:-home}"
 if [[ -n "${N8N_KUMA_WEBHOOK_URL:-}" ]]; then
   :
 else
@@ -45,7 +50,7 @@ fi
 export N8N_KUMA_WEBHOOK_URL
 
 docker run --rm --network host \
-  -e KUMA_URL -e KUMA_USER -e KUMA_PASS -e PI_IP -e DOCKER_GW \
+  -e KUMA_URL -e KUMA_USER -e KUMA_PASS -e PI_IP -e DOCKER_GW -e LAN_DOMAIN \
   -e TELEGRAM_BOT_TOKEN -e TELEGRAM_CHAT_ID -e UPTIME_KUMA_STATUS_SLUG \
   -e ENABLE_N8N -e N8N_KUMA_WEBHOOK_URL \
   python:3.12-alpine sh -c '
@@ -59,6 +64,7 @@ user = os.environ["KUMA_USER"]
 password = os.environ["KUMA_PASS"]
 pi_ip = os.environ["PI_IP"]
 gw = os.environ["DOCKER_GW"]
+lan = os.environ.get("LAN_DOMAIN", "home")
 tg_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 tg_chat = os.environ.get("TELEGRAM_CHAT_ID", "")
 
@@ -70,14 +76,14 @@ monitors = [
     ("AdGuard", MonitorType.HTTP, {"url": f"http://{gw}:8080", "accepted_statuscodes": ok}),
     ("Caddy", MonitorType.HTTP, {
         "url": "https://caddy:443",
-        "headers": "{\"Host\": \"gateway.home\"}",
+        "headers": f'{{"Host": "gateway.{lan}"}}',
         "accepted_statuscodes": ok,
         "ignoreTls": True,
         "maxredirects": 0,
     }),
-    ("logs.home", MonitorType.HTTP, {
+    (f"logs.{lan}", MonitorType.HTTP, {
         "url": f"https://{pi_ip}",
-        "headers": "{\"Host\": \"logs.home\"}",
+        "headers": f'{{"Host": "logs.{lan}"}}',
         "accepted_statuscodes": ok,
         "ignoreTls": True,
         "maxredirects": 0,

@@ -49,7 +49,6 @@ services:
       CONTAINERS: 1
       LOGS: 1
       EVENTS: 1
-      NETWORKS: 1
 
   autoheal:
     image: willfarrell/autoheal:latest
@@ -165,8 +164,8 @@ services:
       - ../data/projects:/var/syncthing/Projects
     ports:
       - "127.0.0.1:${SYNCTHING_PORT:-8384}:8384"
-      - "22000:22000/tcp"
-      - "22000:22000/udp"
+      - "127.0.0.1:22000:22000/tcp"
+      - "127.0.0.1:22000:22000/udp"
 
   redis:
     image: redis:7-alpine
@@ -187,7 +186,7 @@ services:
       retries: 3
 
   n8n:
-    image: docker.n8n.io/n8nio/n8n:latest
+    image: docker.n8n.io/n8nio/n8n:2.30.4
     container_name: n8n
     restart: unless-stopped
     profiles: ["n8n"]
@@ -211,8 +210,7 @@ services:
       PI_TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
     volumes:
       - ../data/n8n:/home/node/.n8n
-      # ponytail: sadece df probe — tum SSD okuma yok; health-check zaten disk uyarisi gonderir
-      - /mnt/ssd/.disk-probe:/host-ssd:ro
+      - ../data/.disk-probe:/host-ssd:ro
 
   crowdsec:
     image: crowdsecurity/crowdsec:v1.6.4

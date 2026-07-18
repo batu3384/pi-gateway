@@ -8,7 +8,7 @@ Production-grade single-node home dev/DNS server for Raspberry Pi 4B.
 - Automatic network discovery and static IP assignment
 - Self-healing containers (autoheal + healthchecks)
 - Independent DNS health monitoring (systemd timer, not dependent on Uptime Kuma)
-- Hybrid storage: SD boot + USB SSD data (`/mnt/ssd`)
+- Hybrid storage: SD boot + root; USB SSD for application data (`/mnt/ssd`)
 - Host firewall (UFW) + SSH brute-force protection (fail2ban)
 - Optional full automation via AdGuard DHCP mode
 
@@ -41,7 +41,7 @@ Client DNS query
 | Security | UFW + fail2ban | LAN-scoped admin ports, SSH protection |
 | Host | log2ram, sysctl tuning, watchdog | SD longevity, UDP performance |
 | Remote | Tailscale (host) | Secure admin from anywhere |
-| Storage | `/mnt/ssd/pi-gateway-data` | AdGuard, Kuma, future Forgejo/Syncthing |
+| Storage | `/mnt/ssd/pi-gateway-data` (symlink `~/pi-gateway/data`) | AdGuard, Kuma, Forgejo, Syncthing, backups |
 
 ## Phased rollout
 
@@ -77,17 +77,23 @@ Mac: make install
 ## Hybrid storage layout
 
 ```
-/mnt/ssd/pi-gateway-data/
-  adguard/work/
-  uptime-kuma/
-  forgejo/      (Faz 2)
-  syncthing/    (Faz 2)
-  restic/       (Faz 2)
-  projects/     (Faz 2)
-  backups/
+SD (mmcblk):  /           OS root, /var/lib/docker (varsayılan)
+USB SSD:      /mnt/ssd/
+                pi-gateway-data/   <- ~/pi-gateway/data symlink
+                  adguard/work/
+                  uptime-kuma/
+                  forgejo/
+                  syncthing/
+                  n8n/
+                  backups/restic/
+                  projects/
 ```
 
-Symlink: `~/pi-gateway/data` -> `/mnt/ssd/pi-gateway-data`
+Symlink: `~/pi-gateway/data` → `/mnt/ssd/pi-gateway-data`
+
+Docker imajları varsayılan olarak SD (`/var/lib/docker`). JMicron USB SSD'de I/O sorunu yaşanırsa `ENABLE_DOCKER_SSD=false` bırakın (önerilen).
+
+Deneysel alternatif: `ssd-root` — `docs/SSD-ROOT.md`
 
 ## Future HA (optional)
 

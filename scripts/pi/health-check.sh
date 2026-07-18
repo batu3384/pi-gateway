@@ -5,6 +5,7 @@ REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 [[ -f "$REMOTE_DIR/.env" ]] && set -a && source "$REMOTE_DIR/.env" && set +a
+STORAGE_TYPE="${STORAGE_TYPE:-hybrid}"
 # shellcheck source=../lib/adguard-api.sh
 source "$SCRIPT_DIR/../lib/adguard-api.sh"
 # shellcheck source=../lib/stack-health.sh
@@ -30,9 +31,13 @@ if ! SD_HEALTH_AUTO_RECOVER=false REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/che
   fail=1
 fi
 
-if [[ "$STACK_AUTO_RECOVER" == "true" ]] && ! stack_fully_healthy; then
-  logger -t "$LOG_TAG" "stack auto-recover tetikleniyor"
-  trigger_stack_recover "$REMOTE_DIR" || true
+if [[ "$STACK_AUTO_RECOVER" == "true" ]] && { ! stack_fully_healthy || ! root_rw_ok; }; then
+  if stack_recover_suppressed; then
+    logger -t "$LOG_TAG" "stack recover atlandi (cooldown/boot grace)"
+  else
+    logger -t "$LOG_TAG" "stack/root auto-recover tetikleniyor"
+    trigger_stack_recover "$REMOTE_DIR" || true
+  fi
 fi
 
 if ! docker ps --format '{{.Names}}' | grep -q '^unbound$'; then
@@ -51,10 +56,31 @@ if ! stack_gateway_ok; then
   note_fail "gateway-http"
 fi
 
-if [[ "${STORAGE_TYPE:-hybrid}" == "hybrid" || "${STORAGE_TYPE}" == "ssd-data" ]]; then
-  if [[ ! -L "${REMOTE_DIR}/data" ]] || [[ "$(readlink -f "${REMOTE_DIR}/data")" != "/mnt/ssd/pi-gateway-data" ]]; then
-    note_fail "data-ssd-symlink-broken"
+if storage_degraded; then
+  logger -t "$LOG_TAG" "storage-degraded: core DNS modu"
+  [[ -d "${REMOTE_DIR}/data" && ! -L "${REMOTE_DIR}/data" ]] || note_fail "storage-degraded-data-missing"
+else
+  if is_ssd_root_mode; then
+    root_on_ssd || note_fail "root-still-on-sd-mmcblk"
+    [[ -d "${REMOTE_DIR}/data" && ! -L "${REMOTE_DIR}/data" ]] || note_fail "data-native-missing"
+  elif [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
+    if [[ ! -L "${REMOTE_DIR}/data" ]] || [[ "$(readlink -f "${REMOTE_DIR}/data")" != "/mnt/ssd/pi-gateway-data" ]]; then
+      note_fail "data-ssd-symlink-broken"
+    fi
+    if ! mountpoint -q /mnt/ssd 2>/dev/null; then
+      note_fail "ssd-unmounted"
+    fi
   fi
+
+  optional_down() {
+    local name="$1"
+    docker ps --format '{{.Names}}' | grep -q "^${name}$" || note_fail "optional-${name}-down"
+  }
+  [[ "${ENABLE_FORGEJO:-true}" == "true" ]] && optional_down forgejo
+  [[ "${ENABLE_N8N:-true}" == "true" ]] && optional_down n8n
+  [[ "${ENABLE_SYNCTHING:-true}" == "true" ]] && optional_down syncthing
+  [[ "${ENABLE_REDIS:-true}" == "true" ]] && optional_down redis
+  [[ "${ENABLE_DOZZLE:-true}" == "true" ]] && optional_down dozzle
 fi
 
 if ! dig +time=2 +tries=1 @127.0.0.1 -p "${UNBOUND_PORT}" cloudflare.com A >/dev/null 2>&1; then

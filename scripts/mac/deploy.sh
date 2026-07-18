@@ -42,7 +42,6 @@ rsync -avz --delete \
   --filter 'protect config/homepage/logs/**' \
   --exclude 'config/adguard/AdGuardHome.yaml' \
   --exclude 'config/homepage/services.yaml' \
-  # Caddyfile: rsync disinda; render sonrasi sync-rendered-configs.sh ile gider
   --exclude 'config/caddy/Caddyfile' \
   --exclude 'config/homepage/logs/**' \
   --exclude 'backups' \

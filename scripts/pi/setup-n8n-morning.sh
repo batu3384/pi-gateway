@@ -3,43 +3,60 @@
 set -euo pipefail
 
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 [[ -f "$REMOTE_DIR/.env" ]] && source "$REMOTE_DIR/.env"
 
+N8N_DIR="${REMOTE_DIR}/config/n8n"
 N8N_PORT="${N8N_PORT:-5678}"
 LAN_DOMAIN="${LAN_DOMAIN:-home}"
-WORKFLOW_FILE="${REMOTE_DIR}/config/n8n/morning-summary.workflow.json"
+WF_NAME="Pi Gateway Sabah Ozeti"
 
 log() { echo "[n8n-morning] $*"; }
 
-[[ "${ENABLE_N8N:-true}" == "true" ]] || { log "n8n kapali"; exit 0; }
-notify_enabled() { [[ -n "${TELEGRAM_BOT_TOKEN:-}" && -n "${TELEGRAM_CHAT_ID:-}" ]]; }
-notify_enabled || { log "Telegram eksik — atlandi"; exit 0; }
-docker ps --format '{{.Names}}' | grep -q '^n8n$' || { log "n8n container yok"; exit 0; }
-[[ -f "$WORKFLOW_FILE" ]] || { log "Workflow dosyasi yok: $WORKFLOW_FILE"; exit 0; }
+n8n_workflow_id() {
+  local name="$1"
+  docker exec n8n n8n list:workflow 2>/dev/null | python3 -c "
+import sys
+name = sys.argv[1]
+for line in sys.stdin:
+    line = line.strip()
+    if not line or '|' not in line:
+        continue
+    wf_id, wf_name = line.split('|', 1)
+    if wf_name == name:
+        print(wf_id)
+        break
+" "$name" 2>/dev/null || true
+}
 
-# n8n owner hesabi yoksa import atlanir (ilk kurulumda tarayicidan owner olustur)
+resolve_workflow_file() {
+  local f
+  for f in \
+    "${N8N_DIR}/morning-summary.workflow.json" \
+    "${N8N_DIR}/archive/morning-summary.workflow.json"; do
+    if [[ -f "$f" ]]; then
+      echo "$f"
+      return 0
+    fi
+  done
+  return 1
+}
+
+[[ "${ENABLE_N8N:-true}" == "true" ]] || { log "n8n kapali"; exit 0; }
+[[ -n "${TELEGRAM_BOT_TOKEN:-}" && -n "${TELEGRAM_CHAT_ID:-}" ]] || { log "Telegram eksik — atlandi"; exit 0; }
+docker ps --format '{{.Names}}' | grep -q '^n8n$' || { log "n8n container yok"; exit 0; }
+
+WORKFLOW_FILE="$(resolve_workflow_file)" || { log "Workflow dosyasi yok"; exit 0; }
+
 if ! curl -fsS "http://127.0.0.1:${N8N_PORT}/healthz" >/dev/null 2>&1; then
   log "n8n hazir degil"
   exit 0
 fi
 
-WF_NAME="Pi Gateway Sabah Ozeti"
-WF_ID="$(docker exec n8n n8n list:workflow --output=json 2>/dev/null | python3 -c "
-import json,sys
-name=sys.argv[1]
-try:
-    data=json.load(sys.stdin)
-except Exception:
-    sys.exit(0)
-for w in data if isinstance(data,list) else data.get('data',[]):
-    if w.get('name')==name:
-        print(w.get('id',''))
-        break
-" "$WF_NAME" 2>/dev/null || true)"
-
+WF_ID="$(n8n_workflow_id "$WF_NAME")"
 if [[ -n "$WF_ID" ]]; then
+  docker exec n8n n8n publish:workflow --id="$WF_ID" 2>/dev/null \
+    || docker exec n8n n8n update:workflow --id="$WF_ID" --active=true 2>/dev/null || true
   log "Workflow zaten var: $WF_NAME ($WF_ID)"
   exit 0
 fi
@@ -55,17 +72,11 @@ docker cp "$TMP" n8n:/tmp/morning-summary.json
 rm -f "$TMP"
 
 if docker exec n8n n8n import:workflow --input=/tmp/morning-summary.json 2>/dev/null; then
-  NEW_ID="$(docker exec n8n n8n list:workflow --output=json 2>/dev/null | python3 -c "
-import json,sys
-name=sys.argv[1]
-data=json.load(sys.stdin)
-for w in data if isinstance(data,list) else data.get('data',[]):
-    if w.get('name')==name:
-        print(w.get('id',''))
-        break
-" "$WF_NAME" 2>/dev/null || true)"
+  NEW_ID="$(n8n_workflow_id "$WF_NAME")"
   if [[ -n "$NEW_ID" ]]; then
-    docker exec n8n n8n update:workflow --id="$NEW_ID" --active=true 2>/dev/null || true
+    docker exec n8n n8n publish:workflow --id="$NEW_ID" 2>/dev/null \
+      || docker exec n8n n8n update:workflow --id="$NEW_ID" --active=true 2>/dev/null || true
+    docker restart n8n >/dev/null 2>&1 || true
     log "Workflow aktif: $WF_NAME"
   fi
 else

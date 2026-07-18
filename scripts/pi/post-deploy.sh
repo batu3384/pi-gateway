@@ -4,6 +4,7 @@ set -euo pipefail
 
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 SCRIPT_DIR="${REMOTE_DIR}/scripts/pi"
+DEPLOY_STRICT="${DEPLOY_STRICT:-true}"
 
 log() { echo "[post-deploy] $*"; }
 
@@ -19,16 +20,24 @@ run_step_critical() {
 run_step_optional() {
   local name="$1" script="$2"
   log ">> $name"
-  REMOTE_DIR="$REMOTE_DIR" bash "$script" || log "WARN: $name atlandi"
+  if REMOTE_DIR="$REMOTE_DIR" bash "$script"; then
+    return 0
+  fi
+  if [[ "$DEPLOY_STRICT" == "true" ]]; then
+    log "HATA: $name basarisiz (DEPLOY_STRICT=true)"
+    exit 1
+  fi
+  log "WARN: $name atlandi"
 }
 
 [[ -f "$REMOTE_DIR/.env" ]] || { log "HATA: .env yok"; exit 1; }
 
 # shellcheck source=/dev/null
 set -a && source "$REMOTE_DIR/.env" && set +a
+STORAGE_TYPE="${STORAGE_TYPE:-hybrid}"
 
 # Placeholder sifreleri fail-closed
-for key in AGH_ADMIN_PASSWORD DOZZLE_ADMIN_PASSWORD RESTIC_PASSWORD FORGEJO_ADMIN_PASSWORD N8N_WEBHOOK_SECRET; do
+for key in AGH_ADMIN_PASSWORD DOZZLE_ADMIN_PASSWORD RESTIC_PASSWORD FORGEJO_ADMIN_PASSWORD N8N_WEBHOOK_SECRET UPTIME_KUMA_ADMIN_PASSWORD SYNCTHING_GUI_PASSWORD; do
   val="${!key:-}"
   case "$val" in
     ""|CHANGE_ME*|Degistir*)
@@ -44,6 +53,12 @@ for key in AGH_ADMIN_PASSWORD DOZZLE_ADMIN_PASSWORD RESTIC_PASSWORD FORGEJO_ADMI
       if [[ "$key" == "N8N_WEBHOOK_SECRET" && "${ENABLE_N8N:-true}" != "true" ]]; then
         continue
       fi
+      if [[ "$key" == "UPTIME_KUMA_ADMIN_PASSWORD" && "${ENABLE_N8N:-true}" != "true" ]]; then
+        continue
+      fi
+      if [[ "$key" == "SYNCTHING_GUI_PASSWORD" && "${ENABLE_SYNCTHING:-true}" != "true" ]]; then
+        continue
+      fi
       log "HATA: $key bos veya placeholder — .env duzelt"
       exit 1
       ;;
@@ -52,13 +67,36 @@ done
 
 run_step_critical "Privileged scripts (root-owned)" "$SCRIPT_DIR/install-privileged-scripts.sh"
 run_step_optional "Config izinleri" "$SCRIPT_DIR/fix-config-perms.sh"
-if [[ "${STORAGE_TYPE:-hybrid}" == "hybrid" || "${STORAGE_TYPE}" == "ssd-data" ]]; then
+if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
   run_step_optional "SSD fstab" "$SCRIPT_DIR/ensure-ssd-fstab.sh"
+  log ">> SSD veri diski"
+  ssd_env=(REMOTE_DIR="$REMOTE_DIR" STORAGE_TYPE="$STORAGE_TYPE" PI_USER="${PI_USER:-$USER}")
+  if [[ ! -f /mnt/ssd/.pi-gateway-initialized ]]; then
+    ssd_env+=(PI_SSD_CONFIRM_FORMAT=yes)
+  fi
+  if sudo env "${ssd_env[@]}" bash "$SCRIPT_DIR/setup-ssd-data.sh"; then
+    log "SSD veri diski hazir"
+  else
+    log "HATA: SSD veri diski hazirlanamadi (takili mi? PI_SSD_CONFIRM_FORMAT=yes)"
+    exit 1
+  fi
   log ">> SSD data symlink"
-  REMOTE_DIR="$REMOTE_DIR" STORAGE_TYPE="${STORAGE_TYPE}" bash "$SCRIPT_DIR/ensure-data-symlink.sh" repair || {
+  REMOTE_DIR="$REMOTE_DIR" STORAGE_TYPE="$STORAGE_TYPE" bash "$SCRIPT_DIR/ensure-data-symlink.sh" repair || {
     log "HATA: data symlink onarilamadi"
     exit 1
   }
+elif [[ "$STORAGE_TYPE" == "ssd-root" || "$STORAGE_TYPE" == "ssd" ]]; then
+  log ">> Native data dizini (ssd-root)"
+  REMOTE_DIR="$REMOTE_DIR" STORAGE_TYPE="$STORAGE_TYPE" bash "$SCRIPT_DIR/ensure-data-symlink.sh" repair || {
+    log "HATA: data dizini hazirlanamadi"
+    exit 1
+  }
+  ROOT_SRC="$(findmnt -n -o SOURCE / 2>/dev/null || true)"
+  if echo "$ROOT_SRC" | grep -q mmcblk; then
+    log "HATA: ssd-root bekleniyor ama root SD ($ROOT_SRC)"
+    exit 1
+  fi
+  run_step_critical "ssd-root harden" env REMOTE_DIR="$REMOTE_DIR" CONFIRM_NEUTRALIZE="${CONFIRM_NEUTRALIZE:-}" CONFIRM_EEPROM_FIX="${CONFIRM_EEPROM_FIX:-}" "$SCRIPT_DIR/ssd-root-harden.sh"
 fi
 
 run_step_critical "AdGuard yapilandirma" "$SCRIPT_DIR/configure-adguard.sh"
@@ -88,16 +126,15 @@ fi
 
 if [[ "${ENABLE_N8N:-true}" == "true" ]]; then
   run_step_optional "Sabah ozeti timer" "$SCRIPT_DIR/setup-morning-timer.sh"
-  run_step_optional "n8n workflow (opsiyonel)" "$SCRIPT_DIR/setup-n8n-morning.sh"
-  run_step_optional "n8n otomasyonlar" "$SCRIPT_DIR/setup-n8n-workflows.sh"
+  run_step_critical "n8n otomasyonlar" "$SCRIPT_DIR/setup-n8n-workflows.sh"
 fi
 
 if docker ps --format '{{.Names}}' | grep -q '^uptime-kuma$'; then
-  run_step_optional "Uptime Kuma monitorler" "$SCRIPT_DIR/setup-uptime-kuma.sh"
+  run_step_critical "Uptime Kuma monitorler" "$SCRIPT_DIR/setup-uptime-kuma.sh"
 fi
 
 if [[ "${ENABLE_N8N:-true}" == "true" ]] && [[ "${ENABLE_FORGEJO:-true}" == "true" ]]; then
-  run_step_optional "Forgejo n8n webhook" "$SCRIPT_DIR/setup-forgejo-webhook.sh"
+  run_step_critical "Forgejo n8n webhook" "$SCRIPT_DIR/setup-forgejo-webhook.sh"
 fi
 
 if command -v tailscale >/dev/null 2>&1 && tailscale status >/dev/null 2>&1; then
@@ -111,11 +148,11 @@ if [[ "${ENABLE_CROWDSEC:-true}" == "true" ]]; then
 fi
 
 if [[ "${ENABLE_UFW:-true}" == "true" ]]; then
-  run_step_optional "UFW firewall" "$SCRIPT_DIR/setup-firewall.sh"
+  run_step_critical "UFW firewall" "$SCRIPT_DIR/setup-firewall.sh"
 fi
 
-if [[ "${STORAGE_TYPE:-hybrid}" == "hybrid" || "${STORAGE_TYPE}" == "ssd-data" ]]; then
-  if [[ "${ENABLE_DOCKER_SSD:-true}" == "true" ]]; then
+if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
+  if [[ "${ENABLE_DOCKER_SSD:-false}" == "true" ]]; then
     if [[ ! -f /mnt/ssd/.docker-data-root ]] || [[ ! -f /etc/systemd/system/docker.service.d/pi-gateway-ssd.conf ]]; then
       run_step_optional "Docker SSD tasima" "$SCRIPT_DIR/setup-docker-ssd.sh"
     fi

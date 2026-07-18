@@ -16,6 +16,8 @@ PI_LOCALE="${PI_LOCALE:-tr_TR.UTF-8}"
 
 log() { echo "[$(date '+%H:%M:%S')] $*" | tee -a "$LOG" >&2; }
 die() { log "HATA: $*"; exit 1; }
+# shellcheck source=../lib/password-policy.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/password-policy.sh"
 
 [[ "$(uname)" == "Darwin" ]] || die "Bu script sadece macOS icin"
 [[ -x "$IMAGER" ]] || die "Raspberry Pi Imager bulunamadi: $IMAGER"
@@ -48,7 +50,9 @@ find_pi_ssd() {
 }
 
 write_cloud_init() {
-  local boot="$1"
+  local boot="$1" hash
+  enforce_password_policy "$PI_PASSWORD" "PI_PASSWORD" || die "sifre politikasi"
+  hash="$(printf '%s' "$PI_PASSWORD" | openssl passwd -6 -stdin)"
   cat > "$boot/user-data" <<EOF
 #cloud-config
 hostname: ${PI_HOSTNAME}
@@ -62,7 +66,7 @@ users:
     groups: users,adm,dialout,audio,netdev,video,plugdev,cdrom,games,input,gpio,spi,i2c,render,sudo
     shell: /bin/bash
     lock_passwd: false
-    plain_text_password: "${PI_PASSWORD}"
+    passwd: '${hash}'
     sudo: ALL=(ALL) NOPASSWD:ALL
 
 enable_ssh: true
@@ -83,8 +87,7 @@ EOF
 
   # Legacy yedek (bazi surumlerde hala is gorur)
   touch "$boot/ssh"
-  HASH=$(echo -n "$PI_PASSWORD" | openssl passwd -6 -stdin)
-  echo "${PI_USER}:${HASH}" > "$boot/userconf"
+  echo "${PI_USER}:${hash}" > "$boot/userconf"
 
   # Eski firstrun kalintisini temizle
   rm -f "$boot/firstrun.sh" "$boot/._firstrun.sh" 2>/dev/null || true
@@ -166,10 +169,10 @@ if [[ -z "$PI_PASSWORD" && -f /Volumes/bootfs/user-data ]]; then
   PI_PASSWORD=$(awk -F'"' '/plain_text_password:/ {print $2; exit}' /Volumes/bootfs/user-data || true)
 fi
 if [[ -z "$PI_PASSWORD" ]]; then
-  read -r -s -p "Pi kullanici sifresi ($PI_USER, min 8 karakter): " PI_PASSWORD
+  read -r -s -p "Pi kullanici sifresi ($PI_USER, min 12 karakter): " PI_PASSWORD
   echo
 fi
-[[ ${#PI_PASSWORD} -ge 8 ]] || die "Sifre en az 8 karakter olmali"
+enforce_password_policy "$PI_PASSWORD" "PI_PASSWORD" || die "sifre politikasi"
 
 # --- 1. Okuma testi (2GB) ---
 log "1/6 Okuma testi (2GB)..."
@@ -191,7 +194,6 @@ dd if=/dev/zero of="$RDISK" bs=1m count=100 2>>"$LOG" || die "Disk sifirlanamadi
 # --- 3. Imager ile yaz ---
 log "3/6 Imager ile yaziliyor (10-25 dk, internet gerekebilir)..."
 "$IMAGER" --cli \
-  --disable-verify \
   --enable-writing-system-drives \
   --quiet \
   "$OS_IMAGE_URL" \

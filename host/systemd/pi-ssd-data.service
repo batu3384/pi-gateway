@@ -8,6 +8,9 @@ DefaultDependencies=no
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+Environment=PI_USER=PI_USER
+Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
+Environment=PI_SSD_CONFIRM_FORMAT=yes
 ExecStart=/usr/local/sbin/pi-setup-ssd-data.sh
 TimeoutStartSec=300
 
