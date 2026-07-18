@@ -22,24 +22,36 @@ Deneysel ssd-root: `docs/SSD-ROOT.md`
 |-------|----------|
 | `ssh pi` | Pi'ye LAN üzerinden SSH |
 | `ssh pi-ts` | Pi'ye Tailscale üzerinden SSH |
-| `pi-open` | `http://gateway.home` tarayıcıda aç |
-| `pi-logs` | `http://logs.home` |
-| `pi-status` | `http://status.home` |
+| `pi-open` | `https://gateway.home` tarayıcıda aç (TLS kapalıysa `http://`) |
+| `pi-logs` | `https://logs.home` |
+| `pi-status` | `https://status.home` |
 | `make telegram-menu` | Telegram panel menüsü |
 
 Kurulum: `make pi-access`
 
 ## Paneller (`*.home`)
 
-| URL | Servis |
-|-----|--------|
-| http://gateway.home | Homepage (ana panel) |
-| http://status.home | Uptime Kuma |
-| http://logs.home | Dozzle (container logları) |
-| http://dns.home | AdGuard |
-| http://git.home | Forgejo |
-| http://sync.home | Syncthing |
-| http://n8n.home | n8n otomasyon |
+`ENABLE_TLS=true` iken tüm paneller **HTTPS** (`https://*.home`). TLS kapalıysa `http://`.
+
+### Çift giriş (normal)
+
+1. **Caddy basic auth** — tüm `*.home` panelleri (varsayılan: `AGH_ADMIN_USER` + `AGH_ADMIN_PASSWORD`; `CADDY_AUTH_*` set ise onlar)
+2. **Uygulama girişi** — servisin kendi kullanıcı/şifresi (Homepage hariç)
+
+| URL | Servis | Caddy | Uygulama |
+|-----|--------|-------|----------|
+| https://gateway.home | Homepage (ana panel) | `AGH_ADMIN_*` | — |
+| https://panel.home | Homepage (alias) | aynı | — |
+| https://status.home | Uptime Kuma | aynı | `UPTIME_KUMA_ADMIN_*` |
+| https://logs.home | Dozzle | aynı | `DOZZLE_ADMIN_*` |
+| https://dns.home | AdGuard | aynı | `AGH_ADMIN_*` |
+| https://git.home | Forgejo | aynı | `FORGEJO_ADMIN_*` |
+| https://sync.home | Syncthing | aynı | `SYNCTHING_GUI_*` |
+| https://n8n.home | n8n | aynı | Owner (ilk kurulumda web UI) |
+
+Public durum sayfası: `https://status.home/status/pi-gateway` (Caddy auth sonrası).
+
+Mac'te HTTPS sertifika uyarısı: `make trust-ca`.
 
 Uzaktan erişim: Tailscale açık + MagicDNS (`home` split DNS). Ayrıntı: `docs/TAILSCALE.md` (ACL: `config/tailscale/acl.hujson.example`).
 
@@ -106,13 +118,22 @@ docker info | grep "Docker Root Dir"
 
 `.env`: `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`
 
-- DNS health fail
-- Disk %80+
-- Restic yedek başarılı
-- n8n sabah özeti (08:00, workflow kuruluysa)
-- **Sabah özeti (08:00):** systemd timer + Telegram (`make morning-test`)
+| Kaynak | Ne gönderir |
+|--------|-------------|
+| `health-check` timer | DNS hatası, disk %80+, SD uyarıları |
+| `restic-backup` | Yedek tamamlandı |
+| `stack-watchdog` / SSD hotplug | Stack veya SSD kurtarma |
+| `morning-summary.sh` (08:00 timer) | Günlük sabah özeti |
+| n8n ← Uptime Kuma webhook | Servis düştü / tekrar ayakta |
+| n8n ← Forgejo push webhook | Git push (repo: `FORGEJO_REPO_NAME`) |
 
-Test: `make telegram-test`
+| Komut | Açıklama |
+|-------|----------|
+| `make telegram-test` | Test mesajı |
+| `make telegram-menu` | Panel link butonları |
+| `make morning-test` | Sabah özeti hemen gönder |
+
+Bot yalnızca bildirim gönderir; gelen mesajlara cevap vermez.
 
 ## Şifreler
 

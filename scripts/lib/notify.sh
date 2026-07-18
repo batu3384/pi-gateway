@@ -52,6 +52,30 @@ notify_escape_html() {
   printf '%s' "$text"
 }
 
+notify_send_message() {
+  local text="$1"
+  local parse_mode="${2:-}"
+  local err
+
+  if [[ -n "$parse_mode" ]]; then
+    if err="$(curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+      -d "chat_id=${TELEGRAM_CHAT_ID}" \
+      -d "parse_mode=${parse_mode}" \
+      --data-urlencode "text=${text}" \
+      -d "disable_web_page_preview=true" 2>&1)"; then
+      return 0
+    fi
+  elif err="$(curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+    -d "chat_id=${TELEGRAM_CHAT_ID}" \
+    --data-urlencode "text=${text}" \
+    -d "disable_web_page_preview=true" 2>&1)"; then
+    return 0
+  fi
+
+  echo "[notify] Telegram gonderilemedi: ${err:-bilinmeyen hata}" >&2
+  return 1
+}
+
 notify_telegram() {
   local title="$1"
   local body="$2"
@@ -63,18 +87,7 @@ notify_telegram() {
 
   local text
   text="$(printf '%s\n\n%s' "$title" "$body")"
-  if [[ -n "$parse_mode" ]]; then
-    curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-      -d "chat_id=${TELEGRAM_CHAT_ID}" \
-      -d "parse_mode=${parse_mode}" \
-      --data-urlencode "text=${text}" \
-      -d "disable_web_page_preview=true" >/dev/null 2>&1 || true
-  else
-    curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-      -d "chat_id=${TELEGRAM_CHAT_ID}" \
-      --data-urlencode "text=${text}" \
-      -d "disable_web_page_preview=true" >/dev/null 2>&1 || true
-  fi
+  notify_send_message "$text" "$parse_mode" || true
 }
 
 # Kullanıcıya giden standart Türkçe mesajlar (UTF-8)

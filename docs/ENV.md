@@ -64,3 +64,14 @@ WATCHTOWER_NOTIFICATION_URL=telegram://TOKEN@telegram?chats=CHAT_ID
 ```
 
 Tam liste: `.env.example`
+
+## n8n
+
+| Değişken | Açıklama |
+|----------|----------|
+| `N8N_ENCRYPTION_KEY` | Credential şifreleme (≥32 karakter; `openssl rand -hex 24`) |
+| `N8N_WEBHOOK_SECRET` | Webhook URL son eki (Kuma, Forgejo) |
+| `N8N_KUMA_WEBHOOK_URL` | İsteğe bağlı; boşsa secret ile otomatik |
+| `N8N_FORGEJO_WEBHOOK_URL` | İsteğe bağlı; boşsa secret ile otomatik |
+
+Pi'de `N8N_ENCRYPTION_KEY` boşsa `ensure-n8n-encryption-key.sh` post-deploy sırasında üretir. **Değiştirmeyin** — mevcut n8n credential'ları okunamaz hale gelir.

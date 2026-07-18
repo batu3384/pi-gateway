@@ -10,6 +10,14 @@ load_env
 PI_USER="${PI_USER:-batu}"
 PI_STATIC_IP="${PI_STATIC_IP:-192.168.1.112}"
 LAN_DOMAIN="${LAN_DOMAIN:-home}"
+PANEL_PROTOCOL="${PANEL_PROTOCOL:-}"
+if [[ -z "$PANEL_PROTOCOL" ]]; then
+  if [[ "${ENABLE_TLS:-false}" == "true" ]]; then
+    PANEL_PROTOCOL=https
+  else
+    PANEL_PROTOCOL=http
+  fi
+fi
 SSH_CONFIG="${HOME}/.ssh/config"
 MARKER="# pi-gateway access"
 
@@ -42,21 +50,21 @@ fi
 BIN="${HOME}/.local/bin"
 mkdir -p "$BIN"
 
-cat > "${BIN}/pi-open" <<'EOF'
+cat > "${BIN}/pi-open" <<EOF
 #!/usr/bin/env bash
-open "http://gateway.home"
+open "${PANEL_PROTOCOL}://gateway.${LAN_DOMAIN}"
 EOF
 chmod +x "${BIN}/pi-open"
 
-cat > "${BIN}/pi-logs" <<'EOF'
+cat > "${BIN}/pi-logs" <<EOF
 #!/usr/bin/env bash
-open "http://logs.home"
+open "${PANEL_PROTOCOL}://logs.${LAN_DOMAIN}"
 EOF
 chmod +x "${BIN}/pi-logs"
 
-cat > "${BIN}/pi-status" <<'EOF'
+cat > "${BIN}/pi-status" <<EOF
 #!/usr/bin/env bash
-open "http://status.home"
+open "${PANEL_PROTOCOL}://status.${LAN_DOMAIN}"
 EOF
 chmod +x "${BIN}/pi-status"
 

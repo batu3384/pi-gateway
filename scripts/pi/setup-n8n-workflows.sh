@@ -7,7 +7,7 @@ N8N_DIR="${REMOTE_DIR}/config/n8n"
 N8N_PORT="${N8N_PORT:-5678}"
 LAN_DOMAIN="${LAN_DOMAIN:-home}"
 DISK_WARN_PCT="${DISK_WARN_PCT:-80}"
-SECRET_MARKER="${REMOTE_DIR}/data/n8n/.webhook-secret-hash"
+RENDER_MARKER="${REMOTE_DIR}/data/n8n/.workflow-render-hash"
 
 log() { echo "[n8n-workflows] $*"; }
 
@@ -37,8 +37,22 @@ if ! curl -fsS "http://127.0.0.1:${N8N_PORT}/healthz" >/dev/null 2>&1; then
   exit 1
 fi
 
-secret_hash() {
-  printf '%s' "${N8N_WEBHOOK_SECRET:-}" | sha256sum | awk '{print $1}'
+panel_protocol() {
+  if [[ -n "${PANEL_PROTOCOL:-}" ]]; then
+    printf '%s' "$PANEL_PROTOCOL"
+    return 0
+  fi
+  if [[ "${ENABLE_TLS:-false}" == "true" ]]; then
+    printf 'https'
+  else
+    printf 'http'
+  fi
+}
+
+render_hash() {
+  local proto
+  proto="$(panel_protocol)"
+  printf '%s|%s' "${N8N_WEBHOOK_SECRET:-}" "$proto" | sha256sum | awk '{print $1}'
 }
 
 case "${N8N_WEBHOOK_SECRET:-}" in
@@ -49,6 +63,7 @@ render_workflow() {
   local src="$1" dst="$2"
   sed \
     -e "s|__LAN_DOMAIN__|${LAN_DOMAIN}|g" \
+    -e "s|__PANEL_PROTOCOL__|$(panel_protocol)|g" \
     -e "s|__DISK_WARN_PCT__|${DISK_WARN_PCT}|g" \
     -e "s|__N8N_WEBHOOK_SECRET__|${N8N_WEBHOOK_SECRET}|g" \
     "$src" >"$dst"
@@ -110,14 +125,14 @@ PY
   activate_workflow "$name"
 }
 
-mkdir -p "$(dirname "$SECRET_MARKER")"
-stored_hash="$(cat "$SECRET_MARKER" 2>/dev/null || true)"
+mkdir -p "$(dirname "$RENDER_MARKER")"
+stored_hash="$(cat "$RENDER_MARKER" 2>/dev/null || true)"
 needs_import=false
-if [[ "$(secret_hash)" != "$stored_hash" ]]; then
+if [[ "$(render_hash)" != "$stored_hash" ]]; then
   needs_import=true
-  log "Webhook secret degisti — workflow import"
+  log "Workflow sablonu degisti — import"
 else
-  log "Webhook secret ayni — import atlandi, aktivasyon dogrulaniyor"
+  log "Workflow sablonu ayni — import atlandi, aktivasyon dogrulaniyor"
 fi
 
 fail=0
@@ -126,7 +141,7 @@ if [[ "$needs_import" == "true" ]]; then
   import_workflow "Pi Gateway — Uptime Kuma Alert" "${N8N_DIR}/uptime-kuma-alert.workflow.json" || fail=1
   import_workflow "Pi Gateway — Forgejo Push" "${N8N_DIR}/forgejo-push.workflow.json" || fail=1
   if [[ "$fail" -eq 0 ]]; then
-    secret_hash >"$SECRET_MARKER"
+    render_hash >"$RENDER_MARKER"
     needs_restart=true
   fi
 else

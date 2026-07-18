@@ -37,12 +37,11 @@ body="$(cat <<EOF
 EOF
 )"
 
-curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-  -d "chat_id=${TELEGRAM_CHAT_ID}" \
-  -d "parse_mode=HTML" \
-  --data-urlencode "text=☀️ Pi Gateway — Sabah özeti
+if ! notify_send_message "☀️ Pi Gateway — Sabah özeti
 
-${body}" \
-  -d "disable_web_page_preview=true" >/dev/null 2>&1 || true
+${body}" "HTML"; then
+  log "HATA: Telegram gonderilemedi"
+  exit 1
+fi
 
 log "Gönderildi"

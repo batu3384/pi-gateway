@@ -125,6 +125,7 @@ if [[ "${ENABLE_DOZZLE:-true}" == "true" ]]; then
 fi
 
 if [[ "${ENABLE_N8N:-true}" == "true" ]]; then
+  run_step_critical "n8n encryption key" "$SCRIPT_DIR/ensure-n8n-encryption-key.sh"
   run_step_optional "Sabah ozeti timer" "$SCRIPT_DIR/setup-morning-timer.sh"
   run_step_critical "n8n otomasyonlar" "$SCRIPT_DIR/setup-n8n-workflows.sh"
 fi

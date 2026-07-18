@@ -33,12 +33,20 @@ api_token() {
     return 0
   fi
   mkdir -p "$(dirname "$TOKEN_FILE")"
-  local token
+  local token name="$TOKEN_NAME"
   token="$(docker exec -u git forgejo forgejo admin user generate-access-token \
     --username "$FORGEJO_ADMIN_USER" \
-    --token-name "$TOKEN_NAME" \
-    --scopes "read:repository,write:repository" \
+    --token-name "$name" \
+    --scopes "write:user,write:repository,read:user,read:repository" \
     --raw 2>/dev/null || true)"
+  if [[ -z "$token" ]]; then
+    name="${TOKEN_NAME}-$(date +%s)"
+    token="$(docker exec -u git forgejo forgejo admin user generate-access-token \
+      --username "$FORGEJO_ADMIN_USER" \
+      --token-name "$name" \
+      --scopes "write:user,write:repository,read:user,read:repository" \
+      --raw 2>/dev/null || true)"
+  fi
   [[ -n "$token" ]] || return 1
   printf '%s' "$token" >"$TOKEN_FILE"
   chmod 600 "$TOKEN_FILE"
@@ -56,11 +64,52 @@ if ! curl -fsS "${AUTH[@]}" "${API}/version" >/dev/null 2>&1; then
   exit 0
 fi
 
-repo_ok="$(curl -fsS "${AUTH[@]}" -o /dev/null -w '%{http_code}' \
-  "${API}/repos/${FORGEJO_ADMIN_USER}/${FORGEJO_REPO_NAME}" 2>/dev/null || echo 000)"
-if [[ "$repo_ok" != "200" ]]; then
-  log "Repo yok: ${FORGEJO_ADMIN_USER}/${FORGEJO_REPO_NAME} — once Forgejo'da olustur"
-  exit 0
+forgejo_http_code() {
+  local method="$1"
+  local url="$2"
+  shift 2
+  curl -sS -o /dev/null -w '%{http_code}' -X "$method" "${AUTH[@]}" "$@" "$url" 2>/dev/null || echo 000
+}
+
+ensure_repo() {
+  local code
+  code="$(forgejo_http_code GET "${API}/repos/${FORGEJO_ADMIN_USER}/${FORGEJO_REPO_NAME}")"
+  if [[ "$code" == "200" ]]; then
+    return 0
+  fi
+  if [[ "$code" != "404" ]]; then
+    log "HATA: repo kontrolu basarisiz (HTTP $code)"
+    return 1
+  fi
+  log "Repo olusturuluyor: ${FORGEJO_ADMIN_USER}/${FORGEJO_REPO_NAME}"
+  payload="$(python3 - <<PY
+import json
+print(json.dumps({
+  "name": "${FORGEJO_REPO_NAME}",
+  "private": True,
+  "auto_init": True,
+  "default_branch": "main",
+}))
+PY
+)"
+  code="$(forgejo_http_code POST "${API}/user/repos" \
+    -H "Content-Type: application/json" \
+    -d "$payload")"
+  if [[ "$code" == "201" ]]; then
+    log "Repo olusturuldu"
+    return 0
+  fi
+  log "HATA: repo olusturulamadi (HTTP $code)"
+  return 1
+}
+
+if ! ensure_repo; then
+  log "Repo olusturulamadi — API token yenileniyor"
+  rm -f "$TOKEN_FILE"
+  TOKEN="$(api_token || true)"
+  [[ -n "$TOKEN" ]] || { log "HATA: Forgejo API token yenilenemedi"; exit 1; }
+  AUTH=(-H "Authorization: token ${TOKEN}")
+  ensure_repo || exit 1
 fi
 
 hooks="$(curl -fsS "${AUTH[@]}" \
@@ -90,10 +139,9 @@ print(json.dumps({
 PY
 )"
 
-code="$(curl -fsS "${AUTH[@]}" -o /dev/null -w '%{http_code}' \
-  -X POST "${API}/repos/${FORGEJO_ADMIN_USER}/${FORGEJO_REPO_NAME}/hooks" \
+code="$(forgejo_http_code POST "${API}/repos/${FORGEJO_ADMIN_USER}/${FORGEJO_REPO_NAME}/hooks" \
   -H "Content-Type: application/json" \
-  -d "$payload" 2>/dev/null || echo 000)"
+  -d "$payload")"
 
 if [[ "$code" == "201" ]]; then
   log "Webhook eklendi: ${FORGEJO_ADMIN_USER}/${FORGEJO_REPO_NAME} -> $N8N_WEBHOOK_URL"

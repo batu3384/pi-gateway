@@ -78,7 +78,7 @@ tls-certs:
 	@./scripts/mac/setup-tls-certs.sh
 
 pi-open:
-	@open "http://gateway.$${LAN_DOMAIN:-home}"
+	@. ./.env 2>/dev/null; proto=$${PANEL_PROTOCOL:-http}; [ "$${ENABLE_TLS:-false}" = "true" ] && proto=https; open "$$proto://gateway.$${LAN_DOMAIN:-home}"
 
 backup-pull:
 	@chmod +x scripts/mac/backup-pull.sh 2>/dev/null || true

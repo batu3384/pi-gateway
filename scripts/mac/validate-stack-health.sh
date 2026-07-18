@@ -176,8 +176,12 @@ grep -A3 'http://status\.__LAN_DOMAIN__' "$PROJECT_DIR/config/caddy/Caddyfile.te
   || die "status Caddy auth yok"
 ok "gateway/status Caddy auth"
 
-grep -q 'SECRET_MARKER' "$PROJECT_DIR/scripts/pi/setup-n8n-workflows.sh" \
-  || die "n8n workflow webhook guncelleme yok"
+grep -q 'RENDER_MARKER' "$PROJECT_DIR/scripts/pi/setup-n8n-workflows.sh" \
+  || die "n8n workflow render marker yok"
+grep -q '__PANEL_PROTOCOL__' "$PROJECT_DIR/config/n8n/uptime-kuma-alert.workflow.json" \
+  || die "n8n uptime workflow PANEL_PROTOCOL yok"
+grep -q 'ensure-n8n-encryption-key' "$PROJECT_DIR/scripts/pi/post-deploy.sh" \
+  || die "post-deploy n8n encryption key yok"
 grep -q 'update:workflow.*active=true' "$PROJECT_DIR/scripts/pi/setup-n8n-workflows.sh" \
   || die "n8n workflow aktivasyonu yok"
 ok "n8n webhook guncelleme + aktivasyon"

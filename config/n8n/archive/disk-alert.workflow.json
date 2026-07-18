@@ -32,7 +32,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const threshold = __DISK_WARN_PCT__;\nconst stdout = $input.first().json.stdout || '';\nconst alerts = [];\nfor (const line of stdout.trim().split('\\n').filter(Boolean)) {\n  const parts = line.trim().split(/\\s+/);\n  if (parts.length < 6) continue;\n  const pct = parseInt(parts[4].replace('%', ''), 10);\n  const mount = parts[5];\n  const size = parts[1];\n  const used = parts[2];\n  if (!Number.isNaN(pct) && pct >= threshold) {\n    alerts.push(`• ${mount}: ${pct}% (${used}/${size})`);\n  }\n}\nif (alerts.length === 0) return [];\nconst text = `⚠️ Disk uyarısı (≥${threshold}%)\\n\\n${alerts.join('\\n')}\\n\\n🔗 http://gateway.__LAN_DOMAIN__`;\nreturn [{ json: { text } }];"
+        "jsCode": "const threshold = __DISK_WARN_PCT__;\nconst stdout = $input.first().json.stdout || '';\nconst alerts = [];\nfor (const line of stdout.trim().split('\\n').filter(Boolean)) {\n  const parts = line.trim().split(/\\s+/);\n  if (parts.length < 6) continue;\n  const pct = parseInt(parts[4].replace('%', ''), 10);\n  const mount = parts[5];\n  const size = parts[1];\n  const used = parts[2];\n  if (!Number.isNaN(pct) && pct >= threshold) {\n    alerts.push(`• ${mount}: ${pct}% (${used}/${size})`);\n  }\n}\nif (alerts.length === 0) return [];\nconst text = `⚠️ Disk uyarısı (≥${threshold}%)\\n\\n${alerts.join('\\n')}\\n\\n🔗 __PANEL_PROTOCOL__://gateway.__LAN_DOMAIN__`;\nreturn [{ json: { text } }];"
       },
       "id": "b1b2c3d4-2222-4000-8000-000000000003",
       "name": "Esik kontrol",
