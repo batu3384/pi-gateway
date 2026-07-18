@@ -2,7 +2,7 @@
 # Bildirim yardımcıları (Telegram). health-check, backup, systemd tarafından kullanılır.
 set -euo pipefail
 
-NOTIFY_STATE_DIR="${NOTIFY_STATE_DIR:-/tmp/pi-gateway-notify}"
+NOTIFY_STATE_DIR="${NOTIFY_STATE_DIR:-/run/pi-gateway/notify}"
 NOTIFY_COOLDOWN_SEC="${NOTIFY_COOLDOWN_SEC:-300}"
 
 LAN_DOMAIN="${LAN_DOMAIN:-home}"
@@ -26,14 +26,20 @@ panel_url() {
 
 notify_rate_ok() {
   local key="$1"
-  local now last
-  mkdir -p "$NOTIFY_STATE_DIR"
+  local now last owner
+  owner="${NOTIFY_OWNER:-${PI_USER:-batu}}"
+  if [[ "$(id -u)" -eq 0 ]]; then
+    install -d -m 0775 -o "$owner" -g "$owner" "$NOTIFY_STATE_DIR" 2>/dev/null \
+      || mkdir -p "$NOTIFY_STATE_DIR"
+  else
+    mkdir -p "$NOTIFY_STATE_DIR" 2>/dev/null || true
+  fi
   now="$(date +%s)"
   last="$(cat "${NOTIFY_STATE_DIR}/${key}" 2>/dev/null || echo 0)"
   if (( now - last < NOTIFY_COOLDOWN_SEC )); then
     return 1
   fi
-  echo "$now" > "${NOTIFY_STATE_DIR}/${key}"
+  echo "$now" > "${NOTIFY_STATE_DIR}/${key}" 2>/dev/null || return 0
   return 0
 }
 

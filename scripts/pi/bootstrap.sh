@@ -164,4 +164,8 @@ if [[ "$STORAGE_TYPE" == "ssd-root" || "$STORAGE_TYPE" == "ssd" ]]; then
   echo "[bootstrap] Storage: SSD root OK ($ROOT_SRC)"
 fi
 
+sudo mkdir -p /run/pi-gateway/notify 2>/dev/null || true
+sudo chown "$USER:$USER" /run/pi-gateway/notify 2>/dev/null || true
+sudo chmod 775 /run/pi-gateway/notify 2>/dev/null || true
+
 echo "[bootstrap] complete"

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC1083
-# Uptime Kuma monitorlerini otomatik ekler
+# Uptime Kuma: DB kurulumu, admin, monitorler
 set -euo pipefail
 
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
@@ -11,6 +11,7 @@ KUMA_URL="${UPTIME_KUMA_URL:-http://127.0.0.1:3001}"
 KUMA_USER="${UPTIME_KUMA_ADMIN_USER:-batu}"
 KUMA_PASS="${UPTIME_KUMA_ADMIN_PASSWORD:-}"
 PI_IP="${PI_STATIC_IP:-192.168.1.112}"
+export KUMA_URL KUMA_USER KUMA_PASS
 
 log() { echo "[uptime-kuma-setup] $*"; }
 
@@ -21,15 +22,92 @@ esac
 
 docker ps --format '{{.Names}}' | grep -q '^uptime-kuma$' || { log "uptime-kuma container yok"; exit 1; }
 
-sync_password() {
-  local hash
-  hash="$(docker exec uptime-kuma node -e "const b=require('bcryptjs'); console.log(b.hashSync(process.argv[1], 10));" "$KUMA_PASS")"
-  docker exec uptime-kuma sqlite3 /app/data/kuma.db \
-    "UPDATE user SET password='${hash}' WHERE username='${KUMA_USER}';"
-  log "Kullanici sifresi guncellendi: ${KUMA_USER}"
+wait_for_kuma_http() {
+  local i
+  for i in $(seq 1 40); do
+    if curl -fsS "${KUMA_URL}/api/entry-page" >/dev/null 2>&1 \
+      || curl -fsS "${KUMA_URL}/setup-database-info" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 3
+  done
+  log "HATA: uptime-kuma HTTP hazir degil"
+  return 1
 }
 
-sync_password
+ensure_kuma_database() {
+  local info
+  info="$(curl -fsS "${KUMA_URL}/setup-database-info" 2>/dev/null || true)"
+  if ! echo "$info" | grep -q '"needSetup":true'; then
+    return 0
+  fi
+  log "SQLite veritabani kuruluyor (setup-database)..."
+  curl -fsS -X POST "${KUMA_URL}/setup-database" \
+    -H "Content-Type: application/json" \
+    -d '{"dbConfig":{"type":"sqlite"}}' >/dev/null
+  docker restart uptime-kuma >/dev/null
+  wait_for_kuma_http
+}
+
+sync_password_sqlite() {
+  local hash
+  hash="$(docker exec uptime-kuma node -e "const b=require('bcryptjs'); console.log(b.hashSync(process.argv[1], 10));" "$KUMA_PASS")"
+  if docker exec uptime-kuma sqlite3 /app/data/kuma.db \
+    "SELECT COUNT(*) FROM user WHERE username='${KUMA_USER}';" 2>/dev/null | grep -q '^1$'; then
+    docker exec uptime-kuma sqlite3 /app/data/kuma.db \
+      "UPDATE user SET password='${hash}' WHERE username='${KUMA_USER}';"
+    log "Kullanici sifresi guncellendi (sqlite): ${KUMA_USER}"
+  fi
+}
+
+ensure_kuma_admin() {
+  docker run --rm --network host \
+    -e KUMA_URL -e KUMA_USER -e KUMA_PASS \
+    python:3.12-alpine sh -c '
+      pip install -q uptime-kuma-api2
+      python - <<'"'"'PY'"'"'
+import os, sys
+from uptime_kuma_api import UptimeKumaApi
+
+url = os.environ["KUMA_URL"]
+user = os.environ["KUMA_USER"]
+password = os.environ["KUMA_PASS"]
+api = UptimeKumaApi(url, timeout=60)
+try:
+    if api.need_setup():
+        api.setup(user, password)
+        print("admin-setup-ok")
+    else:
+        api.login(user, password)
+        print("admin-login-ok")
+except Exception as exc:
+    print(f"admin-fail: {exc}", file=sys.stderr)
+    sys.exit(1)
+finally:
+    api.disconnect()
+PY
+    ' || {
+    log "API login/setup basarisiz — sqlite sifre senkronu deneniyor"
+    sync_password_sqlite
+    docker run --rm --network host \
+      -e KUMA_URL -e KUMA_USER -e KUMA_PASS \
+      python:3.12-alpine sh -c '
+        pip install -q uptime-kuma-api2
+        python - <<'"'"'PY'"'"'
+import os
+from uptime_kuma_api import UptimeKumaApi
+api = UptimeKumaApi(os.environ["KUMA_URL"], timeout=60)
+api.login(os.environ["KUMA_USER"], os.environ["KUMA_PASS"])
+print("admin-login-ok-retry")
+api.disconnect()
+PY
+      '
+  }
+}
+
+wait_for_kuma_http
+ensure_kuma_database
+ensure_kuma_admin
 
 DOCKER_GW="${DOCKER_GATEWAY:-172.18.0.1}"
 export KUMA_URL KUMA_USER KUMA_PASS PI_IP DOCKER_GW LAN_DOMAIN
@@ -57,6 +135,7 @@ docker run --rm --network host \
     pip install -q uptime-kuma-api2
     python - <<'"'"'PY'"'"'
 import os
+import json
 from uptime_kuma_api import UptimeKumaApi, MonitorType
 
 url = os.environ["KUMA_URL"]
@@ -76,14 +155,14 @@ monitors = [
     ("AdGuard", MonitorType.HTTP, {"url": f"http://{gw}:8080", "accepted_statuscodes": ok}),
     ("Caddy", MonitorType.HTTP, {
         "url": "https://caddy:443",
-        "headers": f'{{"Host": "gateway.{lan}"}}',
+        "headers": json.dumps({"Host": f"gateway.{lan}"}),
         "accepted_statuscodes": ok,
         "ignoreTls": True,
         "maxredirects": 0,
     }),
     (f"logs.{lan}", MonitorType.HTTP, {
         "url": f"https://{pi_ip}",
-        "headers": f'{{"Host": "logs.{lan}"}}',
+        "headers": json.dumps({"Host": f"logs.{lan}"}),
         "accepted_statuscodes": ok,
         "ignoreTls": True,
         "maxredirects": 0,
