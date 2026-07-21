@@ -117,6 +117,7 @@ export UPTIME_KUMA_STATUS_SLUG="${UPTIME_KUMA_STATUS_SLUG:-pi-gateway}"
 export ENABLE_N8N="${ENABLE_N8N:-true}"
 export ENABLE_NETALERTX="${ENABLE_NETALERTX:-true}"
 export NETALERTX_PORT="${NETALERTX_PORT:-20211}"
+export UPTIME_KUMA_SLOW_TIMEOUT="${UPTIME_KUMA_SLOW_TIMEOUT:-90}"
 export LAN_DOMAIN="${LAN_DOMAIN:-home}"
 if [[ -n "${N8N_KUMA_WEBHOOK_URL:-}" ]]; then
   :
@@ -132,7 +133,7 @@ export N8N_KUMA_WEBHOOK_URL
 docker run --rm --network host \
   -e KUMA_URL -e KUMA_USER -e KUMA_PASS -e PI_IP -e DOCKER_GW -e LAN_DOMAIN \
   -e TELEGRAM_BOT_TOKEN -e TELEGRAM_CHAT_ID -e UPTIME_KUMA_STATUS_SLUG \
-  -e ENABLE_N8N -e N8N_KUMA_WEBHOOK_URL -e ENABLE_NETALERTX -e NETALERTX_PORT \
+  -e ENABLE_N8N -e N8N_KUMA_WEBHOOK_URL -e ENABLE_NETALERTX -e NETALERTX_PORT -e UPTIME_KUMA_SLOW_TIMEOUT \
   python:3.12-alpine sh -c '
     pip install -q uptime-kuma-api2
     python - <<'"'"'PY'"'"'
@@ -149,6 +150,7 @@ lan = os.environ.get("LAN_DOMAIN", "home")
 tg_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 tg_chat = os.environ.get("TELEGRAM_CHAT_ID", "")
 netalertx_port = os.environ.get("NETALERTX_PORT", "20211")
+slow_timeout = int(os.environ.get("UPTIME_KUMA_SLOW_TIMEOUT", "90"))
 
 ok = ["200-299", "301", "302", "307", "308", "401"]
 
@@ -247,9 +249,12 @@ elif tg_token and tg_chat:
         print("notification: Telegram zaten var")
 
 by_name = {m.get("name"): m for m in api.get_monitors() if m.get("type") != "group"}
+slow_monitors = {f"devices.{lan}", f"logs.{lan}", "NetAlertX"}
 updated = added = 0
 for name, mtype, kwargs in monitors:
     base = {"type": mtype, "name": name, "interval": 60, "maxretries": 2, "conditions": [], **kwargs}
+    if name in slow_monitors:
+        base["timeout"] = slow_timeout
     if name in by_name:
         mid = by_name[name]["id"]
         api.edit_monitor(mid, **{k: v for k, v in base.items() if k != "id"})

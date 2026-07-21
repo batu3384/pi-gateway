@@ -19,8 +19,21 @@ ssh pi 'REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/setup-tailscale-rem
 Tailscale Admin → DNS → Nameservers:
 
 - Split DNS: `home` → Pi Tailscale IP (`100.x.x.x`)
+- **Override local DNS** açık
 
-Böylece `gateway.home`, `logs.home` vb. uzaktan da çalışır.
+## Tailscale Serve (önerilen — Telegram uzaktan linkler)
+
+Telefonda `https://gateway.home` mkcert sertifikasına güvenmez. Bunun yerine:
+
+1. Admin'de Serve'i aç: deploy sırasında verilen `/f/serve` linki veya ACL
+2. Pi'de: `bash scripts/pi/setup-tailscale-serve.sh`
+3. Telegram menüsünde **🌐 Uzaktan** butonları: `https://pi-gateway.tailXXXX.ts.net/p/dns` vb.
+
+```bash
+make telegram-menu   # veya Pi'de scripts/pi/telegram-menu.sh
+```
+
+Teşhis: `bash scripts/pi/diagnose-remote-access.sh`
 
 ## ACL (önerilen)
 

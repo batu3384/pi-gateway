@@ -83,5 +83,6 @@ Pi'de `N8N_ENCRYPTION_KEY` boşsa `ensure-n8n-encryption-key.sh` post-deploy sı
 | `ENABLE_NETALERTX` | `true` | NetAlertX container + kurulum |
 | `NETALERTX_PORT` | `20211` | UI (yalnızca localhost; Caddy `devices.home`) |
 | `NETALERTX_SCAN_SUBNETS` | (boş) | ARP tarama; boşsa `LAN_SUBNET_CIDR` + `PI_INTERFACE` |
+| `NETALERTX_PASSWORD` | (boş → `AGH_ADMIN_PASSWORD`) | NetAlertX UI şifresi |
 
 Ayrıntı: `docs/FAZ4.md`

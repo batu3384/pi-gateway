@@ -18,6 +18,9 @@ PANEL_PROTOCOL="${PANEL_PROTOCOL:-https}"
 if [[ "${ENABLE_TLS:-false}" != "true" ]]; then
   PANEL_PROTOCOL=http
 fi
+ADGUARD_WEB_PORT="${ADGUARD_WEB_PORT:-8080}"
+AGH_ADMIN_USER="${AGH_ADMIN_USER:-admin}"
+AGH_ADMIN_PASSWORD="${AGH_ADMIN_PASSWORD:-}"
 DATA_DIR="${REMOTE_DIR}/data/netalertx"
 CONF_FILE="${DATA_DIR}/config/app.conf"
 MARKER="${DATA_DIR}/.pi-gateway-configured"
@@ -26,6 +29,7 @@ log() { echo "[netalertx-setup] $*"; }
 
 [[ "${ENABLE_NETALERTX:-true}" == "true" ]] || { log "NetAlertX kapali"; exit 0; }
 [[ -n "${NETALERTX_PASSWORD:-}" ]] || { log "HATA: NETALERTX_PASSWORD veya AGH_ADMIN_PASSWORD gerekli"; exit 1; }
+[[ -n "${AGH_ADMIN_PASSWORD:-}" ]] || { log "HATA: AGH_ADMIN_PASSWORD gerekli (ADGUARDIMP)"; exit 1; }
 docker ps --format '{{.Names}}' | grep -q '^netalertx$' || { log "HATA: netalertx container yok"; exit 1; }
 
 case "${N8N_WEBHOOK_SECRET:-}" in
@@ -65,9 +69,11 @@ chown -R 20211:20211 "${DATA_DIR}" 2>/dev/null || sudo chown -R 20211:20211 "${D
 wait_http
 
 export CONF_FILE SCAN_SUBNET WEBHOOK_URL MARKER PANEL_PROTOCOL LAN_DOMAIN NETALERTX_PASSWORD
+export AGH_ADMIN_USER AGH_ADMIN_PASSWORD ADGUARD_WEB_PORT
 SCAN_SUBNET="$(scan_subnet)"
 WEBHOOK_URL="$(webhook_url)"
-export SCAN_SUBNET WEBHOOK_URL
+PLUGINS='["ARPSCAN","DIGSCAN","NSLOOKUP","ICMP","WEBHOOK","NEWDEV","NTFPRCS","DBCLNP","CUSTPROP","SETPWD","SYNC","UI","MAINT","VNDRPDT","ADGUARDIMP","AVAHISCAN"]'
+export SCAN_SUBNET WEBHOOK_URL PLUGINS
 
 python3 <<'PY'
 import os
@@ -80,6 +86,11 @@ marker = Path(os.environ["MARKER"])
 subnet = os.environ["SCAN_SUBNET"]
 webhook = os.environ["WEBHOOK_URL"]
 password = os.environ["NETALERTX_PASSWORD"]
+password_hash = __import__("hashlib").sha256(password.encode()).hexdigest()
+agh_user = os.environ.get("AGH_ADMIN_USER", "admin")
+agh_pass = os.environ["AGH_ADMIN_PASSWORD"]
+agh_port = os.environ.get("ADGUARD_WEB_PORT", "8080")
+plugins = os.environ.get("PLUGINS", "[]")
 lan = os.environ.get("LAN_DOMAIN", "home")
 proto = os.environ.get("PANEL_PROTOCOL", "https")
 dashboard = f"{proto}://devices.{lan}"
@@ -94,6 +105,7 @@ else:
 
 text = conf.read_text()
 updates = {
+    "LOADED_PLUGINS": plugins,
     "SCAN_SUBNETS": scan_value,
     "WEBHOOK_URL": f"'{webhook}'",
     "WEBHOOK_REQUEST_METHOD": "'POST'",
@@ -102,8 +114,19 @@ updates = {
     "ICMP_RUN": "'schedule'",
     "ARPSCAN_RUN": "'schedule'",
     "DIGSCAN_RUN": "'schedule'",
+    "AVAHISCAN_RUN": "'before_name_updates'",
+    "NSLOOKUP_RUN": "'before_name_updates'",
+    "ADGUARDIMP_RUN": "'schedule'",
+    "ADGUARDIMP_RUN_SCHD": "'*/5 * * * *'",
+    "ADGUARDIMP_RUN_TIMEOUT": "30",
+    "ADGUARDIMP_SERVER": "'127.0.0.1'",
+    "ADGUARDIMP_PORT": agh_port,
+    "ADGUARDIMP_PROTOCOL": "'http'",
+    "ADGUARDIMP_USER": "'" + agh_user.replace("'", "\\'") + "'",
+    "ADGUARDIMP_PASS": "'" + agh_pass.replace("'", "\\'") + "'",
+    "ADGUARDIMP_FAKE_MAC": "False",
     "SETPWD_enable_password": "True",
-    "SETPWD_password": "'" + password.replace("'", "\\'") + "'",
+    "SETPWD_password": "'" + password_hash + "'",
     "BACKEND_API_URL": "'/server'",
     "REPORT_DASHBOARD_URL": f"'{dashboard}'",
 }
@@ -142,6 +165,11 @@ if [[ "$(cat "$MARKER" 2>/dev/null)" == "ok" ]]; then
   docker restart netalertx >/dev/null 2>&1 || true
   wait_http || true
 fi
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+bash "$SCRIPT_DIR/import-adguard-names-to-netalertx.sh" || log "WARN: AdGuard isim importu atlandi"
+bash "$SCRIPT_DIR/enrich-netalertx-names.sh"
+bash "$SCRIPT_DIR/sync-adguard-persistent-clients.sh" || log "WARN: AdGuard istemci senkronu atlandi"
 
 log "Tamamlandi — https://devices.${LAN_DOMAIN:-home}"
 log "Giris: NetAlertX UI sifresi (NETALERTX_PASSWORD veya AGH_ADMIN_PASSWORD)"

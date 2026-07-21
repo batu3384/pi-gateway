@@ -145,6 +145,7 @@ fi
 
 if command -v tailscale >/dev/null 2>&1 && tailscale status >/dev/null 2>&1; then
   run_step_optional "Tailscale uzaktan erisim" "$SCRIPT_DIR/setup-tailscale-remote.sh"
+  run_step_optional "Tailscale panel HTTPS" "$SCRIPT_DIR/setup-tailscale-serve.sh"
   run_step_optional "Tailscale ACL" "$SCRIPT_DIR/setup-tailscale-acl.sh"
 fi
 
