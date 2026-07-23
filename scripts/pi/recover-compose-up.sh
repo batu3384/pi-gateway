@@ -25,8 +25,8 @@ if needs_ssd_storage && ! mountpoint -q /mnt/ssd 2>/dev/null; then
 fi
 
 compose_up() {
-  if [[ "${COMPOSE_RECOVER_MODE:-}" == "core-dns" ]]; then
-    echo "[recover-compose] mode=core-dns (unbound adguard homepage caddy)" >&2
+    if [[ "${COMPOSE_RECOVER_MODE:-}" == "core-dns" ]]; then
+    echo "[recover-compose] mode=core-dns (unbound+adguard; homepage/caddy best-effort)" >&2
     docker compose --env-file ../.env --profile caddy up -d unbound adguard homepage caddy
   else
     docker compose --env-file ../.env "${profiles[@]}" up -d "$@"

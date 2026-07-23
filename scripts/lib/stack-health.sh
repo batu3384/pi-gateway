@@ -12,6 +12,49 @@ STACK_RECOVER_COOLDOWN_FILE="${STACK_RECOVER_COOLDOWN_FILE:-/run/pi-gateway/stac
 STACK_BOOT_GRACE_SEC="${STACK_BOOT_GRACE_SEC:-120}"
 SSD_HOTPLUG_STATE_FILE="${SSD_HOTPLUG_STATE_FILE:-/var/lib/pi-gateway/ssd-hotplug-mounted}"
 SSD_HOTPLUG_DEBOUNCE_SEC="${SSD_HOTPLUG_DEBOUNCE_SEC:-120}"
+PI_GATEWAY_RUNTIME_DIR="${PI_GATEWAY_RUNTIME_DIR:-/run/pi-gateway}"
+
+# /run/pi-gateway batu yazabilir olsun (root hotplug sonrasi stuck flag onleme)
+ensure_runtime_dir() {
+  local owner
+  owner="$(pi_user_from_remote_dir "${REMOTE_DIR:-/home/${PI_USER:-batu}/pi-gateway}")"
+  if [[ "$(id -u)" -eq 0 ]]; then
+    mkdir -p "$PI_GATEWAY_RUNTIME_DIR"
+    chown "${owner}:${owner}" "$PI_GATEWAY_RUNTIME_DIR" 2>/dev/null || true
+    chmod 775 "$PI_GATEWAY_RUNTIME_DIR" 2>/dev/null || true
+  else
+    mkdir -p "$PI_GATEWAY_RUNTIME_DIR" 2>/dev/null \
+      || sudo mkdir -p "$PI_GATEWAY_RUNTIME_DIR" 2>/dev/null || true
+    sudo chown "${owner}:${owner}" "$PI_GATEWAY_RUNTIME_DIR" 2>/dev/null || true
+    sudo chmod 775 "$PI_GATEWAY_RUNTIME_DIR" 2>/dev/null || true
+  fi
+}
+
+runtime_rm() {
+  local path="$1"
+  rm -f "$path" 2>/dev/null && return 0
+  if [[ "$(id -u)" -eq 0 ]]; then
+    rm -f "$path" 2>/dev/null || return 1
+  else
+    sudo rm -f "$path" 2>/dev/null || return 1
+  fi
+}
+
+runtime_write() {
+  local path="$1" content="$2"
+  ensure_runtime_dir
+  if printf '%s\n' "$content" >"$path" 2>/dev/null; then
+    return 0
+  fi
+  if [[ "$(id -u)" -eq 0 ]]; then
+    printf '%s\n' "$content" >"$path"
+  else
+    printf '%s\n' "$content" | sudo tee "$path" >/dev/null
+    local owner
+    owner="$(pi_user_from_remote_dir "${REMOTE_DIR:-/home/${PI_USER:-batu}/pi-gateway}")"
+    sudo chown "${owner}:${owner}" "$path" 2>/dev/null || true
+  fi
+}
 
 needs_ssd_storage() {
   # hybrid/ssd-data: ayri /mnt/ssd veri diski
@@ -52,21 +95,43 @@ root_rw_ok() {
 }
 
 storage_degraded() {
-  [[ -f "${STORAGE_DEGRADED_FLAG}" ]]
+  [[ -f "${STORAGE_DEGRADED_FLAG}" ]] || return 1
+  # Stuck flag iyilestirme: SSD + symlink OK ise bayrak yalan — temizle
+  if needs_ssd_storage && mountpoint -q /mnt/ssd 2>/dev/null; then
+    local data_link="${REMOTE_DIR:-}/data"
+    if [[ -n "${REMOTE_DIR:-}" && -L "$data_link" ]] \
+      && [[ "$(readlink -f "$data_link" 2>/dev/null)" == "/mnt/ssd/pi-gateway-data" ]]; then
+      clear_storage_degraded 2>/dev/null || true
+      [[ -f "${STORAGE_DEGRADED_FLAG}" ]] || return 1
+    fi
+  fi
+  return 0
 }
 
 set_storage_degraded() {
-  mkdir -p "$(dirname "$STORAGE_DEGRADED_FLAG")" 2>/dev/null || true
-  touch "$STORAGE_DEGRADED_FLAG" 2>/dev/null || true
+  ensure_runtime_dir
+  if touch "$STORAGE_DEGRADED_FLAG" 2>/dev/null; then
+    return 0
+  fi
+  runtime_write "$STORAGE_DEGRADED_FLAG" ""
 }
 
 clear_storage_degraded() {
-  rm -f "$STORAGE_DEGRADED_FLAG" 2>/dev/null || true
+  [[ -f "$STORAGE_DEGRADED_FLAG" ]] || return 0
+  if runtime_rm "$STORAGE_DEGRADED_FLAG"; then
+    return 0
+  fi
+  logger -t pi-gateway-recover "HATA: degraded flag silinemedi: $STORAGE_DEGRADED_FLAG"
+  echo "[stack-health] HATA: degraded flag silinemedi: $STORAGE_DEGRADED_FLAG" >&2
+  return 1
 }
 
 mark_stack_recover_cooldown() {
-  mkdir -p "$(dirname "$STACK_RECOVER_COOLDOWN_FILE")" 2>/dev/null || true
-  date +%s >"$STACK_RECOVER_COOLDOWN_FILE" 2>/dev/null || true
+  ensure_runtime_dir
+  runtime_write "$STACK_RECOVER_COOLDOWN_FILE" "$(date +%s)" || {
+    logger -t pi-gateway-recover "WARN: cooldown yazilamadi"
+    return 0
+  }
 }
 
 stack_recover_suppressed() {
@@ -185,19 +250,32 @@ run_compose_up() {
   local remote_dir="$1"
   local pi_user="$2"
   local lib="${PI_GATEWAY_LIB_DIR:-/usr/local/lib/pi-gateway}"
-  local script="${lib}/scripts/pi/recover-compose-up.sh"
-  [[ -x "$script" ]] || script="${remote_dir}/scripts/pi/recover-compose-up.sh"
-  if [[ "$(id -u)" -eq 0 ]]; then
-    runuser -u "$pi_user" -- env REMOTE_DIR="$remote_dir" bash "$script"
+  local script
+  # REMOTE_DIR once — rsync sonrasi lib drift olmasin
+  if [[ -f "${remote_dir}/scripts/pi/recover-compose-up.sh" ]]; then
+    script="${remote_dir}/scripts/pi/recover-compose-up.sh"
+  elif [[ -x "${lib}/scripts/pi/recover-compose-up.sh" ]]; then
+    script="${lib}/scripts/pi/recover-compose-up.sh"
   else
-    REMOTE_DIR="$remote_dir" bash "$script"
+    script="${remote_dir}/scripts/pi/recover-compose-up.sh"
+  fi
+  if [[ "$(id -u)" -eq 0 ]]; then
+    runuser -u "$pi_user" -- env \
+      REMOTE_DIR="$remote_dir" \
+      COMPOSE_RECOVER_MODE="${COMPOSE_RECOVER_MODE:-}" \
+      bash "$script"
+  else
+    REMOTE_DIR="$remote_dir" COMPOSE_RECOVER_MODE="${COMPOSE_RECOVER_MODE:-}" bash "$script"
   fi
 }
 
 recover_script_path() {
   local remote_dir="$1"
   local lib="${PI_GATEWAY_LIB_DIR:-/usr/local/lib/pi-gateway}"
-  if [[ -x "${lib}/scripts/pi/recover-readonly-root.sh" ]]; then
+  # Deploy rsync ~/pi-gateway gunceller; systemd lib eski kalabilir — REMOTE once
+  if [[ -f "${remote_dir}/scripts/pi/recover-readonly-root.sh" ]]; then
+    echo "${remote_dir}/scripts/pi/recover-readonly-root.sh"
+  elif [[ -x "${lib}/scripts/pi/recover-readonly-root.sh" ]]; then
     echo "${lib}/scripts/pi/recover-readonly-root.sh"
   else
     echo "${remote_dir}/scripts/pi/recover-readonly-root.sh"
@@ -207,11 +285,17 @@ recover_script_path() {
 apply_adguard_rewrites_best_effort() {
   local remote_dir="${1:-${REMOTE_DIR:-}}"
   local lib="${PI_GATEWAY_LIB_DIR:-/usr/local/lib/pi-gateway}"
-  local script="${lib}/scripts/pi/apply-adguard-rewrites.sh"
+  local script
   local pi_user
   local rc=0
-  [[ -x "$script" ]] || script="${remote_dir}/scripts/pi/apply-adguard-rewrites.sh"
-  [[ -x "$script" ]] || return 0
+  if [[ -f "${remote_dir}/scripts/pi/apply-adguard-rewrites.sh" ]]; then
+    script="${remote_dir}/scripts/pi/apply-adguard-rewrites.sh"
+  elif [[ -x "${lib}/scripts/pi/apply-adguard-rewrites.sh" ]]; then
+    script="${lib}/scripts/pi/apply-adguard-rewrites.sh"
+  else
+    script="${remote_dir}/scripts/pi/apply-adguard-rewrites.sh"
+  fi
+  [[ -x "$script" || -f "$script" ]] || return 0
   pi_user="$(pi_user_from_remote_dir "$remote_dir")"
   if [[ "$(id -u)" -eq 0 ]]; then
     runuser -u "$pi_user" -- env REMOTE_DIR="$remote_dir" bash "$script" >/dev/null 2>&1 || rc=$?

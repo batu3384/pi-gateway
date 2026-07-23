@@ -54,12 +54,14 @@ if mountpoint -q /mnt/ssd 2>/dev/null; then
   fi
   touch_hotplug_run
   log "SSD mount OK — tam stack restore"
-  clear_storage_degraded
+  ensure_runtime_dir
+  clear_storage_degraded || log "WARN: degraded flag temizlenemedi"
   REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/ensure-data-symlink.sh" repair || true
   if [[ -x "$SCRIPT_DIR/setup-docker-ssd.sh" ]] && [[ "${ENABLE_DOCKER_SSD:-false}" == "true" ]]; then
     REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/setup-docker-ssd.sh" || log "WARN: docker SSD restore atlandi"
+    # Sadece data-root degisince docker restart
+    run_root systemctl restart docker 2>/dev/null || true
   fi
-  run_root systemctl restart docker 2>/dev/null || true
   REMOTE_DIR="$REMOTE_DIR" bash "$(recover_script_path "$REMOTE_DIR")" || log "WARN: recover basarisiz"
   run_root mkdir -p "$(dirname "$SSD_HOTPLUG_STATE_FILE")" 2>/dev/null || true
   run_root touch "$SSD_HOTPLUG_STATE_FILE" 2>/dev/null || true

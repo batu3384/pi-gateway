@@ -56,4 +56,24 @@ line_lock="$(grep -n 'acquire_recover_lock_wait' "$PROJECT_DIR/scripts/pi/recove
   || die "remount lock'tan once degil (rw=$line_rw lock=$line_lock)"
 ok "remount lock'tan once"
 
+# dns_degraded + COMPOSE forward + clobber marker
+dns_degraded_on_ssd_loss >/dev/null 2>&1 || true
+DNS_DEGRADED_ON_SSD_LOSS=false STORAGE_FALLBACK_SD=false
+if dns_degraded_on_ssd_loss; then
+  die "dns_degraded_on_ssd_loss her iki flag false iken true dondu"
+fi
+ok "dns_degraded fail-closed"
+
+DNS_DEGRADED_ON_SSD_LOSS=true STORAGE_FALLBACK_SD=false
+dns_degraded_on_ssd_loss || die "DNS_DEGRADED_ON_SSD_LOSS=true iken false"
+ok "dns_degraded default path"
+
+grep -q 'COMPOSE_RECOVER_MODE=' "$STACK_HEALTH" || die "COMPOSE_RECOVER_MODE forward yok"
+ok "COMPOSE_RECOVER_MODE forward"
+
+SYMLINK="$PROJECT_DIR/scripts/lib/ensure-data-symlink.sh"
+grep -q 'pi-gateway-sd-degraded-ephemeral' "$SYMLINK" || die "ephemeral marker yok"
+grep -q 'clobber' "$SYMLINK" || die "clobber korumasi yorumu yok"
+ok "symlink clobber korumasi"
+
 echo "[validate-recovery] Tum kontrat testleri gecti"

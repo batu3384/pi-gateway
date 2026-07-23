@@ -59,8 +59,15 @@ grep -q 'HATA: data symlink onarilamadi' "$BOOTSTRAP" || die "bootstrap symlink 
 ok "bootstrap hybrid SSD zinciri"
 
 grep -q 'STORAGE_FALLBACK_SD' "$SYMLINK" || die "ensure-data-symlink STORAGE_FALLBACK_SD yok"
-grep -q 'STORAGE_FALLBACK_SD=false' "$SYMLINK" || die "ensure-data-symlink fail-closed yok"
-ok "ensure-data-symlink fail-closed"
+grep -q 'DNS_DEGRADED_ON_SSD_LOSS\|dns_degraded_allowed' "$SYMLINK" || die "ensure-data-symlink DNS degraded yok"
+grep -q 'pi-gateway-sd-degraded-ephemeral' "$SYMLINK" || die "ephemeral degraded marker yok"
+grep -q 'clobber' "$SYMLINK" || die "ensure-data-symlink clobber korumasi yok"
+grep -q 'discard_ephemeral_sd_data' "$SYMLINK" || die "discard_ephemeral_sd_data yok"
+ok "ensure-data-symlink fail-closed + clobber korumasi"
+
+PI_SYMLINK_WRAP="$PROJECT_DIR/scripts/pi/ensure-data-symlink.sh"
+grep -q '"\$@"' "$PI_SYMLINK_WRAP" || die "pi ensure-data-symlink wrapper args iletmiyor"
+ok "ensure-data-symlink wrapper \$@"
 
 RECOVER="$PROJECT_DIR/scripts/pi/recover-readonly-root.sh"
 COMPOSE_UP="$PROJECT_DIR/scripts/pi/recover-compose-up.sh"
@@ -81,6 +88,13 @@ ok "recover-readonly-root DNS degraded"
 grep -q 'COMPOSE_RECOVER_MODE=core-dns' "$COMPOSE_UP" || die "recover-compose core-dns yok"
 grep -q 'SSD yok' "$COMPOSE_UP" || die "recover-compose SSD guard yok"
 ok "recover-compose-up storm guard"
+
+grep -q 'COMPOSE_RECOVER_MODE=' "$STACK_HEALTH" || die "stack-health COMPOSE_RECOVER_MODE forward yok"
+grep -q 'ensure_runtime_dir' "$STACK_HEALTH" || die "stack-health ensure_runtime_dir yok"
+grep -q 'recover-readonly-root.sh' "$STACK_HEALTH" || die "stack-health recover path yok"
+grep -q 'rsync sonrasi lib drift\|REMOTE_DIR once\|remote_dir}/scripts/pi/recover' "$STACK_HEALTH" \
+  || die "stack-health REMOTE_DIR-first recover path yok"
+ok "stack-health runtime + COMPOSE forward + REMOTE_DIR-first"
 
 JOURNAL_CONF="$PROJECT_DIR/host/systemd/journald.conf.d/00-pi-gateway-persistent.conf"
 [[ -f "$JOURNAL_CONF" ]] || die "journald persistent conf yok"

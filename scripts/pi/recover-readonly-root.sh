@@ -110,8 +110,17 @@ ensure_data_symlink() {
 }
 
 enter_degraded_mode() {
-  log "SSD yok — degraded mod (SD fallback DNS)"
+  log "SSD yok — degraded mod (core-dns: Unbound+AdGuard SD)"
+  ensure_runtime_dir
   set_storage_degraded
+  # Optional app'ler kirik volume'da restart storm yapmasin
+  if [[ -d "$REMOTE_DIR/compose" ]]; then
+    (
+      cd "$REMOTE_DIR/compose"
+      docker compose --env-file "$REMOTE_DIR/.env" stop \
+        n8n forgejo syncthing uptime-kuma crowdsec redis dozzle netalertx 2>/dev/null || true
+    )
+  fi
   REMOTE_DIR="$REMOTE_DIR" STORAGE_TYPE="$STORAGE_TYPE" \
     bash "$SCRIPT_DIR/ensure-data-symlink.sh" repair --fallback-sd || true
   if [[ -x "$SCRIPT_DIR/setup-docker-fallback.sh" ]]; then
