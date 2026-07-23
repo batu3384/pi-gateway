@@ -19,6 +19,7 @@ UNBOUND_PORT="${UNBOUND_PORT:-5335}"
 STACK_AUTO_RECOVER="${STACK_AUTO_RECOVER:-true}"
 fail=0
 FAILURES=()
+sd_fail=0
 
 note_fail() {
   logger -t "$LOG_TAG" "FAIL $1"
@@ -29,6 +30,7 @@ note_fail() {
 # SD sagligi (kurtarma yok — asagida tek trigger_stack_recover)
 if ! SD_HEALTH_AUTO_RECOVER=false REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/check-sd-health.sh"; then
   fail=1
+  sd_fail=1
 fi
 
 if [[ "$STACK_AUTO_RECOVER" == "true" ]] && { ! stack_fully_healthy || ! root_rw_ok; }; then
@@ -133,10 +135,40 @@ fi
 
 if [[ "$fail" -eq 0 ]]; then
   logger -t "$LOG_TAG" "OK dns stack healthy"
+  # shellcheck source=../lib/notify.sh
+  source "$SCRIPT_DIR/../lib/notify.sh"
+  notify_dns_recovered "$(hostname -s)" || true
+  notify_optional_recovered "$(hostname -s)" || true
 else
   # shellcheck source=../lib/notify.sh
   source "$SCRIPT_DIR/../lib/notify.sh"
-  notify_dns_fail "$(hostname -s)" "${FAILURES[*]}"
+  host="$(hostname -s)"
+  details="${FAILURES[*]}"
+  has_ssd=0
+  has_core=0
+  has_optional=0
+  for f in "${FAILURES[@]}"; do
+    case "$f" in
+      ssd-unmounted|storage-degraded*|data-ssd-symlink*|data-native-missing)
+        has_ssd=1
+        ;;
+      optional-*)
+        has_optional=1
+        ;;
+      *)
+        has_core=1
+        ;;
+    esac
+  done
+  if [[ "$has_ssd" -eq 1 ]]; then
+    # SSD kök neden — DNS spam yerine tek degraded mesajı (edge + saatlik)
+    notify_ssd_degraded "$host" "$details"
+  elif [[ "$has_core" -eq 1 ]]; then
+    notify_dns_fail "$host" "$details"
+  elif [[ "$has_optional" -eq 1 ]]; then
+    # Opsiyonel panel; "DNS sağlığı" diye bağırma
+    notify_optional_warn "$host" "$details"
+  fi
 fi
 
 DISK_WARN_PCT="${DISK_WARN_PCT:-80}"
@@ -152,4 +184,20 @@ for mount in / /mnt/ssd; do
   fi
 done
 
-exit "$fail"
+# Opsiyonel-only: journal'da FAIL kalsın; systemd "Failed" spam olmasın.
+# SD veya çekirdek/SSD fail → exit 1
+exit_code=0
+if [[ "$sd_fail" -eq 1 ]]; then
+  exit_code=1
+elif [[ ${#FAILURES[@]} -gt 0 ]]; then
+  exit_code=0
+  for f in "${FAILURES[@]}"; do
+    case "$f" in
+      optional-*) ;;
+      *) exit_code=1; break ;;
+    esac
+  done
+elif [[ "$fail" -ne 0 ]]; then
+  exit_code=1
+fi
+exit "$exit_code"

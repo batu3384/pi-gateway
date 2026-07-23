@@ -3,7 +3,10 @@
 set -euo pipefail
 
 NOTIFY_STATE_DIR="${NOTIFY_STATE_DIR:-/run/pi-gateway/notify}"
+# İlk FAIL bildirimi için minimum aralık (çift tetiklemeyi keser)
 NOTIFY_COOLDOWN_SEC="${NOTIFY_COOLDOWN_SEC:-300}"
+# Aynı sorun sürerken tekrar hatırlatma (edge-trigger sonrası)
+NOTIFY_REPEAT_SEC="${NOTIFY_REPEAT_SEC:-3600}"
 
 LAN_DOMAIN="${LAN_DOMAIN:-home}"
 
@@ -24,9 +27,8 @@ panel_url() {
   printf '%s://%s.%s' "$proto" "$host" "${LAN_DOMAIN}"
 }
 
-notify_rate_ok() {
-  local key="$1"
-  local now last owner
+notify_ensure_dir() {
+  local owner
   owner="${NOTIFY_OWNER:-${PI_USER:-batu}}"
   if [[ "$(id -u)" -eq 0 ]]; then
     install -d -m 0775 -o "$owner" -g "$owner" "$NOTIFY_STATE_DIR" 2>/dev/null \
@@ -34,13 +36,58 @@ notify_rate_ok() {
   else
     mkdir -p "$NOTIFY_STATE_DIR" 2>/dev/null || true
   fi
+}
+
+notify_rate_ok() {
+  local key="$1"
+  local cooldown="${2:-$NOTIFY_COOLDOWN_SEC}"
+  local now last
+  notify_ensure_dir
   now="$(date +%s)"
   last="$(cat "${NOTIFY_STATE_DIR}/${key}" 2>/dev/null || echo 0)"
-  if (( now - last < NOTIFY_COOLDOWN_SEC )); then
+  if (( now - last < cooldown )); then
     return 1
   fi
   echo "$now" > "${NOTIFY_STATE_DIR}/${key}" 2>/dev/null || return 0
   return 0
+}
+
+# Edge-trigger: ok→fail hemen; fail sürerken NOTIFY_REPEAT_SEC; fail→ok recovery.
+# return 0 = bildirim gönderilmeli, 1 = sustur
+notify_transition_should_send() {
+  local key="$1"
+  local new_state="$2" # ok|fail
+  local state_file stamp_file prev now
+  notify_ensure_dir
+  state_file="${NOTIFY_STATE_DIR}/${key}.state"
+  stamp_file="${NOTIFY_STATE_DIR}/${key}"
+  prev="$(cat "$state_file" 2>/dev/null || echo ok)"
+  now="$(date +%s)"
+
+  if [[ "$new_state" == "ok" ]]; then
+    if [[ "$prev" != "ok" ]]; then
+      echo "ok" > "$state_file" 2>/dev/null || true
+      echo "$now" > "$stamp_file" 2>/dev/null || true
+      return 0
+    fi
+    echo "ok" > "$state_file" 2>/dev/null || true
+    return 1
+  fi
+
+  # new_state=fail
+  if [[ "$prev" != "fail" ]]; then
+    echo "fail" > "$state_file" 2>/dev/null || true
+    echo "$now" > "$stamp_file" 2>/dev/null || true
+    return 0
+  fi
+  # hâlâ fail — sadece periyodik hatırlatma
+  local last
+  last="$(cat "$stamp_file" 2>/dev/null || echo 0)"
+  if (( now - last >= NOTIFY_REPEAT_SEC )); then
+    echo "$now" > "$stamp_file" 2>/dev/null || true
+    return 0
+  fi
+  return 1
 }
 
 notify_escape_html() {
@@ -95,11 +142,39 @@ notify_dns_fail() {
   local host="$1"
   local details="$2"
   local gateway
+  notify_transition_should_send "health-dns" "fail" || return 0
   gateway="$(panel_url gateway)"
   local body
-  body="$(printf '<b>%s</b> — DNS sağlık kontrolü başarısız.\n\n<code>%s</code>\n\n<b>Ne yapmalı?</b>\n• Pi açık mı kontrol edin\n• Geçici: router DNS → 8.8.8.8\n• Panel: %s' \
+  body="$(printf '<b>%s</b> — DNS / çekirdek stack sağlık kontrolü başarısız.\n\n<code>%s</code>\n\n<b>Ne yapmalı?</b>\n• Pi açık mı kontrol edin\n• Geçici: router DNS → 8.8.8.8\n• Panel: %s\n\n<i>Aynı sorun sürerken en fazla saatte bir hatırlatılır.</i>' \
     "$host" "$(notify_escape_html "$details")" "$gateway")"
-  notify_telegram "⚠️ Pi Gateway" "$body" "health-dns" "HTML"
+  # transition zaten stamp yazdı; rate_ok çift kesmesin
+  NOTIFY_COOLDOWN_SEC=0 notify_telegram "⚠️ Pi Gateway" "$body" "health-dns" "HTML"
+}
+
+notify_dns_recovered() {
+  local host="$1"
+  notify_transition_should_send "health-dns" "ok" || return 0
+  local body
+  body="$(printf '<b>%s</b> — DNS / çekirdek stack tekrar sağlıklı.' "$host")"
+  NOTIFY_COOLDOWN_SEC=0 notify_telegram "✅ Pi Gateway" "$body" "health-dns" "HTML"
+}
+
+notify_optional_warn() {
+  local host="$1"
+  local details="$2"
+  # Opsiyonel paneller: DNS diye bağırma; uzun aralık
+  notify_transition_should_send "health-optional" "fail" || return 0
+  local body
+  body="$(printf '<b>%s</b> — opsiyonel servis(ler) ayakta değil (DNS etkilenmez).\n\n<code>%s</code>' \
+    "$host" "$(notify_escape_html "$details")" )"
+  NOTIFY_COOLDOWN_SEC=0 notify_telegram "ℹ️ Pi Gateway" "$body" "health-optional" "HTML"
+}
+
+notify_optional_recovered() {
+  local host="$1"
+  notify_transition_should_send "health-optional" "ok" || return 0
+  # Sessiz recovery — opsiyonel spam istemiyoruz
+  return 0
 }
 
 notify_backup_ok() {
@@ -160,14 +235,16 @@ notify_stack_recovered() {
 notify_ssd_degraded() {
   local host="$1"
   local details="$2"
+  notify_transition_should_send "ssd-degraded" "fail" || return 0
   local body
-  body="$(printf '<b>%s</b> — SSD veri diski yok; <b>degraded mod</b> (DNS SD uzerinde).\n\n<code>%s</code>\n\nSSD takilinca otomatik tam stack restore denenir.' \
+  body="$(printf '<b>%s</b> — SSD veri diski yok; <b>degraded mod</b> (DNS SD uzerinde).\n\n<code>%s</code>\n\nSSD takilinca otomatik tam stack restore denenir.\n\n<i>Ayni sorun surerken en fazla saatte bir hatirlatilir.</i>' \
     "$host" "$(notify_escape_html "$details")")"
-  notify_telegram "⚠️ Pi Gateway — SSD Degraded" "$body" "ssd-degraded" "HTML"
+  NOTIFY_COOLDOWN_SEC=0 notify_telegram "⚠️ Pi Gateway — SSD Degraded" "$body" "ssd-degraded" "HTML"
 }
 
 notify_ssd_restored() {
   local host="$1"
+  notify_transition_should_send "ssd-degraded" "ok" || true
   local body
   body="$(printf '<b>%s</b> — SSD tekrar baglandi; tam stack restore baslatildi.' "$host")"
   notify_telegram "✅ Pi Gateway — SSD Geri" "$body" "ssd-restored" "HTML"

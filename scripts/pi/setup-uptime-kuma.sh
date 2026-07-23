@@ -144,7 +144,13 @@ repair_kuma_db_if_corrupt
 ensure_kuma_database
 ensure_kuma_admin
 
-DOCKER_GW="${DOCKER_GATEWAY:-172.18.0.1}"
+# Kuma compose network gateway (host-network servisler icin); sabit 172.18 varsayma.
+if [[ -n "${DOCKER_GATEWAY:-}" ]]; then
+  DOCKER_GW="$DOCKER_GATEWAY"
+else
+  DOCKER_GW="$(docker inspect uptime-kuma --format '{{range $k,$v := .NetworkSettings.Networks}}{{$v.Gateway}}{{end}}' 2>/dev/null || true)"
+fi
+DOCKER_GW="${DOCKER_GW:-172.18.0.1}"
 export KUMA_URL KUMA_USER KUMA_PASS PI_IP DOCKER_GW LAN_DOMAIN
 export TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
 export TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:-}"
@@ -200,8 +206,10 @@ monitors = [
         "ignoreTls": True,
         "maxredirects": 0,
     }),
+    # *.home LAN IP hairpin Docker icinden timeout olur; Caddy hostname + Host header.
     (f"logs.{lan}", MonitorType.HTTP, {
-        "url": f"https://logs.{lan}",
+        "url": "https://caddy:443",
+        "headers": json.dumps({"Host": f"logs.{lan}"}),
         "accepted_statuscodes": ok,
         "ignoreTls": True,
         "maxredirects": 0,
@@ -217,13 +225,15 @@ monitors = [
 
 if os.environ.get("ENABLE_NETALERTX", "true") == "true":
     monitors.append((f"devices.{lan}", MonitorType.HTTP, {
-        "url": f"https://devices.{lan}",
+        "url": "https://caddy:443",
+        "headers": json.dumps({"Host": f"devices.{lan}"}),
         "accepted_statuscodes": ok,
         "ignoreTls": True,
         "maxredirects": 0,
     }))
+    # host-network NetAlertX: Kuma konteynerinden 127.0.0.1 degil docker gateway.
     monitors.append(("NetAlertX", MonitorType.HTTP, {
-        "url": f"http://127.0.0.1:{netalertx_port}",
+        "url": f"http://{gw}:{netalertx_port}",
         "accepted_statuscodes": ok,
     }))
 
