@@ -20,12 +20,14 @@ log() {
 
 PROBLEMS=()
 
-if needs_ssd_storage && ! mountpoint -q /mnt/ssd 2>/dev/null && ! storage_degraded; then
-  PROBLEMS+=("ssd-unmounted")
-fi
-
 if storage_degraded; then
-  PROBLEMS+=("storage-degraded")
+  if stack_dns_core_ok && root_rw_ok; then
+    log "degraded DNS OK (adguard+unbound) — watchdog idle"
+    exit 0
+  fi
+  PROBLEMS+=("storage-degraded-dns-down")
+elif needs_ssd_storage && ! mountpoint -q /mnt/ssd 2>/dev/null; then
+  PROBLEMS+=("ssd-unmounted")
 fi
 
 if ! root_rw_ok; then

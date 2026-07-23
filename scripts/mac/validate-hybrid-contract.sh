@@ -62,9 +62,31 @@ grep -q 'STORAGE_FALLBACK_SD' "$SYMLINK" || die "ensure-data-symlink STORAGE_FAL
 grep -q 'STORAGE_FALLBACK_SD=false' "$SYMLINK" || die "ensure-data-symlink fail-closed yok"
 ok "ensure-data-symlink fail-closed"
 
-grep -q 'STORAGE_FALLBACK_SD=false' "$HOTPLUG" || die "hotplug fail-closed kontrolu yok"
-grep -q 'degraded moda gecilmiyor' "$HOTPLUG" || die "hotplug degraded guard yok"
-ok "ssd-hotplug fail-closed"
+RECOVER="$PROJECT_DIR/scripts/pi/recover-readonly-root.sh"
+COMPOSE_UP="$PROJECT_DIR/scripts/pi/recover-compose-up.sh"
+STACK_HEALTH="$PROJECT_DIR/scripts/lib/stack-health.sh"
+
+grep -q 'dns_degraded_on_ssd_loss' "$STACK_HEALTH" || die "stack-health dns_degraded_on_ssd_loss yok"
+grep -q 'DNS_DEGRADED_ON_SSD_LOSS' "$HOTPLUG" || die "hotplug DNS_DEGRADED_ON_SSD_LOSS yok"
+grep -q 'dns_degraded_on_ssd_loss' "$HOTPLUG" || die "hotplug dns_degraded_on_ssd_loss cagrisi yok"
+grep -q 'fail-closed' "$HOTPLUG" || die "hotplug fail-closed guard yok"
+grep -q 'COMPOSE_RECOVER_MODE=core-dns' "$HOTPLUG" || die "hotplug core-dns compose yok"
+ok "ssd-hotplug DNS degraded"
+
+grep -q 'dns_degraded_on_ssd_loss' "$RECOVER" || die "recover dns_degraded_on_ssd_loss yok"
+grep -q 'enter_degraded_mode' "$RECOVER" || die "recover enter_degraded_mode yok"
+grep -q 'core-dns' "$RECOVER" || die "recover core-dns yok"
+ok "recover-readonly-root DNS degraded"
+
+grep -q 'COMPOSE_RECOVER_MODE=core-dns' "$COMPOSE_UP" || die "recover-compose core-dns yok"
+grep -q 'SSD yok' "$COMPOSE_UP" || die "recover-compose SSD guard yok"
+ok "recover-compose-up storm guard"
+
+JOURNAL_CONF="$PROJECT_DIR/host/systemd/journald.conf.d/00-pi-gateway-persistent.conf"
+[[ -f "$JOURNAL_CONF" ]] || die "journald persistent conf yok"
+grep -q 'Storage=persistent' "$JOURNAL_CONF" || die "journald Storage=persistent yok"
+grep -q 'journald.conf.d' "$BOOTSTRAP" || die "bootstrap journald install yok"
+ok "persistent journal"
 
 grep -q 'PI_SSD_CONFIRM_FORMAT=yes' "$SSD_SERVICE" || die "pi-ssd-data.service format onayi yok"
 grep -q 'pi-setup-ssd-data.sh' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" \

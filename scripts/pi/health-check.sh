@@ -48,18 +48,18 @@ if ! docker ps --format '{{.Names}}' | grep -q '^adguard$'; then
   note_fail "container adguard down"
 fi
 
-if ! docker ps --format '{{.Names}}' | grep -q '^caddy$'; then
-  note_fail "container caddy down"
-fi
-
-if ! stack_gateway_ok; then
-  note_fail "gateway-http"
-fi
-
 if storage_degraded; then
-  logger -t "$LOG_TAG" "storage-degraded: core DNS modu"
+  logger -t "$LOG_TAG" "storage-degraded: core DNS modu (caddy/panel opsiyonel)"
   [[ -d "${REMOTE_DIR}/data" && ! -L "${REMOTE_DIR}/data" ]] || note_fail "storage-degraded-data-missing"
 else
+  if ! docker ps --format '{{.Names}}' | grep -q '^caddy$'; then
+    note_fail "container caddy down"
+  fi
+
+  if ! stack_gateway_ok; then
+    note_fail "gateway-http"
+  fi
+
   if is_ssd_root_mode; then
     root_on_ssd || note_fail "root-still-on-sd-mmcblk"
     [[ -d "${REMOTE_DIR}/data" && ! -L "${REMOTE_DIR}/data" ]] || note_fail "data-native-missing"

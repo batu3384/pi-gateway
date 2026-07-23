@@ -7,6 +7,7 @@ STACK_RECOVER_WAIT_SEC="${STACK_RECOVER_WAIT_SEC:-330}"
 STACK_LOCK_FILE="${STACK_LOCK_FILE:-/run/pi-gateway/stack-recover.lock}"
 STORAGE_DEGRADED_FLAG="${STORAGE_DEGRADED_FLAG:-/run/pi-gateway/storage-degraded}"
 STACK_RECOVER_COOLDOWN_SEC="${STACK_RECOVER_COOLDOWN_SEC:-180}"
+STACK_RECOVER_COOLDOWN_DEGRADED_SEC="${STACK_RECOVER_COOLDOWN_DEGRADED_SEC:-900}"
 STACK_RECOVER_COOLDOWN_FILE="${STACK_RECOVER_COOLDOWN_FILE:-/run/pi-gateway/stack-recover-cooldown}"
 STACK_BOOT_GRACE_SEC="${STACK_BOOT_GRACE_SEC:-120}"
 SSD_HOTPLUG_STATE_FILE="${SSD_HOTPLUG_STATE_FILE:-/var/lib/pi-gateway/ssd-hotplug-mounted}"
@@ -15,6 +16,14 @@ SSD_HOTPLUG_DEBOUNCE_SEC="${SSD_HOTPLUG_DEBOUNCE_SEC:-120}"
 needs_ssd_storage() {
   # hybrid/ssd-data: ayri /mnt/ssd veri diski
   [[ "${STORAGE_TYPE:-hybrid}" == "hybrid" || "${STORAGE_TYPE:-}" == "ssd-data" ]]
+}
+
+# SSD yokken Unbound+AdGuard (core-dns) SD uzerinde — varsayilan acik.
+# STORAGE_FALLBACK_SD=true ayni yolu acar (geriye uyum).
+# Ikisi de false ise fail-closed (DNS de dusebilir).
+dns_degraded_on_ssd_loss() {
+  [[ "${DNS_DEGRADED_ON_SSD_LOSS:-true}" == "true" ]] \
+    || [[ "${STORAGE_FALLBACK_SD:-false}" == "true" ]]
 }
 
 # ssd-root: OS root USB/SSD uzerinde olmali (mmcblk yasak)
@@ -61,14 +70,18 @@ mark_stack_recover_cooldown() {
 }
 
 stack_recover_suppressed() {
-  local then now uptime_sec
+  local last_ts now uptime_sec cooldown
   if recover_service_running; then
     return 0
   fi
+  cooldown="$STACK_RECOVER_COOLDOWN_SEC"
+  if storage_degraded; then
+    cooldown="$STACK_RECOVER_COOLDOWN_DEGRADED_SEC"
+  fi
   if [[ -f "$STACK_RECOVER_COOLDOWN_FILE" ]]; then
-    then="$(cat "$STACK_RECOVER_COOLDOWN_FILE" 2>/dev/null || echo 0)"
+    last_ts="$(cat "$STACK_RECOVER_COOLDOWN_FILE" 2>/dev/null || echo 0)"
     now="$(date +%s)"
-    if (( now - then < STACK_RECOVER_COOLDOWN_SEC )); then
+    if (( now - last_ts < cooldown )); then
       return 0
     fi
   fi
@@ -77,6 +90,14 @@ stack_recover_suppressed() {
     return 0
   fi
   return 1
+}
+
+# Degraded: sadece DNS core (mount sart degil). Tam saglik: gateway dahil.
+stack_dns_core_ok() {
+  systemctl is-active --quiet docker 2>/dev/null || return 1
+  container_health_ok 'adguard' || return 1
+  container_health_ok 'unbound' || return 1
+  return 0
 }
 
 # 0 = saglikli, 1 = unhealthy/none/missing
@@ -93,9 +114,11 @@ stack_core_ok() {
   if needs_ssd_storage && ! storage_degraded; then
     mountpoint -q /mnt/ssd 2>/dev/null || return 1
   fi
-  systemctl is-active --quiet docker 2>/dev/null || return 1
-  container_health_ok 'adguard' || return 1
-  container_health_ok 'unbound' || return 1
+  stack_dns_core_ok || return 1
+  # Degraded DNS-only: Caddy panel opsiyonel — DNS ayaktaysa core OK
+  if storage_degraded; then
+    return 0
+  fi
   container_health_ok 'caddy' || return 1
   return 0
 }
@@ -116,6 +139,10 @@ stack_gateway_ok() {
 
 stack_fully_healthy() {
   stack_core_ok || return 1
+  # SSD degraded: Unbound+AdGuard yeterli (panel/Caddy best-effort)
+  if storage_degraded; then
+    return 0
+  fi
   stack_gateway_ok
 }
 

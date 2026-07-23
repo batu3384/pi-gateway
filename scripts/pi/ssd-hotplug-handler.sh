@@ -72,22 +72,33 @@ fi
 
 log "SSD mount yok"
 run_root rm -f "$SSD_HOTPLUG_STATE_FILE" 2>/dev/null || true
-if [[ "${STORAGE_FALLBACK_SD:-false}" != "true" ]]; then
-  log "HATA: STORAGE_FALLBACK_SD=false — degraded moda gecilmiyor"
+if ! dns_degraded_on_ssd_loss; then
+  log "HATA: DNS_DEGRADED_ON_SSD_LOSS=false — degraded moda gecilmiyor (fail-closed)"
   # shellcheck source=../lib/notify.sh
   source "$SCRIPT_DIR/../lib/notify.sh"
-  notify_ssd_degraded "$(hostname -s)" "SSD kopma — fail-closed (STORAGE_FALLBACK_SD=false)"
+  notify_ssd_degraded "$(hostname -s)" "SSD kopma — fail-closed (DNS_DEGRADED_ON_SSD_LOSS=false)"
   exit 1
 fi
 
-log "STORAGE_FALLBACK_SD=true — degraded moda gecis"
+log "DNS degraded moda gecis (core-dns SD)"
 if [[ -d "$REMOTE_DIR/compose" ]]; then
   cd "$REMOTE_DIR/compose"
-  docker compose stop n8n forgejo syncthing uptime-kuma crowdsec redis dozzle 2>/dev/null || true
+  # shellcheck source=../lib/compose-profiles.sh
+  source "$SCRIPT_DIR/../lib/compose-profiles.sh" 2>/dev/null || true
+  docker compose --env-file "$REMOTE_DIR/.env" stop \
+    n8n forgejo syncthing uptime-kuma crowdsec redis dozzle netalertx 2>/dev/null || true
 fi
 set_storage_degraded
 REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/ensure-data-symlink.sh" repair --fallback-sd || true
 REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/setup-docker-fallback.sh" || true
 # shellcheck source=../lib/notify.sh
 source "$SCRIPT_DIR/../lib/notify.sh"
-notify_ssd_degraded "$(hostname -s)" "USB SSD kopma veya mount kaybi"
+notify_ssd_degraded "$(hostname -s)" "USB SSD kopma — DNS degraded (Unbound+AdGuard SD)"
+
+# Core DNS ayağa kaldır (full stack recreate yok)
+if [[ -d "$REMOTE_DIR/compose" ]]; then
+  COMPOSE_RECOVER_MODE=core-dns run_compose_up "$REMOTE_DIR" "$(pi_user_from_remote_dir "$REMOTE_DIR")" \
+    || log "WARN: core-dns compose basarisiz"
+fi
+mark_stack_recover_cooldown
+exit 0

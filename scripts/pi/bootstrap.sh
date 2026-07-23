@@ -71,6 +71,15 @@ if [[ -f "$REMOTE_DIR/scripts/pi/setup-firewall.sh" ]] && [[ "${ENABLE_UFW:-true
     echo "[bootstrap] WARN: firewall setup atlandi"
 fi
 
+# Persistent journal — USB disconnect loglari reboot sonrasi kalsin
+if [[ -d "$REMOTE_DIR/host/systemd/journald.conf.d" ]]; then
+  echo "[bootstrap] journald persistent..."
+  sudo mkdir -p /etc/systemd/journald.conf.d
+  sudo cp "$REMOTE_DIR/host/systemd/journald.conf.d/"*.conf /etc/systemd/journald.conf.d/ 2>/dev/null || true
+  sudo mkdir -p /var/log/journal
+  sudo systemctl restart systemd-journald 2>/dev/null || true
+fi
+
 for unit in pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-crowdsec-ufw.timer pi-gateway-morning.timer pi-gateway-stack-watchdog.timer pi-gateway-netalertx-names.timer pi-data-symlink.timer pi-ssd-watch.path; do
   [[ -f "$REMOTE_DIR/host/systemd/$unit" ]] && sudo cp "$REMOTE_DIR/host/systemd/$unit" "/etc/systemd/system/$unit"
 done

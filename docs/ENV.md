@@ -38,7 +38,8 @@
 | Değişken | Varsayılan | Açıklama |
 |----------|------------|----------|
 | `STORAGE_TYPE` | `hybrid` | **Üretim:** SD root + SSD veri (`/mnt/ssd`). `ssd-data` alias. |
-| `STORAGE_FALLBACK_SD` | `false` | SSD yokken SD üzerinde core DNS (fail-closed varsayılan) |
+| `STORAGE_FALLBACK_SD` | `false` | `true` ise SSD yokken DNS degraded (geriye uyum). Tam app stack SD'ye taşınmaz. |
+| `DNS_DEGRADED_ON_SSD_LOSS` | `true` | SSD kopunca Unbound+AdGuard (core-dns) SD üzerinde; recreate fırtınası yok. `false` + `STORAGE_FALLBACK_SD=false` = fail-closed. |
 | `ENABLE_DOCKER_SSD` | `false` | `true`: Docker `data-root` SSD'ye; JMicron USB'de I/O riski |
 | `DOCKER_SSD_ROOT` | `/mnt/ssd/docker` | `ENABLE_DOCKER_SSD=true` iken hedef |
 | `STACK_RECOVER_COOLDOWN_SEC` | `180` | compose up sonrası otomatik recover bekleme |

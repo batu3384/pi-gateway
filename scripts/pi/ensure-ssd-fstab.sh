@@ -132,17 +132,20 @@ main() {
   fi
 
   local part attempt
-  for attempt in $(seq 1 15); do
+  local max_attempts="${ENSURE_FSTAB_MAX_ATTEMPTS:-15}"
+  [[ "$max_attempts" =~ ^[0-9]+$ ]] || max_attempts=15
+  (( max_attempts < 1 )) && max_attempts=1
+  for attempt in $(seq 1 "$max_attempts"); do
     if part="$(find_ssd_partition)"; then
       write_fstab_entry "$part"
       exit 0
     fi
-    if (( attempt < 15 )); then
-      log "USB veri diski henuz yok — deneme $attempt/15"
+    if (( attempt < max_attempts )); then
+      log "USB veri diski henuz yok — deneme $attempt/$max_attempts"
       sleep 2
     fi
   done
-  log "HATA: USB veri diski bulunamadi (15 deneme)"
+  log "HATA: USB veri diski bulunamadi ($max_attempts deneme)"
   exit 1
 }
 

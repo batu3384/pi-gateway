@@ -35,7 +35,13 @@ needs_ssd() {
 
 # hybrid kalintisi: ssd-root'ta /mnt/ssd fstab yok
 if needs_ssd; then
-  bash "$SCRIPT_DIR/ensure-ssd-fstab.sh" || log "WARN: fstab kontrolu basarisiz"
+  # Health/recover dongusunda 15x2s beklemeyi kes — disk yoksa hizli degraded
+  local_fstab_attempts=15
+  if dns_degraded_on_ssd_loss && ! mountpoint -q /mnt/ssd 2>/dev/null; then
+    local_fstab_attempts="${ENSURE_FSTAB_MAX_ATTEMPTS:-3}"
+  fi
+  ENSURE_FSTAB_MAX_ATTEMPTS="$local_fstab_attempts" bash "$SCRIPT_DIR/ensure-ssd-fstab.sh" \
+    || log "WARN: fstab kontrolu basarisiz"
 fi
 
 if is_ssd_root_mode && ! root_on_ssd; then
@@ -144,11 +150,11 @@ main() {
   if needs_ssd; then
     if ensure_ssd_mounted; then
       :
-    elif [[ "${STORAGE_FALLBACK_SD:-false}" == "true" ]]; then
+    elif dns_degraded_on_ssd_loss; then
       enter_degraded_mode
       recover_mode="core-dns"
     else
-      log "HATA: SSD mount basarisiz ve STORAGE_FALLBACK_SD=false"
+      log "HATA: SSD mount basarisiz ve DNS_DEGRADED_ON_SSD_LOSS=false (fail-closed)"
       release_recover_lock
       exit 1
     fi
@@ -184,7 +190,18 @@ main() {
   fi
 
   if stack_fully_healthy && root_rw_ok; then
-    log "OK stack ayakta (adguard, unbound, caddy, gateway)"
+    if storage_degraded; then
+      log "OK degraded DNS ayakta (adguard, unbound)"
+    else
+      log "OK stack ayakta (adguard, unbound, caddy, gateway)"
+    fi
+    apply_adguard_rewrites_best_effort "$REMOTE_DIR"
+    release_recover_lock
+    exit 0
+  fi
+
+  if storage_degraded && stack_dns_core_ok && root_rw_ok; then
+    log "OK degraded DNS core ayakta (gateway/caddy eksik olabilir)"
     apply_adguard_rewrites_best_effort "$REMOTE_DIR"
     release_recover_lock
     exit 0
