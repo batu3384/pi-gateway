@@ -47,8 +47,10 @@ services:
     environment:
       # Dozzle: sadece container listesi + log okuma (exec/image/pull yok)
       CONTAINERS: 1
+      INFO: 1
       LOGS: 1
       EVENTS: 1
+      VERSION: 1
 
   autoheal:
     image: willfarrell/autoheal:latest

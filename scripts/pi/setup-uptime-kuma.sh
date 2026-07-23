@@ -22,6 +22,40 @@ esac
 
 docker ps --format '{{.Names}}' | grep -q '^uptime-kuma$' || { log "uptime-kuma container yok"; exit 1; }
 
+repair_kuma_db_if_corrupt() {
+  local db_dir="${REMOTE_DIR}/data/uptime-kuma"
+  local db="${db_dir}/kuma.db"
+  local stamp backup
+  [[ -f "$db" ]] || return 0
+
+  if docker exec uptime-kuma sqlite3 /app/data/kuma.db "PRAGMA integrity_check;" 2>/dev/null | grep -qx 'ok'; then
+    return 0
+  fi
+
+  stamp="$(date +%Y%m%d-%H%M%S)"
+  backup="${db_dir}/kuma.db.corrupt-${stamp}"
+  log "Kuma DB bozuk — sqlite recover deneniyor"
+  docker stop uptime-kuma >/dev/null 2>&1 || true
+  cp -a "$db" "$backup"
+
+  docker run --rm -u 0 -v "${db_dir}:/db" python:3.12-alpine sh -c '
+    set -e
+    apk add --no-cache sqlite >/dev/null
+    sqlite3 /db/kuma.db ".recover" > /db/recovered.sql
+    rm -f /db/kuma.db.new
+    sqlite3 /db/kuma.db.new < /db/recovered.sql
+    sqlite3 /db/kuma.db.new "PRAGMA integrity_check;" | grep -qx ok
+    chown 1000:1000 /db/kuma.db.new
+  '
+
+  mv "$db" "${db}.pre-recover"
+  mv "${db}.new" "$db"
+  rm -f "${db_dir}/recovered.sql"
+  docker start uptime-kuma >/dev/null
+  wait_for_kuma_http
+  log "Kuma DB recover tamamlandi: ${backup}"
+}
+
 wait_for_kuma_http() {
   local i
   for i in $(seq 1 40); do
@@ -106,6 +140,7 @@ PY
 }
 
 wait_for_kuma_http
+repair_kuma_db_if_corrupt
 ensure_kuma_database
 ensure_kuma_admin
 
