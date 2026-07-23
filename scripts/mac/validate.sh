@@ -38,7 +38,19 @@ if [[ -f "$SCRIPT_DIR/validate-hybrid-contract.sh" ]]; then
   "$SCRIPT_DIR/validate-hybrid-contract.sh"
 fi
 
-docker compose -f "$PROJECT_DIR/compose/docker-compose.yml" --env-file "$PROJECT_DIR/.env" config -q
+# Mac: docker compose plugin yoksa docker-compose (v2 standalone / OrbStack)
+compose_config() {
+  local yml="$PROJECT_DIR/compose/docker-compose.yml"
+  local envf="$PROJECT_DIR/.env"
+  if docker compose version >/dev/null 2>&1; then
+    docker compose -f "$yml" --env-file "$envf" config -q
+  elif command -v docker-compose >/dev/null 2>&1; then
+    docker-compose -f "$yml" --env-file "$envf" config -q
+  else
+    die "docker compose / docker-compose yok"
+  fi
+}
+compose_config
 log "docker-compose validation: OK"
 
 for f in \
