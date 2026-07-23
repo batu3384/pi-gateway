@@ -78,7 +78,9 @@ ensure_ssd_mounted() {
       clear_storage_degraded
       return 0
     fi
-    if run_root mount /mnt/ssd 2>/dev/null; then
+    # fstab nofail: mount exit 0 olabilir ama mountpoint olmaz — dogrula
+    run_root mount /mnt/ssd 2>/dev/null || true
+    if mountpoint -q /mnt/ssd 2>/dev/null; then
       log "SSD mount OK (fstab)"
       clear_storage_degraded
       return 0
