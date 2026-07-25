@@ -57,6 +57,7 @@ elif [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
   else
     run_check "data-ssd-symlink" bash -c \
       "[[ -L '${REMOTE_DIR}/data' ]] && [[ \"\$(readlink -f '${REMOTE_DIR}/data')\" == '/mnt/ssd/pi-gateway-data' ]]"
+    run_check "ssd-mounted" mountpoint -q /mnt/ssd
   fi
   if [[ -f /mnt/ssd/.docker-data-root ]]; then
     run_check "docker-ssd-root" bash -c \
@@ -64,7 +65,6 @@ elif [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
   fi
   run_check "root-rw" bash -c '! findmnt -n -o OPTIONS / | tr "," "\n" | grep -qx ro'
   run_check "ssd-fstab" bash -c 'grep -qE "[[:space:]]/mnt/ssd[[:space:]]" /etc/fstab'
-  run_check "ssd-mounted" mountpoint -q /mnt/ssd
   run_check "sd-health" bash -c "REMOTE_DIR='${REMOTE_DIR}' bash '${REMOTE_DIR}/scripts/pi/check-sd-health.sh'"
 fi
 

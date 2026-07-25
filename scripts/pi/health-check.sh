@@ -133,12 +133,25 @@ print('1' if udp_ok and ptr_ok and ttl_ok else '0')
   rm -f "$COOKIE"
 fi
 
+# SSD varken DNS-only fail'leri ayır (cascade: container/gateway/ssd symlink)
+health_is_dns_only_fail() {
+  local f="$1"
+  case "$f" in
+    unbound:*|container\ unbound\ down|adguard-block-test|adguard-rewrite-*|adguard-dns-config-drift|adguard-filter-rules-low|adguard-rewrites-low)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 if [[ "$fail" -eq 0 ]]; then
   logger -t "$LOG_TAG" "OK dns stack healthy"
   # shellcheck source=../lib/notify.sh
   source "$SCRIPT_DIR/../lib/notify.sh"
   notify_dns_recovered "$(hostname -s)" || true
-  notify_optional_recovered "$(hostname -s)" || true
+  notify_optional_recovered || true
 else
   # shellcheck source=../lib/notify.sh
   source "$SCRIPT_DIR/../lib/notify.sh"
@@ -161,8 +174,14 @@ else
     esac
   done
   if [[ "$has_ssd" -eq 1 ]]; then
-    # SSD kök neden — DNS spam yerine tek degraded mesajı (edge + saatlik)
     notify_ssd_degraded "$host" "$details"
+    dns_only=()
+    for f in "${FAILURES[@]}"; do
+      health_is_dns_only_fail "$f" && dns_only+=("$f")
+    done
+    if [[ ${#dns_only[@]} -gt 0 ]]; then
+      notify_dns_fail "$host" "${dns_only[*]}"
+    fi
   elif [[ "$has_core" -eq 1 ]]; then
     notify_dns_fail "$host" "$details"
   elif [[ "$has_optional" -eq 1 ]]; then

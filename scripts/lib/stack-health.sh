@@ -61,6 +61,12 @@ needs_ssd_storage() {
   [[ "${STORAGE_TYPE:-hybrid}" == "hybrid" || "${STORAGE_TYPE:-}" == "ssd-data" ]]
 }
 
+# SSD yok ama data/ symlink degil (SD uzerinde native agac) — paneller calisabilir
+sd_data_native_ok() {
+  local remote="${REMOTE_DIR:-}"
+  [[ -n "$remote" && -d "${remote}/data" && ! -L "${remote}/data" ]]
+}
+
 # SSD yokken Unbound+AdGuard (core-dns) SD uzerinde — varsayilan acik.
 # STORAGE_FALLBACK_SD=true ayni yolu acar (geriye uyum).
 # Ikisi de false ise fail-closed (DNS de dusebilir).

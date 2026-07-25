@@ -25,6 +25,8 @@ fi
 
 chmod +x "$SCRIPT_DIR/validate-stack-health.sh" 2>/dev/null || true
 "$SCRIPT_DIR/validate-stack-health.sh"
+chmod +x "$SCRIPT_DIR/validate-public-repo.sh" 2>/dev/null || true
+"$SCRIPT_DIR/validate-public-repo.sh"
 chmod +x "$SCRIPT_DIR/validate-ssd-root-contract.sh" 2>/dev/null || true
 if [[ -f "$SCRIPT_DIR/validate-ssd-root-contract.sh" ]]; then
   "$SCRIPT_DIR/validate-ssd-root-contract.sh"

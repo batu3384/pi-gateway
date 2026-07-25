@@ -37,7 +37,10 @@ Teşhis: `bash scripts/pi/diagnose-remote-access.sh`
 
 ## ACL (önerilen)
 
-`config/tailscale/acl.hujson.example` dosyasını [Access Controls](https://login.tailscale.com/admin/acls) sayfasına kopyala.
+`make tailscale-acl` — `.env` içinde `TAILSCALE_ACL_OWNER` (Tailscale e-postası) gerekli.
+Şablon: `config/tailscale/acl.hujson.example` → yerel `config/tailscale/acl.hujson` (gitignore, commit etme).
+
+Manuel: [Access Controls](https://login.tailscale.com/admin/acls) sayfasına şablonu kopyala.
 
 - Pi'ye etiket: `tag:pi-gateway`
 - Kendi cihazlarına: `tag:owner-device`

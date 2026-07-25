@@ -1,12 +1,11 @@
 // Tailscale ACL — https://login.tailscale.com/admin/acls
 // Kopyala-yapistir: Admin Console > Access Controls > Edit
 //
-// Amac: Yalnizca sahip cihazlar Pi'ye erisebilsin; misafir cihazlar engellensin.
-// Cihaz etiketlerini kendi tailnet'ine gore guncelle.
+// Sahip e-postasini .env -> TAILSCALE_ACL_OWNER ile degistir (make tailscale-acl).
 
 {
   "groups": {
-    "group:owners": ["batuhan@github.com"]
+    "group:owners": ["YOUR_TAILSCALE_EMAIL@example.com"]
   },
 
   "tagOwners": {
@@ -23,13 +22,13 @@
     {
       "action": "accept",
       "src": ["tag:owner-device"],
-      "dst": ["192.168.1.0/24:*"]
+      "dst": ["192.168.0.0/16:*"]
     }
   ],
 
   "autoApprovers": {
     "routes": {
-      "192.168.1.0/24": ["group:owners"]
+      "192.168.0.0/16": ["group:owners"]
     }
   },
 

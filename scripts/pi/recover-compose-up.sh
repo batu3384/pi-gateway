@@ -15,8 +15,11 @@ cd "$REMOTE_DIR/compose"
 mapfile -t profiles < <(compose_profiles)
 
 # SSD yokken asla full stack — kirik symlink + recreate firtinasi
+# Istisna: SD uzerinde native data/ (degraded ephemeral) — paneller ayaga kalkabilir
 if needs_ssd_storage && ! mountpoint -q /mnt/ssd 2>/dev/null; then
-  if storage_degraded || dns_degraded_on_ssd_loss; then
+  if sd_data_native_ok; then
+    echo "[recover-compose] SSD yok; SD data/ native — full stack" >&2
+  elif storage_degraded || dns_degraded_on_ssd_loss; then
     COMPOSE_RECOVER_MODE=core-dns
   else
     echo "[recover-compose] HATA: SSD yok ve DNS degraded kapali — compose atlandi" >&2
@@ -34,6 +37,12 @@ compose_up() {
 }
 
 finish_ok() {
+  if [[ "${ENABLE_DOZZLE:-true}" == "true" ]] \
+    && [[ ! -f "${REMOTE_DIR}/data/dozzle/users.yml" ]]; then
+    echo "[recover-compose] dozzle users.yml eksik — setup-dozzle" >&2
+    "$SCRIPT_DIR/setup-dozzle.sh" || true
+    docker compose --env-file ../.env --profile dozzle up -d dozzle 2>/dev/null || true
+  fi
   mark_stack_recover_cooldown
   exit 0
 }
@@ -57,4 +66,4 @@ if [[ "${COMPOSE_RECOVER_MODE:-}" == "core-dns" ]]; then
 else
   compose_up --force-recreate --remove-orphans
 fi
-mark_stack_recover_cooldown
+finish_ok

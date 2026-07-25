@@ -3,14 +3,41 @@
 set -euo pipefail
 
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
-ACL_FILE="${REMOTE_DIR}/config/tailscale/acl.hujson"
-ACL_OWNER="${TAILSCALE_ACL_OWNER:-batu3384@gmail.com}"
+# shellcheck source=/dev/null
+[[ -f "$REMOTE_DIR/.env" ]] && set -a && source "$REMOTE_DIR/.env" && set +a
+ACL_TEMPLATE="${REMOTE_DIR}/config/tailscale/acl.hujson.example"
+ACL_LOCAL="${REMOTE_DIR}/config/tailscale/acl.hujson"
+ACL_OWNER="${TAILSCALE_ACL_OWNER:-}"
 API_KEY="${TAILSCALE_API_KEY:-}"
 
 log() { echo "[tailscale-acl] $*"; }
 
 command -v tailscale >/dev/null 2>&1 || { log "tailscale yok"; exit 0; }
-[[ -f "$ACL_FILE" ]] || { log "ACL dosyasi yok: $ACL_FILE"; exit 1; }
+
+if [[ -z "$ACL_OWNER" || "$ACL_OWNER" == CHANGE_ME* ]]; then
+  log "HATA: TAILSCALE_ACL_OWNER gerekli (.env veya ortam)"
+  exit 1
+fi
+
+if [[ ! "$ACL_OWNER" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]; then
+  log "HATA: TAILSCALE_ACL_OWNER gecersiz e-posta formati"
+  exit 1
+fi
+
+[[ -f "$ACL_TEMPLATE" ]] || { log "ACL sablonu yok: $ACL_TEMPLATE"; exit 1; }
+
+mkdir -p "$(dirname "$ACL_LOCAL")"
+python3 - "$ACL_TEMPLATE" "$ACL_LOCAL" "$ACL_OWNER" <<'PY'
+import sys
+from pathlib import Path
+template, out, owner = sys.argv[1], sys.argv[2], sys.argv[3]
+text = Path(template).read_text(encoding="utf-8")
+placeholder = "YOUR_TAILSCALE_EMAIL@example.com"
+if placeholder not in text:
+    sys.exit("placeholder missing in ACL template")
+Path(out).write_text(text.replace(placeholder, owner), encoding="utf-8")
+PY
+ACL_FILE="$ACL_LOCAL"
 
 if [[ -n "$API_KEY" ]]; then
   tailnet="$(tailscale status --json 2>/dev/null | python3 -c "

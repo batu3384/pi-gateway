@@ -306,4 +306,23 @@ ok "ssd-root contract test script"
   || die "ssd-root-harden.sh yok"
 ok "ssd-root-harden script"
 
+grep -q 'sd_data_native_ok' "$PROJECT_DIR/scripts/lib/stack-health.sh" \
+  || die "sd_data_native_ok helper yok"
+ok "sd native data fallback helper"
+
+grep -q 'notify_transition_peek' "$PROJECT_DIR/scripts/lib/notify.sh" \
+  || die "notify transition peek yok"
+grep -q 'notify_send_with_transition' "$PROJECT_DIR/scripts/lib/notify.sh" \
+  || die "notify send-with-transition yok"
+grep -q 'health_is_dns_only_fail' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health dns-only fail ayrimi yok"
+[[ -f "$PROJECT_DIR/scripts/pi/test-notify-transitions.sh" ]] \
+  || die "test-notify-transitions.sh yok"
+grep -q 'config/tailscale/acl.hujson' "$PROJECT_DIR/.gitignore" \
+  || die "acl.hujson gitignore yok"
+grep -q 'TAILSCALE_ACL_OWNER' "$PROJECT_DIR/.env.example" \
+  || die "TAILSCALE_ACL_OWNER .env.example yok"
+"$PROJECT_DIR/scripts/pi/test-notify-transitions.sh"
+ok "notify transition testleri"
+
 echo "[validate-stack] Tum kontroller gecti"

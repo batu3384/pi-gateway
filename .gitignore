@@ -1,4 +1,6 @@
 .env
+.env.*
+!.env.example
 .env.bak
 .DS_Store
 data/
@@ -7,6 +9,14 @@ config/caddy/Caddyfile
 config/caddy/certs/
 config/homepage/services.yaml
 config/crowdsec/bouncer/local_api_credentials.yaml
+config/tailscale/acl.hujson
+host/dhcpcd/pi-gateway.conf
 backups/
 legacy/
 *.log
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+credentials/
