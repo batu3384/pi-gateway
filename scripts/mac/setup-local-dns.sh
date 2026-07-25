@@ -7,13 +7,14 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # shellcheck source=/dev/null
 [[ -f "$PROJECT_DIR/.env" ]] && source "$PROJECT_DIR/.env"
 
-PI_DNS="${PI_STATIC_IP:-192.168.1.112}"
+PI_DNS="${PI_STATIC_IP:-}"
 RESOLVER_DIR="/etc/resolver"
 RESOLVER_FILE="${RESOLVER_DIR}/home"
 
 log() { echo "[mac-dns] $*"; }
 
 [[ "$(uname)" == "Darwin" ]] || { log "Sadece macOS"; exit 1; }
+[[ -n "$PI_DNS" ]] || { log "HATA: PI_STATIC_IP gerekli (.env)"; exit 1; }
 
 if [[ -f "$RESOLVER_FILE" ]] && grep -q "$PI_DNS" "$RESOLVER_FILE" 2>/dev/null; then
   log "Zaten ayarli: $RESOLVER_FILE -> $PI_DNS"

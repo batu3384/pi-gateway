@@ -7,8 +7,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../lib/common.sh"
 load_env
 
-PI_HOST="${PI_STATIC_IP:-${PI_HOST:-192.168.1.112}}"
-PI_USER="${PI_USER:-batu}"
+PI_HOST="${PI_STATIC_IP:-${PI_HOST:-}}"
+PI_USER="${PI_USER:-pi}"
+REMOTE_DIR="${REMOTE_DIR:-/home/$PI_USER/pi-gateway}"
 ENV_FILE="$PROJECT_DIR/.env"
 
 usage() {
@@ -57,7 +58,7 @@ bash "$SCRIPT_DIR/render-config.sh"
 
 log "Pi'ye gonderiliyor ve AdGuard yeniden baslatiliyor..."
 scp "$PROJECT_DIR/config/adguard/AdGuardHome.yaml" "${PI_USER}@${PI_HOST}:/tmp/AdGuardHome.yaml"
-ssh "${PI_USER}@${PI_HOST}" 'sudo cp /tmp/AdGuardHome.yaml ~/pi-gateway/config/adguard/AdGuardHome.yaml && sudo chown batu:batu ~/pi-gateway/config/adguard/AdGuardHome.yaml && docker restart adguard'
+ssh "${PI_USER}@${PI_HOST}" "sudo cp /tmp/AdGuardHome.yaml ${REMOTE_DIR}/config/adguard/AdGuardHome.yaml && sudo chown ${PI_USER}:${PI_USER} ${REMOTE_DIR}/config/adguard/AdGuardHome.yaml && docker restart adguard"
 
 log "Tamam."
 log "Giris: http://${PI_HOST}:8080"

@@ -11,22 +11,22 @@
 
 ## n8n ilk kurulum
 
-1. http://n8n.home veya http://192.168.1.112:5678
+1. http://n8n.home veya `http://PI_STATIC_IP:5678`
 2. Ilk acilista owner hesabi olustur
 3. `N8N_ENCRYPTION_KEY` `.env` icinde sabit kalmali — degistirme
 
 ## Redis (Mac'ten test)
 
 ```bash
-ssh -L 6379:127.0.0.1:6379 batu@192.168.1.112
+ssh -L 6379:127.0.0.1:6379 "$PI_USER@$PI_STATIC_IP"
 redis-cli -h 127.0.0.1 ping
 ```
 
 ## CrowdSec
 
 ```bash
-ssh batu@192.168.1.112 'docker exec crowdsec cscli metrics'
-ssh batu@192.168.1.112 'docker exec crowdsec cscli decisions list'
+ssh "$PI_USER@$PI_STATIC_IP" 'docker exec crowdsec cscli metrics'
+ssh "$PI_USER@$PI_STATIC_IP" 'docker exec crowdsec cscli decisions list'
 ```
 
 ## Cloudflare Tunnel

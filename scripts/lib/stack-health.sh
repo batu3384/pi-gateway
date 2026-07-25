@@ -14,10 +14,10 @@ SSD_HOTPLUG_STATE_FILE="${SSD_HOTPLUG_STATE_FILE:-/var/lib/pi-gateway/ssd-hotplu
 SSD_HOTPLUG_DEBOUNCE_SEC="${SSD_HOTPLUG_DEBOUNCE_SEC:-120}"
 PI_GATEWAY_RUNTIME_DIR="${PI_GATEWAY_RUNTIME_DIR:-/run/pi-gateway}"
 
-# /run/pi-gateway batu yazabilir olsun (root hotplug sonrasi stuck flag onleme)
+# /run/pi-gateway owner yazabilir olsun (root hotplug sonrasi stuck flag onleme)
 ensure_runtime_dir() {
   local owner
-  owner="$(pi_user_from_remote_dir "${REMOTE_DIR:-/home/${PI_USER:-batu}/pi-gateway}")"
+  owner="$(pi_user_from_remote_dir "${REMOTE_DIR:-/home/${PI_USER:-pi}/pi-gateway}")"
   if [[ "$(id -u)" -eq 0 ]]; then
     mkdir -p "$PI_GATEWAY_RUNTIME_DIR"
     chown "${owner}:${owner}" "$PI_GATEWAY_RUNTIME_DIR" 2>/dev/null || true
@@ -51,7 +51,7 @@ runtime_write() {
   else
     printf '%s\n' "$content" | sudo tee "$path" >/dev/null
     local owner
-    owner="$(pi_user_from_remote_dir "${REMOTE_DIR:-/home/${PI_USER:-batu}/pi-gateway}")"
+    owner="$(pi_user_from_remote_dir "${REMOTE_DIR:-/home/${PI_USER:-pi}/pi-gateway}")"
     sudo chown "${owner}:${owner}" "$path" 2>/dev/null || true
   fi
 }
@@ -92,7 +92,7 @@ pi_user_from_remote_dir() {
   if [[ "$remote_dir" =~ /home/([^/]+)/ ]]; then
     echo "${BASH_REMATCH[1]}"
   else
-    echo "${PI_USER:-batu}"
+    echo "${PI_USER:-pi}"
   fi
 }
 
@@ -236,7 +236,7 @@ wait_for_recover_service() {
 
 acquire_recover_lock_wait() {
   local owner
-  owner="$(pi_user_from_remote_dir "${REMOTE_DIR:-/home/${PI_USER:-batu}/pi-gateway}")"
+  owner="$(pi_user_from_remote_dir "${REMOTE_DIR:-/home/${PI_USER:-pi}/pi-gateway}")"
   mkdir -p "$(dirname "$STACK_LOCK_FILE")" 2>/dev/null || return 1
   touch "$STACK_LOCK_FILE" 2>/dev/null || return 1
   if [[ "$(id -u)" -eq 0 ]]; then
@@ -316,7 +316,7 @@ apply_adguard_rewrites_best_effort() {
 }
 
 trigger_stack_recover() {
-  local remote_dir="${1:-${REMOTE_DIR:-/home/${USER:-batu}/pi-gateway}}"
+  local remote_dir="${1:-${REMOTE_DIR:-/home/${USER:-pi}/pi-gateway}}"
   local script
   script="$(recover_script_path "$remote_dir")"
   [[ -f "$script" ]] || return 1

@@ -2,7 +2,7 @@
 # SD kart bootfs uzerinden Pi sifresini sifirla (Mac)
 set -euo pipefail
 
-PI_USER="${PI_USER:-batu}"
+PI_USER="${PI_USER:-pi}"
 NEW_PASSWORD="${NEW_PASSWORD:-}"
 
 log() { echo "[$(date '+%H:%M:%S')] $*"; }

@@ -8,8 +8,8 @@ LOG="${TMPDIR:-/tmp}/pi-ssd-flash.log"
 # Resmi Trixie arm64 Desktop (64-bit) — cloud-init destekli
 OS_IMAGE_URL="${OS_IMAGE_URL:-https://downloads.raspberrypi.com/raspios_arm64/images/raspios_arm64-2026-06-19/2026-06-18-raspios-trixie-arm64.img.xz}"
 
-PI_HOSTNAME="${PI_HOSTNAME:-batu}"
-PI_USER="${PI_USER:-batu}"
+PI_HOSTNAME="${PI_HOSTNAME:-pi-gateway}"
+PI_USER="${PI_USER:-pi}"
 PI_PASSWORD="${PI_PASSWORD:-}"
 PI_TIMEZONE="${PI_TIMEZONE:-Europe/Istanbul}"
 PI_LOCALE="${PI_LOCALE:-tr_TR.UTF-8}"

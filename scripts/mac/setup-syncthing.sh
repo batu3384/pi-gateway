@@ -7,7 +7,7 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 # shellcheck source=/dev/null
 [[ -f "$PROJECT_DIR/.env" ]] && source "$PROJECT_DIR/.env"
 
-PI_STATIC_IP="${PI_STATIC_IP:-192.168.1.112}"
+PI_STATIC_IP="${PI_STATIC_IP:-}"
 SYNCTHING_MAC_DEVICE_ID="${SYNCTHING_MAC_DEVICE_ID:-}"
 SYNCTHING_FOLDER_ID="${SYNCTHING_FOLDER_ID:-projects}"
 SYNCTHING_FOLDER_LABEL="${SYNCTHING_FOLDER_LABEL:-Projects}"
@@ -16,6 +16,7 @@ MAC_PROJECTS_DIR="${MAC_PROJECTS_DIR:-$HOME/Projects}"
 log() { echo "[mac-syncthing] $*"; }
 
 [[ "$(uname)" == "Darwin" ]] || { log "Sadece macOS"; exit 1; }
+[[ -n "$PI_STATIC_IP" ]] || { log "HATA: PI_STATIC_IP gerekli (.env)"; exit 1; }
 
 if ! command -v syncthing >/dev/null 2>&1; then
   log "Syncthing kuruluyor (brew)..."
@@ -40,7 +41,7 @@ if [[ -z "$SYNCTHING_MAC_DEVICE_ID" ]]; then
 fi
 
 PI_ID="$(curl -fsS -H "X-API-Key: $MAC_API" "http://${PI_STATIC_IP}:8384/rest/system/status" 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get("myID",""))' 2>/dev/null || true)"
-[[ -n "$PI_ID" ]] || PI_ID="$(ssh -o ConnectTimeout=5 "${PI_USER:-batu}@${PI_STATIC_IP}" \
+[[ -n "$PI_ID" ]] || PI_ID="$(ssh -o ConnectTimeout=5 "${PI_USER:-pi}@${PI_STATIC_IP}" \
   "docker exec syncthing sed -n 's:.*<device id=\"\\([^\"]*\\)\".*:\\1:p' /var/syncthing/config/config.xml | head -1" 2>/dev/null || true)"
 [[ -n "$PI_ID" ]] || { log "HATA: Pi Device ID alinamadi"; exit 1; }
 

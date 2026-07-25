@@ -186,6 +186,6 @@ fi
 
 log "=== Hybrid restore tamam ==="
 log "1. SD + SSD Pi'ye tak, Ethernet"
-log "2. Ac, ssh batu@<IP>"
+log "2. Ac, ssh @<PI_STATIC_IP>"
 log "3. ./scripts/mac/deploy.sh"
 log "4. dogrula: findmnt /mnt/ssd && readlink ~/pi-gateway/data"

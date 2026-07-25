@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# recover-readonly-root icinden batu kullanicisi ile docker compose up
+# recover-readonly-root icinden PI_USER ile docker compose up
 set -euo pipefail
 
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"

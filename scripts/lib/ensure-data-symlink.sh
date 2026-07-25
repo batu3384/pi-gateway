@@ -106,7 +106,7 @@ repair_symlink() {
   fi
 
   ln -sfn "${DATA_ROOT}" "${REMOTE_DIR}/data"
-  # Flag clear: root veya sudo ile (batu yazamazsa takili kalmasin)
+  # Flag clear: root veya sudo ile (owner yazamazsa takili kalmasin)
   if [[ -f "$STORAGE_DEGRADED_FLAG" ]]; then
     rm -f "$STORAGE_DEGRADED_FLAG" 2>/dev/null \
       || run_as_needed rm -f "$STORAGE_DEGRADED_FLAG" 2>/dev/null \
@@ -126,9 +126,9 @@ repair_fallback_sd() {
   if ! touch "$STORAGE_DEGRADED_FLAG" 2>/dev/null; then
     run_as_needed mkdir -p "$(dirname "$STORAGE_DEGRADED_FLAG")"
     run_as_needed touch "$STORAGE_DEGRADED_FLAG"
-    # Sonraki batu clear icin sahiplik
+    # Sonraki owner clear icin sahiplik
     local owner
-    owner="$(stat -c '%U' "$REMOTE_DIR" 2>/dev/null || echo "${USER:-batu}")"
+    owner="$(stat -c '%U' "$REMOTE_DIR" 2>/dev/null || echo "${USER:-pi}")"
     run_as_needed chown -R "${owner}:${owner}" "$(dirname "$STORAGE_DEGRADED_FLAG")" 2>/dev/null || true
   fi
   log "OK: yerel data (degraded) -> ${REMOTE_DIR}/data"

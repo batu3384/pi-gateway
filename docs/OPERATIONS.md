@@ -94,7 +94,7 @@ ssh pi 'REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/setup-firewall.sh'
 ## Pi reboot sonrası
 
 1. 2–3 dk bekleyin (AdGuard filtre yüklemesi)
-2. `make dns-test` veya `dig google.com @192.168.1.112`
+2. `make dns-test` veya `dig google.com @PI_STATIC_IP`
 3. `pi-gateway-recover-ro.service` root ve stack kurtarmayı dener
 
 ## DNS çalışmıyor

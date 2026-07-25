@@ -8,13 +8,14 @@ REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 [[ -f "$REMOTE_DIR/.env" ]] && source "$REMOTE_DIR/.env"
 
 KUMA_URL="${UPTIME_KUMA_URL:-http://127.0.0.1:3001}"
-KUMA_USER="${UPTIME_KUMA_ADMIN_USER:-batu}"
+KUMA_USER="${UPTIME_KUMA_ADMIN_USER:-admin}"
 KUMA_PASS="${UPTIME_KUMA_ADMIN_PASSWORD:-}"
-PI_IP="${PI_STATIC_IP:-192.168.1.112}"
+PI_IP="${PI_STATIC_IP:-}"
 export KUMA_URL KUMA_USER KUMA_PASS
 
 log() { echo "[uptime-kuma-setup] $*"; }
 
+[[ -n "$PI_IP" ]] || { log "HATA: PI_STATIC_IP bos"; exit 1; }
 [[ -n "$KUMA_PASS" ]] || { log "HATA: UPTIME_KUMA_ADMIN_PASSWORD bos"; exit 1; }
 case "$KUMA_PASS" in
   CHANGE_ME*|Degistir*) log "HATA: UPTIME_KUMA_ADMIN_PASSWORD placeholder"; exit 1 ;;
@@ -57,8 +58,8 @@ repair_kuma_db_if_corrupt() {
 }
 
 wait_for_kuma_http() {
-  local i
-  for i in $(seq 1 40); do
+  local _
+  for _ in $(seq 1 40); do
     if curl -fsS "${KUMA_URL}/api/entry-page" >/dev/null 2>&1 \
       || curl -fsS "${KUMA_URL}/setup-database-info" >/dev/null 2>&1; then
       return 0

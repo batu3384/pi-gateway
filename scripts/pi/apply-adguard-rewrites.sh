@@ -9,13 +9,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../lib/adguard-api.sh
 source "$SCRIPT_DIR/../lib/adguard-api.sh"
 
-PI_STATIC_IP="${PI_STATIC_IP:-192.168.1.112}"
+PI_STATIC_IP="${PI_STATIC_IP:-}"
 LAN_DOMAIN="${LAN_DOMAIN:-home}"
 AGH_ADMIN_USER="${AGH_ADMIN_USER:-admin}"
 AGH_ADMIN_PASSWORD="${AGH_ADMIN_PASSWORD:-}"
 ADGUARD_WEB_PORT="${ADGUARD_WEB_PORT:-8080}"
 BASE="http://127.0.0.1:${ADGUARD_WEB_PORT}"
 
+[[ -n "$PI_STATIC_IP" ]] || { echo "[adguard-rewrites] PI_STATIC_IP bos"; exit 1; }
 [[ -n "$AGH_ADMIN_PASSWORD" ]] || { echo "[adguard-rewrites] AGH_ADMIN_PASSWORD bos"; exit 1; }
 
 COOKIE="$(mktemp)"

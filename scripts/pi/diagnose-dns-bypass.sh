@@ -9,7 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../lib/adguard-api.sh
 source "$SCRIPT_DIR/../lib/adguard-api.sh"
 
-PI_IP="${PI_STATIC_IP:-192.168.1.112}"
+PI_IP="${PI_STATIC_IP:-}"
 ADGUARD_WEB_PORT="${ADGUARD_WEB_PORT:-8080}"
 AGH_ADMIN_USER="${AGH_ADMIN_USER:-admin}"
 AGH_ADMIN_PASSWORD="${AGH_ADMIN_PASSWORD:-}"

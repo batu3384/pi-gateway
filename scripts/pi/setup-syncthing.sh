@@ -9,11 +9,12 @@ REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 SYNCTHING_MAC_DEVICE_ID="${SYNCTHING_MAC_DEVICE_ID:-}"
 SYNCTHING_FOLDER_ID="${SYNCTHING_FOLDER_ID:-projects}"
 SYNCTHING_FOLDER_LABEL="${SYNCTHING_FOLDER_LABEL:-Projects}"
-PI_STATIC_IP="${PI_STATIC_IP:-192.168.1.112}"
+PI_STATIC_IP="${PI_STATIC_IP:-}"
 SYNCTHING_PORT="${SYNCTHING_PORT:-8384}"
 
 log() { echo "[syncthing-setup] $*"; }
 
+[[ -n "$PI_STATIC_IP" ]] || { log "HATA: PI_STATIC_IP bos"; exit 1; }
 [[ -n "$SYNCTHING_MAC_DEVICE_ID" ]] || { log "SYNCTHING_MAC_DEVICE_ID bos — atlandi"; exit 0; }
 
 docker ps --format '{{.Names}}' | grep -q '^syncthing$' || { log "syncthing container yok"; exit 0; }

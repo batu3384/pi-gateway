@@ -16,6 +16,26 @@ load_env() {
 log() { printf '[pi-gateway] %s\n' "$*"; }
 die() { log "ERROR: $*"; exit 1; }
 
+default_pi_user() { echo "${PI_USER:-pi}"; }
+
+default_remote_dir() {
+  echo "${REMOTE_DIR:-/home/$(default_pi_user)/pi-gateway}"
+}
+
+deploy_host() { echo "${PI_STATIC_IP:-${PI_HOST:-}}"; }
+
+require_deploy_host() {
+  local h
+  h="$(deploy_host)"
+  [[ -n "$h" ]] || die "PI_STATIC_IP veya PI_HOST gerekli (.env)"
+  echo "$h"
+}
+
+require_pi_static_ip() {
+  [[ -n "${PI_STATIC_IP:-}" ]] || die "PI_STATIC_IP gerekli (.env)"
+  echo "$PI_STATIC_IP"
+}
+
 require_cmd() {
   local cmd
   for cmd in "$@"; do

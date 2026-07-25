@@ -29,7 +29,7 @@ panel_url() {
 
 notify_ensure_dir() {
   local owner
-  owner="${NOTIFY_OWNER:-${PI_USER:-batu}}"
+  owner="${NOTIFY_OWNER:-${PI_USER:-pi}}"
   if [[ "$(id -u)" -eq 0 ]]; then
     install -d -m 0775 -o "$owner" -g "$owner" "$NOTIFY_STATE_DIR" 2>/dev/null \
       || mkdir -p "$NOTIFY_STATE_DIR"

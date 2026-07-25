@@ -58,14 +58,13 @@ ok "remount lock'tan once"
 
 # dns_degraded + COMPOSE forward + clobber marker
 dns_degraded_on_ssd_loss >/dev/null 2>&1 || true
-DNS_DEGRADED_ON_SSD_LOSS=false STORAGE_FALLBACK_SD=false
-if dns_degraded_on_ssd_loss; then
+if DNS_DEGRADED_ON_SSD_LOSS=false STORAGE_FALLBACK_SD=false dns_degraded_on_ssd_loss; then
   die "dns_degraded_on_ssd_loss her iki flag false iken true dondu"
 fi
 ok "dns_degraded fail-closed"
 
-DNS_DEGRADED_ON_SSD_LOSS=true STORAGE_FALLBACK_SD=false
-dns_degraded_on_ssd_loss || die "DNS_DEGRADED_ON_SSD_LOSS=true iken false"
+DNS_DEGRADED_ON_SSD_LOSS=true STORAGE_FALLBACK_SD=false dns_degraded_on_ssd_loss \
+  || die "DNS_DEGRADED_ON_SSD_LOSS=true iken false"
 ok "dns_degraded default path"
 
 grep -q 'COMPOSE_RECOVER_MODE=' "$STACK_HEALTH" || die "COMPOSE_RECOVER_MODE forward yok"

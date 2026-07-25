@@ -2,7 +2,7 @@
 # Docker/SSD/AdGuard duserse otomatik kurtarma
 set -euo pipefail
 
-REMOTE_DIR="${REMOTE_DIR:-/home/${USER:-batu}/pi-gateway}"
+REMOTE_DIR="${REMOTE_DIR:-/home/${USER:-pi}/pi-gateway}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_TAG="pi-gateway-watchdog"
 

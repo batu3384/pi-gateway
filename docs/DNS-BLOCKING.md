@@ -32,8 +32,8 @@ DNS yetmezse cihazda ekle:
 ## Guncelleme
 
 ```bash
-ssh batu@192.168.1.112 'REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/apply-adguard-dns.sh'
-ssh batu@192.168.1.112 'REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/apply-adguard-filters.sh'
+ssh "$PI_USER@$PI_STATIC_IP" 'REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/apply-adguard-dns.sh'
+ssh "$PI_USER@$PI_STATIC_IP" 'REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/apply-adguard-filters.sh'
 ```
 
 Deploy sonrasi `post-deploy` otomatik calistirir: `wait-adguard-dns` → `apply-adguard-dns` → `apply-adguard-filters`.

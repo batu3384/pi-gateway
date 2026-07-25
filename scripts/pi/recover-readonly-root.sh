@@ -2,7 +2,7 @@
 # Boot: SSD mount + symlink + read-only root kurtarma + Docker stack
 set -euo pipefail
 
-REMOTE_DIR="${REMOTE_DIR:-/home/${PI_USER:-batu}/pi-gateway}"
+REMOTE_DIR="${REMOTE_DIR:-/home/${PI_USER:-pi}/pi-gateway}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_TAG="pi-gateway-recover"
 

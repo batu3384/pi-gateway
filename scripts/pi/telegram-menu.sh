@@ -10,7 +10,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../lib/notify.sh"
 
 LAN_DOMAIN="${LAN_DOMAIN:-home}"
-PI_IP="${PI_STATIC_IP:-192.168.1.112}"
+PI_IP="${PI_STATIC_IP:-}"
 PANEL_PROTOCOL="${PANEL_PROTOCOL:-$([[ "${ENABLE_TLS:-false}" == "true" ]] && echo https || echo http)}"
 
 log() { echo "[telegram-menu] $*"; }

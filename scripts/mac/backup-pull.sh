@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../lib/common.sh"
 load_env
 
-PI_USER="${PI_USER:-batu}"
+PI_USER="${PI_USER:-pi}"
 PI_HOST="${PI_STATIC_IP:-${PI_HOST:-}}"
 REMOTE_DIR="${REMOTE_DIR:-/home/$PI_USER/pi-gateway}"
 LOCAL_DEST="${MAC_BACKUP_DEST:-$HOME/Backups/pi-gateway}"

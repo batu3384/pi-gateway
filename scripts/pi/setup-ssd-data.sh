@@ -130,7 +130,7 @@ ensure_fstab() {
 }
 
 prepare_data_tree() {
-  local user="${PI_USER:-batu}"
+  local user="${PI_USER:-pi}"
   local remote="${REMOTE_DIR:-/home/${user}/pi-gateway}"
 
   mkdir -p \
@@ -185,8 +185,8 @@ write_health_hint() {
 main() {
   require_root
   # shellcheck source=/dev/null
-  [[ -f "${REMOTE_DIR:-/home/${PI_USER:-batu}/pi-gateway}/.env" ]] && \
-    source "${REMOTE_DIR:-/home/${PI_USER:-batu}/pi-gateway}/.env" 2>/dev/null || true
+  [[ -f "${REMOTE_DIR:-/home/${PI_USER:-pi}/pi-gateway}/.env" ]] && \
+    source "${REMOTE_DIR:-/home/${PI_USER:-pi}/pi-gateway}/.env" 2>/dev/null || true
   STORAGE_TYPE="${STORAGE_TYPE:-hybrid}"
   if [[ "$STORAGE_TYPE" == "ssd-root" || "$STORAGE_TYPE" == "ssd" ]]; then
     log "STORAGE_TYPE=${STORAGE_TYPE} — ayri veri diski kurulumu gerekmez (root=SSD)"

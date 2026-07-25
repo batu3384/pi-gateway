@@ -53,3 +53,16 @@ Token varsa dış erişim açılır. Yalnızca gerekli hostname’leri expose ed
 - [ ] `make backup-pull` haftalık cron (Mac)
 - [ ] Syncthing GUI şifresi set
 - [ ] Tailscale 2FA (hesap tarafı)
+
+## Public GitHub hazırlığı
+
+Repo public yapmadan önce:
+
+1. `make validate` — `validate-public-repo.sh` secret/PII taraması
+2. `.env` asla commit edilmedi — `git log -- .env` boş olmalı
+3. Chat veya logda görünen gerçek token/şifreleri **rotate** et (Telegram, Tailscale, servis şifreleri)
+4. `config/tailscale/acl.hujson` ve `host/dhcpcd/pi-gateway.conf` yalnızca Pi'de render — git'te yok
+5. `TAILSCALE_ACL_OWNER` `.env`'de gerçek Tailscale e-postası (tracked değil)
+6. Watchtower açıksa `WATCHTOWER_NOTIFICATION_URL` token içerir — URL loglara düşebilir; gerekmedikçe kapalı tut
+
+Public sonrası: güvenlik sorunları için [.github/SECURITY.md](../.github/SECURITY.md) prosedürünü izle; acil durumda repo private + secret rotation.

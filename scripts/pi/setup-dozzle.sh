@@ -6,7 +6,7 @@ REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 # shellcheck source=/dev/null
 [[ -f "$REMOTE_DIR/.env" ]] && source "$REMOTE_DIR/.env"
 
-DOZZLE_ADMIN_USER="${DOZZLE_ADMIN_USER:-batu}"
+DOZZLE_ADMIN_USER="${DOZZLE_ADMIN_USER:-admin}"
 DOZZLE_ADMIN_PASSWORD="${DOZZLE_ADMIN_PASSWORD:-}"
 DATA_DIR="${REMOTE_DIR}/data/dozzle"
 

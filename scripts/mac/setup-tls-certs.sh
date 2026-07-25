@@ -7,13 +7,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../lib/common.sh"
 load_env
 
-PI_USER="${PI_USER:-batu}"
-PI_STATIC_IP="${PI_STATIC_IP:-192.168.1.112}"
+PI_USER="${PI_USER:-pi}"
+PI_STATIC_IP="${PI_STATIC_IP:-}"
 REMOTE_DIR="${REMOTE_DIR:-/home/${PI_USER}/pi-gateway}"
 LAN_DOMAIN="${LAN_DOMAIN:-home}"
 CERT_DIR="$PROJECT_DIR/config/caddy/certs"
 CERT_FILE="${CERT_DIR}/${LAN_DOMAIN}.pem"
 KEY_FILE="${CERT_DIR}/${LAN_DOMAIN}-key.pem"
+
+[[ -n "$PI_STATIC_IP" ]] || die "PI_STATIC_IP gerekli (.env)"
 
 log() { echo "[tls-certs] $*"; }
 

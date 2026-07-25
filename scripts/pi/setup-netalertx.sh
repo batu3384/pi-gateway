@@ -9,7 +9,7 @@ REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 NETALERTX_PORT="${NETALERTX_PORT:-20211}"
 NETALERTX_LISTEN_ADDR="${NETALERTX_LISTEN_ADDR:-0.0.0.0}"
 NETALERTX_PASSWORD="${NETALERTX_PASSWORD:-${AGH_ADMIN_PASSWORD:-}}"
-PI_STATIC_IP="${PI_STATIC_IP:-192.168.1.112}"
+PI_STATIC_IP="${PI_STATIC_IP:-}"
 PI_INTERFACE="${PI_INTERFACE:-eth0}"
 LAN_SUBNET_CIDR="${LAN_SUBNET_CIDR:-192.168.1.0/24}"
 LAN_DOMAIN="${LAN_DOMAIN:-home}"
@@ -52,8 +52,8 @@ webhook_url() {
 }
 
 wait_http() {
-  local i
-  for i in $(seq 1 36); do
+  local _
+  for _ in $(seq 1 36); do
     if curl -fsS "http://127.0.0.1:${NETALERTX_PORT}/" >/dev/null 2>&1; then
       return 0
     fi
@@ -72,7 +72,9 @@ export CONF_FILE SCAN_SUBNET WEBHOOK_URL MARKER PANEL_PROTOCOL LAN_DOMAIN NETALE
 export AGH_ADMIN_USER AGH_ADMIN_PASSWORD ADGUARD_WEB_PORT
 SCAN_SUBNET="$(scan_subnet)"
 WEBHOOK_URL="$(webhook_url)"
+# shellcheck disable=SC2089,SC2090 # JSON string passed to python via env
 PLUGINS='["ARPSCAN","DIGSCAN","NSLOOKUP","ICMP","WEBHOOK","NEWDEV","NTFPRCS","DBCLNP","CUSTPROP","SETPWD","SYNC","UI","MAINT","VNDRPDT","ADGUARDIMP","AVAHISCAN"]'
+# shellcheck disable=SC2090
 export SCAN_SUBNET WEBHOOK_URL PLUGINS
 
 python3 <<'PY'
@@ -154,7 +156,8 @@ if changed or not marker.is_file():
     subprocess.run(["sudo", "chown", "20211:20211", str(conf)], check=True)
     Path(tmp_path).unlink(missing_ok=True)
     subprocess.run(["sudo", "tee", str(marker)], input=b"ok\n", check=True, stdout=subprocess.DEVNULL)
-    subprocess.run(["sudo", "chown", f"{os.environ.get('USER', 'batu')}:batu", str(marker)], check=False)
+    _u = os.environ.get("USER") or os.environ.get("PI_USER") or "pi"
+    subprocess.run(["sudo", "chown", f"{_u}:{_u}", str(marker)], check=False)
     print(f"[netalertx-setup] app.conf guncellendi (SCAN_SUBNETS={subnet})")
     print(f"[netalertx-setup] WEBHOOK_URL={webhook}")
 else:

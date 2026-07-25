@@ -6,7 +6,7 @@ REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 # shellcheck source=/dev/null
 [[ -f "$REMOTE_DIR/.env" ]] && source "$REMOTE_DIR/.env"
 
-SYNCTHING_GUI_USER="${SYNCTHING_GUI_USER:-batu}"
+SYNCTHING_GUI_USER="${SYNCTHING_GUI_USER:-admin}"
 SYNCTHING_GUI_PASSWORD="${SYNCTHING_GUI_PASSWORD:-}"
 SYNCTHING_PORT="${SYNCTHING_PORT:-8384}"
 

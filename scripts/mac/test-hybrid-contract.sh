@@ -31,13 +31,13 @@ cat >"$tmp/user-data" <<'EOF'
 #cloud-config
 hostname: testpi
 users:
-  - name: batu
+  - name: pi
 enable_ssh: true
 EOF
 
 setup="$PROJECT_DIR/scripts/pi/setup-ssd-data.sh"
 [[ -f "$setup" ]] || die "setup-ssd-data yok"
-hybrid_inject_ssd_into_user_data "$tmp/user-data" "$setup" batu /home/batu/pi-gateway /mnt/ssd
+hybrid_inject_ssd_into_user_data "$tmp/user-data" "$setup" pi /home/pi/pi-gateway /mnt/ssd
 grep -q '^users:' "$tmp/user-data" || die "inject users silindi"
 grep -q 'hostname: testpi' "$tmp/user-data" || die "inject hostname silindi"
 grep -q 'pi-ssd-data.service' "$tmp/user-data" || die "inject service yok"
@@ -47,7 +47,7 @@ ok "user-data inject koruma"
 
 # Ikinci inject idempotent (runcmd tekrarlanmaz)
 lines_before="$(wc -l <"$tmp/user-data" | tr -d ' ')"
-hybrid_inject_ssd_into_user_data "$tmp/user-data" "$setup" batu /home/batu/pi-gateway /mnt/ssd
+hybrid_inject_ssd_into_user_data "$tmp/user-data" "$setup" pi /home/pi/pi-gateway /mnt/ssd
 lines_after="$(wc -l <"$tmp/user-data" | tr -d ' ')"
 [[ "$lines_before" -eq "$lines_after" ]] || die "inject idempotent degil: $lines_before -> $lines_after"
 enable_count="$(grep -c 'enable, pi-ssd-data.service' "$tmp/user-data" || true)"
@@ -55,7 +55,7 @@ enable_count="$(grep -c 'enable, pi-ssd-data.service' "$tmp/user-data" || true)"
 ok "user-data inject idempotent"
 
 # fresh install cloud-init
-hybrid_write_fresh_install_cloud_init "$tmp/ci" "$setup" batu batu 'testpass123' \
+hybrid_write_fresh_install_cloud_init "$tmp/ci" "$setup" pi pi-gateway 'testpass123' \
   Europe/Istanbul tr_TR.UTF-8 /mnt/ssd
 grep -q 'pi-ssd-data.service' "$tmp/ci/user-data" || die "fresh user-data service yok"
 grep -q 'users:' "$tmp/ci/user-data" || die "fresh user-data users yok"

@@ -62,8 +62,8 @@ ok "recover rewrite early+success yollari"
 
 grep -q 'pi_user_from_remote_dir' "$stack_health" \
   || die "lock owner pi_user_from_remote_dir kullanmiyor"
-if grep -q 'SUDO_USER:-batu' "$stack_health"; then
-  die "lock hala SUDO_USER:-batu hardcode"
+if grep -q 'SUDO_USER:-pi' "$stack_health"; then
+  die "lock hala SUDO_USER:-pi hardcode"
 fi
 ok "lock owner REMOTE_DIR'den"
 

@@ -109,7 +109,7 @@ if [[ "${ENABLE_CADDY:-true}" == "true" ]] && [[ -z "${CADDY_AUTH_PASSWORD:-}" ]
 fi
 
 if [[ "${ENABLE_DOZZLE:-true}" == "true" ]]; then
-  run_check "dozzle" curl -fsS -u "${DOZZLE_ADMIN_USER:-batu}:${DOZZLE_ADMIN_PASSWORD}" "http://127.0.0.1:${DOZZLE_PORT}/"
+  run_check "dozzle" curl -fsS -u "${DOZZLE_ADMIN_USER:-admin}:${DOZZLE_ADMIN_PASSWORD}" "http://127.0.0.1:${DOZZLE_PORT}/"
 fi
 
 if [[ "${ENABLE_FORGEJO:-true}" == "true" ]]; then

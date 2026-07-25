@@ -7,9 +7,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../lib/common.sh"
 load_env
 
-PI_USER="${PI_USER:-batu}"
-PI_STATIC_IP="${PI_STATIC_IP:-192.168.1.112}"
+PI_USER="${PI_USER:-pi}"
+PI_STATIC_IP="${PI_STATIC_IP:-}"
 LAN_DOMAIN="${LAN_DOMAIN:-home}"
+[[ -n "$PI_STATIC_IP" ]] || die "PI_STATIC_IP gerekli (.env)"
 PANEL_PROTOCOL="${PANEL_PROTOCOL:-}"
 if [[ -z "$PANEL_PROTOCOL" ]]; then
   if [[ "${ENABLE_TLS:-false}" == "true" ]]; then

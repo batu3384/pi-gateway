@@ -7,13 +7,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../lib/common.sh"
 load_env
 
-PI_DNS="${PI_STATIC_IP:-192.168.1.112}"
+PI_DNS="${PI_STATIC_IP:-}"
 FALLBACK_DNS="${ROUTER_DNS_SECONDARY:-1.1.1.1}"
 PI_INTERFACE="${PI_INTERFACE:-eth0}"
 
 log() { echo "[dns-fallback] $*"; }
 
 [[ "$(uname)" == "Darwin" ]] || { log "Sadece macOS"; exit 1; }
+[[ -n "$PI_DNS" ]] || die "PI_STATIC_IP gerekli (.env)"
 
 mac_service() {
   local iface="$1"

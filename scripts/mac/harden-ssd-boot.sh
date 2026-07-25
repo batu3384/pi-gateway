@@ -3,6 +3,13 @@
 # EEPROM ayarlari Pi'de SD ile yapilir — bu script sadece SSD FAT bootfs'e yazar.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# shellcheck source=../lib/common.sh
+source "$PROJECT_DIR/scripts/lib/common.sh"
+load_env
+PI_USER="${PI_USER:-pi}"
+
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 die() { log "HATA: $*"; exit 1; }
 
@@ -106,7 +113,7 @@ log "3/5 config.txt: boot_delay, hdmi, usb_max_current"
 touch "$BOOT/ssh"
 [[ -f "$BOOT/user-data" ]] || die "user-data yok (cloud-init)"
 grep -q "^enable_ssh: true" "$BOOT/user-data" || die "enable_ssh yok"
-grep -q "name: batu" "$BOOT/user-data" || log "UYARI: user batu yok"
+grep -q "name: ${PI_USER}" "$BOOT/user-data" || log "UYARI: user ${PI_USER} yok"
 log "4/5 SSH / cloud-init OK"
 
 # --- 5. Rapor ---

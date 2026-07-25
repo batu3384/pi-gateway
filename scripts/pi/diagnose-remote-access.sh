@@ -7,7 +7,7 @@ REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 [[ -f "$REMOTE_DIR/.env" ]] && source "$REMOTE_DIR/.env"
 
 LAN_DOMAIN="${LAN_DOMAIN:-home}"
-PI_IP="${PI_STATIC_IP:-192.168.1.112}"
+PI_IP="${PI_STATIC_IP:-}"
 ok=0 fail=0
 
 pass() { echo "[OK] $*"; ok=$((ok + 1)); }

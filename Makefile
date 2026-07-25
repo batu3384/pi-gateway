@@ -1,4 +1,19 @@
-.PHONY: setup validate render deploy deploy-fast install discover mac-dns harden status dns-test test-remote backup-pull backup-cron verify-data pi-access trust-ca tls-certs telegram-menu firewall morning-test sync-configs docker-ssd
+# Deploy targeting only — never `include`/export whole .env (secrets leak to recipe env).
+env_val = $(shell awk -F= -v k='$(1)' '$$1 == k { sub(/^[^=]*=/, ""); print; exit }' .env 2>/dev/null)
+
+ifneq (,$(wildcard .env))
+  PI_USER ?= $(call env_val,PI_USER)
+  PI_STATIC_IP ?= $(call env_val,PI_STATIC_IP)
+  REMOTE_DIR ?= $(call env_val,REMOTE_DIR)
+endif
+
+PI_USER ?= pi
+REMOTE_DIR ?= /home/$(PI_USER)/pi-gateway
+
+.PHONY: setup validate render deploy deploy-fast install discover mac-dns harden status dns-test test-remote backup-pull backup-cron verify-data pi-access trust-ca tls-certs telegram-menu firewall morning-test sync-configs docker-ssd check-pi-env
+
+check-pi-env:
+	@test -n "$(PI_STATIC_IP)" || (echo "PI_STATIC_IP gerekli — .env duzenle veya make discover" && exit 1)
 
 setup:
 	@cp -n .env.example .env 2>/dev/null || true
@@ -25,8 +40,8 @@ sync-configs:
 	@chmod +x scripts/mac/sync-rendered-configs.sh 2>/dev/null || true
 	@make render && ./scripts/mac/sync-rendered-configs.sh
 
-morning-test:
-	@ssh "$${PI_USER:-batu}@$${PI_STATIC_IP:-192.168.1.112}" 'R=/home/$${USER:-batu}/pi-gateway; REMOTE_DIR="$$R" bash "$$R/scripts/pi/morning-summary.sh"'
+morning-test: check-pi-env
+	@ssh "$(PI_USER)@$(PI_STATIC_IP)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/morning-summary.sh"'
 
 verify-data:
 	@chmod +x scripts/mac/pre-deploy-check.sh scripts/lib/ensure-data-symlink.sh scripts/pi/ensure-data-symlink.sh 2>/dev/null || true
@@ -45,8 +60,8 @@ dns-fallback:
 syncthing:
 	@./scripts/mac/setup-syncthing.sh
 
-harden:
-	@ssh "$${PI_USER:-batu}@$${PI_STATIC_IP:-192.168.1.112}" "REMOTE_DIR=/home/$${PI_USER:-batu}/pi-gateway bash -s" < ./scripts/pi/harden-host.sh
+harden: check-pi-env
+	@ssh "$(PI_USER)@$(PI_STATIC_IP)" "REMOTE_DIR='$(REMOTE_DIR)' bash -s" < ./scripts/pi/harden-host.sh
 
 status:
 	@chmod +x scripts/mac/status.sh 2>/dev/null || true
@@ -56,14 +71,14 @@ dns-test:
 	@chmod +x scripts/mac/dns-test.sh 2>/dev/null || true
 	@./scripts/mac/dns-test.sh
 
-test-remote:
-	@ssh "$${PI_USER:-batu}@$${PI_STATIC_IP:-192.168.1.112}" 'R=/home/$${USER:-batu}/pi-gateway; REMOTE_DIR="$$R" bash "$$R/scripts/pi/health-check.sh" && REMOTE_DIR="$$R" bash "$$R/scripts/pi/smoke-test.sh"'
+test-remote: check-pi-env
+	@ssh "$(PI_USER)@$(PI_STATIC_IP)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/health-check.sh" && REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/smoke-test.sh"'
 
-telegram-test:
-	@ssh "$${PI_USER:-batu}@$${PI_STATIC_IP:-192.168.1.112}" 'R=/home/$${USER:-batu}/pi-gateway; REMOTE_DIR="$$R" bash "$$R/scripts/pi/test-telegram.sh"'
+telegram-test: check-pi-env
+	@ssh "$(PI_USER)@$(PI_STATIC_IP)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/test-telegram.sh"'
 
-telegram-menu:
-	@ssh "$${PI_USER:-batu}@$${PI_STATIC_IP:-192.168.1.112}" 'R=/home/$${USER:-batu}/pi-gateway; REMOTE_DIR="$$R" bash "$$R/scripts/pi/telegram-menu.sh"'
+telegram-menu: check-pi-env
+	@ssh "$(PI_USER)@$(PI_STATIC_IP)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/telegram-menu.sh"'
 
 pi-access:
 	@chmod +x scripts/mac/setup-pi-access.sh 2>/dev/null || true
@@ -88,17 +103,17 @@ backup-cron:
 	@chmod +x scripts/mac/install-backup-cron.sh 2>/dev/null || true
 	@./scripts/mac/install-backup-cron.sh
 
-firewall:
-	@ssh "$${PI_USER:-batu}@$${PI_STATIC_IP:-192.168.1.112}" 'R=/home/$${USER:-batu}/pi-gateway; REMOTE_DIR="$$R" bash "$$R/scripts/pi/setup-firewall.sh"'
+firewall: check-pi-env
+	@ssh "$(PI_USER)@$(PI_STATIC_IP)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-firewall.sh"'
 
-docker-ssd:
-	@scp scripts/pi/setup-docker-ssd.sh $${PI_USER:-batu}@$${PI_STATIC_IP:-192.168.1.112}:/home/$${PI_USER:-batu}/pi-gateway/scripts/pi/setup-docker-ssd.sh
-	@ssh "$${PI_USER:-batu}@$${PI_STATIC_IP:-192.168.1.112}" 'R=/home/$${USER:-batu}/pi-gateway; REMOTE_DIR="$$R" bash "$$R/scripts/pi/setup-docker-ssd.sh"'
+docker-ssd: check-pi-env
+	@scp scripts/pi/setup-docker-ssd.sh "$(PI_USER)@$(PI_STATIC_IP):$(REMOTE_DIR)/scripts/pi/setup-docker-ssd.sh"
+	@ssh "$(PI_USER)@$(PI_STATIC_IP)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-docker-ssd.sh"'
 
-tailscale-acl:
+tailscale-acl: check-pi-env
 	@chmod +x scripts/pi/setup-tailscale-acl.sh 2>/dev/null || true
-	@ssh "$${PI_USER:-batu}@$${PI_STATIC_IP:-192.168.1.112}" 'R=/home/$${USER:-batu}/pi-gateway; REMOTE_DIR="$$R" bash "$$R/scripts/pi/setup-tailscale-acl.sh"'
+	@ssh "$(PI_USER)@$(PI_STATIC_IP)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-tailscale-acl.sh"'
 
-n8n-workflows:
+n8n-workflows: check-pi-env
 	@chmod +x scripts/pi/setup-n8n-workflows.sh scripts/pi/setup-forgejo-webhook.sh 2>/dev/null || true
-	@ssh "$${PI_USER:-batu}@$${PI_STATIC_IP:-192.168.1.112}" 'R=/home/$${USER:-batu}/pi-gateway; REMOTE_DIR="$$R" bash "$$R/scripts/pi/setup-n8n-workflows.sh" && REMOTE_DIR="$$R" bash "$$R/scripts/pi/setup-uptime-kuma.sh" && REMOTE_DIR="$$R" bash "$$R/scripts/pi/setup-forgejo-webhook.sh"'
+	@ssh "$(PI_USER)@$(PI_STATIC_IP)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-n8n-workflows.sh" && REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-uptime-kuma.sh" && REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-forgejo-webhook.sh"'

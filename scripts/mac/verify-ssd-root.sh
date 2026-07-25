@@ -169,7 +169,7 @@ echo "$SSD_CMD" | grep -q 'usb-storage.quirks=' || log "WARN: SSD cmdline quirks
 
 # cloud-init kullanici
 if [[ -f "$BOOT_SSD/user-data" ]]; then
-  grep -q 'name: batu\|name: pi\|name: '"${PI_USER:-batu}" "$BOOT_SSD/user-data" 2>/dev/null \
+  grep -q 'name: pi\|name: '"${PI_USER:-pi}" "$BOOT_SSD/user-data" 2>/dev/null \
     && ok "SSD user-data kullanici tanimli" \
     || log "WARN: SSD user-data kullanici satiri belirsiz"
 fi

@@ -5,8 +5,8 @@ Ev sunucusu (Raspberry Pi 4B): AdGuard DNS, Unbound, Caddy, Forgejo, Syncthing, 
 ## Health Stack
 
 - validate: `./scripts/mac/validate.sh`
-- test: `ssh batu@PI_IP 'REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/smoke-test.sh'`
-- runtime: `ssh batu@PI_IP 'REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/health-check.sh'`
+- test: `ssh $PI_USER@$PI_STATIC_IP 'REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/smoke-test.sh'`
+- runtime: `ssh $PI_USER@$PI_STATIC_IP 'REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/health-check.sh'`
 - shell: `shellcheck -S warning scripts/pi/*.sh scripts/mac/*.sh scripts/lib/*.sh`
 
 ## Skill routing

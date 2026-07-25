@@ -59,6 +59,7 @@ if ! run_restic snapshots >/dev/null 2>&1; then
   run_restic init
 fi
 
+RESTIC_BACKUP_HOST="${RESTIC_BACKUP_HOST:-${PI_HOSTNAME:-$(hostname -s)}}"
 STAMP="$(date -Iseconds)"
 log "Yedek basliyor ($STAMP)"
 run_restic backup \
@@ -66,7 +67,7 @@ run_restic backup \
   /backup/compose \
   /backup/data \
   --tag "pi-gateway" \
-  --host "batu" \
+  --host "$RESTIC_BACKUP_HOST" \
   --exclude '/backup/data/backups/restic' \
   --exclude '/backup/data/**/work/data' \
   --exclude '*.tmp'

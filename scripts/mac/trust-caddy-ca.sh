@@ -7,12 +7,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../lib/common.sh"
 load_env
 
-PI_USER="${PI_USER:-batu}"
-PI_STATIC_IP="${PI_STATIC_IP:-192.168.1.112}"
+PI_USER="${PI_USER:-pi}"
+PI_STATIC_IP="${PI_STATIC_IP:-}"
 CERT_DIR="${HOME}/.local/share/pi-gateway"
 CERT_FILE="${CERT_DIR}/caddy-root-ca.crt"
 PROFILE_FILE="${CERT_DIR}/pi-gateway-caddy-ca.mobileconfig"
 LAN_DOMAIN="${LAN_DOMAIN:-home}"
+
+[[ -n "$PI_STATIC_IP" ]] || die "PI_STATIC_IP gerekli (.env)"
 
 log() { echo "[trust-ca] $*"; }
 

@@ -9,7 +9,7 @@
 ## Snapshot listesi
 
 ```bash
-ssh batu@PI_IP 'source ~/pi-gateway/.env && docker run --rm \
+ssh "$PI_USER@$PI_STATIC_IP" 'source ~/pi-gateway/.env && docker run --rm \
   -e RESTIC_PASSWORD -v /mnt/ssd/pi-gateway-data/backups/restic:/repo \
   restic/restic -r file:///repo snapshots'
 ```

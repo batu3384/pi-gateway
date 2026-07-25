@@ -50,7 +50,7 @@ Manuel: [Access Controls](https://login.tailscale.com/admin/acls) sayfasına şa
 
 ```bash
 ssh pi-ts          # Tailscale IP
-ssh batu@100.x.x.x
+ssh "$PI_USER@100.x.x.x"
 ```
 
 ## Güvenlik notu

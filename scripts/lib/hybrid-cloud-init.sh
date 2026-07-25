@@ -15,8 +15,8 @@ hybrid_setup_script_path() {
 
 hybrid_read_bootfs_identity() {
   local boot_dir="$1"
-  PI_USER="${PI_USER:-batu}"
-  PI_HOSTNAME="${PI_HOSTNAME:-batu}"
+  PI_USER="${PI_USER:-pi}"
+  PI_HOSTNAME="${PI_HOSTNAME:-pi-gateway}"
   if [[ -f "${boot_dir}/userconf" ]]; then
     PI_USER="$(cut -d: -f1 "${boot_dir}/userconf" | tr -d '[:space:]')"
     PI_HOSTNAME="${PI_USER}"

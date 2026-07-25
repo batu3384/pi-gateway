@@ -15,7 +15,7 @@ Pi-hole’a geçiş aynı DNS teknolojisini kullanır; YouTube/sosyal medya soru
 
 ## Hedef
 
-- Tüm LAN cihazlarının DNS sorgularının mümkün olduğunca `192.168.1.112` (AdGuard) üzerinden geçmesi
+- Tüm LAN cihazlarının DNS sorgularının mümkün olduğunca `PI_STATIC_IP` (AdGuard) üzerinden geçmesi
 - Bypass kaynaklarının kapatılması (router ikincil DNS, cihaz DoH/Private DNS)
 - DNS’nin yapamadığı platformlar için katmanlı çözümün net tanımı
 - 1 hafta içinde ölçülebilir iyileşme (query log + kullanıcı gözlemi)
@@ -29,7 +29,7 @@ Pi-hole’a geçiş aynı DNS teknolojisini kullanır; YouTube/sosyal medya soru
 ## Mimari
 
 ```
-[Cihazlar] --DNS--> [ZTE Router DHCP: DNS=192.168.1.112 only]
+[Cihazlar] --DNS--> [Router DHCP: DNS=PI_STATIC_IP only]
                           |
                           v
                    [AdGuard :53] --upstream--> [Unbound :5335] --> Internet
@@ -51,7 +51,7 @@ Katmanlar:
 
 ```bash
 # Engelleme çalışıyor mu?
-dig +short @192.168.1.112 doubleclick.net A   # beklenen: 0.0.0.0
+dig +short @PI_STATIC_IP doubleclick.net A   # beklenen: 0.0.0.0
 dig +short @8.8.8.8 doubleclick.net A         # karşılaştırma: gerçek IP
 
 # Smoke (repo)
@@ -64,8 +64,8 @@ Her cihaz için dns.home → Sorgu günlüğü’nde IP görünüyor mu?
 
 | Cihaz | IP | Query log’da var mı? | Test sitesi reklamı |
 |-------|-----|----------------------|---------------------|
-| iPhone | 192.168.1.109 | | |
-| Samsung | 192.168.1.100 | | |
+| iPhone | 192.168.1.50 (ornek) | | |
+| Samsung | 192.168.1.51 (ornek) | | |
 | Mac/PC | | | |
 | Smart TV | | | |
 
@@ -77,16 +77,16 @@ Her cihaz için dns.home → Sorgu günlüğü’nde IP görünüyor mu?
 
 ## Faz 2 — Router DNS sertleştirme (seçilen yol: A)
 
-### ZTE router (hgw / 192.168.1.1)
+### Router (ornek: 192.168.1.1)
 
 1. Admin panel → **LAN / DHCP** ayarları
-2. **Primary DNS:** `192.168.1.112`
-3. **Secondary DNS:** **boş** veya `192.168.1.112` (8.8.8.8 / 1.1.1.1 **olmamalı**)
+2. **Primary DNS:** `PI_STATIC_IP`
+3. **Secondary DNS:** **boş** veya `PI_STATIC_IP` (8.8.8.8 / 1.1.1.1 **olmamalı**)
 4. DHCP lease’leri yenile: cihazlarda Wi‑Fi kapat-aç veya uçak modu
 
 ### iPhone / iPad
 
-- Wi‑Fi → ağ → DNS → **Manuel** → yalnızca `192.168.1.112`
+- Wi‑Fi → ağ → DNS → **Manuel** → yalnızca `PI_STATIC_IP`
 - **Limit IP Address Tracking** → Kapalı (ev ağında test için)
 - iCloud Private Relay → Kapalı (test için)
 
@@ -119,7 +119,7 @@ Her cihaz için dns.home → Sorgu günlüğü’nde IP görünüyor mu?
 ## Başarı kriterleri
 
 1. Tüm aktif cihazlar query log’da görünür
-2. `dig @192.168.1.112` ile bilinen reklam domainleri `0.0.0.0`
+2. `dig @PI_STATIC_IP` ile bilinen reklam domainleri `0.0.0.0`
 3. Kullanıcı: haber sitesi / smart TV’de gözle görülür iyileşme
 4. YouTube uygulaması için beklenti net: DNS tek başına yetmez
 
