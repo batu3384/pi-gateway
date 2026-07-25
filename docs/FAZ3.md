@@ -1,21 +1,21 @@
-# Faz 3 — Otomasyon, cache, guvenlik, tunel
+# Phase 3 — Automation, cache, security, tunnel
 
-## Servisler
+## Services
 
-| # | Servis | URL | Not |
-|---|--------|-----|-----|
-| 5 | CrowdSec | `127.0.0.1:8082` | SSH saldiri tespiti (fail2ban ile birlikte) |
-| 9 | Redis | `127.0.0.1:6379` | Sadece Pi uzerinden (SSH tunnel) |
-| 10 | n8n | http://n8n.home | Otomasyon / webhook |
-| 2 | Cloudflare Tunnel | — | `CLOUDFLARE_TUNNEL_TOKEN` doluysa aktif |
+| # | Service | URL | Notes |
+|---|---------|-----|-------|
+| 5 | CrowdSec | `127.0.0.1:8082` | SSH attack detection (alongside fail2ban) |
+| 9 | Redis | `127.0.0.1:6379` | Pi only (SSH tunnel) |
+| 10 | n8n | http://n8n.home | Automation / webhooks |
+| 2 | Cloudflare Tunnel | — | Active when `CLOUDFLARE_TUNNEL_TOKEN` is set |
 
-## n8n ilk kurulum
+## n8n first-time setup
 
-1. http://n8n.home veya `http://PI_STATIC_IP:5678`
-2. Ilk acilista owner hesabi olustur
-3. `N8N_ENCRYPTION_KEY` `.env` icinde sabit kalmali — degistirme
+1. http://n8n.home or `http://PI_STATIC_IP:5678`
+2. Create owner account on first launch
+3. `N8N_ENCRYPTION_KEY` in `.env` must stay fixed — do not change it
 
-## Redis (Mac'ten test)
+## Redis (test from Mac)
 
 ```bash
 ssh -L 6379:127.0.0.1:6379 "$PI_USER@$PI_STATIC_IP"
@@ -32,11 +32,11 @@ ssh "$PI_USER@$PI_STATIC_IP" 'docker exec crowdsec cscli decisions list'
 ## Cloudflare Tunnel
 
 1. [Cloudflare Zero Trust](https://one.dash.cloudflare.com/) → Networks → Tunnels
-2. Token olustur → `.env` icine `CLOUDFLARE_TUNNEL_TOKEN=...`
-3. `make deploy` (profil otomatik eklenir)
+2. Create token → add to `.env` as `CLOUDFLARE_TUNNEL_TOKEN=...`
+3. `make deploy` (profile added automatically)
 
-Public hostname ornegi: `demo.seninadi.com` → `http://localhost:80`
+Public hostname example: `demo.yourdomain.com` → `http://localhost:80`
 
-## Kapatma
+## Disable
 
-`.env` icinde `ENABLE_N8N=false` vb. sonra `make deploy`.
+Set `ENABLE_N8N=false` etc. in `.env`, then `make deploy`.

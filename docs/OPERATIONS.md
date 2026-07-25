@@ -1,168 +1,168 @@
-# Operasyon Rehberi
+# Operations Guide
 
-Pi Gateway homelab — günlük kullanım, deploy ve sorun giderme.
+Pi Gateway homelab — daily use, deploy, and troubleshooting.
 
-## Depolama (hybrid — varsayılan)
+## Storage (hybrid — default)
 
-Üretim: **SD = boot + root**, **SSD = veri** (`/mnt/ssd`). Ayrıntı: `docs/SSD-KURULUM.md`.
+Production: **SD = boot + root**, **SSD = data** (`/mnt/ssd`). Details: `docs/SSD-INSTALL.md`.
 
 ```bash
 findmnt -n -o SOURCE /          # mmcblk0p2 (SD root)
 findmnt -n -o SOURCE /mnt/ssd    # /dev/sda1
 readlink -f ~/pi-gateway/data    # /mnt/ssd/pi-gateway-data
-docker info | grep "Docker Root Dir"   # /var/lib/docker (varsayılan)
+docker info | grep "Docker Root Dir"   # /var/lib/docker (default)
 ```
 
-SSD imaj / hybrid boot: `scripts/mac/restore-hybrid-boot.sh`  
-Deneysel ssd-root: `docs/SSD-ROOT.md`
+SSD image / hybrid boot: `scripts/mac/restore-hybrid-boot.sh`  
+Experimental ssd-root: `docs/SSD-ROOT.md`
 
-## Hızlı erişim (Mac)
+## Quick access (Mac)
 
-| Komut | Açıklama |
-|-------|----------|
-| `ssh pi` | Pi'ye LAN üzerinden SSH |
-| `ssh pi-ts` | Pi'ye Tailscale üzerinden SSH |
-| `pi-open` | `https://gateway.home` tarayıcıda aç (TLS kapalıysa `http://`) |
+| Command | Description |
+|---------|-------------|
+| `ssh pi` | SSH to Pi over LAN |
+| `ssh pi-ts` | SSH to Pi over Tailscale |
+| `pi-open` | Open `https://gateway.home` in browser (`http://` if TLS off) |
 | `pi-logs` | `https://logs.home` |
 | `pi-status` | `https://status.home` |
-| `make telegram-menu` | Telegram panel menüsü |
+| `make telegram-menu` | Telegram panel menu |
 
-Kurulum: `make pi-access`
+Setup: `make pi-access`
 
-## Paneller (`*.home`)
+## Panels (`*.home`)
 
-`ENABLE_TLS=true` iken tüm paneller **HTTPS** (`https://*.home`). TLS kapalıysa `http://`.
+With `ENABLE_TLS=true`, all panels use **HTTPS** (`https://*.home`). Without TLS, use `http://`.
 
-### Çift giriş (normal)
+### Dual login (normal)
 
-1. **Caddy basic auth** — tüm `*.home` panelleri (varsayılan: `AGH_ADMIN_USER` + `AGH_ADMIN_PASSWORD`; `CADDY_AUTH_*` set ise onlar)
-2. **Uygulama girişi** — servisin kendi kullanıcı/şifresi (Homepage hariç)
+1. **Caddy basic auth** — all `*.home` panels (default: `AGH_ADMIN_USER` + `AGH_ADMIN_PASSWORD`; `CADDY_AUTH_*` if set)
+2. **App login** — each service's own user/password (except Homepage)
 
-| URL | Servis | Caddy | Uygulama |
-|-----|--------|-------|----------|
-| https://gateway.home | Homepage (ana panel) | `AGH_ADMIN_*` | — |
-| https://panel.home | Homepage (alias) | aynı | — |
-| https://status.home | Uptime Kuma | aynı | `UPTIME_KUMA_ADMIN_*` |
-| https://logs.home | Dozzle | aynı | `DOZZLE_ADMIN_*` |
-| https://dns.home | AdGuard | aynı | `AGH_ADMIN_*` |
-| https://git.home | Forgejo | aynı | `FORGEJO_ADMIN_*` |
-| https://sync.home | Syncthing | aynı | `SYNCTHING_GUI_*` |
-| https://n8n.home | n8n | aynı | Owner (ilk kurulumda web UI) |
-| https://devices.home | NetAlertX (ağ envanteri) | aynı | NetAlertX UI (ilk açılışta şifre) |
+| URL | Service | Caddy | App |
+|-----|---------|-------|-----|
+| https://gateway.home | Homepage (main panel) | `AGH_ADMIN_*` | — |
+| https://panel.home | Homepage (alias) | same | — |
+| https://status.home | Uptime Kuma | same | `UPTIME_KUMA_ADMIN_*` |
+| https://logs.home | Dozzle | same | `DOZZLE_ADMIN_*` |
+| https://dns.home | AdGuard | same | `AGH_ADMIN_*` |
+| https://git.home | Forgejo | same | `FORGEJO_ADMIN_*` |
+| https://sync.home | Syncthing | same | `SYNCTHING_GUI_*` |
+| https://n8n.home | n8n | same | Owner (web UI on first setup) |
+| https://devices.home | NetAlertX (network inventory) | same | NetAlertX UI (password on first launch) |
 
-Public durum sayfası: `https://status.home/status/pi-gateway` (Caddy auth sonrası).
+Public status page: `https://status.home/status/pi-gateway` (after Caddy auth).
 
-Mac'te HTTPS sertifika uyarısı: `make trust-ca`.
+Mac HTTPS cert warning: `make trust-ca`.
 
-Uzaktan erişim: Tailscale açık + MagicDNS (`home` split DNS). Ayrıntı: `docs/TAILSCALE.md` (ACL: `config/tailscale/acl.hujson.example`).
+Remote access: Tailscale enabled + MagicDNS (`home` split DNS). Details: `docs/TAILSCALE.md` (ACL: `config/tailscale/acl.hujson.example`).
 
-## Günlük komutlar (Mac)
+## Daily commands (Mac)
 
-| Komut | Açıklama |
-|-------|----------|
+| Command | Description |
+|---------|-------------|
 | `make status` | Pi uptime, docker, health |
-| `make dns-test` | DNS engel + rewrite testi |
-| `make test-remote` | health + smoke (16+ kontrol) |
-| `make verify-data` | Hybrid SSD symlink doğrulama |
-| `make backup-pull` | Restic + config offsite kopya |
-| `make backup-cron` | Haftalık backup-pull (Pazar 03:00) |
+| `make dns-test` | DNS block + rewrite test |
+| `make test-remote` | health + smoke (16+ checks) |
+| `make verify-data` | Hybrid SSD symlink validation |
+| `make backup-pull` | Restic + config offsite copy |
+| `make backup-cron` | Weekly backup-pull (Sunday 03:00) |
 
 ## Deploy
 
 ```bash
 make render && make validate && make deploy
-# veya hizli (pull yok):
+# or fast (no pull):
 make deploy-fast
 ```
 
-Sıra: ön kontrol → rsync (data hariç) → bootstrap → docker compose → post-deploy → smoke test.
+Order: pre-check → rsync (excluding data) → bootstrap → docker compose → post-deploy → smoke test.
 
-Deploy başarısız olursa: `make verify-data` ile `data/` symlink kontrol et; `data/` asla rsync ile silinmemeli.
+If deploy fails: run `make verify-data` to check `data/` symlink; `data/` must never be deleted by rsync.
 
-## Güvenlik (varsayılan)
+## Security (defaults)
 
-- **UFW:** `caddy-only` — admin panelleri yalnızca `*.home` (port 80/443) üzerinden
-- **Şifreler:** servis başına ayrı (`.env`, git'e girmez)
-- **Tailscale:** UFW'de yalnızca 22/80/443; ACL ile cihaz kısıtı önerilir
+- **UFW:** `caddy-only` — admin panels only via `*.home` (ports 80/443)
+- **Passwords:** per-service (`.env`, not in git)
+- **Tailscale:** UFW allows only 22/80/443; device restriction via ACL recommended
 
-Firewall yeniden uygula (Pi):
+Reapply firewall (Pi):
 
 ```bash
 ssh pi 'REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/setup-firewall.sh'
 ```
 
-## Pi reboot sonrası
+## After Pi reboot
 
-1. 2–3 dk bekleyin (AdGuard filtre yüklemesi)
-2. `make dns-test` veya `dig google.com @PI_STATIC_IP`
-3. `pi-gateway-recover-ro.service` root ve stack kurtarmayı dener
+1. Wait 2–3 minutes (AdGuard filter loading)
+2. `make dns-test` or `dig google.com @PI_STATIC_IP`
+3. `pi-gateway-recover-ro.service` attempts root and stack recovery
 
-## DNS çalışmıyor
+## DNS not working
 
-1. `docker ps` → `adguard`, `unbound` healthy mi?
+1. `docker ps` → are `adguard`, `unbound` healthy?
 2. `journalctl -t pi-gateway-health -n 20`
 3. `bash ~/pi-gateway/scripts/pi/configure-adguard.sh`
-4. Mac DNS: Pi IP; router'da birincil DNS Pi olmalı
+4. Mac DNS: Pi IP; router primary DNS should be Pi
 
-## Disk dolu
+## Disk full
 
-Hybrid modda: **SD** OS + Docker imajları; **SSD** uygulama verisi.
+In hybrid mode: **SD** = OS + Docker images; **SSD** = app data.
 
 ```bash
 df -h / /mnt/ssd
 docker info | grep "Docker Root Dir"
 ```
 
-`docker system prune` (dikkatli). Restic `forget --prune` gunluk calisir.
+`docker system prune` (careful). Restic `forget --prune` runs daily.
 
-## Bildirimler
+## Notifications
 
 `.env`: `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`
 
-| Kaynak | Ne gönderir |
-|--------|-------------|
-| `health-check` timer | DNS hatası, disk %80+, SD uyarıları |
-| `restic-backup` | Yedek tamamlandı |
-| `stack-watchdog` / SSD hotplug | Stack veya SSD kurtarma |
-| `morning-summary.sh` (08:00 timer) | Günlük sabah özeti |
-| n8n ← Uptime Kuma webhook | Servis düştü / tekrar ayakta |
+| Source | What it sends |
+|--------|---------------|
+| `health-check` timer | DNS errors, disk 80%+, SD warnings |
+| `restic-backup` | Backup completed |
+| `stack-watchdog` / SSD hotplug | Stack or SSD recovery |
+| `morning-summary.sh` (08:00 timer) | Daily morning summary |
+| n8n ← Uptime Kuma webhook | Service down / back up |
 | n8n ← Forgejo push webhook | Git push (repo: `FORGEJO_REPO_NAME`) |
-| n8n ← NetAlertX webhook | Yeni cihaz, offline / disconnect |
+| n8n ← NetAlertX webhook | New device, offline / disconnect |
 
-| Komut | Açıklama |
-|-------|----------|
-| `make telegram-test` | Test mesajı |
-| `make telegram-menu` | Panel link butonları |
-| `make morning-test` | Sabah özeti hemen gönder |
+| Command | Description |
+|---------|-------------|
+| `make telegram-test` | Test message |
+| `make telegram-menu` | Panel link buttons |
+| `make morning-test` | Send morning summary now |
 
-Bot yalnızca bildirim gönderir; gelen mesajlara cevap vermez.
+Bot sends notifications only; it does not reply to incoming messages.
 
-## Şifreler
+## Passwords
 
-Tüm şifreler Mac'teki `.env` dosyasında. Servisler:
+All passwords live in `.env` on the Mac. Services:
 
-| Değişken | Servis |
-|----------|--------|
+| Variable | Service |
+|----------|---------|
 | `AGH_ADMIN_PASSWORD` | AdGuard |
 | `DOZZLE_ADMIN_PASSWORD` | Dozzle |
 | `UPTIME_KUMA_ADMIN_PASSWORD` | Uptime Kuma |
 | `SYNCTHING_GUI_PASSWORD` | Syncthing |
 | `FORGEJO_ADMIN_PASSWORD` | Forgejo |
-| `RESTIC_PASSWORD` | Yedekleme |
+| `RESTIC_PASSWORD` | Backup |
 
-Yeni şifre üret: `openssl rand -base64 18 | tr -d '/+=' | head -c 20`
+Generate new password: `openssl rand -base64 18 | tr -d '/+=' | head -c 20`
 
-Deploy sonrası post-deploy scriptleri şifreleri uygular.
+Post-deploy scripts apply passwords after deploy.
 
-## Yedekleme (3-2-1)
+## Backup (3-2-1)
 
-1. **Pi SSD:** Restic günlük (`pi-gateway-backup.timer`)
-2. **Mac offsite:** `make backup-pull` veya `make backup-cron`
-3. Hedef: `~/Backups/pi-gateway/`
+1. **Pi SSD:** Restic daily (`pi-gateway-backup.timer`)
+2. **Mac offsite:** `make backup-pull` or `make backup-cron`
+3. Destination: `~/Backups/pi-gateway/`
 
-## İlgili dokümanlar
+## Related docs
 
-- `docs/ENV.md` — tüm ortam değişkenleri
-- `docs/SECURITY.md` — güvenlik modeli
-- `docs/RESTORE.md` — felaket kurtarma
-- `config/tailscale/acl.hujson.example` — Tailscale ACL şablonu
+- `docs/ENV.md` — all environment variables
+- `docs/SECURITY.md` — security model
+- `docs/RESTORE.md` — disaster recovery
+- `config/tailscale/acl.hujson.example` — Tailscale ACL template

@@ -1,43 +1,43 @@
-# DNS reklam engelleme — sinirlar ve stack
+# DNS ad blocking — limits and stack
 
-## Neden telefon AdGuard daha cok engeller?
+## Why does phone AdGuard block more?
 
-| Katman | Telefon AdGuard | Pi AdGuard Home |
-|--------|-----------------|-----------------|
-| DNS host engeli | Var | Var (bu proje) |
-| HTTPS icerik (path/query) | Var (yerel VPN/proxy) | **Yok** |
-| CSS element hiding | Var | **Yok** |
-| Scriptlet / JS enjeksiyon | Var | **Yok** |
+| Layer | Phone AdGuard | Pi AdGuard Home |
+|-------|---------------|-----------------|
+| DNS host blocking | Yes | Yes (this project) |
+| HTTPS content (path/query) | Yes (local VPN/proxy) | **No** |
+| CSS element hiding | Yes | **No** |
+| Scriptlet / JS injection | Yes | **No** |
 
-Sonuc: Ayni domain uzerinden gelen reklamlar (YouTube `googlevideo.com`, bazi uygulama ici reklamlar, sayfa ici iframe path'leri) DNS ile engellenemez. Bu normal; DNS-only mimari siniri.
+Result: Ads served from the same domain (YouTube `googlevideo.com`, some in-app ads, in-page iframe paths) cannot be blocked by DNS alone. This is normal; it is a DNS-only architecture limit.
 
-## Mevcut DNS stack
+## Current DNS stack
 
-1. **HaGeZi Pro++** — ana reklam/tracker listesi (OISD + digerleri zaten icinde)
-2. **HaGeZi TIF Medium** — malware/phishing (Pi 4GB icin medium; full TIF RAM'i zorlar)
-3. **AdGuard DNS Popup Hosts** — popup hostlari
-4. **Apple / Windows / Samsung tracker** — cihaz telemetrisi
-5. **User rules** — Google Ads, DoubleClick, Criteo, Taboola, Gemius vb. `$important`
+1. **HaGeZi Pro++** — primary ad/tracker list (OISD and others already included)
+2. **HaGeZi TIF Medium** — malware/phishing (medium for Pi 4GB; full TIF strains RAM)
+3. **AdGuard DNS Popup Hosts** — popup hosts
+4. **Apple / Windows / Samsung tracker** — device telemetry
+5. **User rules** — Google Ads, DoubleClick, Criteo, Taboola, Gemius, etc. with `$important`
 
-OISD Big bilerek yok: Pro++ ile cift yuk; Pi RAM'i israf eder.
+OISD Big is intentionally omitted: duplicates Pro++; wastes Pi RAM.
 
-## Tarayici / YouTube icin
+## Browser / YouTube
 
-DNS yetmezse cihazda ekle:
+If DNS is not enough, add on the device:
 
 - Safari: AdGuard for Safari / uBlock Origin Lite
 - Chrome/Firefox: uBlock Origin
-- YouTube: tarayici eklentisi veya SponsorBlock (DNS cozmez)
+- YouTube: browser extension or SponsorBlock (DNS cannot fix this)
 
-## Guncelleme
+## Update
 
 ```bash
 ssh "$PI_USER@$PI_STATIC_IP" 'REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/apply-adguard-dns.sh'
 ssh "$PI_USER@$PI_STATIC_IP" 'REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/apply-adguard-filters.sh'
 ```
 
-Deploy sonrasi `post-deploy` otomatik calistirir: `wait-adguard-dns` → `apply-adguard-dns` → `apply-adguard-filters`.
+After deploy, `post-deploy` runs automatically: `wait-adguard-dns` → `apply-adguard-dns` → `apply-adguard-filters`.
 
-## Boot notu
+## Boot note
 
-Pi yeniden basladiginda DNS port 53'un acilmasi ~30-90 sn surebilir (filtre yukleme). Mac tek DNS olarak Pi kullaniyorsa once Pi'nin hazir olmasini bekle.
+After a Pi reboot, DNS port 53 may take ~30–90 seconds to open (filter loading). If the Mac uses the Pi as its only DNS server, wait for the Pi to be ready first.

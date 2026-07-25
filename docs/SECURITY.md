@@ -1,68 +1,68 @@
-# Güvenlik Modeli
+# Security Model
 
-## Varsayımlar
+## Assumptions
 
-- Ev LAN’ı (`192.168.1.0/24`) kısmen güvenilir
-- DNS ve admin panelleri Pi üzerinde toplanmış
-- İnternet tehditleri SSH ve servis portlarına yönelir
+- Home LAN (`192.168.1.0/24`) is partially trusted
+- DNS and admin panels are centralized on the Pi
+- Internet threats target SSH and service ports
 
-## Katmanlar
+## Layers
 
-| Katman | Bileşen |
-|--------|---------|
-| Ağ | UFW (LAN-scoped), fail2ban SSH |
-| Tehdit | CrowdSec + firewall bouncer |
-| Uygulama | Servis bazlı şifreler (Dozzle, Forgejo, Kuma, Syncthing GUI) |
-| DNS | AdGuard filtre + Unbound |
-| Uzaktan | Tailscale (opsiyonel) |
+| Layer | Component |
+|-------|-----------|
+| Network | UFW (LAN-scoped), fail2ban SSH |
+| Threat | CrowdSec + firewall bouncer |
+| Application | Per-service passwords (Dozzle, Forgejo, Kuma, Syncthing GUI) |
+| DNS | AdGuard filters + Unbound |
+| Remote | Tailscale (optional) |
 
-## HTTP riski
+## HTTP risk
 
-`*.home` trafiği varsayılan olarak **HTTP**. LAN dinleyicisi veya misafir WiFi ile şifreler görülebilir.
+`*.home` traffic defaults to **HTTP**. Passwords can be exposed on a LAN listener or guest WiFi.
 
-**Öneriler (öncelik sırası):**
+**Recommendations (priority order):**
 
-1. `UFW_ADMIN_EXPOSURE=caddy-only` + panellere yalnızca Caddy üzerinden erişim
-2. Tailscale ile admin; UFW’de hassas portları kapatma
+1. `UFW_ADMIN_EXPOSURE=caddy-only` + access panels only via Caddy
+2. Admin over Tailscale; close sensitive ports in UFW
 3. Internal TLS (`step-ca` / Caddy `tls internal`) — v2
 
 ## Secrets
 
-- `.env` asla git’e girmez
-- `backup.sh` secrets kopyalamaz
-- Restic şifreli; offsite için `make backup-pull`
+- `.env` never goes into git
+- `backup.sh` does not copy secrets
+- Restic is encrypted; use `make backup-pull` for offsite
 
 ## CrowdSec bouncer
 
-`setup-crowdsec-bouncer.sh` host bouncer dener; olmazsa `sync-crowdsec-ufw.sh` + timer ile CrowdSec kararlarini UFW'ye yansitir.
+`setup-crowdsec-bouncer.sh` tries a host bouncer; if that fails, `sync-crowdsec-ufw.sh` + timer applies CrowdSec decisions to UFW.
 
 ```bash
-sudo systemctl status crowdsec-firewall-bouncer  # host kurulumu varsa
+sudo systemctl status crowdsec-firewall-bouncer  # if host install exists
 sudo systemctl status pi-gateway-crowdsec-ufw.timer
 docker exec crowdsec cscli decisions list
 ```
 
 ## Cloudflare Tunnel
 
-Token varsa dış erişim açılır. Yalnızca gerekli hostname’leri expose edin; HTTPS termination Cloudflare tarafında olmalı.
+If a token is set, external access is enabled. Expose only required hostnames; HTTPS termination should be on Cloudflare.
 
-## Kontrol listesi
+## Checklist
 
-- [ ] Tüm varsayılan şifreler değiştirildi
-- [ ] Telegram bildirimleri test edildi
-- [ ] `make backup-pull` haftalık cron (Mac)
-- [ ] Syncthing GUI şifresi set
-- [ ] Tailscale 2FA (hesap tarafı)
+- [ ] All default passwords changed
+- [ ] Telegram notifications tested
+- [ ] `make backup-pull` weekly cron (Mac)
+- [ ] Syncthing GUI password set
+- [ ] Tailscale 2FA (account side)
 
-## Public GitHub hazırlığı
+## Public GitHub preparation
 
-Repo public yapmadan önce:
+Before making the repo public:
 
-1. `make validate` — `validate-public-repo.sh` secret/PII taraması
-2. `.env` asla commit edilmedi — `git log -- .env` boş olmalı
-3. Chat veya logda görünen gerçek token/şifreleri **rotate** et (Telegram, Tailscale, servis şifreleri)
-4. `config/tailscale/acl.hujson` ve `host/dhcpcd/pi-gateway.conf` yalnızca Pi'de render — git'te yok
-5. `TAILSCALE_ACL_OWNER` `.env`'de gerçek Tailscale e-postası (tracked değil)
-6. Watchtower açıksa `WATCHTOWER_NOTIFICATION_URL` token içerir — URL loglara düşebilir; gerekmedikçe kapalı tut
+1. `make validate` — `validate-public-repo.sh` secret/PII scan
+2. `.env` never committed — `git log -- .env` should be empty
+3. **Rotate** any real tokens/passwords seen in chat or logs (Telegram, Tailscale, service passwords)
+4. `config/tailscale/acl.hujson` and `host/dhcpcd/pi-gateway.conf` render only on the Pi — not in git
+5. `TAILSCALE_ACL_OWNER` in `.env` is your real Tailscale email (not tracked)
+6. If Watchtower is enabled, `WATCHTOWER_NOTIFICATION_URL` contains a token — URL may appear in logs; keep disabled unless needed
 
-Public sonrası: güvenlik sorunları için [.github/SECURITY.md](../.github/SECURITY.md) prosedürünü izle; acil durumda repo private + secret rotation.
+After going public: follow [.github/SECURITY.md](../.github/SECURITY.md) for security issues; in an emergency, make the repo private and rotate secrets.

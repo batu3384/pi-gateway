@@ -10,15 +10,19 @@ endif
 PI_USER ?= pi
 REMOTE_DIR ?= /home/$(PI_USER)/pi-gateway
 
-.PHONY: setup validate render deploy deploy-fast install discover mac-dns harden status dns-test test-remote backup-pull backup-cron verify-data pi-access trust-ca tls-certs telegram-menu firewall morning-test sync-configs docker-ssd check-pi-env
+.PHONY: setup validate render deploy deploy-fast install discover mac-dns harden status dns-test test-remote backup-pull backup-cron verify-data pi-access trust-ca tls-certs telegram-menu firewall morning-test sync-configs docker-ssd check-pi-env doctor
 
 check-pi-env:
-	@test -n "$(PI_STATIC_IP)" || (echo "PI_STATIC_IP gerekli — .env duzenle veya make discover" && exit 1)
+	@test -n "$(PI_STATIC_IP)" || (echo "PI_STATIC_IP required — edit .env or run make discover" && exit 1)
+
+doctor:
+	@chmod +x scripts/mac/doctor.sh 2>/dev/null || true
+	@./scripts/mac/doctor.sh
 
 setup:
 	@cp -n .env.example .env 2>/dev/null || true
 	@chmod +x scripts/**/*.sh scripts/*.sh 2>/dev/null || true
-	@echo "Edit .env then: make install"
+	@echo "Edit .env then: make doctor && make install"
 
 validate:
 	@./scripts/mac/validate.sh

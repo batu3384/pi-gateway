@@ -37,7 +37,7 @@ Client DNS query
 | Dashboard | Homepage | Service links |
 | Logs | Dozzle | Live Docker container logs |
 | Monitoring | Uptime Kuma + systemd health timer | Uptime + DNS layer checks |
-| Network inventory | NetAlertX | LAN cihaz keşfi, yeni/offline uyarıları |
+| Network inventory | NetAlertX | LAN device discovery, new/offline alerts |
 | Recovery | autoheal | Restart unhealthy containers |
 | Security | UFW + fail2ban | LAN-scoped admin ports, SSH protection |
 | Host | log2ram, sysctl tuning, watchdog | SD longevity, UDP performance |
@@ -51,8 +51,8 @@ Client DNS query
 | 0 Foundation | Done | Docker, SSD data disk, UFW, fail2ban, Tailscale hook |
 | 1 DNS stack | Done | Unbound, AdGuard, Homepage, Uptime Kuma, Caddy, Dozzle |
 | 2 Dev & sync | Done | Forgejo, Syncthing, Restic (timer) |
-| 3 Advanced | Done | CrowdSec, Redis, n8n; Cloudflare Tunnel (token ile) |
-| 4 Network visibility | Done | NetAlertX — `devices.home`, n8n webhook uyarıları |
+| 3 Advanced | Done | CrowdSec, Redis, n8n; Cloudflare Tunnel (with token) |
+| 4 Network visibility | Done | NetAlertX — `devices.home`, n8n webhook alerts |
 
 ## Network modes
 
@@ -79,7 +79,7 @@ Mac: make install
 ## Hybrid storage layout
 
 ```
-SD (mmcblk):  /           OS root, /var/lib/docker (varsayılan)
+SD (mmcblk):  /           OS root, /var/lib/docker (default)
 USB SSD:      /mnt/ssd/
                 pi-gateway-data/   <- ~/pi-gateway/data symlink
                   adguard/work/
@@ -94,9 +94,9 @@ USB SSD:      /mnt/ssd/
 
 Symlink: `~/pi-gateway/data` → `/mnt/ssd/pi-gateway-data`
 
-Docker imajları varsayılan olarak SD (`/var/lib/docker`). JMicron USB SSD'de I/O sorunu yaşanırsa `ENABLE_DOCKER_SSD=false` bırakın (önerilen).
+Docker images default to SD (`/var/lib/docker`). If you see I/O issues on JMicron USB SSD, keep `ENABLE_DOCKER_SSD=false` (recommended).
 
-Deneysel alternatif: `ssd-root` — `docs/SSD-ROOT.md`
+Experimental alternative: `ssd-root` — `docs/SSD-ROOT.md`
 
 ## Future HA (optional)
 

@@ -1,65 +1,66 @@
-# SD Boot + SSD Rootfs (A mimarisi)
+# SD Boot + SSD Rootfs (Architecture A)
 
-Üretim hedefi: **SD yalnızca boot**, **SSD = rootfs + Docker + veri**.
+Production target: **SD boot only**, **SSD = rootfs + Docker + data**.
 
-## Mimari
+## Architecture
 
 ```
 Pi EEPROM → SD bootfs (firmware/kernel/cmdline)
          → cmdline root=PARTUUID=<ssd> → SSD ext4 /
 ```
 
-| Disk | Rol |
-|------|-----|
+| Disk | Role |
+|------|------|
 | SD `bootfs` | firmware, kernel, cmdline, config |
 | SSD root | OS, apt, home, Docker, pi-gateway data |
 
-`STORAGE_TYPE=ssd-root` — hybrid (`/mnt/ssd` data-disk) **üretim varsayılanı değil**; JMicron USB ve EEPROM riski nedeniyle deneysel kabul edilir.
+`STORAGE_TYPE=ssd-root` — hybrid (`/mnt/ssd` data disk) is **not** the production default; treated as experimental due to JMicron USB and EEPROM risk.
 
 ## Cutover (Mac)
 
-**Önkoşul:** Restic / `make backup-pull` (veya bilinçli risk kabulü). Pi kapalı. SD + SSD Mac USB'de.
+**Prerequisite:** Restic / `make backup-pull` (or conscious risk acceptance). Pi powered off. SD + SSD on Mac USB.
 
 ```bash
 cd ~/Documents/raspberrypi
-# SSD silinir — onay zorunlu
+# SSD is wiped — confirmation required
 PI_PASSWORD='...' CONFIRM=yes ./scripts/mac/migrate-sd-boot-ssd-root.sh
 
-# Zorunlu dogrulama (false-green yok):
+# Mandatory verification (no false green):
 PI_SD_DISK=/dev/diskXX PI_SSD_DISK=/dev/diskYY ./scripts/mac/verify-ssd-root.sh
 ```
 
-`verify-ssd-root` SD ve SSD bootfs'i **disk kimligiyle** esler; SD `root=` SSD `root=` ile ayni olmali ve eski SD PARTUUID'den farkli olmali. SD'de `resize` + `user-data`/`ssh` zorunlu (firmware SD'den boot eder).
+`verify-ssd-root` matches SD and SSD bootfs **by disk identity**; SD `root=` and SSD `root=` must match and differ from the old SD PARTUUID. SD must have `resize` + `user-data`/`ssh` (firmware boots from SD).
 
-Cutover sonrasi onarim (Mac, diskler takili):
+Post-cutover repair (Mac, disks attached):
 ```bash
 PI_SD_DISK=/dev/diskXX PI_SSD_DISK=/dev/diskYY ./scripts/mac/repair-cutover-bootfs.sh
 ```
-SD golden kaynak; firmware/kernel/initramfs SD'den SSD'ye snapshot ile kopyalanir. JMicron okuyucuda SSD bootfs bozulursa `STRICT_SSD_BOOTFS=no` (varsayilan) ile verify uyarir — A mimarisinde Pi SD bootfs'ten acilir.
+SD is golden source; firmware/kernel/initramfs copied from SD bootfs to SSD via snapshot. If SSD bootfs corrupts on JMicron reader, `STRICT_SSD_BOOTFS=no` (default) warns — in architecture A the Pi boots from SD bootfs.
 
-1. SD + SSD'yi Pi'ye tak (SSD → mavi USB 3.0)
-2. Aç, ~3–5 dk bekle (resize + cloud-init)
-3. SSH: `findmnt -n -o SOURCE /` → **mmcblk olmamalı**
+1. Insert SD + SSD into Pi (SSD → blue USB 3.0)
+2. Power on, wait ~3–5 min (resize + cloud-init)
+3. SSH: `findmnt -n -o SOURCE /` → **must not be mmcblk**
 4. `.env`: `STORAGE_TYPE=ssd-root`
 5. Mac: `./scripts/mac/deploy.sh`
-6. İlk girişte güçlü şifre (`passwd`) + `ssh-copy-id` + PasswordAuthentication kapat
-7. Deploy sonrası otomatik: `ssd-root-harden.sh` (EEPROM + root check)
+6. On first login: strong password (`passwd`) + `ssh-copy-id` + disable PasswordAuthentication
+7. After deploy (automatic): `ssd-root-harden.sh` (EEPROM + root check)
 8. Legacy SD root:
    `CONFIRM=yes sudo bash ~/pi-gateway/scripts/pi/neutralize-legacy-sd-root.sh`
-   veya deploy sırasında `CONFIRM_NEUTRALIZE=yes`
-### EEPROM (gerekirse, eski SD root ile bir kez)
+   or `CONFIRM_NEUTRALIZE=yes` during deploy
+
+### EEPROM (if needed, once with old SD root)
 
 ```bash
 sudo rpi-eeprom-config --edit
-# BOOT_ORDER=0xf41   # SD once, sonra USB
+# BOOT_ORDER=0xf41   # SD first, then USB
 # USB_MSD_PWR_OFF_TIME=0
 # USB_MSD_DISCOVER_TIMEOUT=25000
 # USB_MSD_STARTUP_DELAY=5000
 ```
 
-JMicron adaptör: `docs/SSD-JMICRON-FIX.md`.
+JMicron adapter: `docs/SSD-JMICRON-FIX.md`.
 
-## Doğrulama
+## Verification
 
 ```bash
 findmnt -n -o SOURCE,FSTYPE /
@@ -72,16 +73,16 @@ REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/smoke-test.sh
 REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/reboot-smoke.sh post
 ```
 
-## Hybrid'den fark
+## Difference from hybrid
 
-| | hybrid (eski) | ssd-root |
-|--|---------------|----------|
+| | hybrid (legacy) | ssd-root |
+|--|-----------------|----------|
 | OS | SD | SSD |
-| Root RO riski | Yüksek (SD I/O) | Düşük |
-| `/mnt/ssd` | Zorunlu data disk | Yok |
-| `data/` | symlink | native dizin |
-| Docker root | `/mnt/ssd/docker` | `/var/lib/docker` (SSD'de) |
+| Root RO risk | High (SD I/O) | Low |
+| `/mnt/ssd` | Required data disk | N/A |
+| `data/` | symlink | native directory |
+| Docker root | `/mnt/ssd/docker` | `/var/lib/docker` (on SSD) |
 
-## Alternatif B
+## Alternative B
 
-Tam USB SSD boot (SD çıkarma): `docs/SSD-KURULUM.md` — bu projenin varsayılanı değil.
+Full USB SSD boot (SD removed): `docs/SSD-INSTALL.md` — not this project's default.

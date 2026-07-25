@@ -1,38 +1,38 @@
-# SSD Boot — Profesyonel Teşhis ve Düzeltme
+# SSD Boot — Professional Diagnosis and Fix
 
-Güncelleme: 2026-07-11
+Updated: 2026-07-11
 
-## Gerçekler (forum + resmi doküman)
+## Facts (forums + official docs)
 
-1. **SSD / imaj Mac'te sağlam** olabilir; Pi USB **bootloader** aşaması ayrıdır.
-2. `usb-storage.quirks` = **Linux kernel** ayarı. Renkli ekranda (kernel yok) **işe yaramaz**.
-3. YongzhenWeiye = JMicron **JMS583** (`152d:0583`) — Pi 4'te bilinen uyumsuzluk ([rpi-eeprom#266](https://github.com/raspberrypi/rpi-eeprom/issues/266)).
-4. Bootloader düzeltmeleri **EEPROM**'da: `USB_MSD_PWR_OFF_TIME=0`, `USB_MSD_DISCOVER_TIMEOUT`, `USB_MSD_STARTUP_DELAY`.
+1. **SSD / image can be fine on Mac**; Pi USB **bootloader** stage is separate.
+2. `usb-storage.quirks` is a **Linux kernel** setting. On the rainbow screen (no kernel) it **does nothing**.
+3. YongzhenWeiye = JMicron **JMS583** (`152d:0583`) — known Pi 4 incompatibility ([rpi-eeprom#266](https://github.com/raspberrypi/rpi-eeprom/issues/266)).
+4. Bootloader fixes live in **EEPROM**: `USB_MSD_PWR_OFF_TIME=0`, `USB_MSD_DISCOVER_TIMEOUT`, `USB_MSD_STARTUP_DELAY`.
 
-## Mac'te yapılanlar (`harden-ssd-boot.sh`)
+## Done on Mac (`harden-ssd-boot.sh`)
 
 - quirks + rootdelay=25
-- quiet/splash kaldırıldı (boot log görünsün)
+- quiet/splash removed (boot log visible)
 - boot_delay=5, hdmi_force_hotplug, usb_max_current
-- ssh + cloud-init kontrolü
+- ssh + cloud-init check
 
-## Pi'de zorunlu — SD ile (elle veya script)
+## Required on Pi — with SD (manual or script)
 
-**A mimarisi (SD boot + SSD root):** `BOOT_ORDER=0xf41` (SD once)
-**B mimarisi (tam USB boot, SD cikarilir):** `BOOT_ORDER=0xf14` (USB once)
+**Architecture A (SD boot + SSD root):** `BOOT_ORDER=0xf41` (SD first)  
+**Architecture B (full USB boot, SD removed):** `BOOT_ORDER=0xf14` (USB first)
 
-Otomatik (A):
+Automatic (A):
 ```bash
 CONFIRM_EEPROM_FIX=yes sudo bash ~/pi-gateway/scripts/pi/fix-eeprom-usb-ssd.sh
 sudo reboot
 ```
 
-Elle:
+Manual:
 ```bash
 sudo -E rpi-eeprom-config --edit
 ```
 
-A mimarisi icin ekle / guncelle:
+For architecture A, add / update:
 
 ```
 BOOT_ORDER=0xf41
@@ -41,19 +41,19 @@ USB_MSD_DISCOVER_TIMEOUT=25000
 USB_MSD_STARTUP_DELAY=5000
 ```
 
-Kaydet, `sudo reboot`. Sonra dogrula:
+Save, `sudo reboot`. Then verify:
 
 ```bash
 sudo rpi-eeprom-config | grep -E 'BOOT_ORDER|USB_MSD'
 ```
 
-## Test sırası
+## Test sequence
 
-1. SD açık → SSD tak → `lsusb` / `lsblk` (disk Linux'ta görünmeli)
-2. EEPROM script → reboot → doğrula
-3. SD çıkar → SSD USB **2.0** → aç
-4. Olmazsa: ASMedia kutu veya SD'den `make install`
+1. SD booted → attach SSD → `lsusb` / `lsblk` (disk should appear in Linux)
+2. EEPROM script → reboot → verify
+3. Remove SD → SSD on USB **2.0** → power on
+4. If that fails: ASMedia enclosure or `make install` from SD
 
-## Kalıcı çözüm
+## Permanent fix
 
-ASMedia chipsetli USB-SATA adaptör. JMicron ile 24/7 USB boot önerilmez.
+USB-SATA adapter with ASMedia chipset. 24/7 USB boot with JMicron is not recommended.

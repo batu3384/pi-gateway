@@ -1,8 +1,8 @@
-# Tailscale Uzaktan Erişim
+# Tailscale Remote Access
 
-## Kurulum (Pi)
+## Setup (Pi)
 
-Deploy sırasında `setup-tailscale-remote.sh` çalışır. Manuel:
+`setup-tailscale-remote.sh` runs during deploy. Manual:
 
 ```bash
 ssh pi 'REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/setup-tailscale-remote.sh'
@@ -10,41 +10,41 @@ ssh pi 'REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/setup-tailscale-rem
 
 ## Mac / iPhone
 
-1. Tailscale uygulamasını kur
-2. Aynı tailnet'e giriş yap
-3. Pi'yi onayla: subnet `192.168.1.0/24` route
+1. Install the Tailscale app
+2. Sign in to the same tailnet
+3. Approve Pi: subnet route `192.168.1.0/24`
 
-## DNS (`*.home` uzaktan)
+## DNS (`*.home` remotely)
 
 Tailscale Admin → DNS → Nameservers:
 
 - Split DNS: `home` → Pi Tailscale IP (`100.x.x.x`)
-- **Override local DNS** açık
+- Enable **Override local DNS**
 
-## Tailscale Serve (önerilen — Telegram uzaktan linkler)
+## Tailscale Serve (recommended — remote Telegram links)
 
-Telefonda `https://gateway.home` mkcert sertifikasına güvenmez. Bunun yerine:
+On phone, `https://gateway.home` does not trust mkcert certs. Instead:
 
-1. Admin'de Serve'i aç: deploy sırasında verilen `/f/serve` linki veya ACL
-2. Pi'de: `bash scripts/pi/setup-tailscale-serve.sh`
-3. Telegram menüsünde **🌐 Uzaktan** butonları: `https://pi-gateway.tailXXXX.ts.net/p/dns` vb.
+1. Enable Serve in Admin: `/f/serve` link from deploy or ACL
+2. On Pi: `bash scripts/pi/setup-tailscale-serve.sh`
+3. Telegram menu **🌐 Remote** buttons: `https://pi-gateway.tailXXXX.ts.net/p/dns` etc.
 
 ```bash
-make telegram-menu   # veya Pi'de scripts/pi/telegram-menu.sh
+make telegram-menu   # or on Pi: scripts/pi/telegram-menu.sh
 ```
 
-Teşhis: `bash scripts/pi/diagnose-remote-access.sh`
+Diagnostics: `bash scripts/pi/diagnose-remote-access.sh`
 
-## ACL (önerilen)
+## ACL (recommended)
 
-`make tailscale-acl` — `.env` içinde `TAILSCALE_ACL_OWNER` (Tailscale e-postası) gerekli.
-Şablon: `config/tailscale/acl.hujson.example` → yerel `config/tailscale/acl.hujson` (gitignore, commit etme).
+`make tailscale-acl` — requires `TAILSCALE_ACL_OWNER` in `.env` (Tailscale email).
+Template: `config/tailscale/acl.hujson.example` → local `config/tailscale/acl.hujson` (gitignored, do not commit).
 
-Manuel: [Access Controls](https://login.tailscale.com/admin/acls) sayfasına şablonu kopyala.
+Manual: copy template to [Access Controls](https://login.tailscale.com/admin/acls).
 
-- Pi'ye etiket: `tag:pi-gateway`
-- Kendi cihazlarına: `tag:owner-device`
-- Misafir cihazlar Pi'ye erişemez
+- Tag Pi: `tag:pi-gateway`
+- Your devices: `tag:owner-device`
+- Guest devices cannot reach Pi
 
 ## SSH
 
@@ -53,6 +53,6 @@ ssh pi-ts          # Tailscale IP
 ssh "$PI_USER@100.x.x.x"
 ```
 
-## Güvenlik notu
+## Security note
 
-UFW, `tailscale0` üzerinde yalnızca 22/80/443'e izin verir. Admin panelleri Caddy (`*.home`) üzerinden erişilir.
+UFW allows only 22/80/443 on `tailscale0`. Admin panels are reached via Caddy (`*.home`).

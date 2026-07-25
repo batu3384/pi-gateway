@@ -1,12 +1,12 @@
-# Geri Yükleme (Restic)
+# Restore (Restic)
 
-## Ön koşul
+## Prerequisites
 
-- `RESTIC_PASSWORD` (`.env` veya güvenli kasada)
-- Yerel repo: `/mnt/ssd/pi-gateway-data/backups/restic` (symlink: `~/pi-gateway/data/backups/restic`)
-- Mac kopyası: `make backup-pull` → `~/Backups/pi-gateway/restic`
+- `RESTIC_PASSWORD` (`.env` or secure vault)
+- Local repo: `/mnt/ssd/pi-gateway-data/backups/restic` (symlink: `~/pi-gateway/data/backups/restic`)
+- Mac copy: `make backup-pull` → `~/Backups/pi-gateway/restic`
 
-## Snapshot listesi
+## Snapshot list
 
 ```bash
 ssh "$PI_USER@$PI_STATIC_IP" 'source ~/pi-gateway/.env && docker run --rm \
@@ -14,10 +14,10 @@ ssh "$PI_USER@$PI_STATIC_IP" 'source ~/pi-gateway/.env && docker run --rm \
   restic/restic -r file:///repo snapshots'
 ```
 
-## Tek dosya / klasör geri yükleme
+## Single file / folder restore
 
 ```bash
-# Örnek: config/adguard template
+# Example: config/adguard template
 docker run --rm -e RESTIC_PASSWORD \
   -v /mnt/ssd/pi-gateway-data/backups/restic:/repo \
   -v /tmp/restore:/restore \
@@ -25,12 +25,12 @@ docker run --rm -e RESTIC_PASSWORD \
   --target /restore --include /backup/config
 ```
 
-## Tam felaket senaryosu
+## Full disaster scenario
 
-1. Pi’yi yeniden kur (`make install` veya SSD imajı)
-2. `.env` dosyasını güvenli kaynaktan geri koy
+1. Reinstall Pi (`make install` or SSD image)
+2. Restore `.env` from secure source
 3. `make deploy`
-4. Restic’ten veri dizinini geri yükle:
+4. Restore data directory from Restic:
 
 ```bash
 docker run --rm -e RESTIC_PASSWORD \
@@ -40,11 +40,11 @@ docker run --rm -e RESTIC_PASSWORD \
 ```
 
 5. `docker compose up -d` + `configure-adguard.sh`
-6. `scripts/pi/smoke-test.sh` (tüm kontroller yeşil)
-7. İsteğe bağlı: `scripts/pi/reboot-smoke.sh post` (reboot sonrası `recover-ro` + smoke)
+6. `scripts/pi/smoke-test.sh` (all checks green)
+7. Optional: `scripts/pi/reboot-smoke.sh post` (post-reboot `recover-ro` + smoke)
 
-SSD yokken veya degraded modda Restic yedek atlanır (`restic-backup.sh`).
+Restic backup is skipped when SSD is missing or in degraded mode (`restic-backup.sh`).
 
-## Aylık drill
+## Monthly drill
 
-Ayda bir `make backup-pull` + Mac’te `restic check` çalıştırın.
+Once a month, run `make backup-pull` + `restic check` on the Mac.

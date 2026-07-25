@@ -1,67 +1,67 @@
-# Faz 4 — Ağ görünürlüğü (NetAlertX)
+# Phase 4 — Network visibility (NetAlertX)
 
-LAN cihaz envanteri, yeni cihaz ve offline uyarıları.
+LAN device inventory, new-device and offline alerts.
 
 ## Panel
 
-| URL | Açıklama |
-|-----|----------|
-| https://devices.home | NetAlertX arayüzü (Caddy auth) |
+| URL | Description |
+|-----|-------------|
+| https://devices.home | NetAlertX UI (Caddy auth) |
 
 `.env`:
 
 ```bash
 ENABLE_NETALERTX=true
 NETALERTX_PORT=20211
-# Opsiyonel — bos ise LAN_SUBNET_CIDR + PI_INTERFACE kullanilir
+# Optional — if empty, LAN_SUBNET_CIDR + PI_INTERFACE are used
 NETALERTX_SCAN_SUBNETS=
 ```
 
-## Kurulum
+## Setup
 
-Deploy sırasında otomatik:
+Automatic during deploy:
 
 1. `netalertx` container (`--profile netalert`, host network)
-2. `setup-netalertx.sh` — ARP tarama subnet + n8n webhook
+2. `setup-netalertx.sh` — ARP scan subnet + n8n webhook
 3. n8n workflow `Pi Gateway — NetAlertX Alert`
 4. Kuma monitor `devices.home`
 
-Manuel:
+Manual:
 
 ```bash
 ssh pi 'REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/setup-netalertx.sh'
 ```
 
-## İlk çalıştırma
+## First run
 
-İlk ARP taraması **5–10 dakika** sürebilir. Sonrasında **Devices** listesinde LAN cihazları görünür.
+First ARP scan may take **5–10 minutes**. After that, LAN devices appear in **Devices**.
 
-Bilinen cihazları onaylayın / etiketleyin; böylece “yeni cihaz” uyarıları azalır.
+Approve / label known devices to reduce "new device" alerts.
 
-## Bildirimler
+## Notifications
 
-| Olay | Kanal |
-|------|-------|
-| Yeni cihaz | n8n → Telegram |
+| Event | Channel |
+|-------|---------|
+| New device | n8n → Telegram |
 | Offline / disconnect | n8n → Telegram |
 
-NetAlertX içinde doğrudan Telegram **kapalı** — tek hat n8n webhook.
+Direct Telegram in NetAlertX is **disabled** — single path is n8n webhook.
 
 Test:
 
 ```bash
-make telegram-test   # genel hat
-# smoke: n8n-netalert-webhook (deploy sonrasi)
+make telegram-test   # general path
+# smoke: n8n-netalert-webhook (after deploy)
 ```
 
-## Kuma ile fark
+## Difference from Kuma
 
-| Araç | Soru |
-|------|------|
-| Uptime Kuma | Servis ayakta mı? |
-| NetAlertX | Ağda hangi cihazlar var? |
+| Tool | Question |
+|------|----------|
+| Uptime Kuma | Is the service up? |
+| NetAlertX | Which devices are on the network? |
 
-## Kapatma
+## Disable
 
 ```bash
 # .env
@@ -69,4 +69,4 @@ ENABLE_NETALERTX=false
 make deploy-fast
 ```
 
-Veri `data/netalertx/` altında kalır.
+Data remains under `data/netalertx/`.
