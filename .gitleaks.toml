@@ -1,0 +1,9 @@
+# Gitleaks config — https://github.com/gitleaks/gitleaks
+title = "pi-gateway"
+
+[allowlist]
+description = "Known false positives"
+regexes = [
+  # curl -u "${API_KEY}:" uses env var, not a literal secret
+  '''\$\{API_KEY\}:''',
+]
