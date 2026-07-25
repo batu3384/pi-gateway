@@ -4,10 +4,12 @@ Automated Mac → Raspberry Pi deploy for a production DNS / home-lab stack.
 
 ## Requirements
 
-- **Mac:** Docker Desktop (or Engine), SSH, rsync, python3
+- **Mac:** Docker Desktop (or Engine), SSH **with key auth** (`ssh-copy-id`), rsync, python3
 - **Pi 4B:** OS on SD card; ethernet; 5V/3A+ PSU
 - **USB SSD (required for default hybrid mode):** plugged into a USB 3.0 port before `make install`. Bootstrap formats/mounts it at `/mnt/ssd` and stores all app data there. Without the SSD, install **exits with an error**.
 - `.env` with strong passwords (min 12 characters; no `CHANGE_ME*` placeholders)
+
+Password-only SSH is not supported for deploy (non-interactive). Use: `ssh-copy-id "$PI_USER@$PI_HOST"`.
 
 Default storage: **hybrid** — SD = OS (boot + root), SSD = `/mnt/ssd` data. See [docs/SSD-INSTALL.md](docs/SSD-INSTALL.md).
 

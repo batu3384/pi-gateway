@@ -93,6 +93,18 @@ if [[ -f "$PROJECT_DIR/.env" ]]; then
   else
     ok "PI_USER=${PI_USER}"
   fi
+
+  # Deploy needs non-interactive SSH (key auth)
+  ssh_target="${PI_HOST:-${PI_STATIC_IP:-}}"
+  ssh_user="${PI_USER:-pi}"
+  if [[ -n "$ssh_target" ]]; then
+    if ssh -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+      "${ssh_user}@${ssh_target}" 'true' 2>/dev/null; then
+      ok "SSH key auth: ${ssh_user}@${ssh_target}"
+    else
+      fail "SSH key auth failed for ${ssh_user}@${ssh_target} — run: ssh-copy-id ${ssh_user}@${ssh_target}"
+    fi
+  fi
 fi
 
 echo "[doctor] summary: fails=${fails} warns=${warns}"

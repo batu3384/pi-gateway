@@ -21,7 +21,7 @@ AdGuard + Unbound DNS, Caddy reverse proxy, Forgejo, Syncthing, n8n, monitoring 
 
 ## Requirements
 
-- **Mac (or Linux):** Docker, SSH, `python3`, `rsync`
+- **Mac (or Linux):** Docker, SSH with key auth (`ssh-copy-id`), `python3`, `rsync`
 - **Pi 4B:** Ethernet, adequate PSU; **USB SSD required** for default hybrid storage (`/mnt/ssd` data)
 - Strong passwords in `.env` (min 12 chars; no `CHANGE_ME*` placeholders)
 

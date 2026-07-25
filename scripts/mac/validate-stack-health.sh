@@ -345,10 +345,22 @@ ok "install doctor + PI_STATIC_IP fallback"
 
 grep -q 'wait_ssh' "$PROJECT_DIR/scripts/mac/deploy.sh" \
   || die "deploy.sh wait_ssh yok (dhcpcd sonrasi)"
+grep -q 'ssh-copy-id' "$PROJECT_DIR/scripts/mac/deploy.sh" \
+  || die "deploy wait_ssh SSH key mesaji yok"
 ok "deploy SSH retry after bootstrap"
 
-grep -q 'WARN: pre-deploy symlink not ready' "$PROJECT_DIR/scripts/mac/pre-deploy-check.sh" \
-  || die "pre-deploy fresh-install soft-fail yok"
-ok "pre-deploy soft-fail fresh install"
+grep -q 'fresh_no_ssd\|fresh_no_repo' "$PROJECT_DIR/scripts/mac/pre-deploy-check.sh" \
+  || die "pre-deploy fresh/broken ayrimi yok"
+grep -q 'broken and repair failed' "$PROJECT_DIR/scripts/mac/pre-deploy-check.sh" \
+  || die "pre-deploy broken hard-fail yok"
+ok "pre-deploy fresh soft-fail / broken hard-fail"
+
+# Legacy scripts/deploy.sh must wrap mac/deploy (no divergent ssd-root default)
+if grep -q 'STORAGE_TYPE:-ssd-root' "$PROJECT_DIR/scripts/deploy.sh" 2>/dev/null; then
+  die "scripts/deploy.sh hala ssd-root default — mac/deploy wrapper olmali"
+fi
+grep -q 'mac/deploy.sh' "$PROJECT_DIR/scripts/deploy.sh" \
+  || die "scripts/deploy.sh mac/deploy wrapper degil"
+ok "scripts/deploy.sh wraps mac/deploy"
 
 echo "[validate-stack] Tum kontroller gecti"

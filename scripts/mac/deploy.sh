@@ -59,16 +59,18 @@ ssh "$PI_USER@$PI_HOST" "REMOTE_DIR='$REMOTE_DIR' TAILSCALE_AUTHKEY='${TAILSCALE
 
 DEPLOY_HOST="${PI_STATIC_IP:-$PI_HOST}"
 
+# Deploy is non-interactive: SSH key auth required (password prompts hang/fail).
 wait_ssh() {
   local host="$1" tries="${2:-24}" i
   for ((i = 1; i <= tries; i++)); do
-    if ssh -o ConnectTimeout=5 -o BatchMode=yes "$PI_USER@$host" 'true' 2>/dev/null; then
+    if ssh -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=accept-new \
+      "$PI_USER@$host" 'true' 2>/dev/null; then
       log "SSH ready: $PI_USER@$host (attempt $i)"
       return 0
     fi
     sleep 5
   done
-  die "SSH failed after dhcpcd/bootstrap: $PI_USER@$host"
+  die "SSH failed after dhcpcd/bootstrap: $PI_USER@$host — need working SSH key (ssh-copy-id); password-only auth not supported for deploy"
 }
 
 log "Waiting for SSH on deploy host ($DEPLOY_HOST) after bootstrap..."

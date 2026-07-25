@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Pre-deploy: Mac data/ safety + optional Pi symlink check
-# Fresh installs often have no SSD mount yet — bootstrap creates it. Soft-fail then.
+# Pre-deploy: Mac data/ safety + Pi symlink check
+# Fresh install (no SSD yet): soft-continue — bootstrap formats/mounts SSD.
+# Existing install with broken symlink: hard-fail after repair attempt.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -26,14 +27,71 @@ fi
 DEPLOY_HOST="${PI_STATIC_IP:-$PI_HOST}"
 log "Pre-deploy: data symlink check ($PI_USER@$DEPLOY_HOST)"
 
-if ssh -o ConnectTimeout=15 "$PI_USER@$DEPLOY_HOST" \
-  "REMOTE_DIR='$REMOTE_DIR' STORAGE_TYPE='$STORAGE_TYPE' bash -s" \
-  < "$SCRIPT_DIR/../lib/ensure-data-symlink.sh" verify 2>/dev/null; then
-  log "Pre-deploy: data symlink OK"
+# Classify Pi state (fresh vs broken) before soft-failing
+PI_STATE="$(
+  ssh -o ConnectTimeout=15 "$PI_USER@$DEPLOY_HOST" \
+    "REMOTE_DIR='$REMOTE_DIR' STORAGE_TYPE='$STORAGE_TYPE' bash -s" <<'REMOTE' 2>/dev/null || echo unreachable
+set -euo pipefail
+REMOTE_DIR="${REMOTE_DIR:-$HOME/pi-gateway}"
+STORAGE_TYPE="${STORAGE_TYPE:-hybrid}"
+DATA_ROOT="/mnt/ssd/pi-gateway-data"
+
+if [[ ! -d "$REMOTE_DIR" ]]; then
+  echo fresh_no_repo
   exit 0
 fi
 
-log "Pre-deploy: symlink missing/broken — attempting repair"
+needs_symlink=false
+[[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]] && needs_symlink=true
+
+if [[ "$needs_symlink" != "true" ]]; then
+  if [[ -d "${REMOTE_DIR}/data" && ! -L "${REMOTE_DIR}/data" ]]; then
+    echo ok_local
+  else
+    echo fresh_no_data
+  fi
+  exit 0
+fi
+
+if ! mountpoint -q /mnt/ssd 2>/dev/null; then
+  echo fresh_no_ssd
+  exit 0
+fi
+
+if [[ -L "${REMOTE_DIR}/data" ]] && [[ "$(readlink -f "${REMOTE_DIR}/data" 2>/dev/null || true)" == "${DATA_ROOT}" ]]; then
+  echo ok
+  exit 0
+fi
+
+if [[ -e "${REMOTE_DIR}/data" ]] || [[ -L "${REMOTE_DIR}/data" ]]; then
+  echo broken
+  exit 0
+fi
+
+echo fresh_no_data
+REMOTE
+)"
+
+case "$PI_STATE" in
+  ok|ok_local)
+    log "Pre-deploy: data path OK ($PI_STATE)"
+    exit 0
+    ;;
+  fresh_no_repo|fresh_no_ssd|fresh_no_data)
+    log "WARN: pre-deploy fresh state ($PI_STATE) — bootstrap will prepare SSD/data"
+    exit 0
+    ;;
+  unreachable)
+    die "Pre-deploy: cannot SSH to $PI_USER@$DEPLOY_HOST"
+    ;;
+  broken)
+    log "Pre-deploy: broken data symlink — attempting repair"
+    ;;
+  *)
+    log "WARN: unknown Pi state '$PI_STATE' — attempting repair"
+    ;;
+esac
+
 if ssh -o ConnectTimeout=15 "$PI_USER@$DEPLOY_HOST" \
   "REMOTE_DIR='$REMOTE_DIR' STORAGE_TYPE='$STORAGE_TYPE' bash -s" \
   < "$SCRIPT_DIR/../pi/ensure-data-symlink.sh" repair 2>/dev/null \
@@ -44,6 +102,4 @@ if ssh -o ConnectTimeout=15 "$PI_USER@$DEPLOY_HOST" \
   exit 0
 fi
 
-# Fresh hybrid install: SSD not formatted/mounted until bootstrap — continue
-log "WARN: pre-deploy symlink not ready yet — bootstrap will prepare SSD/data"
-exit 0
+die "Pre-deploy: data symlink broken and repair failed — fix /mnt/ssd or run bootstrap manually"
