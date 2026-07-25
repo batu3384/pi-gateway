@@ -5,39 +5,39 @@ Automated Mac → Raspberry Pi deploy for a production DNS / home-lab stack.
 ## Requirements
 
 - **Mac:** Docker Desktop (or Engine), SSH, rsync, python3
-- **Pi 4B:** OS on SD (hybrid) or SSD; ethernet; 5V/3A+ PSU
-- `.env` with a strong `AGH_ADMIN_PASSWORD` (min 12 characters)
+- **Pi 4B:** OS on SD card; ethernet; 5V/3A+ PSU
+- **USB SSD (required for default hybrid mode):** plugged into a USB 3.0 port before `make install`. Bootstrap formats/mounts it at `/mnt/ssd` and stores all app data there. Without the SSD, install **exits with an error**.
+- `.env` with strong passwords (min 12 characters; no `CHANGE_ME*` placeholders)
 
-Default storage model: **hybrid** — SD holds boot/root, USB SSD holds `/mnt/ssd` application data. See [docs/SSD-INSTALL.md](docs/SSD-INSTALL.md).
+Default storage: **hybrid** — SD = OS (boot + root), SSD = `/mnt/ssd` data. See [docs/SSD-INSTALL.md](docs/SSD-INSTALL.md).
 
 ## Quick install (Pi online)
 
 ```bash
 cd /path/to/pi-gateway
 cp .env.example .env
-# Edit .env: passwords, PI_USER, optional TAILSCALE_AUTHKEY
-make doctor
-make install
+# Edit .env: AGH_ADMIN_PASSWORD, PI_USER, other service passwords, optional TAILSCALE_AUTHKEY
+make install   # runs doctor → discover → render → validate → deploy
 ```
 
-`make install` will prompt for a temporary Pi IP if `PI_HOST` / `PI_STATIC_IP` are unset, or use values already in `.env`.
+`make install`:
+
+1. Uses `PI_HOST` if set; otherwise falls back to `PI_STATIC_IP`; otherwise prompts for a temporary DHCP IP
+2. Runs `make doctor` (fails on missing tools / placeholder passwords)
+3. Discovers network, renders configs, validates, deploys
 
 ## What is automated
 
 | Step | Automated |
 |------|-----------|
+| Prerequisite checks (`doctor`) | Yes (via `make install`) |
 | Network discovery (gateway, subnet, static IP) | Yes |
 | dhcpcd static IP | Yes |
-| systemd-resolved port 53 fix | Yes |
+| SSD data disk at `/mnt/ssd` | Yes (USB SSD must be attached) |
 | Docker + compose stack | Yes |
-| AdGuard admin + Unbound upstream | Yes |
-| DNS rewrites (`*.home`) | Yes |
-| Homepage + Uptime Kuma | Yes |
-| Caddy reverse proxy | Yes |
-| Host hardening hooks (log2ram, sysctl, timers) | Yes |
-| Daily backup timer (if Restic enabled) | Yes |
-| Tailscale (if auth key set) | Yes |
-| Post-deploy smoke test | Yes |
+| AdGuard + Unbound + Homepage + Uptime Kuma | Yes |
+| Optional profiles (Caddy, Forgejo, Syncthing, n8n, …) | Yes (from `.env` flags) |
+| Post-deploy service setup + smoke test | Yes |
 
 ## One-time manual steps
 
@@ -60,12 +60,12 @@ Details: [docs/TAILSCALE.md](docs/TAILSCALE.md)
 ## Commands
 
 ```bash
-make doctor     # prerequisite checks
+make doctor     # prerequisite checks only
 make validate   # config validation (Pi may be offline)
 make discover   # network discovery only
 make render     # generate configs from .env
 make deploy     # sync + bring stack up
-make install    # full pipeline
+make install    # doctor + full pipeline
 make status     # remote status
 make dns-test   # DNS checks from Mac
 ```
@@ -77,6 +77,8 @@ ssh "$PI_USER@$PI_STATIC_IP" 'cd ~/pi-gateway/compose && docker compose ps'
 ssh "$PI_USER@$PI_STATIC_IP" 'cd ~/pi-gateway/compose && docker compose logs -f adguard'
 ssh "$PI_USER@$PI_STATIC_IP" 'sudo journalctl -t pi-gateway-health -n 20'
 ```
+
+**SSD not found:** plug USB SSD into USB 3.0, confirm `lsblk` on the Pi, re-run `make install`.
 
 Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)  
 Operations: [docs/OPERATIONS.md](docs/OPERATIONS.md)

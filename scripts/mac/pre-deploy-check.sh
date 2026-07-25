@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Deploy oncesi: Pi'de data symlink + Mac repo'da data/ klasoru kontrolu
+# Pre-deploy: Mac data/ safety + optional Pi symlink check
+# Fresh installs often have no SSD mount yet — bootstrap creates it. Soft-fail then.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -16,29 +17,33 @@ STORAGE_TYPE="${STORAGE_TYPE:-hybrid}"
 
 if [[ -d "$PROJECT_DIR/data" && ! -L "$PROJECT_DIR/data" ]]; then
   if find "$PROJECT_DIR/data" -type f -print -quit 2>/dev/null | grep -q .; then
-    die "Mac repo'da data/ icinde dosya var — tasiyin; rsync Pi verisini bozabilir"
+    die "Mac repo has files under data/ — move them; rsync can clobber Pi data"
   fi
-  log "WARN: bos data/ klasoru siliniyor (Mac repo; runtime veri Pi SSD'de)"
+  log "WARN: removing empty Mac data/ directory (runtime data lives on Pi SSD)"
   rm -rf "$PROJECT_DIR/data"
 fi
 
 DEPLOY_HOST="${PI_STATIC_IP:-$PI_HOST}"
-log "Pre-deploy: data symlink kontrolu ($PI_USER@$DEPLOY_HOST)"
+log "Pre-deploy: data symlink check ($PI_USER@$DEPLOY_HOST)"
 
-ssh -o ConnectTimeout=15 "$PI_USER@$DEPLOY_HOST" \
+if ssh -o ConnectTimeout=15 "$PI_USER@$DEPLOY_HOST" \
   "REMOTE_DIR='$REMOTE_DIR' STORAGE_TYPE='$STORAGE_TYPE' bash -s" \
-  < "$SCRIPT_DIR/../lib/ensure-data-symlink.sh" verify 2>/dev/null && {
+  < "$SCRIPT_DIR/../lib/ensure-data-symlink.sh" verify 2>/dev/null; then
   log "Pre-deploy: data symlink OK"
   exit 0
-}
+fi
 
-log "Pre-deploy: symlink bozuk — onarim deneniyor"
-ssh "$PI_USER@$DEPLOY_HOST" \
+log "Pre-deploy: symlink missing/broken — attempting repair"
+if ssh -o ConnectTimeout=15 "$PI_USER@$DEPLOY_HOST" \
   "REMOTE_DIR='$REMOTE_DIR' STORAGE_TYPE='$STORAGE_TYPE' bash -s" \
-  < "$SCRIPT_DIR/../pi/ensure-data-symlink.sh" repair
-
-ssh "$PI_USER@$DEPLOY_HOST" \
+  < "$SCRIPT_DIR/../pi/ensure-data-symlink.sh" repair 2>/dev/null \
+  && ssh -o ConnectTimeout=15 "$PI_USER@$DEPLOY_HOST" \
   "REMOTE_DIR='$REMOTE_DIR' STORAGE_TYPE='$STORAGE_TYPE' bash -s" \
-  < "$SCRIPT_DIR/../lib/ensure-data-symlink.sh" verify
+  < "$SCRIPT_DIR/../lib/ensure-data-symlink.sh" verify 2>/dev/null; then
+  log "Pre-deploy: symlink repaired"
+  exit 0
+fi
 
-log "Pre-deploy: symlink onarildi"
+# Fresh hybrid install: SSD not formatted/mounted until bootstrap — continue
+log "WARN: pre-deploy symlink not ready yet — bootstrap will prepare SSD/data"
+exit 0

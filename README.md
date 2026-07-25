@@ -22,7 +22,7 @@ AdGuard + Unbound DNS, Caddy reverse proxy, Forgejo, Syncthing, n8n, monitoring 
 ## Requirements
 
 - **Mac (or Linux):** Docker, SSH, `python3`, `rsync`
-- **Pi 4B:** Ethernet, adequate PSU; hybrid storage recommended (SD OS + USB SSD for data)
+- **Pi 4B:** Ethernet, adequate PSU; **USB SSD required** for default hybrid storage (`/mnt/ssd` data)
 - Strong passwords in `.env` (min 12 chars; no `CHANGE_ME*` placeholders)
 
 ## Quick start
@@ -32,10 +32,10 @@ git clone https://github.com/batu3384/pi-gateway.git
 cd pi-gateway
 cp .env.example .env
 # Edit .env: AGH_ADMIN_PASSWORD, PI_USER, service passwords, optional Tailscale
+# Plug USB SSD into the Pi before install
 
-make doctor    # prerequisite check
-make install   # discover → render → validate → deploy (Pi online)
-make status    # remote health
+make install   # doctor → discover → render → validate → deploy
+make status
 ```
 
 After install (router-dns mode): set the router DHCP DNS server to the Pi static IP once.

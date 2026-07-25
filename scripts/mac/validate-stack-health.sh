@@ -325,4 +325,30 @@ grep -q 'TAILSCALE_ACL_OWNER' "$PROJECT_DIR/.env.example" \
 "$PROJECT_DIR/scripts/pi/test-notify-transitions.sh"
 ok "notify transition testleri"
 
+# Install-path regressions (adversarial 2026-07-25)
+if grep -q 'UPTIME_KUMA_ADMIN_PASSWORD.*ENABLE_N8N' "$PROJECT_DIR/scripts/pi/post-deploy.sh"; then
+  die "UPTIME_KUMA_ADMIN_PASSWORD hala ENABLE_N8N ile gate'li"
+fi
+ok "Kuma password check N8N'den bagimsiz"
+
+grep -q 'ENABLE_AUTOHEAL:-false' "$PROJECT_DIR/scripts/mac/deploy.sh" \
+  || die "deploy.sh AUTOHEAL default false degil"
+grep -q 'ENABLE_AUTOHEAL:-false' "$PROJECT_DIR/scripts/lib/compose-profiles.sh" \
+  || die "compose-profiles AUTOHEAL default false degil"
+ok "AUTOHEAL defaults hizali"
+
+grep -q 'doctor.sh' "$PROJECT_DIR/scripts/mac/install.sh" \
+  || die "install.sh doctor cagirmiyor"
+grep -q 'PI_STATIC_IP' "$PROJECT_DIR/scripts/mac/install.sh" \
+  || die "install.sh PI_STATIC_IP fallback yok"
+ok "install doctor + PI_STATIC_IP fallback"
+
+grep -q 'wait_ssh' "$PROJECT_DIR/scripts/mac/deploy.sh" \
+  || die "deploy.sh wait_ssh yok (dhcpcd sonrasi)"
+ok "deploy SSH retry after bootstrap"
+
+grep -q 'WARN: pre-deploy symlink not ready' "$PROJECT_DIR/scripts/mac/pre-deploy-check.sh" \
+  || die "pre-deploy fresh-install soft-fail yok"
+ok "pre-deploy soft-fail fresh install"
+
 echo "[validate-stack] Tum kontroller gecti"

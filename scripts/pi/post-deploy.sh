@@ -53,9 +53,7 @@ for key in AGH_ADMIN_PASSWORD DOZZLE_ADMIN_PASSWORD RESTIC_PASSWORD FORGEJO_ADMI
       if [[ "$key" == "N8N_WEBHOOK_SECRET" && "${ENABLE_N8N:-true}" != "true" ]]; then
         continue
       fi
-      if [[ "$key" == "UPTIME_KUMA_ADMIN_PASSWORD" && "${ENABLE_N8N:-true}" != "true" ]]; then
-        continue
-      fi
+      # Uptime Kuma is always deployed (no compose profile) — never skip on ENABLE_N8N
       if [[ "$key" == "SYNCTHING_GUI_PASSWORD" && "${ENABLE_SYNCTHING:-true}" != "true" ]]; then
         continue
       fi

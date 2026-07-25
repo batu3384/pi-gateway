@@ -1,28 +1,33 @@
-# SSD Boot Migration — Raspberry Pi 4B
+# Storage & SSD — Raspberry Pi 4B
 
-> **Production default (2026-07):** **Hybrid** — SD = OS root, SSD = data (`/mnt/ssd`)
-> Script: `scripts/mac/setup-hybrid.sh` or after cutover `scripts/mac/restore-hybrid-boot.sh`
+> **Production default: Hybrid (required for `make install`)**  
+> - SD = OS (boot + root)  
+> - **USB SSD must be plugged in** → `/mnt/ssd` holds all app data (`pi-gateway-data`)  
+> - Without the SSD, bootstrap fails  
+> - Setup: automatic on first `make install`, or `scripts/mac/setup-hybrid.sh`  
 >
-> **Experimental:** [SSD-ROOT.md](SSD-ROOT.md) — SD bootfs + SSD rootfs (JMicron/EEPROM risk)
+> **Experimental:** [SSD-ROOT.md](SSD-ROOT.md) — SD bootfs + SSD rootfs (JMicron/EEPROM risk)  
+> **Advanced (section below):** full USB OS boot (SD removed) — not the default path
 
 ## Architecture summary
 
 ```
-Hybrid (recommended, default):
-  Pi -> SD (boot + root) + SSD (ext4 /mnt/ssd, Docker + pi-gateway data)
+Hybrid (default — use this):
+  Pi -> SD (boot + root) + USB SSD (ext4 /mnt/ssd → Docker volumes + backups)
 
 A (ssd-root, experimental):
   Pi -> SD bootfs + SSD rootfs (OS + Docker + data)
 
-B (full USB boot):
+B (full USB boot, advanced):
   Pi -> SSD (OS + everything), SD removed
 ```
 
-The remainder of this file covers **B** (full USB SSD boot). For hybrid use `setup-hybrid.sh`; for ssd-root see `SSD-ROOT.md`.
-
 ---
 
-## Correct architecture (B — full USB boot)
+## Advanced: full USB OS boot (path B)
+
+The sections below are **only** for full USB SSD boot (OS on SSD, SD removed).  
+For normal installs stay on **hybrid** and ignore path B.
 
 ```
 BEFORE (wrong long-term):

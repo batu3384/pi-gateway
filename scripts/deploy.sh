@@ -17,7 +17,7 @@ REMOTE_DIR="${REMOTE_DIR:-/home/$PI_USER/pi-gateway}"
 "$SCRIPT_DIR/pre-deploy-check.sh"
 
 PROFILES=()
-[[ "${ENABLE_AUTOHEAL:-true}" == "true" ]] && PROFILES+=(--profile autoheal)
+[[ "${ENABLE_AUTOHEAL:-false}" == "true" ]] && PROFILES+=(--profile autoheal)
 [[ "${ENABLE_CADDY:-true}" == "true" ]] && PROFILES+=(--profile caddy)
 [[ "${ENABLE_DOZZLE:-true}" == "true" ]] && PROFILES+=(--profile dozzle)
 [[ "${ENABLE_FORGEJO:-true}" == "true" ]] && PROFILES+=(--profile forgejo)
@@ -58,11 +58,25 @@ ssh "$PI_USER@$PI_HOST" "REMOTE_DIR='$REMOTE_DIR' TAILSCALE_AUTHKEY='${TAILSCALE
   < "$SCRIPT_DIR/../pi/bootstrap.sh"
 
 DEPLOY_HOST="${PI_STATIC_IP:-$PI_HOST}"
-sleep 5
+
+wait_ssh() {
+  local host="$1" tries="${2:-24}" i
+  for ((i = 1; i <= tries; i++)); do
+    if ssh -o ConnectTimeout=5 -o BatchMode=yes "$PI_USER@$host" 'true' 2>/dev/null; then
+      log "SSH ready: $PI_USER@$host (attempt $i)"
+      return 0
+    fi
+    sleep 5
+  done
+  die "SSH failed after dhcpcd/bootstrap: $PI_USER@$host"
+}
+
+log "Waiting for SSH on deploy host ($DEPLOY_HOST) after bootstrap..."
+wait_ssh "$DEPLOY_HOST"
 
 PROFILE_ARGS="${PROFILES[*]}"
 if [[ "${DEPLOY_SKIP_PULL:-false}" == "true" ]]; then
-  log "docker compose up -d (pull atlandi — DEPLOY_SKIP_PULL=true)"
+  log "docker compose up -d (pull skipped — DEPLOY_SKIP_PULL=true)"
   ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" "cd '$REMOTE_DIR/compose' && docker compose --env-file ../.env $PROFILE_ARGS up -d"
 else
   ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" "cd '$REMOTE_DIR/compose' && docker compose --env-file ../.env $PROFILE_ARGS pull && docker compose --env-file ../.env $PROFILE_ARGS up -d"
