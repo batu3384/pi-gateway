@@ -193,6 +193,14 @@ notify_backup_ok() {
   notify_telegram "✅ Pi Gateway — Yedek" "$body" "restic-ok" "HTML"
 }
 
+notify_backup_fail() {
+  local details="$1"
+  local body
+  body="$(printf 'Restic yedeklemesi basarisiz veya atlandi.\n\n<code>%s</code>\n\nSSD takili mi? ENABLE_RESTIC=true mi?' \
+    "$(notify_escape_html "$details")")"
+  notify_telegram "⚠️ Pi Gateway — Yedek" "$body" "restic-fail" "HTML"
+}
+
 notify_health_systemd_fail() {
   local host="$1"
   local body

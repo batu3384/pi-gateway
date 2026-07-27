@@ -40,7 +40,8 @@ def is_tailscale_ip(ip: str) -> bool:
 
 
 def path_proxy(prefix: str, backend: str) -> str:
-    # strip prefix + rewrite absolute Location redirects back under /p/...
+    # strip prefix; rewrite root-relative Location. Absolute https://… redirects
+    # may still escape /p/ — apps that emit absolute URLs need app-level root_url.
     return f"""\thandle /{prefix}* {{
 \t\turi strip_prefix /{prefix}
 \t\treverse_proxy {backend} {{

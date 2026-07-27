@@ -57,7 +57,7 @@ def tailscale_dns() -> str:
         return cached.replace("http://", "", 1)
     path = "/var/lib/pi-gateway/tailscale-panel-url"
     if os.path.isfile(path):
-        raw = Path_read(path)
+        raw = path_read(path)
         if raw.startswith("https://"):
             return raw.replace("https://", "", 1).rstrip("/")
     out = _run(["tailscale", "status", "--json"])
@@ -70,7 +70,7 @@ def tailscale_dns() -> str:
         return ""
 
 
-def Path_read(path: str) -> str:
+def path_read(path: str) -> str:
     try:
         with open(path, encoding="utf-8") as fh:
             return fh.read().strip()
@@ -227,17 +227,54 @@ def menu_text(panels: list[dict[str, Any]], mode: str = "all") -> str:
         lines.append("<b>Linkler</b>")
     lines.append(html_links(panels, mode if mode != "all" else "button"))
     lines.append("")
-    lines.append(
+    tip = (
         "<i>⚠️ Telegram içi tarayıcıda Basic Auth çalışmaz. "
-        "Butona bas → ⋯ → Safari’de Aç. Tailscale açık olsun. "
-        "Eski https://…tailnet linkleri işe yaramaz (Serve kapalı).</i>"
+        "Butona bas → ⋯ → Safari’de Aç. Tailscale açık olsun.</i>"
     )
+    if remote_mode == "ts-http" and tailscale_serve_active():
+        tip = (
+            "<i>⚠️ Telegram içi Basic Auth kırık — Safari’de Aç. "
+            "Butonlar http://100.x (ACL). HTTPS yedek: Serve MagicDNS.</i>"
+        )
+    elif remote_mode == "serve":
+        tip = (
+            "<i>⚠️ Telegram içi Basic Auth kırık — Safari’de Aç. "
+            "Serve HTTPS aktif.</i>"
+        )
+    elif remote_mode == "none":
+        tip = (
+            "<i>⚠️ Tailscale yok. Ev ağı / IP kullan veya "
+            "<code>setup-tailscale-serve.sh</code>.</i>"
+        )
+    lines.append(tip)
     return "\n".join(lines)
+
+
+def self_check() -> int:
+    """Assert: no direct AdGuard/NetAlertX ports in panel URLs."""
+    bad: list[str] = []
+    for p in panel_urls():
+        for key in ("button", "remote", "ip", "home"):
+            url = p.get(key) or ""
+            if ":8080" in url or ":20211" in url:
+                bad.append(f"{p['id']}.{key}={url}")
+        btn = p.get("button") or ""
+        if p["id"] != "gateway" and "100." in btn and "/p/" not in btn:
+            bad.append(f"{p['id']}.button missing /p/ → {btn}")
+    if bad:
+        print("FAIL:", "; ".join(bad), file=sys.stderr)
+        return 1
+    print("OK: panels avoid :8080/:20211; Tailscale buttons use /p/")
+    return 0
 
 
 def main() -> None:
     mode = sys.argv[1] if len(sys.argv) > 1 else "keyboard"
     sub = sys.argv[2] if len(sys.argv) > 2 else "all"
+
+    if mode == "self_check":
+        raise SystemExit(self_check())
+
     panels = panel_urls()
 
     if mode == "keyboard":

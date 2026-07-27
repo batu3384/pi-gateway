@@ -46,27 +46,48 @@ resolve_tailscale_url
 tg_api() {
   local method="$1"
   shift
+  # stdout journal'a dusmesin (PII / buyuk JSON)
+  curl -fsS -o /dev/null -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${method}" "$@"
+}
+
+tg_api_json() {
+  local method="$1"
+  shift
   curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${method}" "$@"
 }
 
-tg_send() {
+# Telegram tek reply_markup kabul eder — inline + kalici klavye = 2 mesaj
+tg_send_inline() {
   local chat_id="$1"
   local text="$2"
-  local inline="${3:-}"
-  local reply="${4:-}"
-  local -a args=(
-    -d "chat_id=${chat_id}"
-    --data-urlencode "text=${text}"
-    -d "parse_mode=HTML"
+  local inline="$3"
+  tg_api sendMessage \
+    -d "chat_id=${chat_id}" \
+    --data-urlencode "text=${text}" \
+    -d "parse_mode=HTML" \
+    -d "disable_web_page_preview=true" \
+    --data-urlencode "reply_markup=${inline}"
+}
+
+tg_send_reply_keyboard() {
+  local chat_id="$1"
+  local reply="$2"
+  tg_api sendMessage \
+    -d "chat_id=${chat_id}" \
+    --data-urlencode "text=⌨️ <b>Hizli erisim</b> — alttaki butonlar kalici. /menu = yenile." \
+    -d "parse_mode=HTML" \
+    -d "disable_web_page_preview=true" \
+    --data-urlencode "reply_markup=${reply}"
+}
+
+tg_send_text() {
+  local chat_id="$1"
+  local text="$2"
+  tg_api sendMessage \
+    -d "chat_id=${chat_id}" \
+    --data-urlencode "text=${text}" \
+    -d "parse_mode=HTML" \
     -d "disable_web_page_preview=true"
-  )
-  if [[ -n "$inline" ]]; then
-    args+=(--data-urlencode "reply_markup=${inline}")
-  fi
-  if [[ -n "$reply" ]]; then
-    args+=(--data-urlencode "reply_markup=${reply}")
-  fi
-  tg_api sendMessage "${args[@]}"
 }
 
 send_panel_menu() {
@@ -76,7 +97,8 @@ send_panel_menu() {
   inline="$(python3 "$PANELS_PY" keyboard "$sub")"
   reply="$(python3 "$PANELS_PY" reply_keyboard)"
   text="$(python3 "$PANELS_PY" text "$sub")"
-  tg_send "$chat_id" "$text" "$inline" "$reply"
+  tg_send_inline "$chat_id" "$text" "$inline"
+  tg_send_reply_keyboard "$chat_id" "$reply"
 }
 
 register_bot_ui() {
@@ -106,7 +128,7 @@ handle_message() {
       elif [[ -n "$(tailscale ip -4 2>/dev/null | head -1)" ]]; then
         send_panel_menu "$chat_id" remote
       else
-        tg_send "$chat_id" "⚠️ Tailscale yok.\n\n<code>bash scripts/pi/setup-tailscale-serve.sh</code>"
+        tg_send_text "$chat_id" "⚠️ Tailscale yok.\n\n<code>bash scripts/pi/setup-tailscale-serve.sh</code>"
       fi
       ;;
     /ev|/home|"🏠 Ev ağı"|ev)
@@ -115,8 +137,11 @@ handle_message() {
     /ip|"📍 IP yedek"|ip)
       send_panel_menu "$chat_id" ip
       ;;
+    /help|help)
+      tg_send_text "$chat_id" "Komutlar: /menu /uzak /ev /ip\nveya alttaki kalici butonlar."
+      ;;
     *)
-      send_panel_menu "$chat_id" all
+      log "yok sayilan metin (${#text} char)"
       ;;
   esac
 }
@@ -124,13 +149,12 @@ handle_message() {
 poll_once() {
   local offset resp
   offset="$(cat "$OFFSET_FILE" 2>/dev/null || echo 0)"
-  resp="$(tg_api getUpdates -d "offset=${offset}" -d "timeout=25" -d 'allowed_updates=["message"]' 2>/dev/null || true)"
+  resp="$(tg_api_json getUpdates -d "offset=${offset}" -d "timeout=25" -d 'allowed_updates=["message"]' 2>/dev/null || true)"
   [[ -n "$resp" ]] || return 0
 
   python3 - "$resp" "$TELEGRAM_CHAT_ID" <<'PY' | while IFS=$'\t' read -r next_offset chat_id text; do
 import json, sys
 data = json.loads(sys.argv[1])
-allowed = sys.argv[2]
 for u in data.get("result", []):
     uid = u["update_id"]
     msg = u.get("message") or {}
@@ -144,7 +168,7 @@ PY
     if [[ "$chat_id" == "$TELEGRAM_CHAT_ID" ]]; then
       handle_message "$chat_id" "$text"
     else
-      log "yok sayilan chat_id=$chat_id"
+      log "yok sayilan chat_id=${chat_id:0:4}…"
     fi
   done
 }

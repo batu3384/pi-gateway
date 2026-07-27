@@ -25,8 +25,24 @@ fi
 
 echo "Backup saved: $DEST (secrets excluded; use restic for encrypted data)"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/notify.sh
+source "$SCRIPT_DIR/../lib/notify.sh"
+# shellcheck source=/dev/null
+[[ -f "$REMOTE_DIR/.env" ]] && set -a && source "$REMOTE_DIR/.env" && set +a
+
 if [[ -x "$REMOTE_DIR/scripts/pi/restic-backup.sh" ]]; then
   export REMOTE_DIR
-  bash "$REMOTE_DIR/scripts/pi/restic-backup.sh" || \
-    echo "[backup] WARN: restic atlandi veya hata"
+  if restic_out="$(bash "$REMOTE_DIR/scripts/pi/restic-backup.sh" 2>&1)"; then
+    printf '%s\n' "$restic_out"
+    if printf '%s\n' "$restic_out" | grep -qE 'SSD mount yok|degraded|yedek atlandi'; then
+      if ! printf '%s\n' "$restic_out" | grep -q 'ENABLE_RESTIC=false'; then
+        notify_backup_fail "$(printf '%s\n' "$restic_out" | tail -3 | tr '\n' ' ')"
+      fi
+    fi
+  else
+    printf '%s\n' "$restic_out"
+    echo "[backup] WARN: restic hata"
+    notify_backup_fail "$(printf '%s\n' "$restic_out" | tail -5 | tr '\n' ' ')"
+  fi
 fi

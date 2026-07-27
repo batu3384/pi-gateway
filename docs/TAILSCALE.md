@@ -36,6 +36,8 @@ REMOTE_DIR=~/pi-gateway bash scripts/pi/diagnose-remote-access.sh
 
 **Security:** admin panels only via Caddy on Tailscale `80/443`. Do not open AdGuard `:8080` / NetAlertX `:20211` on `tailscale0`. Keep ACL tight (`tag:owner-device` only).
 
+**Auth tradeoff:** `http://100.x.x.x` Caddy block has **no basic_auth** (Telegram in-app browser cannot do Basic Auth). LAN `192.x` keeps basic_auth. Anyone on your tailnet who can reach the Pi can open panels without a password — **ACL is the only gate**. Do not invite untrusted devices; prefer `tag:owner-device` → `tag:pi-gateway` only.
+
 Phone tips: Tailscale **Connected**; open links in **Safari** (Telegram in-app browser often breaks).
 
 Diagnostics: `bash scripts/pi/diagnose-remote-access.sh`
