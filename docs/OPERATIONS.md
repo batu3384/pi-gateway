@@ -64,6 +64,7 @@ Remote access: Tailscale enabled + MagicDNS (`home` split DNS). Details: `docs/T
 | `make dns-test` | DNS block + rewrite test |
 | `make test-remote` | health + smoke (16+ checks) |
 | `make verify-data` | Hybrid SSD symlink validation |
+| USB SSD power | Direct USB3 + ≥3A PSU; if drops use powered **480M+** hub (not 12M Full-Speed) |
 | `make backup-pull` | Restic + config offsite copy |
 | `make backup-cron` | Weekly backup-pull (Sunday 03:00) |
 
@@ -156,9 +157,17 @@ Post-deploy scripts apply passwords after deploy.
 
 ## Backup (3-2-1)
 
-1. **Pi SSD:** Restic daily (`pi-gateway-backup.timer`)
-2. **Mac offsite:** `make backup-pull` or `make backup-cron`
-3. Destination: `~/Backups/pi-gateway/`
+1. **Pi SSD (encrypted data):** Restic via Docker (`pi-gateway-backup.timer` → `backup.sh` → `restic-backup.sh`). Runs as `PI_USER` with `REMOTE_DIR=~/pi-gateway` — never as root (`/home/root/...` is wrong).
+2. **Config snapshot:** same timer writes `~/pi-gateway/backups/<stamp>/` (compose + config + env key names; no plaintext secrets).
+3. **Mac offsite:** `make backup-pull` or `make backup-cron` → `~/Backups/pi-gateway/`
+
+Verify: `systemctl cat pi-gateway-backup.service | grep -E 'User=|REMOTE_DIR'` and `ls ~/pi-gateway/backups`.
+
+## USB SSD power (hybrid)
+
+- Prefer **direct Pi USB3 (blue)** with a solid **5V ≥3A** PSU.
+- If undervolt / disconnect: use a **powered USB 3.x or High-Speed (480 Mbps) hub** — not Full-Speed (12 Mbps) “USB 2.0” hubs.
+- Check: `lsusb -t` (SSD line must show `480M` or `5000M`) and `vcgencmd get_throttled` (`0x0` ideal).
 
 ## Related docs
 

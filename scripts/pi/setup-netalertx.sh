@@ -54,7 +54,7 @@ webhook_url() {
 wait_http() {
   local _
   for _ in $(seq 1 36); do
-    if curl -fsS "http://127.0.0.1:${NETALERTX_PORT}/" >/dev/null 2>&1; then
+    if curl -fsS -L "http://127.0.0.1:${NETALERTX_PORT}/" >/dev/null 2>&1; then
       return 0
     fi
     sleep 5

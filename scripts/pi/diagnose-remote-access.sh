@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Uzaktan erisim teşhisi (Tailscale + *.home + TLS)
+# HTTPS probe: Host header yetmez — TLS SNI icin --resolve kullan
 set -euo pipefail
 
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
@@ -7,7 +8,7 @@ REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 [[ -f "$REMOTE_DIR/.env" ]] && source "$REMOTE_DIR/.env"
 
 LAN_DOMAIN="${LAN_DOMAIN:-home}"
-PI_IP="${PI_STATIC_IP:-}"
+PI_IP="${PI_STATIC_IP:-127.0.0.1}"
 ok=0 fail=0
 
 pass() { echo "[OK] $*"; ok=$((ok + 1)); }
@@ -41,6 +42,14 @@ else:
     fail "tailscale serve yok — telefon mkcert *.home guvenmez"
     echo "       Cozum: bash scripts/pi/setup-tailscale-serve.sh"
   fi
+  if [[ -n "$TS_IP" ]]; then
+    code="$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "http://${TS_IP}/" 2>/dev/null || echo 000)"
+    if [[ "$code" =~ ^(200|401|302)$ ]]; then
+      pass "Tailscale IP HTTP: http://${TS_IP}/ -> ${code}"
+    else
+      fail "Tailscale IP HTTP yanit vermiyor (${code})"
+    fi
+  fi
 else
   fail "Tailscale bagli degil"
 fi
@@ -51,28 +60,31 @@ else
   warn "gateway.${LAN_DOMAIN} rewrite beklenen ${PI_IP} degil"
 fi
 
-if curl -sk -o /dev/null -w "%{http_code}" --max-time 5 \
-  -H "Host: gateway.${LAN_DOMAIN}" "https://127.0.0.1/" 2>/dev/null | grep -qE '^(401|200|302)$'; then
-  pass "Caddy gateway.${LAN_DOMAIN} yanit veriyor (LAN)"
+# SNI zorunlu: -H Host yetmez (TLS alert / false FAIL)
+gw_code="$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 \
+  --resolve "gateway.${LAN_DOMAIN}:443:127.0.0.1" \
+  "https://gateway.${LAN_DOMAIN}/" 2>/dev/null || echo 000)"
+if [[ "$gw_code" =~ ^(401|200|302)$ ]]; then
+  pass "Caddy gateway.${LAN_DOMAIN} HTTPS (SNI) -> ${gw_code}"
 else
-  fail "Caddy gateway.${LAN_DOMAIN} yanit vermiyor"
+  fail "Caddy gateway.${LAN_DOMAIN} HTTPS yanit vermiyor (${gw_code})"
 fi
 
 if [[ -n "${TS_DNS:-}" ]]; then
+  # Serve uzerinden gercek MagicDNS (localhost Host+SNI yaniltir)
   code="$(curl -sk -o /dev/null -w "%{http_code}" --max-time 8 \
-    -H "Host: ${TS_DNS}" "https://127.0.0.1/" 2>/dev/null || echo 000)"
+    "https://${TS_DNS}/" 2>/dev/null || echo 000)"
   if [[ "$code" =~ ^(200|401|302)$ ]]; then
-    pass "Tailscale panel URL yanit: https://${TS_DNS}/ -> ${code}"
+    pass "Tailscale Serve URL: https://${TS_DNS}/ -> ${code}"
   else
-    fail "Tailscale panel URL yanit vermiyor (${code})"
+    fail "Tailscale Serve URL yanit vermiyor (${code})"
   fi
 fi
 
 echo ""
 echo "=== Ozet ==="
-echo "Telegram *.${LAN_DOMAIN} linkleri uzaktan icin:"
-echo "  1) Tailscale split DNS: ${LAN_DOMAIN} -> Pi Tailscale IP"
-echo "  2) Subnet route onayi (192.168.1.0/24)"
-echo "  3) VEYA tailscale serve URL kullan (mkcert telefonda guvenilmez)"
+echo "Telefon: http://\${TS_IP}/ veya Serve https://\${TS_DNS}/ (Safari; Telegram ici bazen kirar)"
+echo "LAN: https://gateway.${LAN_DOMAIN} (Pi DNS + mkcert trust)"
+echo "USB SSD: dogrudan Pi USB3; guc yetmezse powered High-Speed (480M+) hub — Full-Speed 12M hub kullanma"
 echo "Sonuc: ${ok} OK, ${fail} FAIL"
 [[ "$fail" -eq 0 ]]

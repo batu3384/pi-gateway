@@ -1,17 +1,16 @@
 [Unit]
-Description=Pi Gateway backup job
-After=docker.service network-online.target
+Description=Pi Gateway Telegram panel bot (menu + links)
+After=network-online.target docker.service
 Wants=network-online.target
 
 [Service]
-Type=oneshot
+Type=simple
 User=PI_USER
-Group=PI_USER
 WorkingDirectory=/home/PI_USER/pi-gateway
 Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
-Environment=HOME=/home/PI_USER
-ExecStart=/home/PI_USER/pi-gateway/scripts/pi/backup.sh
-Nice=19
+ExecStart=/home/PI_USER/pi-gateway/scripts/pi/telegram-bot.sh
+Restart=always
+RestartSec=5
 StandardOutput=journal
 StandardError=journal
 

@@ -27,11 +27,16 @@ On phone, `https://gateway.home` does not trust mkcert certs. Instead:
 
 1. Enable Serve in Admin: `/f/serve` link from deploy or ACL
 2. On Pi: `bash scripts/pi/setup-tailscale-serve.sh`
-3. Telegram menu **🌐 Remote** buttons: `https://pi-gateway.tailXXXX.ts.net/p/dns` etc.
+3. Telegram menu prefers **`http://100.x.x.x/p/...`** (works without MagicDNS). Serve HTTPS is optional backup when MagicDNS + Override DNS are on.
 
 ```bash
-make telegram-menu   # or on Pi: scripts/pi/telegram-menu.sh
+make telegram-menu   # or on Pi: scripts/pi/telegram-bot.sh --once
+REMOTE_DIR=~/pi-gateway bash scripts/pi/diagnose-remote-access.sh
 ```
+
+**Security:** admin panels only via Caddy on Tailscale `80/443`. Do not open AdGuard `:8080` / NetAlertX `:20211` on `tailscale0`. Keep ACL tight (`tag:owner-device` only).
+
+Phone tips: Tailscale **Connected**; open links in **Safari** (Telegram in-app browser often breaks).
 
 Diagnostics: `bash scripts/pi/diagnose-remote-access.sh`
 

@@ -91,6 +91,7 @@ install_systemd_unit() {
   sed -e "s|/home/PI_USER/pi-gateway|${REMOTE_DIR}|g" \
       -e "s|/opt/pi-gateway|${REMOTE_DIR}|g" \
       -e "s|User=PI_USER|User=${USER}|g" \
+      -e "s|Group=PI_USER|Group=${USER}|g" \
       "$src" | sudo tee "$dst" >/dev/null
 }
 
@@ -100,7 +101,7 @@ if [[ -x "$REMOTE_DIR/scripts/pi/install-privileged-scripts.sh" ]]; then
   REMOTE_DIR="$REMOTE_DIR" bash "$privileged_script"
 fi
 
-for svc in pi-gateway-health.service pi-gateway-backup.service pi-gateway-adguard-config.service pi-gateway-health-failure.service pi-gateway-crowdsec-ufw.service pi-data-symlink.service pi-data-symlink-repair.service pi-gateway-morning.service pi-gateway-recover-ro.service pi-gateway-stack-watchdog.service pi-gateway-netalertx-names.service pi-gateway-ensure-fstab.service pi-ssd-data.service pi-ssd-watch.service; do
+for svc in pi-gateway-health.service pi-gateway-backup.service pi-gateway-adguard-config.service pi-gateway-health-failure.service pi-gateway-crowdsec-ufw.service pi-data-symlink.service pi-data-symlink-repair.service pi-gateway-morning.service pi-gateway-recover-ro.service pi-gateway-stack-watchdog.service pi-gateway-netalertx-names.service pi-gateway-ensure-fstab.service pi-ssd-data.service pi-ssd-watch.service pi-gateway-telegram-bot.service; do
   install_systemd_unit "$svc"
 done
 sudo systemctl daemon-reload

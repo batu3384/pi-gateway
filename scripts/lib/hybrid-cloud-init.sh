@@ -130,7 +130,17 @@ hybrid_write_fresh_install_cloud_init() {
   local b64 hash remote_dir wf run
   mkdir -p "$dir"
   b64="$(hybrid_ssd_setup_script_b64 "$setup_script")"
-  hash="$(printf '%s' "$pi_password" | openssl passwd -6 -stdin)"
+  # LibreSSL on macOS often lacks `passwd`; try Homebrew OpenSSL / mkpasswd.
+  if ! hash="$(printf '%s' "$pi_password" | openssl passwd -6 -stdin 2>/dev/null)"; then
+    if [[ -x /opt/homebrew/opt/openssl@3/bin/openssl ]]; then
+      hash="$(printf '%s' "$pi_password" | /opt/homebrew/opt/openssl@3/bin/openssl passwd -6 -stdin)"
+    elif command -v mkpasswd >/dev/null 2>&1; then
+      hash="$(mkpasswd -m sha-512 "$pi_password")"
+    else
+      echo "ERROR: need openssl passwd -6 or mkpasswd (brew install openssl@3)" >&2
+      return 1
+    fi
+  fi
   remote_dir="/home/${pi_user}/pi-gateway"
   wf="$(hybrid_ssd_write_files_yaml "$b64" "$pi_user" "$remote_dir" "$ssd_mount")"
   run="$(hybrid_ssd_runcmd_yaml)"

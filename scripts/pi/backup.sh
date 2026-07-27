@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
+# Config snapshot + optional restic (Docker). Must run as PI_USER with REMOTE_DIR set.
 set -euo pipefail
 
-REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
+# systemd Environment=REMOTE_DIR wins; never trust root's $USER alone
+if [[ -z "${REMOTE_DIR:-}" ]]; then
+  if [[ "$(id -u)" -eq 0 ]]; then
+    echo "[backup] HATA: root + REMOTE_DIR bos — /home/root'a yazma. systemd User= + Environment=REMOTE_DIR kullan." >&2
+    exit 1
+  fi
+  REMOTE_DIR="/home/${USER}/pi-gateway"
+fi
+
 STAMP="$(date +%Y%m%d-%H%M%S)"
 DEST="$REMOTE_DIR/backups/$STAMP"
 mkdir -p "$DEST"

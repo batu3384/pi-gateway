@@ -43,32 +43,52 @@ text = path.read_text()
 start = f"# BEGIN TAILSCALE PANEL {ts_dns}"
 end = f"# END TAILSCALE PANEL {ts_dns}"
 
+# Tailscale Serve / MagicDNS: basic_auth YOK — Telegram Basic Auth acmaz; tailnet ACL yeter
+# handle_path yerine strip+Location rewrite (uygulama /login redirect kirilmasin)
 block = f"""{start}
 {ts_dns} {{
 \ttls /etc/caddy/certs/{domain}.pem /etc/caddy/certs/{domain}-key.pem
-\t__CADDY_BASIC_AUTH_PLACEHOLDER__
-\thandle_path /p/status* {{
-\t\treverse_proxy uptime-kuma:3001
+\t# no basic_auth — Tailscale ACL
+\thandle /p/status* {{
+\t\turi strip_prefix /p/status
+\t\treverse_proxy uptime-kuma:3001 {{
+\t\t\theader_down Location / /p/status/
+\t\t}}
 \t}}
-\thandle_path /p/logs* {{
-\t\treverse_proxy dozzle:8080
+\thandle /p/logs* {{
+\t\turi strip_prefix /p/logs
+\t\treverse_proxy dozzle:8080 {{
+\t\t\theader_down Location / /p/logs/
+\t\t}}
 \t}}
-\thandle_path /p/dns* {{
-\t\treverse_proxy {pi_ip}:{agh_port}
+\thandle /p/dns* {{
+\t\turi strip_prefix /p/dns
+\t\treverse_proxy {pi_ip}:{agh_port} {{
+\t\t\theader_down Location / /p/dns/
+\t\t}}
 \t}}
-\thandle_path /p/git* {{
-\t\treverse_proxy forgejo:3000
+\thandle /p/git* {{
+\t\turi strip_prefix /p/git
+\t\treverse_proxy forgejo:3000 {{
+\t\t\theader_down Location / /p/git/
+\t\t}}
 \t}}
-\thandle_path /p/sync* {{
-\t\treverse_proxy syncthing:8384
+\thandle /p/sync* {{
+\t\turi strip_prefix /p/sync
+\t\treverse_proxy syncthing:8384 {{
+\t\t\theader_down Location / /p/sync/
+\t\t}}
 \t}}
-\thandle_path /p/n8n* {{
-\t\treverse_proxy n8n:5678
+\thandle /p/n8n* {{
+\t\turi strip_prefix /p/n8n
+\t\treverse_proxy n8n:5678 {{
+\t\t\theader_down Location / /p/n8n/
+\t\t}}
 \t}}
-\thandle_path /p/devices* {{
+\thandle /p/devices* {{
+\t\turi strip_prefix /p/devices
 \t\treverse_proxy {pi_ip}:{nax_port} {{
-\t\t\theader_up X-Forwarded-Proto {{scheme}}
-\t\t\theader_up X-Forwarded-Host {{host}}
+\t\t\theader_down Location / /p/devices/
 \t\t}}
 \t}}
 \thandle {{
@@ -77,19 +97,6 @@ block = f"""{start}
 }}
 {end}
 """
-
-# Auth blogunu mevcut Caddyfile'dan kopyala
-auth = ""
-for line in text.splitlines():
-    if line.strip().startswith("basic_auth {"):
-        auth_lines = [line]
-        for inner in text.splitlines()[text.splitlines().index(line) + 1:]:
-            auth_lines.append(inner)
-            if inner.strip() == "}":
-                break
-        auth = "\n".join(auth_lines)
-        break
-block = block.replace("\t__CADDY_BASIC_AUTH_PLACEHOLDER__", auth or "\t# basic_auth yok")
 
 if start in text:
     pre, rest = text.split(start, 1)
@@ -106,6 +113,10 @@ PY
     || docker restart caddy >/dev/null 2>&1 || true
 fi
 
+mkdir -p /var/lib/pi-gateway 2>/dev/null || sudo mkdir -p /var/lib/pi-gateway
+echo "https://${TS_DNS}" | sudo tee /var/lib/pi-gateway/tailscale-panel-url >/dev/null 2>&1 || true
+bash "$(dirname "$0")/setup-caddy-lan-ip.sh" || true
+
 # Gecerli Tailscale HTTPS -> Caddy (mkcert arada; telefon guvenilir sertifika gorur)
 if tailscale serve status 2>/dev/null | grep -q "https"; then
   log "tailscale serve zaten aktif"
@@ -114,8 +125,9 @@ else
   sudo tailscale serve reset 2>/dev/null || true
   if ! sudo tailscale serve --bg "https+insecure://127.0.0.1:443" 2>&1; then
     log "HATA: Tailscale Serve tailnet'te kapali"
-    log "Ac: https://login.tailscale.com/admin/acls (veya script ciktisindaki /f/serve linki)"
-    log "Sonra tekrar: bash scripts/pi/setup-tailscale-serve.sh"
+    log "Ac: https://login.tailscale.com/f/serve?node=$(tailscale status --json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get(\"Self\",{}).get(\"ID\",\"\"))' 2>/dev/null || echo '')"
+    log "Telegram uzaktan linkler http://$(tailscale ip -4 2>/dev/null | head -1)/p/... kullanacak (Serve sonrasi HTTPS)"
+    bash "$(dirname "$0")/setup-caddy-lan-ip.sh" || true
     exit 0
   fi
 fi
