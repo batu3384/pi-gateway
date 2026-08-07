@@ -17,9 +17,13 @@ jobs:
           sudo apt-get install -y -qq shellcheck
           shellcheck -S warning scripts/pi/*.sh scripts/mac/*.sh scripts/lib/*.sh
 
+      - name: Compose config (fixture .env)
+        run: |
+          chmod +x scripts/mac/ci-compose-config.sh
+          ./scripts/mac/ci-compose-config.sh
+
       - name: Public-repo + static contracts
         run: |
-          # Full validate.sh needs local .env + Docker — CI runs secret-free checks only
           chmod +x scripts/mac/validate-public-repo.sh scripts/mac/validate-stack-health.sh
           ./scripts/mac/validate-public-repo.sh
           ./scripts/mac/validate-stack-health.sh

@@ -27,7 +27,7 @@ note_fail() {
   fail=1
 }
 
-# SD sagligi (kurtarma yok — asagida tek trigger_stack_recover)
+# SD sagligi (kurtarma yok — asagida recover-stack.sh)
 if ! SD_HEALTH_AUTO_RECOVER=false REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/check-sd-health.sh"; then
   fail=1
   sd_fail=1
@@ -38,7 +38,7 @@ if [[ "$STACK_AUTO_RECOVER" == "true" ]] && { ! stack_fully_healthy || ! root_rw
     logger -t "$LOG_TAG" "stack recover atlandi (cooldown/boot grace)"
   else
     logger -t "$LOG_TAG" "stack/root auto-recover tetikleniyor"
-    trigger_stack_recover "$REMOTE_DIR" || true
+    bash "$SCRIPT_DIR/recover-stack.sh" || true
   fi
 fi
 
@@ -165,7 +165,7 @@ else
       ssd-unmounted|storage-degraded*|data-ssd-symlink*|data-native-missing)
         has_ssd=1
         ;;
-      optional-*)
+      optional-*|offsite-backup-*)
         has_optional=1
         ;;
       *)
@@ -203,6 +203,26 @@ for mount in / /mnt/ssd; do
   fi
 done
 
+# Offsite backup SLA (SSD restic alone ≠ 3-2-1). Marker: make backup-pull
+if [[ "${ENABLE_RESTIC:-true}" == "true" ]]; then
+  max_age="${OFFSITE_BACKUP_MAX_AGE_DAYS:-7}"
+  marker="/var/lib/pi-gateway/last-offsite-backup"
+  if [[ "$max_age" != "0" ]]; then
+    if [[ ! -f "$marker" ]]; then
+      logger -t "$LOG_TAG" "WARN offsite-backup-missing — run make backup-pull on Mac"
+    else
+      age_days="$(python3 -c "import os,time; print(int((time.time()-os.path.getmtime('$marker'))//86400))")"
+      if (( age_days > max_age )); then
+        if [[ "${WEAK_BACKUP_OK:-}" == "yes" ]]; then
+          logger -t "$LOG_TAG" "WARN offsite-backup-stale(${age_days}d) WEAK_BACKUP_OK=yes"
+        else
+          note_fail "offsite-backup-stale(${age_days}d)"
+        fi
+      fi
+    fi
+  fi
+fi
+
 # Opsiyonel-only: journal'da FAIL kalsın; systemd "Failed" spam olmasın.
 # SD veya çekirdek/SSD fail → exit 1
 exit_code=0
@@ -212,7 +232,7 @@ elif [[ ${#FAILURES[@]} -gt 0 ]]; then
   exit_code=0
   for f in "${FAILURES[@]}"; do
     case "$f" in
-      optional-*) ;;
+      optional-*|offsite-backup-*) ;;
       *) exit_code=1; break ;;
     esac
   done

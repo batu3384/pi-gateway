@@ -72,7 +72,7 @@ if stack_recover_suppressed; then
   exit 0
 fi
 
-if trigger_stack_recover "$REMOTE_DIR"; then
+if bash "$SCRIPT_DIR/recover-stack.sh"; then
   log "Kurtarma basarili"
   # shellcheck source=../lib/notify.sh
   source "$SCRIPT_DIR/../lib/notify.sh"

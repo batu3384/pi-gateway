@@ -19,7 +19,7 @@ export AGH_ADMIN_USER ADGUARD_WEB_PORT="${ADGUARD_WEB_PORT:-8080}" DOZZLE_PORT="
 export NETALERTX_PORT="${NETALERTX_PORT:-20211}"
 export PI_STATIC_IP LAN_DOMAIN="${LAN_DOMAIN:-home}" PI_INTERFACE="${PI_INTERFACE:-eth0}"
 export UPTIME_KUMA_STATUS_SLUG="${UPTIME_KUMA_STATUS_SLUG:-pi-gateway}"
-if [[ "${ENABLE_TLS:-false}" == "true" ]]; then
+if [[ "${ENABLE_TLS:-true}" == "true" ]]; then
   export PANEL_PROTOCOL=https
 else
   export PANEL_PROTOCOL=http
@@ -88,13 +88,13 @@ EOF
 
 if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
   caddy_tpl="$PROJECT_DIR/config/caddy/Caddyfile.template"
-  if [[ "${ENABLE_TLS:-false}" == "true" ]]; then
+  if [[ "${ENABLE_TLS:-true}" == "true" ]]; then
     caddy_tpl="$PROJECT_DIR/config/caddy/Caddyfile.tls.template"
     [[ -f "$PROJECT_DIR/config/caddy/certs/${LAN_DOMAIN}.pem" ]] \
       || die "ENABLE_TLS=true but certs missing — run: make tls-certs"
     log "Caddy: HTTPS (mkcert)"
   else
-    log "Caddy: HTTP (LAN)"
+    log "Caddy: HTTP (LAN) — WEAK_TLS_OK gerekli (validate)"
   fi
 
   # Hassas paneller (dns/git/sync/n8n/logs) — Caddy basic_auth

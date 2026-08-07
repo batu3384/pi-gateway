@@ -18,13 +18,20 @@
 
 ## HTTP risk
 
-`*.home` traffic defaults to **HTTP**. Passwords can be exposed on a LAN listener or guest WiFi.
+`*.home` defaults to **HTTPS** (`ENABLE_TLS=true`). Certs: `make tls-certs`.
+
+HTTP-only LAN requires explicit risk acceptance:
+
+```bash
+ENABLE_TLS=false
+WEAK_TLS_OK=yes
+```
 
 **Recommendations (priority order):**
 
-1. `UFW_ADMIN_EXPOSURE=caddy-only` + access panels only via Caddy
+1. Keep TLS on; `UFW_ADMIN_EXPOSURE=caddy-only`
 2. Admin over Tailscale; close sensitive ports in UFW
-3. Internal TLS (`step-ca` / Caddy `tls internal`) — v2
+3. Cloudflare Tunnel only with hostname allowlist — `docs/CLOUDFLARE-TUNNEL.md`
 
 ## Secrets
 

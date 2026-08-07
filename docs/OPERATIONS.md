@@ -31,7 +31,7 @@ Setup: `make pi-access`
 
 ## Panels (`*.home`)
 
-With `ENABLE_TLS=true`, all panels use **HTTPS** (`https://*.home`). Without TLS, use `http://`.
+With `ENABLE_TLS=true` (default), all panels use **HTTPS** (`https://*.home`). HTTP only with `WEAK_TLS_OK=yes`.
 
 ### Dual login (normal)
 

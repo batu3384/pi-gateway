@@ -12,6 +12,21 @@ require_cmd docker envsubst python3
 [[ -n "${AGH_ADMIN_PASSWORD:-}" ]] || die "Set AGH_ADMIN_PASSWORD in .env"
 [[ "${#AGH_ADMIN_PASSWORD}" -ge 12 ]] || die "AGH_ADMIN_PASSWORD must be at least 12 chars"
 
+# TLS fail-closed (LAN partial trust). Escape: WEAK_TLS_OK=yes
+if [[ "${ENABLE_TLS:-true}" != "true" ]]; then
+  if [[ "${WEAK_TLS_OK:-}" == "yes" ]]; then
+    log "WARN: ENABLE_TLS=false (WEAK_TLS_OK=yes) — HTTP panel passwords"
+  else
+    die "ENABLE_TLS=true required (or WEAK_TLS_OK=yes). Run: make tls-certs"
+  fi
+fi
+
+if [[ "${ENABLE_TLS:-true}" == "true" && "${ENABLE_N8N:-true}" == "true" ]]; then
+  if [[ "${N8N_SECURE_COOKIE:-true}" != "true" ]]; then
+    die "N8N_SECURE_COOKIE=true required when ENABLE_TLS=true"
+  fi
+fi
+
 if [[ "${ENABLE_N8N:-true}" == "true" ]]; then
   [[ -n "${N8N_ENCRYPTION_KEY:-}" ]] || die "Set N8N_ENCRYPTION_KEY in .env (openssl rand -hex 24)"
   [[ "${#N8N_ENCRYPTION_KEY}" -ge 32 ]] || die "N8N_ENCRYPTION_KEY must be at least 32 chars"

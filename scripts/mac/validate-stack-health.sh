@@ -198,7 +198,34 @@ ok "recover remount-before-lock + root_rw_ok early exit"
 
 grep -q '! stack_fully_healthy || ! root_rw_ok' "$PROJECT_DIR/scripts/pi/health-check.sh" \
   || die "health-check root RO recover tetiklemesi yok"
+grep -q 'recover-stack.sh' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check recover-stack.sh cagirmiyor"
+grep -q 'recover-stack.sh' "$watchdog" \
+  || die "watchdog recover-stack.sh cagirmiyor"
+[[ -f "$PROJECT_DIR/scripts/pi/recover-stack.sh" ]] \
+  || die "recover-stack.sh yok"
 ok "health-check recover tetiklemesi"
+
+grep -q 'ENABLE_TLS=true' "$PROJECT_DIR/.env.example" \
+  || die "ENABLE_TLS=true .env.example varsayilan degil"
+grep -q 'WEAK_TLS_OK' "$PROJECT_DIR/scripts/mac/validate.sh" \
+  || die "validate WEAK_TLS_OK fail-closed yok"
+ok "TLS default + validate fail-closed"
+
+if grep -E 'image:.*:latest' "$compose" >/dev/null 2>&1; then
+  die "compose'da :latest kaldi — image pin zorunlu"
+fi
+ok "compose image pin (no :latest)"
+
+grep -q 'NETALERTX_LISTEN_ADDR:-127.0.0.1' "$compose" \
+  || die "NetAlertX listen default 127.0.0.1 degil"
+ok "NetAlertX loopback listen"
+
+grep -q 'OFFSITE_BACKUP_MAX_AGE_DAYS' "$PROJECT_DIR/.env.example" \
+  || die "OFFSITE_BACKUP_MAX_AGE_DAYS .env.example yok"
+grep -q 'last-offsite-backup\|.last-success' "$PROJECT_DIR/scripts/mac/backup-pull.sh" \
+  || die "backup-pull offsite stamp yazmiyor"
+ok "offsite backup SLA stamp"
 
 grep -q 'STORAGE_FALLBACK_SD' "$PROJECT_DIR/.env.example" \
   || die "STORAGE_FALLBACK_SD .env.example yok"

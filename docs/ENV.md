@@ -53,8 +53,20 @@ Experimental `ssd-root`: `docs/SSD-ROOT.md` + `scripts/mac/migrate-sd-boot-ssd-r
 |----------|-------------|
 | `ENABLE_RESTIC` | true/false |
 | `RESTIC_PASSWORD` | Repo password |
-| `RESTIC_REPOSITORY` | Path on SSD |
+| `RESTIC_REPOSITORY` | Path on SSD (not offsite by itself) |
 | `MAC_BACKUP_DEST` | Mac `backup-pull` destination |
+| `OFFSITE_BACKUP_MAX_AGE_DAYS` | Default `7`; `0` disables age check |
+| `WEAK_BACKUP_OK` | `yes` = allow stale offsite in doctor |
+
+SSD restic alone is **not** 3-2-1. Run `make backup-pull` / `make backup-cron`. See [ADR-004](adr/004-backup-3321.md).
+
+## TLS
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ENABLE_TLS` | `true` | Caddy HTTPS for `*.home` |
+| `WEAK_TLS_OK` | (unset) | Required to set `ENABLE_TLS=false` |
+| `N8N_SECURE_COOKIE` | `true` | Must be true when TLS on |
 
 ## Watchtower
 
@@ -82,7 +94,8 @@ If `N8N_ENCRYPTION_KEY` is empty on Pi, `ensure-n8n-encryption-key.sh` generates
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `ENABLE_NETALERTX` | `true` | NetAlertX container + setup |
-| `NETALERTX_PORT` | `20211` | UI (localhost only; Caddy `devices.home`) |
+| `NETALERTX_PORT` | `20211` | UI (loopback; Caddy `devices.home`) |
+| `NETALERTX_LISTEN_ADDR` | `127.0.0.1` | Host-network listen (do not use `0.0.0.0` unless intentional) |
 | `NETALERTX_SCAN_SUBNETS` | (empty) | ARP scan; if empty, `LAN_SUBNET_CIDR` + `PI_INTERFACE` |
 | `NETALERTX_PASSWORD` | (empty → `AGH_ADMIN_PASSWORD`) | NetAlertX UI password |
 

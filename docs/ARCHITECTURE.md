@@ -6,11 +6,27 @@ Production-grade single-node home dev/DNS server for Raspberry Pi 4B.
 
 - Zero manual config on AdGuard/Unbound after deploy (IaC rendered configs)
 - Automatic network discovery and static IP assignment
-- Self-healing containers (autoheal + healthchecks)
+- Self-healing containers (`recover-stack.sh` + healthchecks; autoheal optional)
 - Independent DNS health monitoring (systemd timer, not dependent on Uptime Kuma)
 - Hybrid storage: SD boot + root; USB SSD for application data (`/mnt/ssd`)
 - Host firewall (UFW) + SSH brute-force protection (fail2ban)
+- TLS on by default; offsite backup SLA (`make backup-pull`)
 - Optional full automation via AdGuard DHCP mode
+
+## Compose tiers
+
+| Tier | Profile / always-on | Role |
+|------|---------------------|------|
+| **dns-core** | `unbound`, `adguard` (always) | LAN DNS — keep up even when SSD degraded |
+| **panels** | `caddy`, homepage, uptime-kuma, `dozzle` | `*.home` UI via Caddy+TLS |
+| **automation** | `forgejo`, `syncthing`, `n8n`, `redis`, `netalert`, `crowdsec` | Best-effort apps on SSD data |
+| **edge** | `cloudflare` (token), `watchtower` (off by default) | Optional public / update watch |
+
+Feature flags: `ENABLE_*` in `.env` → compose profiles (`scripts/lib/compose-profiles.sh`).
+
+## Decisions (ADR)
+
+See [docs/adr/](adr/README.md). Script map: [docs/SCRIPTS.md](SCRIPTS.md).
 
 ## Traffic flow
 

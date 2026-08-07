@@ -31,11 +31,13 @@ ssh "$PI_USER@$PI_STATIC_IP" 'docker exec crowdsec cscli decisions list'
 
 ## Cloudflare Tunnel
 
+See **[docs/CLOUDFLARE-TUNNEL.md](CLOUDFLARE-TUNNEL.md)** (checklist + disable).
+
 1. [Cloudflare Zero Trust](https://one.dash.cloudflare.com/) → Networks → Tunnels
 2. Create token → add to `.env` as `CLOUDFLARE_TUNNEL_TOKEN=...`
 3. `make deploy` (profile added automatically)
 
-Public hostname example: `demo.yourdomain.com` → `http://localhost:80`
+Prefer Tailscale for admin. Public hostname example: `demo.yourdomain.com` → Caddy on localhost.
 
 ## Disable
 

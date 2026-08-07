@@ -1,6 +1,6 @@
 services:
   unbound:
-    image: klutchell/unbound:latest
+    image: klutchell/unbound:1.23.1
     container_name: unbound
     restart: unless-stopped
     labels:
@@ -38,7 +38,7 @@ services:
       start_period: 120s
 
   docker-socket-proxy:
-    image: tecnativa/docker-socket-proxy:latest
+    image: tecnativa/docker-socket-proxy:0.3.0
     container_name: docker-socket-proxy
     restart: unless-stopped
     profiles: ["dozzle"]
@@ -53,7 +53,7 @@ services:
       VERSION: 1
 
   autoheal:
-    image: willfarrell/autoheal:latest
+    image: willfarrell/autoheal:1.2.0
     container_name: autoheal
     restart: unless-stopped
     profiles: ["autoheal"]
@@ -65,7 +65,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
   caddy:
-    image: caddy:2-alpine
+    image: caddy:2.9.1-alpine
     container_name: caddy
     restart: unless-stopped
     profiles: ["caddy"]
@@ -86,7 +86,7 @@ services:
         condition: service_started
 
   homepage:
-    image: ghcr.io/gethomepage/homepage:latest
+    image: ghcr.io/gethomepage/homepage:v1.13.2
     container_name: homepage
     restart: unless-stopped
     labels:
@@ -111,7 +111,7 @@ services:
       - ../data/uptime-kuma:/app/data
 
   dozzle:
-    image: amir20/dozzle:latest
+    image: amir20/dozzle:v8.14.12
     container_name: dozzle
     restart: unless-stopped
     profiles: ["dozzle"]
@@ -149,7 +149,7 @@ services:
       - "127.0.0.1:${FORGEJO_PORT:-3002}:3000"
 
   syncthing:
-    image: syncthing/syncthing:latest
+    image: syncthing/syncthing:1.29.7
     container_name: syncthing
     restart: unless-stopped
     profiles: ["syncthing"]
@@ -171,7 +171,7 @@ services:
       - "22000:22000/udp"
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.4-alpine
     container_name: redis
     restart: unless-stopped
     profiles: ["redis"]
@@ -216,7 +216,7 @@ services:
       - ../data/.disk-probe:/host-ssd:ro
 
   netalertx:
-    image: ghcr.io/netalertx/netalertx:latest
+    image: ghcr.io/netalertx/netalertx:v26.8.5
     container_name: netalertx
     restart: unless-stopped
     profiles: ["netalert"]
@@ -229,7 +229,8 @@ services:
       autoheal: "true"
     environment:
       PORT: ${NETALERTX_PORT:-20211}
-      LISTEN_ADDR: ${NETALERTX_LISTEN_ADDR:-0.0.0.0}
+      # Host network; UI yalnizca loopback — Caddy devices.home proxy
+      LISTEN_ADDR: ${NETALERTX_LISTEN_ADDR:-127.0.0.1}
       PUID: ${NETALERTX_UID:-20211}
       PGID: ${NETALERTX_GID:-20211}
       LOADED_PLUGINS: '["ARPSCAN","DIGSCAN","NSLOOKUP","ICMP","WEBHOOK","NEWDEV","NTFPRCS","DBCLNP","CUSTPROP","SETPWD","SYNC","UI","MAINT","VNDRPDT","ADGUARDIMP","AVAHISCAN"]'
@@ -265,7 +266,7 @@ services:
       start_period: 60s
 
   cloudflared:
-    image: cloudflare/cloudflared:latest
+    image: cloudflare/cloudflared:2025.11.1
     container_name: cloudflared
     restart: unless-stopped
     profiles: ["cloudflare"]
@@ -275,7 +276,7 @@ services:
     network_mode: host
 
   watchtower:
-    image: containrrr/watchtower:latest
+    image: containrrr/watchtower:1.7.1
     container_name: watchtower
     restart: unless-stopped
     profiles: ["watchtower"]

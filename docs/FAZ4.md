@@ -13,6 +13,7 @@ LAN device inventory, new-device and offline alerts.
 ```bash
 ENABLE_NETALERTX=true
 NETALERTX_PORT=20211
+NETALERTX_LISTEN_ADDR=127.0.0.1
 # Optional — if empty, LAN_SUBNET_CIDR + PI_INTERFACE are used
 NETALERTX_SCAN_SUBNETS=
 ```

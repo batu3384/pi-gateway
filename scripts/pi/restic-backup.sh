@@ -16,7 +16,7 @@ if is_ssd_root_mode; then
 else
   RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-/mnt/ssd/pi-gateway-data/backups/restic}"
 fi
-RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic:latest}"
+RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic:0.17.3}"
 
 log() { echo "[restic] $*"; }
 

@@ -94,6 +94,47 @@ if [[ -f "$PROJECT_DIR/.env" ]]; then
     ok "PI_USER=${PI_USER}"
   fi
 
+  if [[ "${ENABLE_TLS:-true}" != "true" ]]; then
+    if [[ "${WEAK_TLS_OK:-}" == "yes" ]]; then
+      warn "ENABLE_TLS=false (WEAK_TLS_OK=yes) — HTTP on LAN"
+    else
+      fail "ENABLE_TLS=true required — make tls-certs (or WEAK_TLS_OK=yes)"
+    fi
+  else
+    domain="${LAN_DOMAIN:-home}"
+    if [[ -f "$PROJECT_DIR/config/caddy/certs/${domain}.pem" ]]; then
+      ok "TLS certs present (config/caddy/certs/${domain}.pem)"
+    else
+      fail "ENABLE_TLS=true but certs missing — run: make tls-certs"
+    fi
+    if [[ "${ENABLE_N8N:-true}" == "true" && "${N8N_SECURE_COOKIE:-true}" != "true" ]]; then
+      fail "N8N_SECURE_COOKIE=true required when ENABLE_TLS=true"
+    fi
+  fi
+
+  # Offsite backup SLA (SSD restic alone is not 3-2-1)
+  if [[ "${ENABLE_RESTIC:-true}" == "true" ]]; then
+    max_age="${OFFSITE_BACKUP_MAX_AGE_DAYS:-7}"
+    dest="${MAC_BACKUP_DEST:-$HOME/Backups/pi-gateway}"
+    stamp="${dest}/.last-success"
+    if [[ "$max_age" == "0" ]]; then
+      ok "offsite backup age check disabled (OFFSITE_BACKUP_MAX_AGE_DAYS=0)"
+    elif [[ ! -f "$stamp" ]]; then
+      warn "no offsite backup stamp — run make backup-pull after first restic (3-2-1)"
+    else
+      age_days="$(python3 -c "import os,time; print(int((time.time()-os.path.getmtime('$stamp'))//86400))")"
+      if (( age_days > max_age )); then
+        if [[ "${WEAK_BACKUP_OK:-}" == "yes" ]]; then
+          warn "offsite backup stale (${age_days}d > ${max_age}d) — WEAK_BACKUP_OK=yes"
+        else
+          fail "offsite backup stale (${age_days}d > ${max_age}d) — make backup-pull"
+        fi
+      else
+        ok "offsite backup fresh (${age_days}d <= ${max_age}d)"
+      fi
+    fi
+  fi
+
   # Deploy needs non-interactive SSH (key auth)
   ssh_target="${PI_HOST:-${PI_STATIC_IP:-}}"
   ssh_user="${PI_USER:-pi}"

@@ -31,10 +31,11 @@ AdGuard + Unbound DNS, Caddy reverse proxy, Forgejo, Syncthing, n8n, monitoring 
 git clone https://github.com/batu3384/pi-gateway.git
 cd pi-gateway
 cp .env.example .env
-# Edit .env: AGH_ADMIN_PASSWORD, PI_USER, service passwords, optional Tailscale
+# Edit .env: passwords, PI_USER; then: make tls-certs
 # Plug USB SSD into the Pi before install
 
 make install   # doctor → discover → render → validate → deploy
+make backup-cron   # offsite SLA (3-2-1)
 make status
 ```
 
@@ -48,9 +49,12 @@ Full walkthrough: **[INSTALL.md](INSTALL.md)**
 |-----|--------|
 | [INSTALL.md](INSTALL.md) | Install & first boot |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Design & traffic flow |
+| [docs/adr/](docs/adr/README.md) | Architecture decisions |
+| [docs/SCRIPTS.md](docs/SCRIPTS.md) | Script tiers (core/ops/experimental) |
 | [docs/ENV.md](docs/ENV.md) | Environment variables |
 | [docs/OPERATIONS.md](docs/OPERATIONS.md) | Day-to-day ops |
 | [docs/SECURITY.md](docs/SECURITY.md) | Security model |
+| [docs/CLOUDFLARE-TUNNEL.md](docs/CLOUDFLARE-TUNNEL.md) | Optional public tunnel |
 | [docs/DNS-BLOCKING.md](docs/DNS-BLOCKING.md) | Ad blocking |
 | [docs/TAILSCALE.md](docs/TAILSCALE.md) | Remote access |
 | [docs/RESTORE.md](docs/RESTORE.md) | Restic restore |

@@ -36,4 +36,16 @@ rsync -avz \
   "$PI_USER@$PI_HOST:$REMOTE_DIR/config/" \
   "$LOCAL_DEST/config-snapshots/$STAMP/" || log "WARN: config snapshot kismi basarisiz (restic OK)"
 
+# Offsite SLA stamp (doctor + Pi health)
+date -Iseconds >"$LOCAL_DEST/.last-success"
+log "Stamp: $LOCAL_DEST/.last-success"
+
+if ssh -o ConnectTimeout=10 -o BatchMode=yes "$PI_USER@$PI_HOST" \
+  "sudo mkdir -p /var/lib/pi-gateway && date -Iseconds | sudo tee /var/lib/pi-gateway/last-offsite-backup >/dev/null && sudo chmod 644 /var/lib/pi-gateway/last-offsite-backup" \
+  2>/dev/null; then
+  log "Pi marker: /var/lib/pi-gateway/last-offsite-backup"
+else
+  log "WARN: Pi offsite marker yazilamadi (SSH/sudo) — Mac stamp yine de gecerli"
+fi
+
 log "Tamamlandi: $LOCAL_DEST"
