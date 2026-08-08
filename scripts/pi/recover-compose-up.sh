@@ -43,7 +43,7 @@ finish_ok() {
   if [[ "${ENABLE_DOZZLE:-true}" == "true" ]] \
     && [[ ! -f "${REMOTE_DIR}/data/dozzle/users.yml" ]]; then
     echo "[recover-compose] dozzle users.yml eksik — setup-dozzle" >&2
-    "$SCRIPT_DIR/setup-dozzle.sh" || true
+    bash "$SCRIPT_DIR/setup-dozzle.sh" || true
     docker compose --env-file ../.env --profile dozzle up -d dozzle 2>/dev/null || true
   fi
   mark_stack_recover_cooldown

@@ -193,4 +193,6 @@ sudo mkdir -p /run/pi-gateway/notify 2>/dev/null || true
 sudo chown "$USER:$USER" /run/pi-gateway/notify 2>/dev/null || true
 sudo chmod 775 /run/pi-gateway/notify 2>/dev/null || true
 
+chmod +x "$REMOTE_DIR"/scripts/pi/*.sh "$REMOTE_DIR"/scripts/lib/*.sh 2>/dev/null || true
+
 echo "[bootstrap] complete"
