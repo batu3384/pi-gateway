@@ -36,6 +36,20 @@ run_step_optional() {
 set -a && source "$REMOTE_DIR/.env" && set +a
 STORAGE_TYPE="${STORAGE_TYPE:-hybrid}"
 
+DEPLOY_DEGRADED=0
+if [[ -f /run/pi-gateway/storage-degraded ]]; then
+  DEPLOY_DEGRADED=1
+fi
+# shellcheck source=../lib/stack-health.sh
+if [[ "$DEPLOY_DEGRADED" -eq 0 ]] && [[ -f "$REMOTE_DIR/scripts/lib/stack-health.sh" ]]; then
+  # shellcheck source=/dev/null
+  source "$REMOTE_DIR/scripts/lib/stack-health.sh"
+  storage_degraded && DEPLOY_DEGRADED=1
+fi
+if [[ "$DEPLOY_DEGRADED" -eq 1 ]]; then
+  log "WARN: storage degraded — yalnizca DNS/firewall post-deploy (app setup atlanir)"
+fi
+
 # Placeholder sifreleri fail-closed
 for key in AGH_ADMIN_PASSWORD DOZZLE_ADMIN_PASSWORD RESTIC_PASSWORD FORGEJO_ADMIN_PASSWORD N8N_WEBHOOK_SECRET UPTIME_KUMA_ADMIN_PASSWORD SYNCTHING_GUI_PASSWORD; do
   val="${!key:-}"
@@ -113,6 +127,7 @@ if [[ "${SYNC_SERVICE_PASSWORDS:-false}" == "true" ]]; then
 fi
 run_step_optional "Host sertlestirme" "$SCRIPT_DIR/harden-host.sh"
 
+if [[ "$DEPLOY_DEGRADED" -eq 0 ]]; then
 if [[ "${ENABLE_FORGEJO:-true}" == "true" ]]; then
   run_step_optional "Forgejo admin" "$SCRIPT_DIR/setup-forgejo.sh"
 fi
@@ -168,17 +183,20 @@ if [[ "${ENABLE_CROWDSEC:-true}" == "true" ]]; then
   run_step_optional "CrowdSec" "$SCRIPT_DIR/setup-crowdsec.sh"
   run_step_optional "CrowdSec firewall bouncer" "$SCRIPT_DIR/setup-crowdsec-bouncer.sh"
 fi
+fi
 
 if [[ "${ENABLE_UFW:-true}" == "true" ]]; then
   run_step_critical "UFW firewall" "$SCRIPT_DIR/setup-firewall.sh"
 fi
 
+if [[ "$DEPLOY_DEGRADED" -eq 0 ]]; then
 if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
   if [[ "${ENABLE_DOCKER_SSD:-false}" == "true" ]]; then
     if [[ ! -f /mnt/ssd/.docker-data-root ]] || [[ ! -f /etc/systemd/system/docker.service.d/pi-gateway-ssd.conf ]]; then
       run_step_optional "Docker SSD tasima" "$SCRIPT_DIR/setup-docker-ssd.sh"
     fi
   fi
+fi
 fi
 
 log "Post-deploy tamamlandi"
