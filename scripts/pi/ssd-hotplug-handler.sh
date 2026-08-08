@@ -60,11 +60,14 @@ if ! ssd_mount_healthy && ssd_block_present; then
 fi
 
 if ssd_mount_healthy; then
-  if [[ -f "$SSD_HOTPLUG_STATE_FILE" ]] && stack_core_ok 2>/dev/null; then
+  # Degraded bayrak varken asla early-exit — tam stack restore zorunlu
+  if [[ ! -f "${STORAGE_DEGRADED_FLAG:-/run/pi-gateway/storage-degraded}" ]] \
+    && [[ -f "$SSD_HOTPLUG_STATE_FILE" ]] && stack_core_ok 2>/dev/null; then
     log "SSD saglikli ve stack core ayakta — atlaniyor"
     exit 0
   fi
-  if hotplug_debounced; then
+  if hotplug_debounced \
+    && [[ ! -f "${STORAGE_DEGRADED_FLAG:-/run/pi-gateway/storage-degraded}" ]]; then
     log "debounce (${SSD_HOTPLUG_DEBOUNCE_SEC}s) — atlaniyor"
     exit 0
   fi

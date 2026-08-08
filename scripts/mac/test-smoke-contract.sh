@@ -16,6 +16,7 @@ for needle in \
   'ufw-active' \
   'ufw-dns-lan' \
   'adguard-dhcp-config' \
+  'adguard-ui-ufw-no-lan' \
   'privileged-lib-sync' \
   'run_check'; do
   grep -q "$needle" "$SMOKE" || die "smoke eksik: $needle"

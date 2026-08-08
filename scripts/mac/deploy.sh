@@ -89,8 +89,16 @@ else
   echo full
 fi
 REMOTE_EOF
-)" || COMPOSE_MODE="full"
+)" || COMPOSE_MODE="core-dns"
 COMPOSE_MODE="$(echo "$COMPOSE_MODE" | tr -d '\r' | tail -1)"
+# Bilinmeyen/boş cevap = fail-closed core-dns (SD clobber önleme)
+case "$COMPOSE_MODE" in
+  full|core-dns) ;;
+  *)
+    log "WARN: COMPOSE_MODE='$COMPOSE_MODE' gecersiz — core-dns"
+    COMPOSE_MODE="core-dns"
+    ;;
+esac
 
 if [[ "$COMPOSE_MODE" == "core-dns" ]]; then
   log "SSD yok/degraded — compose core-dns (unbound+adguard+caddy/homepage)"

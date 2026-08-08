@@ -22,11 +22,12 @@ SSD_USB_PORT_DISABLE_CYCLE="${SSD_USB_PORT_DISABLE_CYCLE:-true}"
 SSD_USB_HOST_PORT="${SSD_USB_HOST_PORT:-2}"
 SSD_USB_PORT_OFF_SEC="${SSD_USB_PORT_OFF_SEC:-5}"
 SSD_USB_PORT_ON_SEC="${SSD_USB_PORT_ON_SEC:-10}"
-# Son care: xhci PCI unbind/rebind (rate-limit; JMS583 icin gerekli olabilir)
-SSD_USB_XHCI_REBIND="${SSD_USB_XHCI_REBIND:-true}"
+# Son care: xhci PCI unbind/rebind (rate-limit; varsayilan KAPALI — tum USB3 collateral)
+SSD_USB_XHCI_REBIND="${SSD_USB_XHCI_REBIND:-false}"
 SSD_USB_XHCI_PCI="${SSD_USB_XHCI_PCI:-0000:01:00.0}"
 SSD_USB_XHCI_UNBIND_SEC="${SSD_USB_XHCI_UNBIND_SEC:-5}"
 SSD_USB_XHCI_BIND_SEC="${SSD_USB_XHCI_BIND_SEC:-12}"
+SSD_USB_REBOOT_STAMP_FILE="${SSD_USB_REBOOT_STAMP_FILE:-/var/lib/pi-gateway/ssd-usb-reboot-stamp}"
 
 _ssd_alive_root() {
   if [[ "$(id -u)" -eq 0 ]]; then
@@ -34,6 +35,18 @@ _ssd_alive_root() {
   else
     sudo "$@"
   fi
+}
+
+# PCI BDF: 0000:01:00.0 — bash -c injection engeli
+ssd_pci_id_ok() {
+  [[ "$1" =~ ^[0-9a-fA-F]{4}:[0-9a-fA-F]{2}:[0-9a-fA-F]{2}\.[0-9a-fA-F]$ ]]
+}
+
+ssd_sysfs_write() {
+  local path="$1" value="$2"
+  [[ "$path" == /sys/* ]] || return 1
+  [[ -e "$path" ]] || return 1
+  printf '%s\n' "$value" | _ssd_alive_root tee "$path" >/dev/null
 }
 
 _ssd_probe_write() {
@@ -55,7 +68,7 @@ ssd_block_present() {
   if [[ -e "/dev/disk/by-label/${SSD_LABEL}" ]]; then
     return 0
   fi
-  part="$(awk '$2=="/mnt/ssd" && $1 !~ /^#/ {print $1; exit}' /etc/fstab 2>/dev/null || true)"
+  part="$(awk -v m="$SSD_MOUNT" '$2==m && $1 !~ /^#/ {print $1; exit}' /etc/fstab 2>/dev/null || true)"
   if [[ -n "$part" ]]; then
     if [[ "$part" == PARTUUID=* || "$part" == UUID=* ]]; then
       blkid "$part" -o device >/dev/null 2>&1 && return 0
@@ -172,6 +185,7 @@ ssd_usb_bus_dropout() {
 ssd_usb_port_sysfs() {
   local port="${SSD_USB_HOST_PORT:-2}"
   local p
+  [[ "$port" =~ ^[0-9]+$ ]] || return 1
   for p in \
     "/sys/bus/usb/devices/usb2-port${port}" \
     "/sys/devices/platform/scb/fd500000.pcie/pci0000:00/0000:00:00.0/0000:01:00.0/usb2/2-0:1.0/usb2-port${port}"; do
@@ -191,30 +205,56 @@ ssd_usb_port_disable_cycle() {
   [[ -n "$port_sys" ]] || return 1
   ssd_usb_reset_record
   echo "[ssd-alive] USB port disable cycle: $port_sys" >&2
-  _ssd_alive_root bash -c "echo 1 >'${port_sys}/disable'" 2>/dev/null || true
+  ssd_sysfs_write "${port_sys}/disable" 1 || true
   sleep "${SSD_USB_PORT_OFF_SEC:-5}"
-  _ssd_alive_root bash -c "echo 0 >'${port_sys}/disable'" 2>/dev/null || true
+  ssd_sysfs_write "${port_sys}/disable" 0 || true
   sleep "${SSD_USB_PORT_ON_SEC:-10}"
   command -v udevadm >/dev/null 2>&1 && _ssd_alive_root udevadm settle --timeout=15 2>/dev/null || sleep 3
   ssd_find_usb_sysfs >/dev/null 2>&1 || ssd_block_present
 }
 
 ssd_xhci_rebind() {
-  [[ "${SSD_USB_XHCI_REBIND:-true}" == "true" ]] || return 1
+  [[ "${SSD_USB_XHCI_REBIND:-false}" == "true" ]] || return 1
   if ssd_usb_reset_rate_limited; then
     echo "[ssd-alive] xhci rebind rate-limit (${SSD_USB_RESET_MAX}/${SSD_USB_RESET_WINDOW_SEC}s)" >&2
     return 1
   fi
   local dev="${SSD_USB_XHCI_PCI:-0000:01:00.0}"
+  ssd_pci_id_ok "$dev" || {
+    echo "[ssd-alive] HATA: SSD_USB_XHCI_PCI gecersiz: $dev" >&2
+    return 1
+  }
   [[ -e "/sys/bus/pci/drivers/xhci_hcd/${dev}" ]] || return 1
   ssd_usb_reset_record
   echo "[ssd-alive] xhci rebind: $dev" >&2
-  _ssd_alive_root bash -c "echo '${dev}' >/sys/bus/pci/drivers/xhci_hcd/unbind" 2>/dev/null || return 1
+  ssd_sysfs_write "/sys/bus/pci/drivers/xhci_hcd/unbind" "$dev" || return 1
   sleep "${SSD_USB_XHCI_UNBIND_SEC:-5}"
-  _ssd_alive_root bash -c "echo '${dev}' >/sys/bus/pci/drivers/xhci_hcd/bind" 2>/dev/null || return 1
+  ssd_sysfs_write "/sys/bus/pci/drivers/xhci_hcd/bind" "$dev" || return 1
   sleep "${SSD_USB_XHCI_BIND_SEC:-12}"
   command -v udevadm >/dev/null 2>&1 && _ssd_alive_root udevadm settle --timeout=20 2>/dev/null || sleep 5
   ssd_find_usb_sysfs >/dev/null 2>&1 || ssd_block_present
+}
+
+ssd_usb_reboot_once() {
+  [[ "${SSD_USB_RESET_REBOOT:-false}" == "true" ]] || return 1
+  local now ts stamp="$SSD_USB_REBOOT_STAMP_FILE"
+  now="$(date +%s)"
+  if [[ -f "$stamp" ]]; then
+    ts="$(tr -d '[:space:]' <"$stamp" 2>/dev/null || true)"
+    ts="${ts:-0}"
+    if [[ "$ts" =~ ^[0-9]+$ ]] && (( now - ts < SSD_USB_RESET_WINDOW_SEC * 2 )); then
+      echo "[ssd-alive] reboot zaten denendi (${SSD_USB_RESET_WINDOW_SEC}*2s) — atlaniyor" >&2
+      return 1
+    fi
+  fi
+  _ssd_alive_root mkdir -p "$(dirname "$stamp")" 2>/dev/null || true
+  if [[ "$(id -u)" -eq 0 ]]; then
+    printf '%s\n' "$now" >"$stamp"
+  else
+    printf '%s\n' "$now" | sudo tee "$stamp" >/dev/null
+  fi
+  echo "[ssd-alive] SSD_USB_RESET_REBOOT=true — reboot (tek seferlik pencere)" >&2
+  _ssd_alive_root systemctl reboot || true
 }
 
 # Soft-reset: port cycle / xhci / autosuspend / remount; authorized cycle opt-in
@@ -231,10 +271,7 @@ ssd_usb_soft_reset() {
   if [[ "$SSD_USB_AUTHORIZED_RESET" == "true" ]]; then
     if ssd_usb_reset_rate_limited; then
       echo "[ssd-alive] USB authorized rate-limit (${SSD_USB_RESET_MAX}/${SSD_USB_RESET_WINDOW_SEC}s)" >&2
-      if [[ "$SSD_USB_RESET_REBOOT" == "true" ]]; then
-        echo "[ssd-alive] SSD_USB_RESET_REBOOT=true — reboot" >&2
-        _ssd_alive_root systemctl reboot || true
-      fi
+      ssd_usb_reboot_once || true
       return 1
     fi
     local sys
@@ -242,9 +279,9 @@ ssd_usb_soft_reset() {
     if [[ -n "$sys" && -f "${sys}/authorized" ]]; then
       ssd_usb_reset_record
       echo "[ssd-alive] USB authorized cycle: $sys" >&2
-      _ssd_alive_root bash -c "echo 0 >'${sys}/authorized'" 2>/dev/null || true
+      ssd_sysfs_write "${sys}/authorized" 0 || true
       sleep 2
-      _ssd_alive_root bash -c "echo 1 >'${sys}/authorized'" 2>/dev/null || true
+      ssd_sysfs_write "${sys}/authorized" 1 || true
       command -v udevadm >/dev/null 2>&1 && _ssd_alive_root udevadm settle --timeout=10 2>/dev/null || sleep 3
     else
       echo "[ssd-alive] USB cihaz yok — authorized atlandi" >&2
@@ -265,9 +302,8 @@ ssd_usb_soft_reset() {
   if ssd_mount_healthy; then
     return 0
   fi
-  if ssd_usb_bus_dropout && ssd_usb_reset_rate_limited && [[ "$SSD_USB_RESET_REBOOT" == "true" ]]; then
-    echo "[ssd-alive] SSD_USB_RESET_REBOOT=true — reboot" >&2
-    _ssd_alive_root systemctl reboot || true
+  if ssd_usb_bus_dropout && ssd_usb_reset_rate_limited; then
+    ssd_usb_reboot_once || true
   fi
   return 1
 }

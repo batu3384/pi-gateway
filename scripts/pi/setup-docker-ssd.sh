@@ -115,9 +115,10 @@ bring_up_stack() {
   log "Stack yeniden baslatiliyor..."
   cd "${REMOTE_DIR}/compose"
   # shellcheck source=/dev/null
-  source "${REMOTE_DIR}/.env" 2>/dev/null || true
-  local profiles=(--profile autoheal --profile caddy --profile dozzle --profile forgejo \
-    --profile syncthing --profile redis --profile n8n --profile crowdsec)
+  [[ -f "${REMOTE_DIR}/.env" ]] && set -a && source "${REMOTE_DIR}/.env" && set +a
+  # shellcheck source=../lib/compose-profiles.sh
+  source "${REMOTE_DIR}/scripts/lib/compose-profiles.sh"
+  mapfile -t profiles < <(compose_profiles)
   docker compose --env-file ../.env "${profiles[@]}" up -d
 }
 

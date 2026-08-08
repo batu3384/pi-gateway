@@ -34,6 +34,11 @@ if storage_degraded; then
 else
   die "storage_degraded flag algilanmadi"
 fi
+# Auto-clear olmamali: flag dosyasi varken true kalir (symlink/mount ne olursa olsun)
+if grep -A12 '^storage_degraded()' "$STACK_HEALTH" | grep -q 'clear_storage_degraded'; then
+  die "storage_degraded auto-clear geri geldi"
+fi
+ok "storage_degraded no auto-clear"
 rm -f "$STORAGE_DEGRADED_FLAG"
 
 lock_dir="$(dirname "$STACK_LOCK_FILE")"

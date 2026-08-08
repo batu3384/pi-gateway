@@ -200,7 +200,9 @@ if [[ "${ENABLE_UFW:-true}" == "true" ]] && [[ -x /usr/sbin/ufw ]]; then
   if [[ "$UFW_ADMIN_EXPOSURE" == "caddy-only" ]]; then
     run_check "ufw-caddy-only" bash -c \
       "! sudo -n /usr/sbin/ufw status | grep -E 'pi-gateway (9999|8080|3001|8384)' | grep -q '${LAN_SUBNET_CIDR:-192.168.1.0/24}'"
-    # Docker UFW'yi bypass eder — bind gercekten localhost olmali
+    run_check "adguard-ui-ufw-no-lan" bash -c \
+      "! sudo -n /usr/sbin/ufw status numbered | grep -E '8080/tcp' | grep -q '${LAN_SUBNET_CIDR:-192.168.1.0/24}'"
+    # Docker UFW'yi bypass eder — bind gercekten localhost olmali (AdGuard host:0.0.0.0 kasıtlı — UFW blok)
     run_check "admin-ports-localhost" bash -c \
       '! ss -lnt | grep -E ":(3040|3001|5678|9999|3002|8384)\\b" | grep -vE "127\\.0\\.0\\.1|\\[::1\\]" | grep -q .'
     if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
@@ -208,6 +210,16 @@ if [[ "${ENABLE_UFW:-true}" == "true" ]] && [[ -x /usr/sbin/ufw ]]; then
         '! sudo -n /usr/sbin/ufw status | grep -E ":'"${NETALERTX_PORT:-20211}"'\\b" | grep -q "${LAN_SUBNET_CIDR:-192.168.1.0/24}"'
     fi
   fi
+fi
+
+if [[ "${ENABLE_SYNCTHING:-true}" == "true" ]] && docker ps --format '{{.Names}}' | grep -q '^syncthing$'; then
+  case "${SYNCTHING_GUI_PASSWORD:-}" in
+    ""|CHANGE_ME*|Degistir*) ;;
+    *)
+      run_check "syncthing-auth-deny" bash -c \
+        'code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "http://127.0.0.1:'"${SYNCTHING_PORT}"'/"); [[ "$code" == "401" ]]'
+      ;;
+  esac
 fi
 
 echo "Smoke test: $pass/$checks passed"

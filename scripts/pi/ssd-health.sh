@@ -47,7 +47,7 @@ if storage_degraded; then
     fi
   fi
   log "hala degraded"
-  exit 0
+  exit 1
 fi
 
 # Saglikli gorunuyor mu?
@@ -79,4 +79,11 @@ fi
 
 log "soft-reset yetersiz — hotplug degraded yolu"
 run_hotplug
-ssd_mount_healthy || storage_degraded
+if ssd_mount_healthy; then
+  exit 0
+fi
+if storage_degraded; then
+  log "hala degraded"
+  exit 1
+fi
+exit 1

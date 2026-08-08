@@ -44,21 +44,37 @@ for rel in "${SCRIPTS[@]}"; do
     log "WARN: yok — $rel"
     continue
   fi
+  # TOCTOU: world-writable kaynak kopyalama
+  if [[ -n "$(find "$src" -maxdepth 0 -perm -002 2>/dev/null)" ]]; then
+    log "HATA: world-writable kaynak reddedildi — $rel"
+    exit 1
+  fi
   run_root install -o root -g root -m 755 -D "$src" "$dst"
 done
 
 ssd_src="${REMOTE_DIR}/scripts/pi/setup-ssd-data.sh"
 if [[ -f "$ssd_src" ]]; then
+  if [[ -n "$(find "$ssd_src" -maxdepth 0 -perm -002 2>/dev/null)" ]]; then
+    log "HATA: world-writable setup-ssd-data reddedildi"
+    exit 1
+  fi
   run_root install -o root -g root -m 755 -D "$ssd_src" /usr/local/sbin/pi-setup-ssd-data.sh
   log "OK /usr/local/sbin/pi-setup-ssd-data.sh"
 fi
 
-# Deploy drift kontrolu
+# Deploy drift kontrolu + install sonrasi hash (systemd path integrity)
 if command -v sha256sum >/dev/null 2>&1; then
   tmp_sha="$(mktemp)"
   (cd "$REMOTE_DIR" && sha256sum "${SCRIPTS[@]}" 2>/dev/null) >"$tmp_sha" || true
   run_root install -o root -g root -m 644 "$tmp_sha" "$LIB_DIR/.scripts-sha256"
   rm -f "$tmp_sha"
+  tmp_inst="$(mktemp)"
+  (
+    cd "$LIB_DIR" || exit 0
+    sha256sum "${SCRIPTS[@]}" 2>/dev/null
+  ) >"$tmp_inst" || true
+  run_root install -o root -g root -m 644 "$tmp_inst" "$LIB_DIR/.installed-sha256"
+  rm -f "$tmp_inst"
 fi
 
 log "OK root-owned lib: $LIB_DIR"

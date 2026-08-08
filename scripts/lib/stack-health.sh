@@ -112,17 +112,8 @@ root_rw_ok() {
 }
 
 storage_degraded() {
-  [[ -f "${STORAGE_DEGRADED_FLAG}" ]] || return 1
-  # Stuck flag iyilestirme: SSD healthy + symlink OK ise bayrak yalan — temizle
-  if needs_ssd_storage && declare -F ssd_mount_healthy >/dev/null 2>&1 && ssd_mount_healthy; then
-    local data_link="${REMOTE_DIR:-}/data"
-    if [[ -n "${REMOTE_DIR:-}" && -L "$data_link" ]] \
-      && [[ "$(readlink -f "$data_link" 2>/dev/null)" == "/mnt/ssd/pi-gateway-data" ]]; then
-      clear_storage_degraded 2>/dev/null || true
-      [[ -f "${STORAGE_DEGRADED_FLAG}" ]] || return 1
-    fi
-  fi
-  return 0
+  # Flag presence only. Do NOT auto-clear here — hotplug/recover must clear after stack restore.
+  [[ -f "${STORAGE_DEGRADED_FLAG}" ]]
 }
 
 set_storage_degraded() {

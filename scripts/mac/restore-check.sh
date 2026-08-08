@@ -13,19 +13,20 @@ REMOTE_DIR="${REMOTE_DIR:-/home/$PI_USER/pi-gateway}"
 LOCAL_REPO="${MAC_BACKUP_DEST:-$HOME/Backups/pi-gateway}/restic"
 RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic:0.17.3}"
 CHECK_SUBSET="${RESTIC_CHECK_SUBSET:-5%}"
+RESTIC_TIMEOUT_SEC="${RESTIC_TIMEOUT_SEC:-7200}"
 TARGET="${1:-both}"
 
 log() { echo "[restore-check] $*"; }
 die() { echo "[restore-check] HATA: $*" >&2; exit 1; }
 
-[[ "$ENABLE_RESTIC" == "true" ]] || { log "atlandi (ENABLE_RESTIC=false)"; exit 0; }
+[[ "${ENABLE_RESTIC:-false}" == "true" ]] || { log "atlandi (ENABLE_RESTIC=false)"; exit 0; }
 [[ -n "${RESTIC_PASSWORD:-}" ]] || die "RESTIC_PASSWORD .env icinde bos"
 
 run_check() {
   local label="$1" repo_path="$2"
   [[ -d "$repo_path" ]] || { log "SKIP $label — repo yok: $repo_path"; return 0; }
   log "check: $label ($repo_path, subset=$CHECK_SUBSET)"
-  docker run --rm --network none \
+  timeout "$RESTIC_TIMEOUT_SEC" docker run --rm --network none \
     -e RESTIC_PASSWORD \
     -v "${repo_path}:/repo:ro" \
     "$RESTIC_IMAGE" -r "local:/repo" check --read-data-subset="$CHECK_SUBSET"
@@ -37,16 +38,17 @@ case "$TARGET" in
     [[ -n "$PI_HOST" ]] || die "PI_STATIC_IP gerekli (target=pi)"
     RESTIC_REMOTE="${RESTIC_REPOSITORY:-${REMOTE_DIR}/data/backups/restic}"
     ssh -o ConnectTimeout=15 "$PI_USER@$PI_HOST" \
-      "REMOTE_DIR='$REMOTE_DIR' RESTIC_CHECK_SUBSET='$CHECK_SUBSET' bash -s" <<'REMOTE'
+      "REMOTE_DIR='$REMOTE_DIR' RESTIC_CHECK_SUBSET='$CHECK_SUBSET' RESTIC_TIMEOUT_SEC='$RESTIC_TIMEOUT_SEC' RESTIC_IMAGE='$RESTIC_IMAGE' bash -s" <<'REMOTE'
 set -euo pipefail
 # shellcheck source=/dev/null
 [[ -f "$REMOTE_DIR/.env" ]] && set -a && source "$REMOTE_DIR/.env" && set +a
 RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-/mnt/ssd/pi-gateway-data/backups/restic}"
+RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic:0.17.3}"
 [[ -d "$RESTIC_REPOSITORY" ]] || { echo "[restore-check] SKIP pi — repo yok"; exit 0; }
-docker run --rm --network none \
+timeout "${RESTIC_TIMEOUT_SEC:-7200}" docker run --rm --network none \
   -e RESTIC_PASSWORD \
   -v "${RESTIC_REPOSITORY}:/repo:ro" \
-  restic/restic:0.17.3 -r "local:/repo" check --read-data-subset="${RESTIC_CHECK_SUBSET:-5%}"
+  "$RESTIC_IMAGE" -r "local:/repo" check --read-data-subset="${RESTIC_CHECK_SUBSET:-5%}"
 REMOTE
     ;;
   local)
@@ -57,15 +59,16 @@ REMOTE
       RESTIC_REMOTE="${RESTIC_REPOSITORY:-${REMOTE_DIR}/data/backups/restic}"
       if ssh -o ConnectTimeout=15 -o BatchMode=yes "$PI_USER@$PI_HOST" "test -d '$RESTIC_REMOTE'" 2>/dev/null; then
         ssh -o ConnectTimeout=15 "$PI_USER@$PI_HOST" \
-          "REMOTE_DIR='$REMOTE_DIR' RESTIC_CHECK_SUBSET='$CHECK_SUBSET' bash -s" <<'REMOTE'
+          "REMOTE_DIR='$REMOTE_DIR' RESTIC_CHECK_SUBSET='$CHECK_SUBSET' RESTIC_TIMEOUT_SEC='$RESTIC_TIMEOUT_SEC' RESTIC_IMAGE='$RESTIC_IMAGE' bash -s" <<'REMOTE'
 set -euo pipefail
 # shellcheck source=/dev/null
 [[ -f "$REMOTE_DIR/.env" ]] && set -a && source "$REMOTE_DIR/.env" && set +a
 RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-/mnt/ssd/pi-gateway-data/backups/restic}"
-docker run --rm --network none \
+RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic:0.17.3}"
+timeout "${RESTIC_TIMEOUT_SEC:-7200}" docker run --rm --network none \
   -e RESTIC_PASSWORD \
   -v "${RESTIC_REPOSITORY}:/repo:ro" \
-  restic/restic:0.17.3 -r "local:/repo" check --read-data-subset="${RESTIC_CHECK_SUBSET:-5%}"
+  "$RESTIC_IMAGE" -r "local:/repo" check --read-data-subset="${RESTIC_CHECK_SUBSET:-5%}"
 REMOTE
         log "OK: pi-ssd"
       else
