@@ -189,7 +189,7 @@ fi
 if command -v tailscale >/dev/null 2>&1 && tailscale status >/dev/null 2>&1; then
   run_step_optional "Tailscale uzaktan erisim" "$SCRIPT_DIR/setup-tailscale-remote.sh"
   run_step_optional "Tailscale panel HTTPS" "$SCRIPT_DIR/setup-tailscale-serve.sh"
-  run_step_optional "Tailscale ACL" "$SCRIPT_DIR/setup-tailscale-acl.sh"
+  run_step_soft "Tailscale ACL" "$SCRIPT_DIR/setup-tailscale-acl.sh"
 fi
 
 # LAN IP panel yollari (Tailscale yoksa da)
@@ -197,11 +197,11 @@ if [[ -n "${PI_STATIC_IP:-}" && -f "${REMOTE_DIR}/config/caddy/Caddyfile" ]]; th
   run_step_optional "LAN IP panel yollari" "$SCRIPT_DIR/setup-caddy-lan-ip.sh"
 fi
 
-run_step_optional "Telegram panel bot" "$SCRIPT_DIR/setup-telegram-bot.sh"
+run_step_soft "Telegram panel bot" "$SCRIPT_DIR/setup-telegram-bot.sh"
 
 if [[ "${ENABLE_CROWDSEC:-true}" == "true" ]]; then
-  run_step_optional "CrowdSec" "$SCRIPT_DIR/setup-crowdsec.sh"
-  run_step_optional "CrowdSec firewall bouncer" "$SCRIPT_DIR/setup-crowdsec-bouncer.sh"
+  run_step_soft "CrowdSec" "$SCRIPT_DIR/setup-crowdsec.sh"
+  run_step_soft "CrowdSec firewall bouncer" "$SCRIPT_DIR/setup-crowdsec-bouncer.sh"
 fi
 fi
 
