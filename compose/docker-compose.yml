@@ -72,8 +72,9 @@ services:
     labels:
       autoheal: "true"
     ports:
-      - "80:80"
-      - "443:443"
+      # Tailscale Serve 100.x:443 tutabilir — Caddy sadece LAN IP
+      - "${PI_STATIC_IP}:80:80"
+      - "${PI_STATIC_IP}:443:443"
     volumes:
       - ../config/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - ../config/caddy/certs:/etc/caddy/certs:ro
@@ -216,7 +217,7 @@ services:
       - ../data/.disk-probe:/host-ssd:ro
 
   netalertx:
-    image: ghcr.io/netalertx/netalertx:v26.8.5
+    image: ghcr.io/netalertx/netalertx:26.8.5
     container_name: netalertx
     restart: unless-stopped
     profiles: ["netalert"]

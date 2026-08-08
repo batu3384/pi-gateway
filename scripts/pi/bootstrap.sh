@@ -130,17 +130,24 @@ if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
       ssd_env+=(PI_SSD_CONFIRM_FORMAT=yes)
     fi
     if ! sudo env "${ssd_env[@]}" bash "$ssd_script"; then
-      echo "[bootstrap] HATA: SSD veri diski hazirlanamadi (disk takili mi?)"
-      exit 1
+      if [[ "${DNS_DEGRADED_ON_SSD_LOSS:-true}" == "true" || "${STORAGE_FALLBACK_SD:-false}" == "true" ]]; then
+        echo "[bootstrap] WARN: SSD yok/hazirlanamadi — DNS degraded (SD data) ile devam"
+        touch /run/pi-gateway/storage-degraded 2>/dev/null || \
+          sudo mkdir -p /run/pi-gateway && sudo touch /run/pi-gateway/storage-degraded || true
+      else
+        echo "[bootstrap] HATA: SSD veri diski hazirlanamadi (disk takili mi?)"
+        exit 1
+      fi
+    else
+      echo "[bootstrap] SSD veri diski OK"
     fi
-    echo "[bootstrap] SSD veri diski OK"
+    if mountpoint -q /mnt/ssd 2>/dev/null; then
+      echo "[bootstrap] Veri diski: /mnt/ssd"
+      df -h /mnt/ssd | tail -1
+    fi
   else
     echo "[bootstrap] HATA: setup-ssd-data.sh yok"
     exit 1
-  fi
-  if mountpoint -q /mnt/ssd 2>/dev/null; then
-    echo "[bootstrap] Veri diski: /mnt/ssd"
-    df -h /mnt/ssd | tail -1
   fi
 fi
 

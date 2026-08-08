@@ -146,6 +146,11 @@ main() {
     fi
   done
   log "HATA: USB veri diski bulunamadi ($max_attempts deneme)"
+  # DNS degraded: fstab zaten nofail olabilir; deploy'u kilitleme
+  if [[ "${DNS_DEGRADED_ON_SSD_LOSS:-true}" == "true" || "${STORAGE_FALLBACK_SD:-false}" == "true" ]]; then
+    log "WARN: SSD yok — DNS_DEGRADED izinli, fstab atlandi (disk takilinca ensure-fstab tekrar dener)"
+    exit 0
+  fi
   exit 1
 }
 

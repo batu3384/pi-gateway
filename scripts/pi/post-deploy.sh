@@ -75,13 +75,23 @@ if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
   if sudo env "${ssd_env[@]}" bash "$SCRIPT_DIR/setup-ssd-data.sh"; then
     log "SSD veri diski hazir"
   else
-    log "HATA: SSD veri diski hazirlanamadi (takili mi? PI_SSD_CONFIRM_FORMAT=yes)"
-    exit 1
+    if [[ "${DNS_DEGRADED_ON_SSD_LOSS:-true}" == "true" || "${STORAGE_FALLBACK_SD:-false}" == "true" ]]; then
+      log "WARN: SSD yok — DNS degraded (SD data) ile devam"
+      mkdir -p /run/pi-gateway 2>/dev/null || sudo mkdir -p /run/pi-gateway
+      touch /run/pi-gateway/storage-degraded 2>/dev/null || sudo touch /run/pi-gateway/storage-degraded || true
+    else
+      log "HATA: SSD veri diski hazirlanamadi (takili mi? PI_SSD_CONFIRM_FORMAT=yes)"
+      exit 1
+    fi
   fi
   log ">> SSD data symlink"
   REMOTE_DIR="$REMOTE_DIR" STORAGE_TYPE="$STORAGE_TYPE" bash "$SCRIPT_DIR/ensure-data-symlink.sh" repair || {
-    log "HATA: data symlink onarilamadi"
-    exit 1
+    if [[ "${DNS_DEGRADED_ON_SSD_LOSS:-true}" == "true" || "${STORAGE_FALLBACK_SD:-false}" == "true" ]]; then
+      log "WARN: data symlink — degraded SD data ile devam"
+    else
+      log "HATA: data symlink onarilamadi"
+      exit 1
+    fi
   }
 elif [[ "$STORAGE_TYPE" == "ssd-root" || "$STORAGE_TYPE" == "ssd" ]]; then
   log ">> Native data dizini (ssd-root)"

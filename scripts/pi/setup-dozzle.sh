@@ -20,7 +20,8 @@ esac
 mkdir -p "$DATA_DIR"
 
 log "users.yml olusturuluyor: ${DOZZLE_ADMIN_USER}"
-docker run --rm amir20/dozzle:latest generate "${DOZZLE_ADMIN_USER}" \
+DOZZLE_IMAGE="${DOZZLE_IMAGE:-amir20/dozzle:v8.14.12}"
+docker run --rm "$DOZZLE_IMAGE" generate "${DOZZLE_ADMIN_USER}" \
   --password "${DOZZLE_ADMIN_PASSWORD}" \
   --name "${DOZZLE_ADMIN_USER}" > "${DATA_DIR}/users.yml"
 

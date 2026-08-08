@@ -37,8 +37,11 @@ rsync -avz --delete \
   --exclude '.git' \
   --exclude '.env' \
   --exclude 'data' \
+  --exclude 'data.sd-degraded.bak*' \
   --filter 'protect data' \
   --filter 'protect data/**' \
+  --filter 'protect data.sd-degraded.bak*' \
+  --filter 'protect data.sd-degraded.bak*/**' \
   --filter 'protect config/homepage/logs' \
   --filter 'protect config/homepage/logs/**' \
   --exclude 'config/adguard/AdGuardHome.yaml' \
