@@ -63,26 +63,37 @@ ensure_root_rw() {
 
 ensure_ssd_mounted() {
   needs_ssd || return 0
-  if mountpoint -q /mnt/ssd 2>/dev/null; then
-    clear_storage_degraded
+  # Stale mount: mountpoint true ama I/O olu — degraded clear YASAK (hotplug/recover success clear)
+  if declare -F ssd_mount_healthy >/dev/null 2>&1; then
+    if ssd_mount_healthy; then
+      return 0
+    fi
+  elif mountpoint -q /mnt/ssd 2>/dev/null; then
     return 0
   fi
   local attempt
   for attempt in 1 2 3; do
-    log "SSD bagli degil — mount denemesi $attempt/3"
+    log "SSD bagli degil/sagliksiz — mount denemesi $attempt/3"
     if systemctl start mnt-ssd.mount 2>/dev/null; then
       sleep 2
     fi
-    if mountpoint -q /mnt/ssd 2>/dev/null; then
+    if declare -F ssd_mount_healthy >/dev/null 2>&1; then
+      if ssd_mount_healthy; then
+        log "SSD mount OK (systemd+probe)"
+        return 0
+      fi
+    elif mountpoint -q /mnt/ssd 2>/dev/null; then
       log "SSD mount OK (systemd)"
-      clear_storage_degraded
       return 0
     fi
-    # fstab nofail: mount exit 0 olabilir ama mountpoint olmaz — dogrula
     run_root mount /mnt/ssd 2>/dev/null || true
-    if mountpoint -q /mnt/ssd 2>/dev/null; then
+    if declare -F ssd_mount_healthy >/dev/null 2>&1; then
+      if ssd_mount_healthy; then
+        log "SSD mount OK (fstab+probe)"
+        return 0
+      fi
+    elif mountpoint -q /mnt/ssd 2>/dev/null; then
       log "SSD mount OK (fstab)"
-      clear_storage_degraded
       return 0
     fi
     sleep 3
@@ -200,12 +211,14 @@ main() {
     fi
   fi
 
-  if stack_fully_healthy && root_rw_ok; then
-    if storage_degraded; then
-      log "OK degraded DNS ayakta (adguard, unbound)"
-    else
-      log "OK stack ayakta (adguard, unbound, caddy, gateway)"
-    fi
+  # Full stack (SSD saglikli + DNS + caddy + gateway): degraded bayragini burada temizle
+  if root_rw_ok \
+    && (! needs_ssd || { declare -F ssd_mount_healthy >/dev/null 2>&1 && ssd_mount_healthy; }) \
+    && stack_dns_core_ok \
+    && container_health_ok caddy \
+    && stack_gateway_ok; then
+    clear_storage_degraded || log "WARN: degraded flag temizlenemedi"
+    log "OK stack ayakta (adguard, unbound, caddy, gateway)"
     apply_adguard_rewrites_best_effort "$REMOTE_DIR"
     release_recover_lock
     exit 0
@@ -213,6 +226,13 @@ main() {
 
   if storage_degraded && stack_dns_core_ok && root_rw_ok; then
     log "OK degraded DNS core ayakta (gateway/caddy eksik olabilir)"
+    apply_adguard_rewrites_best_effort "$REMOTE_DIR"
+    release_recover_lock
+    exit 0
+  fi
+
+  if stack_fully_healthy && root_rw_ok; then
+    log "OK stack_fully_healthy"
     apply_adguard_rewrites_best_effort "$REMOTE_DIR"
     release_recover_lock
     exit 0

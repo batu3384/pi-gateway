@@ -18,6 +18,8 @@ for needle in \
   'adguard-dhcp-config' \
   'adguard-ui-ufw-no-lan' \
   'privileged-lib-sync' \
+  'privileged-lib-hash' \
+  'caddy-auth-configured' \
   'run_check'; do
   grep -q "$needle" "$SMOKE" || die "smoke eksik: $needle"
 done

@@ -173,7 +173,7 @@ stack_dns_core_ok() {
   return 0
 }
 
-# 0 = saglikli, 1 = unhealthy/none/missing
+# 0 = saglikli, 1 = unhealthy/missing (Health=none = healthcheck yok, ayakta say)
 container_health_ok() {
   local name="$1"
   local status

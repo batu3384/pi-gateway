@@ -9,7 +9,7 @@ source "$SCRIPT_DIR/../lib/stack-health.sh"
 # shellcheck source=/dev/null
 [[ -f "$REMOTE_DIR/.env" ]] && source "$REMOTE_DIR/.env"
 
-ENABLE_RESTIC="${ENABLE_RESTIC:-false}"
+ENABLE_RESTIC="${ENABLE_RESTIC:-true}"
 RESTIC_PASSWORD="${RESTIC_PASSWORD:-}"
 if is_ssd_root_mode; then
   RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-${REMOTE_DIR}/data/backups/restic}"
@@ -19,6 +19,7 @@ fi
 RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic:0.17.3}"
 RESTIC_TIMEOUT_SEC="${RESTIC_TIMEOUT_SEC:-7200}"
 RESTIC_CHOWN_TIMEOUT_SEC="${RESTIC_CHOWN_TIMEOUT_SEC:-120}"
+RESTIC_REINIT_MARKER="${RESTIC_REINIT_MARKER:-/var/lib/pi-gateway/restic-reinit}"
 
 log() { echo "[restic] $*"; }
 
@@ -32,7 +33,6 @@ if is_ssd_root_mode; then
   fi
 elif [[ -f /run/pi-gateway/storage-degraded ]] || ! mountpoint -q /mnt/ssd 2>/dev/null \
   || { declare -F ssd_mount_healthy >/dev/null 2>&1 && ! ssd_mount_healthy; }; then
-  # Degraded / SSD yok: SSD restic repo'suna yazma — skip (RESTORE.md ile uyum)
   log "SSD mount yok veya degraded — yedek atlandi"
   exit 0
 fi
@@ -79,21 +79,32 @@ do_backup() {
     --exclude '*.tmp'
 }
 
+REINIT_DONE=0
 if ! do_backup; then
-  # JMicron I/O sonrasi bozuk snapshot — repair + retry; olmazsa fresh init
   log "WARN: backup fail — restic repair snapshots deneniyor"
   run_restic unlock 2>/dev/null || true
   run_restic repair snapshots 2>/dev/null || true
   run_restic repair index 2>/dev/null || true
   run_restic prune 2>/dev/null || true
   if ! do_backup; then
-    log "WARN: repo kurtarilamadi — yedek klasoru yeniden init"
+    log "WARN: repo kurtarilamadi — yedek klasoru yeniden init (GECMIS KORUNUR: .corrupt.*)"
     bak="${REPO_HOST_PATH}.corrupt.$(date +%Y%m%d%H%M%S)"
     mv "$REPO_HOST_PATH" "$bak" 2>/dev/null || true
     mkdir -p "$REPO_HOST_PATH"
     run_restic init
+    REINIT_DONE=1
+    mkdir -p "$(dirname "$RESTIC_REINIT_MARKER")" 2>/dev/null \
+      || sudo mkdir -p "$(dirname "$RESTIC_REINIT_MARKER")" 2>/dev/null || true
+    {
+      echo "ts=$STAMP"
+      echo "bak=$bak"
+    } | tee "$RESTIC_REINIT_MARKER" >/dev/null 2>&1 \
+      || echo "ts=$STAMP" | sudo tee "$RESTIC_REINIT_MARKER" >/dev/null
     do_backup || {
       log "HATA: fresh init sonrasi backup basarisiz"
+      # shellcheck source=../lib/notify.sh
+      source "$SCRIPT_DIR/../lib/notify.sh"
+      notify_backup_fail "$STAMP" "fresh init sonrasi backup basarisiz"
       exit 1
     }
   fi
@@ -102,12 +113,15 @@ fi
 run_restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune
 run_restic snapshots --last
 
-# Mac backup-pull icin repo sahipligi (docker root olabilir)
 timeout "$RESTIC_CHOWN_TIMEOUT_SEC" sudo chown -R "${USER}:${USER}" "$REPO_HOST_PATH" 2>/dev/null \
   || log "WARN: chown timeout/atlandi ($RESTIC_CHOWN_TIMEOUT_SEC s)"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../lib/notify.sh
 source "$SCRIPT_DIR/../lib/notify.sh"
+if [[ "$REINIT_DONE" -eq 1 ]]; then
+  notify_backup_fail "$STAMP" "restic repo reinit — eski snapshot'lar ${bak:-.corrupt.*}; Mac backup-pull --delete REDDEDILIR (marker)"
+  log "Tamamlandi (REINIT — notify fail, exit 1)"
+  exit 1
+fi
 notify_backup_ok "$STAMP"
-log "Tamamlandı"
+log "Tamamlandi"

@@ -99,7 +99,9 @@ fi
 if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
   auth_pass="${CADDY_AUTH_PASSWORD:-${AGH_ADMIN_PASSWORD:-}}"
   case "${auth_pass}" in
-    ""|CHANGE_ME*|Degistir*) ;;
+    ""|CHANGE_ME*|Degistir*)
+      run_check "caddy-auth-configured" bash -c 'echo "CADDY_AUTH_PASSWORD/AGH_ADMIN_PASSWORD placeholder"; exit 1'
+      ;;
     *)
       run_caddy_auth_checks "gateway"
       run_caddy_auth_checks "status"
@@ -180,6 +182,8 @@ run_check "privileged-lib-installed" test -x /usr/local/lib/pi-gateway/scripts/p
 run_check "privileged-lib-sync" diff -q \
   "${REMOTE_DIR}/scripts/lib/stack-health.sh" \
   /usr/local/lib/pi-gateway/scripts/lib/stack-health.sh
+run_check "privileged-lib-hash" bash -c \
+  '[[ -f /usr/local/lib/pi-gateway/.installed-sha256 ]] && (cd /usr/local/lib/pi-gateway && sha256sum -c .installed-sha256 >/dev/null)'
 
 if [[ "${ENABLE_CROWDSEC:-true}" == "true" ]]; then
   run_check "crowdsec" bash -c \
@@ -214,7 +218,9 @@ fi
 
 if [[ "${ENABLE_SYNCTHING:-true}" == "true" ]] && docker ps --format '{{.Names}}' | grep -q '^syncthing$'; then
   case "${SYNCTHING_GUI_PASSWORD:-}" in
-    ""|CHANGE_ME*|Degistir*) ;;
+    ""|CHANGE_ME*|Degistir*)
+      run_check "syncthing-auth-configured" bash -c 'echo "SYNCTHING_GUI_PASSWORD placeholder"; exit 1'
+      ;;
     *)
       # Syncthing 2.x: sendBasicAuthPrompt=false → form auth; REST auth'suz 403
       run_check "syncthing-auth-deny" bash -c \

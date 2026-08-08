@@ -21,13 +21,22 @@ log() {
 PROBLEMS=()
 
 if storage_degraded; then
-  if stack_dns_core_ok && root_rw_ok; then
+  # SSD geri geldiyse idle kalma — restore tetikle
+  if declare -F ssd_mount_healthy >/dev/null 2>&1 && ssd_mount_healthy; then
+    log "degraded ama SSD saglikli — restore tetikleniyor"
+    PROBLEMS+=("storage-degraded-ssd-ready")
+  elif stack_dns_core_ok && root_rw_ok; then
     log "degraded DNS OK (adguard+unbound) — watchdog idle"
     exit 0
+  else
+    PROBLEMS+=("storage-degraded-dns-down")
   fi
-  PROBLEMS+=("storage-degraded-dns-down")
-elif needs_ssd_storage && ! mountpoint -q /mnt/ssd 2>/dev/null; then
-  PROBLEMS+=("ssd-unmounted")
+elif needs_ssd_storage; then
+  if declare -F ssd_mount_healthy >/dev/null 2>&1; then
+    ssd_mount_healthy || PROBLEMS+=("ssd-unhealthy")
+  elif ! mountpoint -q /mnt/ssd 2>/dev/null; then
+    PROBLEMS+=("ssd-unmounted")
+  fi
 fi
 
 if ! root_rw_ok; then

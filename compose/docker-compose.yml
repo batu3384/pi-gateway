@@ -101,7 +101,7 @@ services:
       HOMEPAGE_ALLOWED_HOSTS: "gateway.${LAN_DOMAIN:-home},panel.${LAN_DOMAIN:-home},localhost,127.0.0.1"
 
   uptime-kuma:
-    image: louislam/uptime-kuma:2
+    image: louislam/uptime-kuma@sha256:a8610b3b4c38077922ba51b036691e06887d7cefd91fe620fd3d6d23d03dc240
     container_name: uptime-kuma
     restart: unless-stopped
     labels:
@@ -131,7 +131,7 @@ services:
       DOZZLE_AUTH_PROVIDER: simple
 
   forgejo:
-    image: codeberg.org/forgejo/forgejo:9
+    image: codeberg.org/forgejo/forgejo@sha256:3c34f11fe8b9983096eef3f8f25c2d2c21c4ae7504960cb203f0b075d1d8ed73
     container_name: forgejo
     restart: unless-stopped
     profiles: ["forgejo"]

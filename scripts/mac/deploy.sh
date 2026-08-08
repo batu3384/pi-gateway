@@ -44,7 +44,59 @@ rsync -avz --delete \
   --exclude 'legacy/' \
   "$PROJECT_DIR/" "$PI_USER@$PI_HOST:$REMOTE_DIR/"
 
-scp "$PROJECT_DIR/.env" "$PI_USER@$PI_HOST:$REMOTE_DIR/.env"
+scp "$PROJECT_DIR/.env" "$PI_USER@$PI_HOST:/tmp/pi-gateway.env.new"
+ssh "$PI_USER@$PI_HOST" "REMOTE_DIR='$REMOTE_DIR' bash -s" <<'ENVMERGE'
+set -euo pipefail
+R="${REMOTE_DIR}"
+NEW="/tmp/pi-gateway.env.new"
+OLD="${R}/.env"
+OUT="${R}/.env"
+PRESERVE='N8N_ENCRYPTION_KEY CROWDSEC_BOUNCER_KEY CROWDSEC_API_KEY'
+python3 - "$NEW" "$OLD" "$OUT" $PRESERVE <<'PY'
+import sys
+from pathlib import Path
+
+new_path, old_path, out_path = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
+preserve = set(sys.argv[4:])
+
+def parse(path: Path) -> dict[str, str]:
+    data = {}
+    if not path.is_file():
+        return data
+    for line in path.read_text().splitlines():
+        if not line or line.lstrip().startswith("#") or "=" not in line:
+            continue
+        k, _, v = line.partition("=")
+        data[k.strip()] = v
+    return data
+
+new = parse(new_path)
+old = parse(old_path)
+for k in preserve:
+    ov = old.get(k, "").strip()
+    nv = new.get(k, "").strip()
+    if ov and (not nv or nv.startswith("CHANGE_ME") or nv.startswith("Degistir")):
+        new[k] = old[k]
+# Keep file order from NEW; append preserved-only keys missing in NEW
+lines = new_path.read_text().splitlines() if new_path.is_file() else []
+out_lines = []
+seen = set()
+for line in lines:
+    if line and not line.lstrip().startswith("#") and "=" in line:
+        k = line.partition("=")[0].strip()
+        seen.add(k)
+        if k in new:
+            out_lines.append(f"{k}={new[k]}")
+            continue
+    out_lines.append(line)
+for k in preserve:
+    if k in new and k not in seen:
+        out_lines.append(f"{k}={new[k]}")
+out_path.write_text("\n".join(out_lines) + "\n")
+print(f"[env-merge] preserved={','.join(sorted(preserve & set(old))) or 'none'}")
+PY
+rm -f "$NEW"
+ENVMERGE
 
 "$SCRIPT_DIR/sync-rendered-configs.sh" || log "WARN: rendered config sync atlandi"
 
@@ -111,10 +163,10 @@ if [[ "$COMPOSE_MODE" == "core-dns" ]]; then
     "REMOTE_DIR='$REMOTE_DIR' COMPOSE_RECOVER_MODE=core-dns bash '$REMOTE_DIR/scripts/pi/recover-compose-up.sh'"
 else
   if [[ "${DEPLOY_SKIP_PULL:-false}" == "true" ]]; then
-    log "docker compose up -d (pull skipped — DEPLOY_SKIP_PULL=true)"
-    ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" "cd '$REMOTE_DIR/compose' && docker compose --env-file ../.env $PROFILE_ARGS up -d"
+    log "docker compose up -d --remove-orphans (pull skipped — DEPLOY_SKIP_PULL=true)"
+    ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" "cd '$REMOTE_DIR/compose' && docker compose --env-file ../.env $PROFILE_ARGS up -d --remove-orphans"
   else
-    ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" "cd '$REMOTE_DIR/compose' && docker compose --env-file ../.env $PROFILE_ARGS pull && docker compose --env-file ../.env $PROFILE_ARGS up -d"
+    ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" "cd '$REMOTE_DIR/compose' && docker compose --env-file ../.env $PROFILE_ARGS pull && docker compose --env-file ../.env $PROFILE_ARGS up -d --remove-orphans"
   fi
 fi
 

@@ -31,7 +31,7 @@ if needs_ssd_storage && [[ "$ssd_ok" -ne 1 ]]; then
 fi
 
 compose_up() {
-    if [[ "${COMPOSE_RECOVER_MODE:-}" == "core-dns" ]]; then
+  if [[ "${COMPOSE_RECOVER_MODE:-}" == "core-dns" ]]; then
     echo "[recover-compose] mode=core-dns (unbound+adguard; homepage/caddy best-effort)" >&2
     docker compose --env-file ../.env --profile caddy up -d unbound adguard homepage caddy
   else
@@ -51,23 +51,31 @@ finish_ok() {
   exit 0
 }
 
+finish_fail() {
+  echo "[recover-compose] HATA: compose recover basarisiz — cooldown yazilmiyor" >&2
+  exit 1
+}
+
 if compose_up; then
   finish_ok
 fi
 
-# Soft: stale ag temizle, recreate yok
 echo "[recover-compose] WARN: compose up basarisiz — network prune + up" >&2
 docker network prune -f >/dev/null 2>&1 || true
 if compose_up; then
   finish_ok
 fi
 
+echo "[recover-compose] WARN: ikinci deneme basarisiz — son care" >&2
 # Son care: force-recreate — core-dns'de sadece DNS seti (full stack degil)
-echo "[recover-compose] WARN: ikinci deneme basarisiz — force-recreate" >&2
 if [[ "${COMPOSE_RECOVER_MODE:-}" == "core-dns" ]]; then
-  docker compose --env-file ../.env --profile caddy up -d --force-recreate --remove-orphans \
-    unbound adguard homepage caddy
+  if docker compose --env-file ../.env --profile caddy up -d --force-recreate --remove-orphans \
+    unbound adguard homepage caddy; then
+    finish_ok
+  fi
 else
-  compose_up --force-recreate --remove-orphans
+  if compose_up --force-recreate --remove-orphans; then
+    finish_ok
+  fi
 fi
-finish_ok
+finish_fail

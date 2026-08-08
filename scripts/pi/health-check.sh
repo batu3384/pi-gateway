@@ -168,7 +168,7 @@ else
       ssd-unmounted|storage-degraded*|data-ssd-symlink*|data-native-missing)
         has_ssd=1
         ;;
-      optional-*|offsite-backup-*)
+      optional-*)
         has_optional=1
         ;;
       *)
@@ -212,7 +212,11 @@ if [[ "${ENABLE_RESTIC:-true}" == "true" ]]; then
   marker="/var/lib/pi-gateway/last-offsite-backup"
   if [[ "$max_age" != "0" ]]; then
     if [[ ! -f "$marker" ]]; then
-      logger -t "$LOG_TAG" "WARN offsite-backup-missing — run make backup-pull on Mac"
+      if [[ "${WEAK_BACKUP_OK:-}" == "yes" ]]; then
+        logger -t "$LOG_TAG" "WARN offsite-backup-missing WEAK_BACKUP_OK=yes"
+      else
+        note_fail "offsite-backup-missing"
+      fi
     else
       age_days="$(python3 -c "import os,time; print(int((time.time()-os.path.getmtime('$marker'))//86400))")"
       if (( age_days > max_age )); then
@@ -227,7 +231,7 @@ if [[ "${ENABLE_RESTIC:-true}" == "true" ]]; then
 fi
 
 # Opsiyonel-only: journal'da FAIL kalsın; systemd "Failed" spam olmasın.
-# SD veya çekirdek/SSD fail → exit 1
+# SD veya çekirdek/SSD fail → exit 1. Offsite SLA da fail-exit (WEAK_BACKUP_OK escape).
 exit_code=0
 if [[ "$sd_fail" -eq 1 ]]; then
   exit_code=1
@@ -235,7 +239,7 @@ elif [[ ${#FAILURES[@]} -gt 0 ]]; then
   exit_code=0
   for f in "${FAILURES[@]}"; do
     case "$f" in
-      optional-*|offsite-backup-*) ;;
+      optional-*) ;;
       *) exit_code=1; break ;;
     esac
   done

@@ -122,12 +122,7 @@ repair_symlink() {
   fi
 
   ln -sfn "${DATA_ROOT}" "${REMOTE_DIR}/data"
-  # Flag clear: root veya sudo ile (owner yazamazsa takili kalmasin)
-  if [[ -f "$STORAGE_DEGRADED_FLAG" ]]; then
-    rm -f "$STORAGE_DEGRADED_FLAG" 2>/dev/null \
-      || run_as_needed rm -f "$STORAGE_DEGRADED_FLAG" 2>/dev/null \
-      || log "WARN: degraded flag silinemedi: $STORAGE_DEGRADED_FLAG"
-  fi
+  # Degraded flag clear YASAK burada — hotplug/recover success path temizler
   log "Symlink: ${REMOTE_DIR}/data -> ${DATA_ROOT}"
 }
 
@@ -159,25 +154,28 @@ main() {
 
   if needs_ssd_symlink; then
     if ! ssd_ready_for_symlink; then
-      if [[ "$FALLBACK_SD" == "true" ]] || dns_degraded_allowed; then
+      # Timer/repair: tek basina degraded'a GIRMEZ (hotplug/recover yazar).
+      # --fallback-sd veya mevcut flag ile SD agacini koru.
+      if [[ "$FALLBACK_SD" == "true" ]] || [[ -f "$STORAGE_DEGRADED_FLAG" ]]; then
         if [[ "${MODE}" == "verify" ]]; then
           verify_local_data || die "SD fallback data yok"
           log "OK: SD fallback data"
           exit 0
         fi
-        repair_fallback_sd
-        exit 0
+        if dns_degraded_allowed || [[ "$FALLBACK_SD" == "true" ]]; then
+          repair_fallback_sd
+          exit 0
+        fi
       fi
-      die "SSD bagli degil (/mnt/ssd) ve DNS_DEGRADED_ON_SSD_LOSS/STORAGE_FALLBACK_SD kapali"
+      if [[ "${MODE}" == "verify" ]]; then
+        die "SSD bagli/saglikli degil (/mnt/ssd)"
+      fi
+      log "SSD yok/sagliksiz — flag set edilmedi (hotplug/recover beklenir)"
+      exit 0
     fi
 
     if verify_symlink; then
-      # Symlink OK ama ephemeral flag/dir kalintisi olmamali — yalniz SSD saglikliyken
-      if [[ -f "$STORAGE_DEGRADED_FLAG" ]]; then
-        rm -f "$STORAGE_DEGRADED_FLAG" 2>/dev/null \
-          || run_as_needed rm -f "$STORAGE_DEGRADED_FLAG" 2>/dev/null || true
-        log "WARN: symlink OK ama degraded flag vardi — temizlendi"
-      fi
+      # Symlink OK — degraded flag'i silme (orchestrator clear)
       log "OK: data -> ${DATA_ROOT}"
       exit 0
     fi

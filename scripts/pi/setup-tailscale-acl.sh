@@ -15,13 +15,13 @@ log() { echo "[tailscale-acl] $*"; }
 command -v tailscale >/dev/null 2>&1 || { log "tailscale yok"; exit 0; }
 
 if [[ -z "$ACL_OWNER" || "$ACL_OWNER" == CHANGE_ME* ]]; then
-  log "HATA: TAILSCALE_ACL_OWNER gerekli (.env veya ortam)"
-  exit 1
+  log "atlandi (TAILSCALE_ACL_OWNER yok/placeholder) — ACL publish edilmedi"
+  exit 0
 fi
 
 if [[ ! "$ACL_OWNER" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]; then
-  log "HATA: TAILSCALE_ACL_OWNER gecersiz e-posta formati"
-  exit 1
+  log "WARN: TAILSCALE_ACL_OWNER gecersiz e-posta — ACL atlandi (duzelt: .env)"
+  exit 0
 fi
 
 [[ -f "$ACL_TEMPLATE" ]] || { log "ACL sablonu yok: $ACL_TEMPLATE"; exit 1; }

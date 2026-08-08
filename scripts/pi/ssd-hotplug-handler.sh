@@ -74,8 +74,7 @@ if ssd_mount_healthy; then
   touch_hotplug_run
   log "SSD mount OK — tam stack restore"
   ensure_runtime_dir
-  clear_storage_degraded || log "WARN: degraded flag temizlenemedi"
-  # fstab drift onarimi + acik remount
+  # fstab drift onarimi + acik remount (flag HENUZ silinmez)
   if [[ -x "$SCRIPT_DIR/ensure-ssd-fstab.sh" ]]; then
     REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/ensure-ssd-fstab.sh" || log "WARN: ensure-fstab"
   fi
@@ -85,7 +84,19 @@ if ssd_mount_healthy; then
     REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/setup-docker-ssd.sh" || log "WARN: docker SSD restore atlandi"
     run_root systemctl restart docker 2>/dev/null || true
   fi
-  REMOTE_DIR="$REMOTE_DIR" bash "$(recover_script_path "$REMOTE_DIR")" || log "WARN: recover basarisiz"
+  if ! REMOTE_DIR="$REMOTE_DIR" bash "$(recover_script_path "$REMOTE_DIR")"; then
+    log "HATA: recover basarisiz — degraded flag korunuyor, notify yok"
+    exit 1
+  fi
+  # Recover success gate (full stack) — flag clear recover icinde; burada dogrula
+  if storage_degraded; then
+    log "WARN: recover bitti ama degraded flag duruyor — clear deneniyor"
+    if stack_dns_core_ok && container_health_ok caddy && stack_gateway_ok; then
+      clear_storage_degraded || log "WARN: degraded flag temizlenemedi"
+    else
+      exit 1
+    fi
+  fi
   run_root mkdir -p "$(dirname "$SSD_HOTPLUG_STATE_FILE")" 2>/dev/null || true
   run_root touch "$SSD_HOTPLUG_STATE_FILE" 2>/dev/null || true
   mark_stack_recover_cooldown
