@@ -40,7 +40,8 @@ compose_up() {
 }
 
 finish_ok() {
-  if [[ "${ENABLE_DOZZLE:-true}" == "true" ]] \
+  if [[ "${COMPOSE_RECOVER_MODE:-}" != "core-dns" ]] \
+    && [[ "${ENABLE_DOZZLE:-true}" == "true" ]] \
     && [[ ! -f "${REMOTE_DIR}/data/dozzle/users.yml" ]]; then
     echo "[recover-compose] dozzle users.yml eksik — setup-dozzle" >&2
     bash "$SCRIPT_DIR/setup-dozzle.sh" || true
