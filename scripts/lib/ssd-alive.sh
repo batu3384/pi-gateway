@@ -17,6 +17,16 @@ SSD_USB_RESET_STATE_FILE="${SSD_USB_RESET_STATE_FILE:-/var/lib/pi-gateway/ssd-us
 SSD_USB_RESET_REBOOT="${SSD_USB_RESET_REBOOT:-false}"
 # JMicron authorized 0→1 bazi kutularda enumerate kaybettirir — varsayilan kapali
 SSD_USB_AUTHORIZED_RESET="${SSD_USB_AUTHORIZED_RESET:-false}"
+# lsusb bos + block yok: host port disable (tak-cikar yerine yazilim)
+SSD_USB_PORT_DISABLE_CYCLE="${SSD_USB_PORT_DISABLE_CYCLE:-true}"
+SSD_USB_HOST_PORT="${SSD_USB_HOST_PORT:-2}"
+SSD_USB_PORT_OFF_SEC="${SSD_USB_PORT_OFF_SEC:-5}"
+SSD_USB_PORT_ON_SEC="${SSD_USB_PORT_ON_SEC:-10}"
+# Son care: xhci PCI unbind/rebind (rate-limit; JMS583 icin gerekli olabilir)
+SSD_USB_XHCI_REBIND="${SSD_USB_XHCI_REBIND:-true}"
+SSD_USB_XHCI_PCI="${SSD_USB_XHCI_PCI:-0000:01:00.0}"
+SSD_USB_XHCI_UNBIND_SEC="${SSD_USB_XHCI_UNBIND_SEC:-5}"
+SSD_USB_XHCI_BIND_SEC="${SSD_USB_XHCI_BIND_SEC:-12}"
 
 _ssd_alive_root() {
   if [[ "$(id -u)" -eq 0 ]]; then
@@ -153,8 +163,69 @@ ssd_usb_reset_record() {
   fi
 }
 
-# Soft-reset: autosuspend off + remount; authorized cycle sadece opt-in (rate-limit)
+ssd_usb_bus_dropout() {
+  ssd_find_usb_sysfs >/dev/null 2>&1 && return 1
+  ssd_block_present && return 1
+  return 0
+}
+
+ssd_usb_port_sysfs() {
+  local port="${SSD_USB_HOST_PORT:-2}"
+  local p
+  for p in \
+    "/sys/bus/usb/devices/usb2-port${port}" \
+    "/sys/devices/platform/scb/fd500000.pcie/pci0000:00/0000:00:00.0/0000:01:00.0/usb2/2-0:1.0/usb2-port${port}"; do
+    [[ -f "${p}/disable" ]] && { echo "$p"; return 0; }
+  done
+  return 1
+}
+
+ssd_usb_port_disable_cycle() {
+  [[ "${SSD_USB_PORT_DISABLE_CYCLE:-true}" == "true" ]] || return 1
+  if ssd_usb_reset_rate_limited; then
+    echo "[ssd-alive] port disable rate-limit (${SSD_USB_RESET_MAX}/${SSD_USB_RESET_WINDOW_SEC}s)" >&2
+    return 1
+  fi
+  local port_sys
+  port_sys="$(ssd_usb_port_sysfs 2>/dev/null || true)"
+  [[ -n "$port_sys" ]] || return 1
+  ssd_usb_reset_record
+  echo "[ssd-alive] USB port disable cycle: $port_sys" >&2
+  _ssd_alive_root bash -c "echo 1 >'${port_sys}/disable'" 2>/dev/null || true
+  sleep "${SSD_USB_PORT_OFF_SEC:-5}"
+  _ssd_alive_root bash -c "echo 0 >'${port_sys}/disable'" 2>/dev/null || true
+  sleep "${SSD_USB_PORT_ON_SEC:-10}"
+  command -v udevadm >/dev/null 2>&1 && _ssd_alive_root udevadm settle --timeout=15 2>/dev/null || sleep 3
+  ssd_find_usb_sysfs >/dev/null 2>&1 || ssd_block_present
+}
+
+ssd_xhci_rebind() {
+  [[ "${SSD_USB_XHCI_REBIND:-true}" == "true" ]] || return 1
+  if ssd_usb_reset_rate_limited; then
+    echo "[ssd-alive] xhci rebind rate-limit (${SSD_USB_RESET_MAX}/${SSD_USB_RESET_WINDOW_SEC}s)" >&2
+    return 1
+  fi
+  local dev="${SSD_USB_XHCI_PCI:-0000:01:00.0}"
+  [[ -e "/sys/bus/pci/drivers/xhci_hcd/${dev}" ]] || return 1
+  ssd_usb_reset_record
+  echo "[ssd-alive] xhci rebind: $dev" >&2
+  _ssd_alive_root bash -c "echo '${dev}' >/sys/bus/pci/drivers/xhci_hcd/unbind" 2>/dev/null || return 1
+  sleep "${SSD_USB_XHCI_UNBIND_SEC:-5}"
+  _ssd_alive_root bash -c "echo '${dev}' >/sys/bus/pci/drivers/xhci_hcd/bind" 2>/dev/null || return 1
+  sleep "${SSD_USB_XHCI_BIND_SEC:-12}"
+  command -v udevadm >/dev/null 2>&1 && _ssd_alive_root udevadm settle --timeout=20 2>/dev/null || sleep 5
+  ssd_find_usb_sysfs >/dev/null 2>&1 || ssd_block_present
+}
+
+# Soft-reset: port cycle / xhci / autosuspend / remount; authorized cycle opt-in
 ssd_usb_soft_reset() {
+  if ssd_usb_bus_dropout; then
+    ssd_usb_port_disable_cycle || true
+    if ssd_usb_bus_dropout; then
+      ssd_xhci_rebind || true
+    fi
+  fi
+
   ssd_usb_disable_autosuspend
 
   if [[ "$SSD_USB_AUTHORIZED_RESET" == "true" ]]; then
@@ -191,7 +262,14 @@ ssd_usb_soft_reset() {
     fi
   fi
   ssd_try_remount || true
-  ssd_mount_healthy
+  if ssd_mount_healthy; then
+    return 0
+  fi
+  if ssd_usb_bus_dropout && ssd_usb_reset_rate_limited && [[ "$SSD_USB_RESET_REBOOT" == "true" ]]; then
+    echo "[ssd-alive] SSD_USB_RESET_REBOOT=true — reboot" >&2
+    _ssd_alive_root systemctl reboot || true
+  fi
+  return 1
 }
 
 ssd_try_remount() {

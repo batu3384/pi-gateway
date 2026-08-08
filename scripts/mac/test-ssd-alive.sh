@@ -27,7 +27,10 @@ ok "API surface"
 # --- Probe defaults ---
 [[ "$SSD_PROBE_FILE" == *".pi-gateway-io-probe" ]] || die "probe dosya default yanlis: $SSD_PROBE_FILE"
 [[ "$SSD_USB_AUTHORIZED_RESET" == "false" ]] || die "AUTHORIZED_RESET default false olmali"
-ok "guvenli defaults (authorized off, io-probe)"
+grep -q 'ssd_usb_port_disable_cycle' "$SSD_ALIVE" || die "port disable cycle yok"
+grep -q 'ssd_xhci_rebind' "$SSD_ALIVE" || die "xhci rebind yok"
+grep -q 'SSD_USB_PORT_DISABLE_CYCLE' "$SSD_ALIVE" || die "PORT_DISABLE_CYCLE env yok"
+ok "port disable + xhci rebind"
 
 # --- Rate limit: remount soft-reset authorized kapali iken state dosyasi yazmamali ---
 tmp_state="$(mktemp)"

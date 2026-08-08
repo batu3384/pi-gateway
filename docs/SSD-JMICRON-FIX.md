@@ -63,7 +63,7 @@ USB-SATA adapter with ASMedia chipset. 24/7 USB boot with JMicron is not recomme
 Kernel quirk alone is not enough when the bridge flaps after boot. Pi Gateway software path:
 
 1. **Detect** — `ssd_mount_healthy()`: `mountpoint` + timed write to `/mnt/ssd/.disk-probe` (stale/hung mount).
-2. **Soft-reset** — `ssd_usb_soft_reset()`: disable autosuspend, remount; optional `SSD_USB_AUTHORIZED_RESET=true` for `authorized` 0→1 (default **off** — JMS583 often disappears after authorize cycle). Rate-limited (`SSD_USB_RESET_MAX` / `SSD_USB_RESET_WINDOW_SEC`). **No xhci rebind.**
+2. **Soft-reset** — `ssd_usb_soft_reset()`: **port disable cycle** (`usb2-portN/disable`) + optional **xhci PCI rebind** when `lsusb` empty; autosuspend off, remount; optional `SSD_USB_AUTHORIZED_RESET=true` for `authorized` 0→1 (default **off**). Rate-limited (`SSD_USB_RESET_MAX` / `SSD_USB_RESET_WINDOW_SEC`).
 3. **Degraded** — if still dead: `/run/pi-gateway/storage-degraded`, stop app containers, `COMPOSE_RECOVER_MODE=core-dns`.
 4. **Restore** — hotplug `PathExistsGone`/`PathChanged` + `ssd-health` poll: remount first → clear flag → full stack.
 
