@@ -122,7 +122,7 @@ run_check "adguard-ui" curl -fsS "http://127.0.0.1:${ADGUARD_WEB_PORT}/"
 
 if [[ "${ENABLE_CADDY:-true}" == "true" ]] && [[ -z "${CADDY_AUTH_PASSWORD:-}" ]]; then
   run_check "gateway-http" bash -c \
-    'if [[ "${ENABLE_TLS:-false}" == "true" ]]; then code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 --resolve "gateway.'"${LAN_DOMAIN}"':443:'"${PI_STATIC_IP}"'" "https://gateway.'"${LAN_DOMAIN}"'/"); else code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 -H "Host: gateway.'"${LAN_DOMAIN}"'" http://127.0.0.1/); fi; [[ "$code" == "200" || "$code" == "401" || "$code" == "302" ]]'
+    'if [[ "${ENABLE_TLS:-false}" == "true" ]]; then code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 --resolve "gateway.'"${LAN_DOMAIN}"':443:'"${PI_STATIC_IP}"'" "https://gateway.'"${LAN_DOMAIN}"'/"); else code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 -H "Host: gateway.'"${LAN_DOMAIN}"'" "http://'"${PI_STATIC_IP}"'/"); fi; [[ "$code" == "200" || "$code" == "401" || "$code" == "302" || "$code" == "307" ]]'
 fi
 
 if [[ "${ENABLE_DOZZLE:-true}" == "true" ]]; then

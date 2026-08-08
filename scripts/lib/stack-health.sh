@@ -203,13 +203,14 @@ stack_core_ok() {
 stack_gateway_ok() {
   local domain="${LAN_DOMAIN:-home}"
   local code
+  local resolve_ip="${PI_STATIC_IP:-127.0.0.1}"
   if [[ "${ENABLE_TLS:-false}" == "true" ]]; then
     code="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 5 \
-      --resolve "gateway.${domain}:443:127.0.0.1" \
+      --resolve "gateway.${domain}:443:${resolve_ip}" \
       "https://gateway.${domain}/" 2>/dev/null)" || return 1
   else
     code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 \
-      -H "Host: gateway.${domain}" "http://127.0.0.1/" 2>/dev/null)" || return 1
+      -H "Host: gateway.${domain}" "http://${resolve_ip}/" 2>/dev/null)" || return 1
   fi
   [[ "$code" == "200" || "$code" == "401" || "$code" == "302" || "$code" == "307" ]]
 }
