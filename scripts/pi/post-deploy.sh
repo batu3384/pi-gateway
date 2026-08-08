@@ -30,6 +30,17 @@ run_step_optional() {
   log "WARN: $name atlandi"
 }
 
+# Backup asla deploy'u durdurmaz (DEPLOY_STRICT olsa bile)
+run_step_soft() {
+  local name="$1" script="$2"
+  log ">> $name"
+  if REMOTE_DIR="$REMOTE_DIR" bash "$script"; then
+    return 0
+  fi
+  log "WARN: $name basarisiz — deploy devam"
+  return 0
+}
+
 [[ -f "$REMOTE_DIR/.env" ]] || { log "HATA: .env yok"; exit 1; }
 
 # shellcheck source=/dev/null
@@ -150,7 +161,7 @@ if [[ "${ENABLE_SYNCTHING:-true}" == "true" ]] && docker ps --format '{{.Names}}
 fi
 
 if [[ "${ENABLE_RESTIC:-true}" == "true" ]]; then
-  run_step_optional "Restic yedek" "$SCRIPT_DIR/restic-backup.sh"
+  run_step_soft "Restic yedek" "$SCRIPT_DIR/restic-backup.sh"
 fi
 
 if [[ "${ENABLE_DOZZLE:-true}" == "true" ]]; then

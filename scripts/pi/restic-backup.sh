@@ -66,15 +66,30 @@ fi
 RESTIC_BACKUP_HOST="${RESTIC_BACKUP_HOST:-${PI_HOSTNAME:-$(hostname -s)}}"
 STAMP="$(date -Iseconds)"
 log "Yedek basliyor ($STAMP)"
-run_restic backup \
-  /backup/config \
-  /backup/compose \
-  /backup/data \
-  --tag "pi-gateway" \
-  --host "$RESTIC_BACKUP_HOST" \
-  --exclude '/backup/data/backups/restic' \
-  --exclude '/backup/data/**/work/data' \
-  --exclude '*.tmp'
+
+do_backup() {
+  run_restic backup \
+    /backup/config \
+    /backup/compose \
+    /backup/data \
+    --tag "pi-gateway" \
+    --host "$RESTIC_BACKUP_HOST" \
+    --exclude '/backup/data/backups/restic' \
+    --exclude '/backup/data/**/work/data' \
+    --exclude '*.tmp'
+}
+
+if ! do_backup; then
+  # JMicron I/O sonrasi bozuk snapshot — repair + bir kez daha
+  log "WARN: backup fail — restic repair snapshots deneniyor"
+  run_restic unlock 2>/dev/null || true
+  run_restic repair snapshots 2>/dev/null || true
+  run_restic repair index 2>/dev/null || true
+  if ! do_backup; then
+    log "HATA: backup repair sonrasi da basarisiz"
+    exit 1
+  fi
+fi
 
 run_restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune
 run_restic snapshots --last
