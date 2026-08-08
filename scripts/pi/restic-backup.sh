@@ -17,6 +17,8 @@ else
   RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-/mnt/ssd/pi-gateway-data/backups/restic}"
 fi
 RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic:0.17.3}"
+RESTIC_TIMEOUT_SEC="${RESTIC_TIMEOUT_SEC:-7200}"
+RESTIC_CHOWN_TIMEOUT_SEC="${RESTIC_CHOWN_TIMEOUT_SEC:-120}"
 
 log() { echo "[restic] $*"; }
 
@@ -44,7 +46,7 @@ REPO_HOST_PATH="$RESTIC_REPOSITORY"
 mkdir -p "$REPO_HOST_PATH"
 
 run_restic() {
-  docker run --rm --network none \
+  timeout "$RESTIC_TIMEOUT_SEC" docker run --rm --network none \
     -e RESTIC_PASSWORD \
     -e RESTIC_REPOSITORY=local:/repo \
     -v "${REPO_HOST_PATH}:/repo" \
@@ -78,7 +80,8 @@ run_restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune
 run_restic snapshots --last
 
 # Mac backup-pull icin repo sahipligi (docker root olabilir)
-sudo chown -R "${USER}:${USER}" "$REPO_HOST_PATH" 2>/dev/null || true
+timeout "$RESTIC_CHOWN_TIMEOUT_SEC" sudo chown -R "${USER}:${USER}" "$REPO_HOST_PATH" 2>/dev/null \
+  || log "WARN: chown timeout/atlandi ($RESTIC_CHOWN_TIMEOUT_SEC s)"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../lib/notify.sh

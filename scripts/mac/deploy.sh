@@ -16,18 +16,9 @@ REMOTE_DIR="${REMOTE_DIR:-/home/$PI_USER/pi-gateway}"
 "$SCRIPT_DIR/validate.sh"
 "$SCRIPT_DIR/pre-deploy-check.sh"
 
-PROFILES=()
-[[ "${ENABLE_AUTOHEAL:-false}" == "true" ]] && PROFILES+=(--profile autoheal)
-[[ "${ENABLE_CADDY:-true}" == "true" ]] && PROFILES+=(--profile caddy)
-[[ "${ENABLE_DOZZLE:-true}" == "true" ]] && PROFILES+=(--profile dozzle)
-[[ "${ENABLE_FORGEJO:-true}" == "true" ]] && PROFILES+=(--profile forgejo)
-[[ "${ENABLE_SYNCTHING:-true}" == "true" ]] && PROFILES+=(--profile syncthing)
-[[ "${ENABLE_REDIS:-true}" == "true" ]] && PROFILES+=(--profile redis)
-[[ "${ENABLE_N8N:-true}" == "true" ]] && PROFILES+=(--profile n8n)
-[[ "${ENABLE_NETALERTX:-true}" == "true" ]] && PROFILES+=(--profile netalert)
-[[ "${ENABLE_CROWDSEC:-true}" == "true" ]] && PROFILES+=(--profile crowdsec)
-[[ -n "${CLOUDFLARE_TUNNEL_TOKEN:-}" ]] && PROFILES+=(--profile cloudflare)
-[[ "${ENABLE_WATCHTOWER:-false}" == "true" ]] && PROFILES+=(--profile watchtower)
+# shellcheck source=../lib/compose-profiles.sh
+source "$SCRIPT_DIR/../lib/compose-profiles.sh"
+mapfile -t PROFILES < <(compose_profiles)
 
 log "Deploy -> $PI_USER@$PI_HOST:$REMOTE_DIR"
 

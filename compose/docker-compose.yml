@@ -252,7 +252,7 @@ services:
     environment:
       GID: "1000"
       COLLECTIONS: "crowdsecurity/linux crowdsecurity/sshd"
-      DISABLE_ONLINE_API: "true"
+      DISABLE_ONLINE_API: "${CROWDSEC_DISABLE_ONLINE_API:-true}"
     volumes:
       - ../data/crowdsec/config:/etc/crowdsec
       - ../data/crowdsec/db:/var/lib/crowdsec/data

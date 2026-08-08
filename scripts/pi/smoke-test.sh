@@ -138,7 +138,7 @@ if [[ "${ENABLE_SYNCTHING:-true}" == "true" ]]; then
   run_check "syncthing" curl -fsS "http://127.0.0.1:${SYNCTHING_PORT}/"
 fi
 
-if [[ "${ENABLE_REDIS:-true}" == "true" ]]; then
+if [[ "${ENABLE_REDIS:-false}" == "true" ]]; then
   run_check "redis" docker exec redis redis-cli ping
 fi
 
@@ -186,8 +186,15 @@ if [[ "${ENABLE_CROWDSEC:-true}" == "true" ]]; then
     'code=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:8082/v1/heartbeat"); [[ "$code" == "200" || "$code" == "401" ]]'
 fi
 
+if [[ "${NETWORK_MODE:-router-dns}" == "adguard-dhcp" ]]; then
+  run_check "adguard-dhcp-config" bash -c \
+    'grep -A5 "^dhcp:" "'"${REMOTE_DIR}"'/config/adguard/AdGuardHome.yaml" | grep -q "enabled: true"'
+fi
+
 if [[ "${ENABLE_UFW:-true}" == "true" ]] && [[ -x /usr/sbin/ufw ]]; then
   run_check "ufw-active" bash -c 'sudo -n /usr/sbin/ufw status | grep -q "Status: active"'
+  run_check "ufw-ssh-lan" bash -c \
+    "sudo -n /usr/sbin/ufw status | grep -E '22/tcp' | grep -q '${LAN_SUBNET_CIDR:-192.168.1.0/24}'"
   run_check "ufw-dns-lan" bash -c \
     "sudo -n /usr/sbin/ufw status | grep -E '53/(tcp|udp)' | grep -q '${LAN_SUBNET_CIDR:-192.168.1.0/24}'"
   if [[ "$UFW_ADMIN_EXPOSURE" == "caddy-only" ]]; then

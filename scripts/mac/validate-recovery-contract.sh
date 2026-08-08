@@ -108,11 +108,15 @@ ok "deploy core-dns"
 
 grep -q 'yedek atlandi' "$PROJECT_DIR/scripts/pi/restic-backup.sh" \
   || die "restic degraded skip yok"
+grep -q 'RESTIC_TIMEOUT_SEC' "$PROJECT_DIR/scripts/pi/restic-backup.sh" \
+  || die "restic timeout yok"
 if grep -q 'SD data yedegi (ephemeral)' "$PROJECT_DIR/scripts/pi/restic-backup.sh"; then
   die "restic hâlâ ephemeral SD repo yaziyor"
 fi
-ok "restic degraded skip"
+ok "restic degraded skip + timeout"
 
+grep -q 'ufw-ssh-lan' "$PROJECT_DIR/scripts/pi/smoke-test.sh" \
+  || die "smoke ufw-ssh-lan yok"
 grep -q 'Smoke test (degraded' "$PROJECT_DIR/scripts/pi/smoke-test.sh" \
   || die "smoke degraded early exit yok"
 ok "smoke degraded"

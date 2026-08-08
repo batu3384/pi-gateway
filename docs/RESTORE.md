@@ -47,4 +47,9 @@ Restic backup is skipped when SSD is missing or in degraded mode (`restic-backup
 
 ## Monthly drill
 
-Once a month, run `make backup-pull` + `restic check` on the Mac.
+```bash
+make backup-pull
+make restore-check
+```
+
+`restore-check` runs `restic check --read-data-subset=5%` on Pi SSD repo and Mac offsite copy (`RESTIC_CHECK_SUBSET` override in `.env`).

@@ -6,11 +6,11 @@ Do not treat every `scripts/**/*.sh` as equal. Prefer `make` targets.
 
 | Area | Scripts |
 |------|---------|
-| Mac pipeline | `install.sh`, `doctor.sh`, `discover-remote.sh`, `render-config.sh`, `validate.sh`, `deploy.sh`, `deploy-fast.sh`, `pre-deploy-check.sh` |
+| Mac pipeline | `install.sh`, `doctor.sh`, `discover-remote.sh`, `render-config.sh`, `validate.sh`, `deploy.sh`, `deploy-fast.sh`, `pre-deploy-check.sh`, `restore-check.sh`, `test-smoke-contract.sh` |
 | Pi lifecycle | `bootstrap.sh`, `post-deploy.sh`, `smoke-test.sh`, `health-check.sh`, `stack-watchdog.sh`, `recover-stack.sh`, `ssd-health.sh`, `ssd-hotplug-handler.sh` |
 | Lib | `common.sh`, `stack-health.sh`, `ssd-alive.sh`, `notify.sh`, `adguard-api.sh`, `password-policy.sh`, `compose-profiles.sh` |
 | Security | `setup-firewall.sh`, `harden-host.sh` |
-| Backup | `restic-backup.sh`, `backup-pull.sh`, `install-backup-cron.sh` |
+| Backup | `restic-backup.sh`, `backup-pull.sh`, `restore-check.sh`, `install-backup-cron.sh` |
 
 Recover path: callers → `recover-stack.sh` → `stack-health.trigger_stack_recover` → `recover-readonly-root.sh`.
 
@@ -20,7 +20,9 @@ SSD path: hotplug (`pi-ssd-watch.path` PathChanged/PathExistsGone) / `ssd-health
 
 Setup helpers: `setup-*.sh` (forgejo, syncthing, n8n, netalertx, crowdsec, dozzle, uptime-kuma, tailscale-*, telegram-*, caddy-lan-ip, morning-*).
 
-DNS: `apply-adguard-*.sh`, `configure-adguard.sh`, `wait-adguard-dns.sh`, `diagnose-dns-bypass.sh`.
+DNS: `apply-adguard-*.sh`, `configure-adguard.sh`, `wait-adguard-dns.sh`, `diagnose-dns-bypass.sh`, `diagnose-remote-access.sh`.
+
+Make: `diagnose-remote`, `diagnose-dns`, `recover-stack`, `restore-check`.
 
 ## experimental (SSD-root / cutover — footguns)
 
@@ -33,4 +35,5 @@ Prefer hybrid (ADR-001). Touch only with `docs/SSD-ROOT.md`:
 
 `scripts/mac/ci-compose-config.sh` + `.github/ci.env.fixture`
 
-SSD recovery regression (Mac): `scripts/mac/test-ssd-alive.sh` (via `validate-recovery-contract.sh`).
+SSD recovery regression (Mac): `scripts/mac/test-ssd-alive.sh` (via `validate-recovery-contract.sh`).  
+Smoke contract (Mac/CI): `scripts/mac/test-smoke-contract.sh`.

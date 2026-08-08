@@ -1,4 +1,7 @@
-# AdGuard DHCP Mode
+# AdGuard DHCP Mode (experimental)
+
+> **Tier: experimental** — yüksek blast radius. Varsayılan `router-dns` tercih edilir.  
+> Smoke: `adguard-dhcp-config` check (`NETWORK_MODE=adguard-dhcp` iken).
 
 With `NETWORK_MODE=adguard-dhcp`, the Pi serves both DNS and DHCP. All devices automatically use Pi DNS.
 

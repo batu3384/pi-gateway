@@ -366,11 +366,13 @@ if grep -q 'UPTIME_KUMA_ADMIN_PASSWORD.*ENABLE_N8N' "$PROJECT_DIR/scripts/pi/pos
 fi
 ok "Kuma password check N8N'den bagimsiz"
 
-grep -q 'ENABLE_AUTOHEAL:-false' "$PROJECT_DIR/scripts/mac/deploy.sh" \
-  || die "deploy.sh AUTOHEAL default false degil"
+grep -q 'compose-profiles.sh' "$PROJECT_DIR/scripts/mac/deploy.sh" \
+  || die "deploy.sh compose-profiles tek kaynak degil"
 grep -q 'ENABLE_AUTOHEAL:-false' "$PROJECT_DIR/scripts/lib/compose-profiles.sh" \
   || die "compose-profiles AUTOHEAL default false degil"
-ok "AUTOHEAL defaults hizali"
+grep -q 'ENABLE_REDIS:-false' "$PROJECT_DIR/scripts/lib/compose-profiles.sh" \
+  || die "compose-profiles REDIS default false degil"
+ok "compose-profiles tek kaynak + defaults"
 
 grep -q 'doctor.sh' "$PROJECT_DIR/scripts/mac/install.sh" \
   || die "install.sh doctor cagirmiyor"
@@ -396,6 +398,12 @@ if grep -q 'STORAGE_TYPE:-ssd-root' "$PROJECT_DIR/scripts/deploy.sh" 2>/dev/null
 fi
 grep -q 'mac/deploy.sh' "$PROJECT_DIR/scripts/deploy.sh" \
   || die "scripts/deploy.sh mac/deploy wrapper degil"
-ok "scripts/deploy.sh wraps mac/deploy"
+install_link="$(readlink "$PROJECT_DIR/scripts/install.sh" 2>/dev/null || true)"
+[[ "$install_link" == "mac/install.sh" ]] \
+  || die "scripts/install.sh mac/install symlink degil ($install_link)"
+setup_link="$(readlink "$PROJECT_DIR/scripts/setup-mac.sh" 2>/dev/null || true)"
+[[ "$setup_link" == "mac/validate.sh" ]] \
+  || die "scripts/setup-mac.sh mac/validate symlink degil ($setup_link)"
+ok "legacy script symlinks"
 
 echo "[validate-stack] Tum kontroller gecti"

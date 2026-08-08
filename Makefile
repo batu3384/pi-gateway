@@ -10,7 +10,7 @@ endif
 PI_USER ?= pi
 REMOTE_DIR ?= /home/$(PI_USER)/pi-gateway
 
-.PHONY: setup validate render deploy deploy-fast install discover mac-dns harden status dns-test test-remote backup-pull backup-cron verify-data pi-access trust-ca tls-certs telegram-menu firewall morning-test sync-configs docker-ssd check-pi-env doctor
+.PHONY: setup validate render deploy deploy-fast install discover mac-dns harden status dns-test test-remote backup-pull backup-cron restore-check verify-data pi-access trust-ca tls-certs telegram-menu firewall morning-test sync-configs docker-ssd check-pi-env doctor diagnose-remote diagnose-dns recover-stack
 
 check-pi-env:
 	@test -n "$(PI_STATIC_IP)" || (echo "PI_STATIC_IP required — edit .env or run make discover" && exit 1)
@@ -106,6 +106,19 @@ backup-pull:
 backup-cron:
 	@chmod +x scripts/mac/install-backup-cron.sh 2>/dev/null || true
 	@./scripts/mac/install-backup-cron.sh
+
+restore-check:
+	@chmod +x scripts/mac/restore-check.sh 2>/dev/null || true
+	@./scripts/mac/restore-check.sh both
+
+diagnose-remote: check-pi-env
+	@ssh "$(PI_USER)@$(PI_STATIC_IP)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/diagnose-remote-access.sh"'
+
+diagnose-dns: check-pi-env
+	@ssh "$(PI_USER)@$(PI_STATIC_IP)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/diagnose-dns-bypass.sh"'
+
+recover-stack: check-pi-env
+	@ssh "$(PI_USER)@$(PI_STATIC_IP)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/recover-stack.sh"'
 
 firewall: check-pi-env
 	@ssh "$(PI_USER)@$(PI_STATIC_IP)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-firewall.sh"'

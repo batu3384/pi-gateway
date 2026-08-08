@@ -1,28 +1,40 @@
 # Phase 3 — Automation, cache, security, tunnel
 
+> **TLS varsayılan.** Panel URL'leri `https://*.home` — bkz. [OPERATIONS.md](OPERATIONS.md).
+
 ## Services
 
-| # | Service | URL | Notes |
-|---|---------|-----|-------|
-| 5 | CrowdSec | `127.0.0.1:8082` | SSH attack detection (alongside fail2ban) |
-| 9 | Redis | `127.0.0.1:6379` | Pi only (SSH tunnel) |
-| 10 | n8n | http://n8n.home | Automation / webhooks |
+| # | Service | URL / bind | Notes |
+|---|---------|------------|-------|
+| 5 | CrowdSec | `127.0.0.1:8082` | SSH attack detection (offline API default) |
+| 9 | Redis | `127.0.0.1:6379` | **Kapalı varsayılan** (`ENABLE_REDIS=true` ile aç) |
+| 10 | n8n | https://n8n.home | Automation / webhooks |
 | 2 | Cloudflare Tunnel | — | Active when `CLOUDFLARE_TUNNEL_TOKEN` is set |
 
 ## n8n first-time setup
 
-1. http://n8n.home or `http://PI_STATIC_IP:5678`
+1. https://n8n.home
 2. Create owner account on first launch
 3. `N8N_ENCRYPTION_KEY` in `.env` must stay fixed — do not change it
 
-## Redis (test from Mac)
+## Redis (opt-in)
 
+Varsayılan `ENABLE_REDIS=false` (tüketici yok). Açmak için `.env` → `ENABLE_REDIS=true`, sonra `make deploy`.
+
+Test from Mac (Redis açıkken):
 ```bash
 ssh -L 6379:127.0.0.1:6379 "$PI_USER@$PI_STATIC_IP"
 redis-cli -h 127.0.0.1 ping
 ```
 
 ## CrowdSec
+
+Offline threat intel varsayılan (`CROWDSEC_DISABLE_ONLINE_API=true`). Online API opt-in:
+```bash
+# .env
+CROWDSEC_DISABLE_ONLINE_API=false
+make deploy
+```
 
 ```bash
 ssh "$PI_USER@$PI_STATIC_IP" 'docker exec crowdsec cscli metrics'
@@ -42,3 +54,12 @@ Prefer Tailscale for admin. Public hostname example: `demo.yourdomain.com` → C
 ## Disable
 
 Set `ENABLE_N8N=false` etc. in `.env`, then `make deploy`.
+
+## Ops shortcuts (Mac)
+
+| Command | Description |
+|---------|-------------|
+| `make diagnose-remote` | Tailscale / SSH / UFW erişim teşhisi |
+| `make diagnose-dns` | DNS bypass / AdGuard teşhisi |
+| `make recover-stack` | Manuel stack kurtarma |
+| `make restore-check` | restic check (Pi + Mac offsite) |

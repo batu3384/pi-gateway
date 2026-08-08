@@ -69,6 +69,9 @@ make discover    # network discovery → writes .env
 make deploy      # push stack to Pi
 make dns-test    # DNS checks from Mac
 make backup-pull # offsite restic copy to Mac
+make restore-check # restic check (Pi + Mac offsite)
+make diagnose-remote # Tailscale/SSH/UFW teşhisi
+make recover-stack   # manuel stack kurtarma
 ```
 
 ## Security

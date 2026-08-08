@@ -17,6 +17,11 @@ jobs:
           sudo apt-get install -y -qq shellcheck
           shellcheck -S warning scripts/pi/*.sh scripts/mac/*.sh scripts/lib/*.sh
 
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Compose config (fixture .env)
         run: |
           chmod +x scripts/mac/ci-compose-config.sh
@@ -27,9 +32,17 @@ jobs:
           chmod +x scripts/mac/validate-public-repo.sh scripts/mac/validate-stack-health.sh
           ./scripts/mac/validate-public-repo.sh
           ./scripts/mac/validate-stack-health.sh
+          if [[ -f scripts/mac/validate-recovery-contract.sh ]]; then
+            chmod +x scripts/mac/validate-recovery-contract.sh
+            ./scripts/mac/validate-recovery-contract.sh
+          fi
           if [[ -f scripts/mac/test-hybrid-contract.sh ]]; then
             chmod +x scripts/mac/test-hybrid-contract.sh
             ./scripts/mac/test-hybrid-contract.sh
+          fi
+          if [[ -f scripts/mac/test-smoke-contract.sh ]]; then
+            chmod +x scripts/mac/test-smoke-contract.sh
+            ./scripts/mac/test-smoke-contract.sh
           fi
           if [[ -f scripts/pi/test-notify-transitions.sh ]]; then
             chmod +x scripts/pi/test-notify-transitions.sh scripts/lib/notify.sh

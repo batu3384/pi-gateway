@@ -54,6 +54,10 @@ chmod +x "$SCRIPT_DIR/validate-hybrid-contract.sh" 2>/dev/null || true
 if [[ -f "$SCRIPT_DIR/validate-hybrid-contract.sh" ]]; then
   "$SCRIPT_DIR/validate-hybrid-contract.sh"
 fi
+chmod +x "$SCRIPT_DIR/test-smoke-contract.sh" 2>/dev/null || true
+if [[ -f "$SCRIPT_DIR/test-smoke-contract.sh" ]]; then
+  "$SCRIPT_DIR/test-smoke-contract.sh"
+fi
 
 # Mac: docker compose plugin yoksa docker-compose (v2 standalone / OrbStack)
 compose_config() {
