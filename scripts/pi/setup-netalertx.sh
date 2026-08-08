@@ -53,13 +53,18 @@ webhook_url() {
 
 wait_http() {
   local _
+  local url="http://${NETALERTX_LISTEN_ADDR}:${NETALERTX_PORT}/"
   for _ in $(seq 1 36); do
+    if curl -fsS -L "$url" >/dev/null 2>&1; then
+      return 0
+    fi
+    # Fallback: n8n restart sonrasi container ayaga kalkana kadar
     if curl -fsS -L "http://127.0.0.1:${NETALERTX_PORT}/" >/dev/null 2>&1; then
       return 0
     fi
     sleep 5
   done
-  log "HATA: NetAlertX HTTP hazir degil (port ${NETALERTX_PORT})"
+  log "HATA: NetAlertX HTTP hazir degil (${NETALERTX_LISTEN_ADDR}:${NETALERTX_PORT})"
   return 1
 }
 

@@ -80,14 +80,22 @@ do_backup() {
 }
 
 if ! do_backup; then
-  # JMicron I/O sonrasi bozuk snapshot — repair + bir kez daha
+  # JMicron I/O sonrasi bozuk snapshot — repair + retry; olmazsa fresh init
   log "WARN: backup fail — restic repair snapshots deneniyor"
   run_restic unlock 2>/dev/null || true
   run_restic repair snapshots 2>/dev/null || true
   run_restic repair index 2>/dev/null || true
+  run_restic prune 2>/dev/null || true
   if ! do_backup; then
-    log "HATA: backup repair sonrasi da basarisiz"
-    exit 1
+    log "WARN: repo kurtarilamadi — yedek klasoru yeniden init"
+    bak="${REPO_HOST_PATH}.corrupt.$(date +%Y%m%d%H%M%S)"
+    mv "$REPO_HOST_PATH" "$bak" 2>/dev/null || true
+    mkdir -p "$REPO_HOST_PATH"
+    run_restic init
+    do_backup || {
+      log "HATA: fresh init sonrasi backup basarisiz"
+      exit 1
+    }
   fi
 fi
 
