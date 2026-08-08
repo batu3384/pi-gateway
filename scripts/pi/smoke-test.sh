@@ -216,8 +216,9 @@ if [[ "${ENABLE_SYNCTHING:-true}" == "true" ]] && docker ps --format '{{.Names}}
   case "${SYNCTHING_GUI_PASSWORD:-}" in
     ""|CHANGE_ME*|Degistir*) ;;
     *)
+      # Syncthing 2.x: sendBasicAuthPrompt=false → form auth; REST auth'suz 403
       run_check "syncthing-auth-deny" bash -c \
-        'code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "http://127.0.0.1:'"${SYNCTHING_PORT}"'/"); [[ "$code" == "401" ]]'
+        'code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "http://127.0.0.1:'"${SYNCTHING_PORT}"'/rest/system/status"); [[ "$code" == "403" || "$code" == "401" ]]'
       ;;
   esac
 fi
