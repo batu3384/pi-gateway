@@ -76,6 +76,28 @@ if [[ -n "$USB_SSD_ERRORS" ]]; then
   log "Son 15 dk USB/SSD kopma veya I/O hatasi"
 fi
 
+# Hybrid: stale mount / I/O → soft-reset → degraded/restore (ssd-health)
+if needs_ssd_storage && ! is_ssd_root_mode; then
+  if [[ -x "$SCRIPT_DIR/ssd-health.sh" ]] || [[ -f "$SCRIPT_DIR/ssd-health.sh" ]]; then
+    # health-check SD_HEALTH_AUTO_RECOVER=false ile gelir; SSD kurtarma ayri env
+    SSD_HEALTH_AUTO="${SSD_HEALTH_AUTO:-${SD_HEALTH_AUTO_RECOVER:-true}}"
+    export SSD_HEALTH_AUTO
+    if ! REMOTE_DIR="$REMOTE_DIR" SSD_HEALTH_AUTO="$SSD_HEALTH_AUTO" bash "$SCRIPT_DIR/ssd-health.sh"; then
+      ISSUES+=("ssd-health-fail")
+      log "ssd-health kurtarma basarisiz veya degraded"
+    elif declare -F ssd_mount_healthy >/dev/null 2>&1 && ssd_mount_healthy; then
+      # Tarihsel journal I/O — mount simdi OK ise fail sayma
+      _ssd_issues_filtered=()
+      for _ssd_issue in "${ISSUES[@]+"${ISSUES[@]}"}"; do
+        [[ "$_ssd_issue" == "usb-ssd-disconnect" || "$_ssd_issue" == "ssd-health-fail" ]] && continue
+        _ssd_issues_filtered+=("$_ssd_issue")
+      done
+      ISSUES=("${_ssd_issues_filtered[@]+"${_ssd_issues_filtered[@]}"}")
+      unset _ssd_issues_filtered _ssd_issue
+    fi
+  fi
+fi
+
 if [[ ${#ISSUES[@]} -eq 0 ]]; then
   log "OK root rw, yazma testi gecti"
   if [[ "$RECOVERED" -eq 1 ]]; then

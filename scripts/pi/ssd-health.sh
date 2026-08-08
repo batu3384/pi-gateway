@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# SSD saglik gozcusu: stale/I/O → remount / soft-reset → degraded / restore poll
+set -euo pipefail
+
+REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOG_TAG="pi-gateway-ssd-health"
+SSD_HEALTH_AUTO="${SSD_HEALTH_AUTO:-true}"
+
+log() {
+  logger -t "$LOG_TAG" "$*"
+  echo "[ssd-health] $*"
+}
+
+# shellcheck source=/dev/null
+[[ -f "$REMOTE_DIR/.env" ]] && set -a && source "$REMOTE_DIR/.env" && set +a
+# shellcheck source=../lib/stack-health.sh
+source "$SCRIPT_DIR/../lib/stack-health.sh"
+
+if is_ssd_root_mode || ! needs_ssd_storage; then
+  log "SSD data disk yok (ssd-root/native) — atlaniyor"
+  exit 0
+fi
+
+if ! ssd_quirk_present; then
+  log "WARN: cmdline usb-storage.quirks=${SSD_USB_VID}:${SSD_USB_PID}:u yok"
+fi
+
+if ssd_under_voltage; then
+  log "WARN: undervolt (vcgencmd get_throttled)"
+fi
+
+ssd_usb_disable_autosuspend || true
+
+run_hotplug() {
+  REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/ssd-hotplug-handler.sh" || true
+}
+
+# Degraded: disk donmus olabilir — poll restore
+if storage_degraded; then
+  log "degraded — remount/soft-reset poll"
+  if ssd_try_remount || ssd_usb_soft_reset || ssd_mount_healthy; then
+    if ssd_mount_healthy; then
+      log "SSD geri — hotplug restore"
+      run_hotplug
+      exit 0
+    fi
+  fi
+  log "hala degraded"
+  exit 0
+fi
+
+# Saglikli gorunuyor mu?
+if ssd_mount_healthy; then
+  if ssd_recent_io_errors; then
+    log "WARN: son 15 dk USB/SSD I/O — probe OK, izleniyor"
+  fi
+  exit 0
+fi
+
+[[ "$SSD_HEALTH_AUTO" == "true" ]] || {
+  log "SSD sagliksiz; SSD_HEALTH_AUTO=false — aksiyon yok"
+  exit 1
+}
+
+# Once block var ama mount yok — once remount (USB reset gereksiz)
+if ssd_block_present && ssd_try_remount; then
+  log "remount OK — hotplug restore"
+  run_hotplug
+  exit 0
+fi
+
+log "SSD sagliksiz — soft-reset"
+if ssd_usb_soft_reset && ssd_mount_healthy; then
+  log "soft-reset OK — hotplug restore"
+  run_hotplug
+  exit 0
+fi
+
+log "soft-reset yetersiz — hotplug degraded yolu"
+run_hotplug
+ssd_mount_healthy || storage_degraded

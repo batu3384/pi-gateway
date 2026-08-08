@@ -16,6 +16,16 @@ docker info | grep "Docker Root Dir"   # /var/lib/docker (default)
 SSD image / hybrid boot: `scripts/mac/restore-hybrid-boot.sh`  
 Experimental ssd-root: `docs/SSD-ROOT.md`
 
+### SSD dropped — what happens
+
+1. **Detect** — hotplug (`PathExistsGone` / `PathChanged`) or health timer (`ssd-health` write-probe).
+2. **Soft-reset** — JMicron USB authorize cycle / remount (rate-limited). See `docs/SSD-JMICRON-FIX.md`.
+3. **Degraded** — flag `/run/pi-gateway/storage-degraded`; Forgejo/n8n/… stop; Unbound+AdGuard (core-dns) on SD.
+4. **Restore** — disk healthy again → remount → symlink → full stack (no reboot required if bus responds).
+5. **Deploy / restic** — while degraded: compose stays core-dns; restic **skips** (no ephemeral SSD-repo lie).
+
+Manual trigger: `REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/ssd-health.sh`
+
 ## Quick access (Mac)
 
 | Command | Description |

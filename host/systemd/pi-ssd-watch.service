@@ -1,7 +1,6 @@
 [Unit]
 Description=Pi Gateway SSD hotplug handler
-After=mnt-ssd.mount
-ConditionPathExists=/dev/disk/by-label/pi-data
+After=local-fs.target
 StartLimitIntervalSec=0
 
 [Service]

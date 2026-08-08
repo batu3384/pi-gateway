@@ -7,12 +7,14 @@ Do not treat every `scripts/**/*.sh` as equal. Prefer `make` targets.
 | Area | Scripts |
 |------|---------|
 | Mac pipeline | `install.sh`, `doctor.sh`, `discover-remote.sh`, `render-config.sh`, `validate.sh`, `deploy.sh`, `deploy-fast.sh`, `pre-deploy-check.sh` |
-| Pi lifecycle | `bootstrap.sh`, `post-deploy.sh`, `smoke-test.sh`, `health-check.sh`, `stack-watchdog.sh`, `recover-stack.sh` |
-| Lib | `common.sh`, `stack-health.sh`, `notify.sh`, `adguard-api.sh`, `password-policy.sh`, `compose-profiles.sh` |
+| Pi lifecycle | `bootstrap.sh`, `post-deploy.sh`, `smoke-test.sh`, `health-check.sh`, `stack-watchdog.sh`, `recover-stack.sh`, `ssd-health.sh`, `ssd-hotplug-handler.sh` |
+| Lib | `common.sh`, `stack-health.sh`, `ssd-alive.sh`, `notify.sh`, `adguard-api.sh`, `password-policy.sh`, `compose-profiles.sh` |
 | Security | `setup-firewall.sh`, `harden-host.sh` |
 | Backup | `restic-backup.sh`, `backup-pull.sh`, `install-backup-cron.sh` |
 
 Recover path: callers → `recover-stack.sh` → `stack-health.trigger_stack_recover` → `recover-readonly-root.sh`.
+
+SSD path: hotplug (`pi-ssd-watch.path` PathChanged/PathExistsGone) / `ssd-health.sh` → soft-reset (`ssd-alive.sh`) → remount or degraded core-dns.
 
 ## ops (enabled features)
 
@@ -30,3 +32,5 @@ Prefer hybrid (ADR-001). Touch only with `docs/SSD-ROOT.md`:
 ## CI
 
 `scripts/mac/ci-compose-config.sh` + `.github/ci.env.fixture`
+
+SSD recovery regression (Mac): `scripts/mac/test-ssd-alive.sh` (via `validate-recovery-contract.sh`).

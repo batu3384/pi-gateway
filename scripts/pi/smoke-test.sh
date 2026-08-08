@@ -44,6 +44,11 @@ run_caddy_auth_checks() {
     'if [[ "${ENABLE_TLS:-false}" == "true" ]]; then code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 -u "'"${CADDY_AUTH_USER}"':'"${CADDY_AUTH_PASSWORD}"'" --resolve "'"${host}"'.'"${LAN_DOMAIN}"':443:127.0.0.1" "https://'"${host}"'.'"${LAN_DOMAIN}"'/"); else code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 -u "'"${CADDY_AUTH_USER}"':'"${CADDY_AUTH_PASSWORD}"'" -H "Host: '"${host}"'.'"${LAN_DOMAIN}"'" http://127.0.0.1/); fi; [[ "$code" == "200" || "$code" == "302" || "$code" == "307" ]]'
 }
 
+DEGRADED=0
+if [[ -f /run/pi-gateway/storage-degraded ]]; then
+  DEGRADED=1
+fi
+
 if [[ "$STORAGE_TYPE" == "ssd-root" || "$STORAGE_TYPE" == "ssd" ]]; then
   run_check "root-on-ssd" bash -c '! findmnt -n -o SOURCE / | grep -q mmcblk'
   run_check "root-rw" bash -c '! findmnt -n -o OPTIONS / | tr "," "\n" | grep -qx ro'
@@ -51,7 +56,7 @@ if [[ "$STORAGE_TYPE" == "ssd-root" || "$STORAGE_TYPE" == "ssd" ]]; then
     "[[ -d '${REMOTE_DIR}/data' && ! -L '${REMOTE_DIR}/data' ]]"
   run_check "sd-health" bash -c "REMOTE_DIR='${REMOTE_DIR}' bash '${REMOTE_DIR}/scripts/pi/check-sd-health.sh'"
 elif [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
-  if [[ -f /run/pi-gateway/storage-degraded ]]; then
+  if [[ "$DEGRADED" -eq 1 ]]; then
     run_check "data-sd-fallback" bash -c \
       "[[ -d '${REMOTE_DIR}/data' && ! -L '${REMOTE_DIR}/data' ]]"
   else
@@ -65,7 +70,9 @@ elif [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
   fi
   run_check "root-rw" bash -c '! findmnt -n -o OPTIONS / | tr "," "\n" | grep -qx ro'
   run_check "ssd-fstab" bash -c 'grep -qE "[[:space:]]/mnt/ssd[[:space:]]" /etc/fstab'
-  run_check "sd-health" bash -c "REMOTE_DIR='${REMOTE_DIR}' bash '${REMOTE_DIR}/scripts/pi/check-sd-health.sh'"
+  if [[ "$DEGRADED" -eq 0 ]]; then
+    run_check "sd-health" bash -c "REMOTE_DIR='${REMOTE_DIR}' bash '${REMOTE_DIR}/scripts/pi/check-sd-health.sh'"
+  fi
 fi
 
 run_check "unbound-5335" dig +time=3 +tries=1 @127.0.0.1 -p 5335 cloudflare.com A
@@ -78,6 +85,15 @@ run_check "dns-rewrite-logs" bash -c \
   "dig +time=3 +tries=1 @${PI_STATIC_IP} logs.${LAN_DOMAIN} A +short | grep -qx '${PI_STATIC_IP}'"
 run_check "dns-rewrite-devices" bash -c \
   "dig +time=3 +tries=1 @${PI_STATIC_IP} devices.${LAN_DOMAIN} A +short | grep -qx '${PI_STATIC_IP}'"
+
+# Degraded: sadece DNS (+ opsiyonel caddy/homepage). App panel smoke yok.
+if [[ "$DEGRADED" -eq 1 ]]; then
+  run_check "adguard-ui" curl -fsS "http://127.0.0.1:${ADGUARD_WEB_PORT}/"
+  run_check "privileged-lib-installed" test -x /usr/local/lib/pi-gateway/scripts/pi/recover-readonly-root.sh
+  echo "Smoke test (degraded/core-dns): $pass/$checks passed"
+  [[ "$pass" -eq "$checks" ]]
+  exit $?
+fi
 
 if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
   auth_pass="${CADDY_AUTH_PASSWORD:-${AGH_ADMIN_PASSWORD:-}}"

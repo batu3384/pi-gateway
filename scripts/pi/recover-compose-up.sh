@@ -14,12 +14,15 @@ source "$SCRIPT_DIR/../lib/stack-health.sh"
 cd "$REMOTE_DIR/compose"
 mapfile -t profiles < <(compose_profiles)
 
-# SSD yokken asla full stack — kirik symlink + recreate firtinasi
-# Istisna: SD uzerinde native data/ (degraded ephemeral) — paneller ayaga kalkabilir
-if needs_ssd_storage && ! mountpoint -q /mnt/ssd 2>/dev/null; then
-  if sd_data_native_ok; then
-    echo "[recover-compose] SSD yok; SD data/ native — full stack" >&2
-  elif storage_degraded || dns_degraded_on_ssd_loss; then
+# SSD yok/stale: asla full app stack (ephemeral SD data clobber riski)
+ssd_ok=0
+if declare -F ssd_mount_healthy >/dev/null 2>&1; then
+  ssd_mount_healthy && ssd_ok=1
+elif mountpoint -q /mnt/ssd 2>/dev/null; then
+  ssd_ok=1
+fi
+if needs_ssd_storage && [[ "$ssd_ok" -ne 1 ]]; then
+  if storage_degraded || dns_degraded_on_ssd_loss; then
     COMPOSE_RECOVER_MODE=core-dns
   else
     echo "[recover-compose] HATA: SSD yok ve DNS degraded kapali — compose atlandi" >&2

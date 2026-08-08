@@ -75,4 +75,61 @@ grep -q 'pi-gateway-sd-degraded-ephemeral' "$SYMLINK" || die "ephemeral marker y
 grep -q 'clobber' "$SYMLINK" || die "clobber korumasi yorumu yok"
 ok "symlink clobber korumasi"
 
+SSD_ALIVE="$PROJECT_DIR/scripts/lib/ssd-alive.sh"
+[[ -f "$SSD_ALIVE" ]] || die "ssd-alive.sh yok"
+grep -q 'ssd_mount_healthy' "$SSD_ALIVE" || die "ssd_mount_healthy yok"
+grep -q 'ssd_usb_soft_reset' "$SSD_ALIVE" || die "ssd_usb_soft_reset yok"
+ok "ssd-alive API"
+
+grep -q 'ssd-alive.sh' "$STACK_HEALTH" || die "stack-health ssd-alive source yok"
+grep -q 'ssd_mount_healthy' "$STACK_HEALTH" || die "stack-health ssd_mount_healthy kullanmiyor"
+ok "stack-health ssd-alive entegrasyonu"
+
+grep -q 'PathExistsGone' "$PROJECT_DIR/host/systemd/pi-ssd-watch.path" \
+  || die "pi-ssd-watch.path PathExistsGone yok"
+if grep -q 'ConditionPathExists=/dev/disk/by-label/pi-data' \
+  "$PROJECT_DIR/host/systemd/pi-ssd-watch.service"; then
+  die "pi-ssd-watch.service ConditionPathExists hâlâ var (disconnect olu)"
+fi
+ok "ssd-watch disconnect path"
+
+grep -q 'ssd_mount_healthy\|Stale' "$PROJECT_DIR/scripts/pi/ssd-hotplug-handler.sh" \
+  || die "hotplug stale/healthy yok"
+ok "hotplug stale+remount"
+
+[[ -f "$PROJECT_DIR/scripts/pi/ssd-health.sh" ]] || die "ssd-health.sh yok"
+grep -q 'ssd-health.sh' "$PROJECT_DIR/scripts/pi/check-sd-health.sh" \
+  || die "check-sd-health ssd-health cagirmiyor"
+ok "ssd-health zinciri"
+
+grep -q 'core-dns' "$PROJECT_DIR/scripts/mac/deploy.sh" \
+  || die "deploy core-dns branch yok"
+ok "deploy core-dns"
+
+grep -q 'yedek atlandi' "$PROJECT_DIR/scripts/pi/restic-backup.sh" \
+  || die "restic degraded skip yok"
+if grep -q 'SD data yedegi (ephemeral)' "$PROJECT_DIR/scripts/pi/restic-backup.sh"; then
+  die "restic hâlâ ephemeral SD repo yaziyor"
+fi
+ok "restic degraded skip"
+
+grep -q 'Smoke test (degraded' "$PROJECT_DIR/scripts/pi/smoke-test.sh" \
+  || die "smoke degraded early exit yok"
+ok "smoke degraded"
+
+[[ -f "$PROJECT_DIR/host/udev/99-pi-gateway-jmicron.rules" ]] \
+  || die "udev jmicron rules yok"
+ok "udev jmicron"
+
+# Deep SSD alive regression (Mac)
+if [[ -x "$PROJECT_DIR/scripts/mac/test-ssd-alive.sh" ]] \
+  || [[ -f "$PROJECT_DIR/scripts/mac/test-ssd-alive.sh" ]]; then
+  bash "$PROJECT_DIR/scripts/mac/test-ssd-alive.sh" || die "test-ssd-alive basarisiz"
+  ok "test-ssd-alive"
+fi
+
+grep -q 'ssd_ready_for_symlink\|ssd_mount_healthy' "$PROJECT_DIR/scripts/lib/ensure-data-symlink.sh" \
+  || die "ensure-data-symlink stale mount korumasi yok"
+ok "symlink stale-mount korumasi"
+
 echo "[validate-recovery] Tum kontrat testleri gecti"

@@ -4,6 +4,7 @@ DefaultInstance=
 
 [Path]
 PathChanged=/dev/disk/by-label/pi-data
+PathExistsGone=/dev/disk/by-label/pi-data
 
 [Install]
 WantedBy=multi-user.target

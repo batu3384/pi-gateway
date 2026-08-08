@@ -80,11 +80,43 @@ log "Waiting for SSH on deploy host ($DEPLOY_HOST) after bootstrap..."
 wait_ssh "$DEPLOY_HOST"
 
 PROFILE_ARGS="${PROFILES[*]}"
-if [[ "${DEPLOY_SKIP_PULL:-false}" == "true" ]]; then
-  log "docker compose up -d (pull skipped — DEPLOY_SKIP_PULL=true)"
-  ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" "cd '$REMOTE_DIR/compose' && docker compose --env-file ../.env $PROFILE_ARGS up -d"
+# SSD yok / degraded / stale: core-dns only (ephemeral app data yazma)
+COMPOSE_MODE="$(ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" \
+  "REMOTE_DIR='$REMOTE_DIR' bash -s" <<'REMOTE_EOF'
+set -euo pipefail
+# shellcheck source=/dev/null
+[[ -f "$REMOTE_DIR/.env" ]] && set -a && source "$REMOTE_DIR/.env" && set +a
+# shellcheck source=/dev/null
+source "$REMOTE_DIR/scripts/lib/stack-health.sh"
+if ! needs_ssd_storage; then
+  echo full
+  exit 0
+fi
+if storage_degraded || ! ssd_mount_healthy; then
+  echo core-dns
 else
-  ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" "cd '$REMOTE_DIR/compose' && docker compose --env-file ../.env $PROFILE_ARGS pull && docker compose --env-file ../.env $PROFILE_ARGS up -d"
+  echo full
+fi
+REMOTE_EOF
+)" || COMPOSE_MODE="full"
+COMPOSE_MODE="$(echo "$COMPOSE_MODE" | tr -d '\r' | tail -1)"
+
+if [[ "$COMPOSE_MODE" == "core-dns" ]]; then
+  log "SSD yok/degraded — compose core-dns (unbound+adguard+caddy/homepage)"
+  if [[ "${DEPLOY_SKIP_PULL:-false}" != "true" ]]; then
+    ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" \
+      "cd '$REMOTE_DIR/compose' && docker compose --env-file ../.env --profile caddy pull unbound adguard homepage caddy" \
+      || log "WARN: core-dns pull kismi"
+  fi
+  ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" \
+    "REMOTE_DIR='$REMOTE_DIR' COMPOSE_RECOVER_MODE=core-dns bash '$REMOTE_DIR/scripts/pi/recover-compose-up.sh'"
+else
+  if [[ "${DEPLOY_SKIP_PULL:-false}" == "true" ]]; then
+    log "docker compose up -d (pull skipped — DEPLOY_SKIP_PULL=true)"
+    ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" "cd '$REMOTE_DIR/compose' && docker compose --env-file ../.env $PROFILE_ARGS up -d"
+  else
+    ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" "cd '$REMOTE_DIR/compose' && docker compose --env-file ../.env $PROFILE_ARGS pull && docker compose --env-file ../.env $PROFILE_ARGS up -d"
+  fi
 fi
 
 sleep 12

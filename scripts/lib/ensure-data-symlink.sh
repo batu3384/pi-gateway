@@ -34,6 +34,22 @@ if [[ -f "${REMOTE_DIR}/.env" ]]; then
   STORAGE_TYPE="${STORAGE_TYPE:-hybrid}"
 fi
 
+# Stale mount = mountpoint true ama I/O olu — degraded clear YASAK
+_SYMLINK_LIB="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+if [[ -f "${_SYMLINK_LIB}/ssd-alive.sh" ]]; then
+  # shellcheck source=ssd-alive.sh
+  source "${_SYMLINK_LIB}/ssd-alive.sh"
+fi
+unset _SYMLINK_LIB
+
+ssd_ready_for_symlink() {
+  if declare -F ssd_mount_healthy >/dev/null 2>&1; then
+    ssd_mount_healthy
+  else
+    mountpoint -q /mnt/ssd 2>/dev/null
+  fi
+}
+
 needs_ssd_symlink() {
   # ssd-root: native data/ (symlink yok) — root zaten SSD
   [[ "${STORAGE_TYPE}" == "hybrid" || "${STORAGE_TYPE}" == "ssd-data" ]]
@@ -88,7 +104,7 @@ discard_ephemeral_sd_data() {
 }
 
 repair_symlink() {
-  mountpoint -q /mnt/ssd 2>/dev/null || die "SSD bagli degil (/mnt/ssd)"
+  ssd_ready_for_symlink || die "SSD bagli/saglikli degil (/mnt/ssd)"
 
   ensure_tree_on "${DATA_ROOT}"
 
@@ -142,7 +158,7 @@ main() {
   mkdir -p "${REMOTE_DIR}"
 
   if needs_ssd_symlink; then
-    if ! mountpoint -q /mnt/ssd 2>/dev/null; then
+    if ! ssd_ready_for_symlink; then
       if [[ "$FALLBACK_SD" == "true" ]] || dns_degraded_allowed; then
         if [[ "${MODE}" == "verify" ]]; then
           verify_local_data || die "SD fallback data yok"
@@ -156,7 +172,7 @@ main() {
     fi
 
     if verify_symlink; then
-      # Symlink OK ama ephemeral flag/dir kalintisi olmamali
+      # Symlink OK ama ephemeral flag/dir kalintisi olmamali — yalniz SSD saglikliyken
       if [[ -f "$STORAGE_DEGRADED_FLAG" ]]; then
         rm -f "$STORAGE_DEGRADED_FLAG" 2>/dev/null \
           || run_as_needed rm -f "$STORAGE_DEGRADED_FLAG" 2>/dev/null || true

@@ -28,15 +28,11 @@ if is_ssd_root_mode; then
     log "HATA: ssd-root modunda root SSD degil — yedek atlandi"
     exit 1
   fi
-elif [[ -f /run/pi-gateway/storage-degraded ]] || ! mountpoint -q /mnt/ssd 2>/dev/null; then
-  # Degraded: SD uzerindeki data agacini yine yedekle (3-2-1 offsite icin)
-  if [[ -d "${REMOTE_DIR}/data" ]]; then
-    log "WARN: SSD yok/degraded — SD data yedegi (ephemeral) aliniyor"
-    RESTIC_REPOSITORY="${REMOTE_DIR}/data/backups/restic"
-  else
-    log "SSD mount yok veya degraded ve data yok — yedek atlandi"
-    exit 0
-  fi
+elif [[ -f /run/pi-gateway/storage-degraded ]] || ! mountpoint -q /mnt/ssd 2>/dev/null \
+  || { declare -F ssd_mount_healthy >/dev/null 2>&1 && ! ssd_mount_healthy; }; then
+  # Degraded / SSD yok: SSD restic repo'suna yazma — skip (RESTORE.md ile uyum)
+  log "SSD mount yok veya degraded — yedek atlandi"
+  exit 0
 fi
 
 DATA_ROOT="${REMOTE_DIR}/data"

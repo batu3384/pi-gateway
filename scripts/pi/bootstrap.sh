@@ -80,6 +80,14 @@ if [[ -d "$REMOTE_DIR/host/systemd/journald.conf.d" ]]; then
   sudo systemctl restart systemd-journald 2>/dev/null || true
 fi
 
+# JMicron autosuspend off
+if [[ -f "$REMOTE_DIR/host/udev/99-pi-gateway-jmicron.rules" ]]; then
+  echo "[bootstrap] udev JMicron rules..."
+  sudo cp "$REMOTE_DIR/host/udev/99-pi-gateway-jmicron.rules" /etc/udev/rules.d/
+  sudo udevadm control --reload-rules 2>/dev/null || true
+  sudo udevadm trigger --subsystem-match=usb 2>/dev/null || true
+fi
+
 for unit in pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-crowdsec-ufw.timer pi-gateway-morning.timer pi-gateway-stack-watchdog.timer pi-gateway-netalertx-names.timer pi-data-symlink.timer pi-ssd-watch.path; do
   [[ -f "$REMOTE_DIR/host/systemd/$unit" ]] && sudo cp "$REMOTE_DIR/host/systemd/$unit" "/etc/systemd/system/$unit"
 done

@@ -40,6 +40,12 @@
 | `STORAGE_TYPE` | `hybrid` | **Production:** SD root + SSD data (`/mnt/ssd`). `ssd-data` alias. |
 | `DNS_DEGRADED_ON_SSD_LOSS` | `true` | **Recommended.** On SSD loss, Unbound+AdGuard on SD (core-dns). Forgejo/n8n stay down. |
 | `STORAGE_FALLBACK_SD` | `false` | Back-compat: if `true`, enables same DNS degraded path. Full app stack still requires SSD. |
+| `SSD_PROBE_TIMEOUT_SEC` | `3` | Write-probe timeout for stale/hung `/mnt/ssd` |
+| `SSD_USB_RESET_MAX` | `3` | Soft-reset attempts per window (JMicron `152d:0583`) |
+| `SSD_USB_RESET_WINDOW_SEC` | `900` | Soft-reset rate-limit window |
+| `SSD_HOTPLUG_DEBOUNCE_SEC` | `30` | Debounce after SSD restore |
+| `SSD_USB_RESET_REBOOT` | `false` | If `true`, reboot after reset budget exhausted (last resort) |
+| `SSD_USB_AUTHORIZED_RESET` | `false` | If `true`, USB `authorized` 0→1 cycle (risky on JMS583) |
 | `ENABLE_DOCKER_SSD` | `false` | `true`: Docker `data-root` on SSD; I/O risk on JMicron USB |
 | `DOCKER_SSD_ROOT` | `/mnt/ssd/docker` | Target when `ENABLE_DOCKER_SSD=true` |
 | `STACK_RECOVER_COOLDOWN_SEC` | `180` | Auto-recover wait after compose up |

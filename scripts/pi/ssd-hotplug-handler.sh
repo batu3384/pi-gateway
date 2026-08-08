@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SSD hotplug: kopma / yeniden takilma
+# SSD hotplug: kopma / yeniden takilma (+ stale mount + soft-reset)
 set -euo pipefail
 
 REMOTE_DIR="${REMOTE_DIR:-/home/${PI_USER:-pi}/pi-gateway}"
@@ -43,9 +43,25 @@ if is_ssd_root_mode; then
   exit 0
 fi
 
-if mountpoint -q /mnt/ssd 2>/dev/null; then
+# Stale mount: mountpoint var ama I/O olu — lazy umount + soft-reset
+if mountpoint -q /mnt/ssd 2>/dev/null && ! ssd_mount_healthy; then
+  log "Stale/hung SSD mount — umount + soft-reset"
+  run_root umount -l /mnt/ssd 2>/dev/null || true
+  ssd_usb_soft_reset || log "WARN: soft-reset basarisiz"
+fi
+
+# Henuz mount degil ama block var — remount dene
+if ! ssd_mount_healthy && ssd_block_present; then
+  log "SSD block var, mount yok — remount"
+  if ! ssd_try_remount; then
+    log "remount fail — soft-reset"
+    ssd_usb_soft_reset || true
+  fi
+fi
+
+if ssd_mount_healthy; then
   if [[ -f "$SSD_HOTPLUG_STATE_FILE" ]] && stack_core_ok 2>/dev/null; then
-    log "SSD zaten mount ve stack core ayakta — atlaniyor"
+    log "SSD saglikli ve stack core ayakta — atlaniyor"
     exit 0
   fi
   if hotplug_debounced; then
@@ -56,10 +72,14 @@ if mountpoint -q /mnt/ssd 2>/dev/null; then
   log "SSD mount OK — tam stack restore"
   ensure_runtime_dir
   clear_storage_degraded || log "WARN: degraded flag temizlenemedi"
+  # fstab drift onarimi + acik remount
+  if [[ -x "$SCRIPT_DIR/ensure-ssd-fstab.sh" ]]; then
+    REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/ensure-ssd-fstab.sh" || log "WARN: ensure-fstab"
+  fi
+  ssd_try_remount || log "WARN: remount"
   REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/ensure-data-symlink.sh" repair || true
   if [[ -x "$SCRIPT_DIR/setup-docker-ssd.sh" ]] && [[ "${ENABLE_DOCKER_SSD:-false}" == "true" ]]; then
     REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/setup-docker-ssd.sh" || log "WARN: docker SSD restore atlandi"
-    # Sadece data-root degisince docker restart
     run_root systemctl restart docker 2>/dev/null || true
   fi
   REMOTE_DIR="$REMOTE_DIR" bash "$(recover_script_path "$REMOTE_DIR")" || log "WARN: recover basarisiz"
@@ -72,8 +92,20 @@ if mountpoint -q /mnt/ssd 2>/dev/null; then
   exit 0
 fi
 
-log "SSD mount yok"
+log "SSD mount yok / sagliksiz"
 run_root rm -f "$SSD_HOTPLUG_STATE_FILE" 2>/dev/null || true
+
+# Soft-reset bir kez daha (cihaz yarim enumerate) — reentry korumasi
+if [[ "${SSD_HOTPLUG_REENTRY:-0}" != "1" ]] && ssd_usb_soft_reset && ssd_mount_healthy; then
+  log "soft-reset sonrasi SSD saglikli — restore'a don"
+  exec env SSD_HOTPLUG_REENTRY=1 REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/ssd-hotplug-handler.sh"
+fi
+
+# Degraded oncesi stale mount kalintisini temizle (symlink clear bug onleme)
+if mountpoint -q /mnt/ssd 2>/dev/null && ! ssd_mount_healthy; then
+  run_root umount -l /mnt/ssd 2>/dev/null || true
+fi
+
 if ! dns_degraded_on_ssd_loss; then
   log "HATA: DNS_DEGRADED_ON_SSD_LOSS=false — degraded moda gecilmiyor (fail-closed)"
   # shellcheck source=../lib/notify.sh
@@ -97,7 +129,6 @@ REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/setup-docker-fallback.sh" || true
 source "$SCRIPT_DIR/../lib/notify.sh"
 notify_ssd_degraded "$(hostname -s)" "USB SSD kopma — DNS degraded (Unbound+AdGuard SD)"
 
-# Core DNS ayağa kaldır (full stack recreate yok)
 if [[ -d "$REMOTE_DIR/compose" ]]; then
   COMPOSE_RECOVER_MODE=core-dns run_compose_up "$REMOTE_DIR" "$(pi_user_from_remote_dir "$REMOTE_DIR")" \
     || log "WARN: core-dns compose basarisiz"

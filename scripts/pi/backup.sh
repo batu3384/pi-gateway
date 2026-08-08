@@ -35,10 +35,12 @@ if [[ -x "$REMOTE_DIR/scripts/pi/restic-backup.sh" ]]; then
   export REMOTE_DIR
   if restic_out="$(bash "$REMOTE_DIR/scripts/pi/restic-backup.sh" 2>&1)"; then
     printf '%s\n' "$restic_out"
-    if printf '%s\n' "$restic_out" | grep -qE 'SSD mount yok|degraded|yedek atlandi'; then
-      if ! printf '%s\n' "$restic_out" | grep -q 'ENABLE_RESTIC=false'; then
-        notify_backup_fail "$(printf '%s\n' "$restic_out" | tail -3 | tr '\n' ' ')"
-      fi
+    # Degraded skip = basari (yaniltici fail notify yok)
+    if printf '%s\n' "$restic_out" | grep -qE 'SSD mount yok veya degraded — yedek atlandi|yedek atlandi \(ENABLE_RESTIC'; then
+      :
+    elif printf '%s\n' "$restic_out" | grep -qE 'SSD mount yok|degraded' \
+      && ! printf '%s\n' "$restic_out" | grep -q 'ENABLE_RESTIC=false'; then
+      notify_backup_fail "$(printf '%s\n' "$restic_out" | tail -3 | tr '\n' ' ')"
     fi
   else
     printf '%s\n' "$restic_out"

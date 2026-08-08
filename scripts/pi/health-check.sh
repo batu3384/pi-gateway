@@ -28,7 +28,8 @@ note_fail() {
 }
 
 # SD sagligi (kurtarma yok — asagida recover-stack.sh)
-if ! SD_HEALTH_AUTO_RECOVER=false REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/check-sd-health.sh"; then
+# SSD gozcu: timer'da kurtarsin (SSD_HEALTH_AUTO=true); SD RO recover kapali
+if ! SD_HEALTH_AUTO_RECOVER=false SSD_HEALTH_AUTO=true REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/check-sd-health.sh"; then
   fail=1
   sd_fail=1
 fi
@@ -69,7 +70,9 @@ else
     if [[ ! -L "${REMOTE_DIR}/data" ]] || [[ "$(readlink -f "${REMOTE_DIR}/data")" != "/mnt/ssd/pi-gateway-data" ]]; then
       note_fail "data-ssd-symlink-broken"
     fi
-    if ! mountpoint -q /mnt/ssd 2>/dev/null; then
+    if declare -F ssd_mount_healthy >/dev/null 2>&1; then
+      ssd_mount_healthy || note_fail "ssd-unhealthy"
+    elif ! mountpoint -q /mnt/ssd 2>/dev/null; then
       note_fail "ssd-unmounted"
     fi
   fi

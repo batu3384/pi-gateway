@@ -11,8 +11,19 @@ STACK_RECOVER_COOLDOWN_DEGRADED_SEC="${STACK_RECOVER_COOLDOWN_DEGRADED_SEC:-900}
 STACK_RECOVER_COOLDOWN_FILE="${STACK_RECOVER_COOLDOWN_FILE:-/run/pi-gateway/stack-recover-cooldown}"
 STACK_BOOT_GRACE_SEC="${STACK_BOOT_GRACE_SEC:-120}"
 SSD_HOTPLUG_STATE_FILE="${SSD_HOTPLUG_STATE_FILE:-/var/lib/pi-gateway/ssd-hotplug-mounted}"
-SSD_HOTPLUG_DEBOUNCE_SEC="${SSD_HOTPLUG_DEBOUNCE_SEC:-120}"
+SSD_HOTPLUG_DEBOUNCE_SEC="${SSD_HOTPLUG_DEBOUNCE_SEC:-30}"
 PI_GATEWAY_RUNTIME_DIR="${PI_GATEWAY_RUNTIME_DIR:-/run/pi-gateway}"
+
+# SSD canlilik (probe / soft-reset) — ayni dizinde veya REMOTE_DIR
+_STACK_HEALTH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+if [[ -f "${_STACK_HEALTH_DIR}/ssd-alive.sh" ]]; then
+  # shellcheck source=ssd-alive.sh
+  source "${_STACK_HEALTH_DIR}/ssd-alive.sh"
+elif [[ -n "${REMOTE_DIR:-}" && -f "${REMOTE_DIR}/scripts/lib/ssd-alive.sh" ]]; then
+  # shellcheck source=ssd-alive.sh
+  source "${REMOTE_DIR}/scripts/lib/ssd-alive.sh"
+fi
+unset _STACK_HEALTH_DIR
 
 # /run/pi-gateway owner yazabilir olsun (root hotplug sonrasi stuck flag onleme)
 ensure_runtime_dir() {
@@ -102,8 +113,8 @@ root_rw_ok() {
 
 storage_degraded() {
   [[ -f "${STORAGE_DEGRADED_FLAG}" ]] || return 1
-  # Stuck flag iyilestirme: SSD + symlink OK ise bayrak yalan — temizle
-  if needs_ssd_storage && mountpoint -q /mnt/ssd 2>/dev/null; then
+  # Stuck flag iyilestirme: SSD healthy + symlink OK ise bayrak yalan — temizle
+  if needs_ssd_storage && declare -F ssd_mount_healthy >/dev/null 2>&1 && ssd_mount_healthy; then
     local data_link="${REMOTE_DIR:-}/data"
     if [[ -n "${REMOTE_DIR:-}" && -L "$data_link" ]] \
       && [[ "$(readlink -f "$data_link" 2>/dev/null)" == "/mnt/ssd/pi-gateway-data" ]]; then
@@ -183,7 +194,11 @@ container_health_ok() {
 # 0 = core ayakta, 1 = bozuk (isim = donus kodu)
 stack_core_ok() {
   if needs_ssd_storage && ! storage_degraded; then
-    mountpoint -q /mnt/ssd 2>/dev/null || return 1
+    if declare -F ssd_mount_healthy >/dev/null 2>&1; then
+      ssd_mount_healthy || return 1
+    else
+      mountpoint -q /mnt/ssd 2>/dev/null || return 1
+    fi
   fi
   stack_dns_core_ok || return 1
   # Degraded DNS-only: Caddy panel opsiyonel — DNS ayaktaysa core OK

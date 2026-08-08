@@ -19,10 +19,12 @@ SCRIPTS=(
   scripts/pi/setup-docker-fallback.sh
   scripts/pi/ssd-hotplug-handler.sh
   scripts/lib/stack-health.sh
+  scripts/lib/ssd-alive.sh
   scripts/lib/compose-profiles.sh
   scripts/lib/notify.sh
   scripts/lib/adguard-api.sh
   scripts/lib/ensure-data-symlink.sh
+  scripts/pi/ssd-health.sh
 )
 
 run_root() {

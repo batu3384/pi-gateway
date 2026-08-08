@@ -231,6 +231,14 @@ grep -q 'STORAGE_FALLBACK_SD' "$PROJECT_DIR/.env.example" \
   || die "STORAGE_FALLBACK_SD .env.example yok"
 ok "STORAGE_FALLBACK_SD tanimli"
 
+grep -q 'ssd_mount_healthy' "$PROJECT_DIR/scripts/lib/ssd-alive.sh" \
+  || die "ssd-alive.sh yok/eksik"
+grep -q 'PathExistsGone' "$PROJECT_DIR/host/systemd/pi-ssd-watch.path" \
+  || die "PathExistsGone yok"
+grep -q 'ssd-alive.sh' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" \
+  || die "install-privileged ssd-alive kopyalamiyor"
+ok "SSD auto-recovery (alive+path+priv)"
+
 [[ -f "$PROJECT_DIR/scripts/pi/setup-docker-fallback.sh" ]] \
   || die "setup-docker-fallback.sh yok"
 ok "docker SD fallback script"
