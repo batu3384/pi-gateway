@@ -42,7 +42,8 @@ logs.__LAN_DOMAIN__ {
 
 devices.__LAN_DOMAIN__ {
   tls /etc/caddy/certs/__LAN_DOMAIN__.pem /etc/caddy/certs/__LAN_DOMAIN__-key.pem
-  reverse_proxy __PI_STATIC_IP__:__NETALERTX_PORT__ {
+  # Host-network NetAlertX: docker0 (LAN IP loopback'a ulasmaz)
+  reverse_proxy 172.17.0.1:__NETALERTX_PORT__ {
     header_up X-Forwarded-Proto {scheme}
     header_up X-Forwarded-Host {host}
   }

@@ -19,5 +19,5 @@ LAN is partially trusted (guest WiFi, IoT). Admin panels and DNS centralize on o
 ## Consequences
 
 - First install needs `make tls-certs` before validate/deploy.
-- NetAlertX listens `127.0.0.1` (Caddy proxies `devices.home`).
+- NetAlertX listens `172.17.0.1` (docker0; Caddy proxies `devices.home`).
 - HTTP-only LAN is explicit risk acceptance via `WEAK_TLS_OK`.

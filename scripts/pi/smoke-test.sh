@@ -38,10 +38,11 @@ CADDY_AUTH_PASSWORD="${CADDY_AUTH_PASSWORD:-${AGH_ADMIN_PASSWORD:-}}"
 
 run_caddy_auth_checks() {
   local host="$1"
+  local resolve_ip="${PI_STATIC_IP:-127.0.0.1}"
   run_check "caddy-${host}-auth-deny" bash -c \
-    'if [[ "${ENABLE_TLS:-false}" == "true" ]]; then code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 --resolve "'"${host}"'.'"${LAN_DOMAIN}"':443:127.0.0.1" "https://'"${host}"'.'"${LAN_DOMAIN}"'/"); else code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 -H "Host: '"${host}"'.'"${LAN_DOMAIN}"'" http://127.0.0.1/); fi; [[ "$code" == "401" ]]'
+    'if [[ "${ENABLE_TLS:-false}" == "true" ]]; then code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 --resolve "'"${host}"'.'"${LAN_DOMAIN}"':443:'"${resolve_ip}"'" "https://'"${host}"'.'"${LAN_DOMAIN}"'/"); else code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 -H "Host: '"${host}"'.'"${LAN_DOMAIN}"'" http://127.0.0.1/); fi; [[ "$code" == "401" ]]'
   run_check "caddy-${host}-auth-ok" bash -c \
-    'if [[ "${ENABLE_TLS:-false}" == "true" ]]; then code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 -u "'"${CADDY_AUTH_USER}"':'"${CADDY_AUTH_PASSWORD}"'" --resolve "'"${host}"'.'"${LAN_DOMAIN}"':443:127.0.0.1" "https://'"${host}"'.'"${LAN_DOMAIN}"'/"); else code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 -u "'"${CADDY_AUTH_USER}"':'"${CADDY_AUTH_PASSWORD}"'" -H "Host: '"${host}"'.'"${LAN_DOMAIN}"'" http://127.0.0.1/); fi; [[ "$code" == "200" || "$code" == "302" || "$code" == "307" ]]'
+    'if [[ "${ENABLE_TLS:-false}" == "true" ]]; then code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 -u "'"${CADDY_AUTH_USER}"':'"${CADDY_AUTH_PASSWORD}"'" --resolve "'"${host}"'.'"${LAN_DOMAIN}"':443:'"${resolve_ip}"'" "https://'"${host}"'.'"${LAN_DOMAIN}"'/"); else code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 -u "'"${CADDY_AUTH_USER}"':'"${CADDY_AUTH_PASSWORD}"'" -H "Host: '"${host}"'.'"${LAN_DOMAIN}"'" http://127.0.0.1/); fi; [[ "$code" == "200" || "$code" == "302" || "$code" == "307" ]]'
 }
 
 DEGRADED=0
@@ -109,7 +110,7 @@ if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
       fi
       if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
         run_check "devices-no-caddy-basic-auth" bash -c \
-          'code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 --resolve "devices.'"${LAN_DOMAIN}"':443:127.0.0.1" "https://devices.'"${LAN_DOMAIN}"'/devices.php"); [[ "$code" == "200" || "$code" == "302" ]] && ! curl -skI --max-time 5 --resolve "devices.'"${LAN_DOMAIN}"':443:127.0.0.1" "https://devices.'"${LAN_DOMAIN}"'/js/api.js" | grep -qi "www-authenticate: Basic"'
+          'code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 --resolve "devices.'"${LAN_DOMAIN}"':443:'"${PI_STATIC_IP}"'" "https://devices.'"${LAN_DOMAIN}"'/devices.php"); [[ "$code" == "200" || "$code" == "302" ]] && ! curl -skI --max-time 5 --resolve "devices.'"${LAN_DOMAIN}"':443:'"${PI_STATIC_IP}"'" "https://devices.'"${LAN_DOMAIN}"'/js/api.js" | grep -qi "www-authenticate: Basic"'
       fi
       ;;
   esac
@@ -121,7 +122,7 @@ run_check "adguard-ui" curl -fsS "http://127.0.0.1:${ADGUARD_WEB_PORT}/"
 
 if [[ "${ENABLE_CADDY:-true}" == "true" ]] && [[ -z "${CADDY_AUTH_PASSWORD:-}" ]]; then
   run_check "gateway-http" bash -c \
-    'if [[ "${ENABLE_TLS:-false}" == "true" ]]; then code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 --resolve "gateway.'"${LAN_DOMAIN}"':443:127.0.0.1" "https://gateway.'"${LAN_DOMAIN}"'/"); else code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 -H "Host: gateway.'"${LAN_DOMAIN}"'" http://127.0.0.1/); fi; [[ "$code" == "200" || "$code" == "401" || "$code" == "302" ]]'
+    'if [[ "${ENABLE_TLS:-false}" == "true" ]]; then code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 --resolve "gateway.'"${LAN_DOMAIN}"':443:'"${PI_STATIC_IP}"'" "https://gateway.'"${LAN_DOMAIN}"'/"); else code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 -H "Host: gateway.'"${LAN_DOMAIN}"'" http://127.0.0.1/); fi; [[ "$code" == "200" || "$code" == "401" || "$code" == "302" ]]'
 fi
 
 if [[ "${ENABLE_DOZZLE:-true}" == "true" ]]; then

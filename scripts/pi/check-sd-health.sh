@@ -108,6 +108,23 @@ if [[ ${#ISSUES[@]} -eq 0 ]]; then
   exit 0
 fi
 
+# Tarihsel kernel I/O: root+SSD simdi saglikliysa fail etme (yalniz uyar)
+if declare -F ssd_mount_healthy >/dev/null 2>&1 && ssd_mount_healthy && root_rw_ok; then
+  _only_hist=1
+  for _i in "${ISSUES[@]+"${ISSUES[@]}"}"; do
+    case "$_i" in
+      kernel-io-errors|usb-ssd-disconnect) ;;
+      *) _only_hist=0; break ;;
+    esac
+  done
+  if [[ "$_only_hist" -eq 1 ]]; then
+    log "WARN: tarihsel I/O journal — root/SSD simdi OK, fail yok"
+    unset _only_hist _i
+    exit 0
+  fi
+  unset _only_hist _i
+fi
+
 # shellcheck source=../lib/notify.sh
 source "$SCRIPT_DIR/../lib/notify.sh"
 DETAILS="$(printf '%s\n' "${ISSUES[@]}")"

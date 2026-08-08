@@ -230,8 +230,8 @@ services:
       autoheal: "true"
     environment:
       PORT: ${NETALERTX_PORT:-20211}
-      # Host network; UI yalnizca loopback — Caddy devices.home proxy
-      LISTEN_ADDR: ${NETALERTX_LISTEN_ADDR:-127.0.0.1}
+      # Host network; UI docker0 — Caddy devices.home proxy (LAN IP loopback'a ulasmaz)
+      LISTEN_ADDR: ${NETALERTX_LISTEN_ADDR:-172.17.0.1}
       PUID: ${NETALERTX_UID:-20211}
       PGID: ${NETALERTX_GID:-20211}
       LOADED_PLUGINS: '["ARPSCAN","DIGSCAN","NSLOOKUP","ICMP","WEBHOOK","NEWDEV","NTFPRCS","DBCLNP","CUSTPROP","SETPWD","SYNC","UI","MAINT","VNDRPDT","ADGUARDIMP","AVAHISCAN"]'

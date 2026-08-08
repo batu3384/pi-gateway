@@ -217,9 +217,9 @@ if grep -E 'image:.*:latest' "$compose" >/dev/null 2>&1; then
 fi
 ok "compose image pin (no :latest)"
 
-grep -q 'NETALERTX_LISTEN_ADDR:-127.0.0.1' "$compose" \
-  || die "NetAlertX listen default 127.0.0.1 degil"
-ok "NetAlertX loopback listen"
+grep -q 'NETALERTX_LISTEN_ADDR:-172.17.0.1' "$compose" \
+  || die "NetAlertX listen default 172.17.0.1 degil"
+ok "NetAlertX docker0 listen"
 
 grep -q 'OFFSITE_BACKUP_MAX_AGE_DAYS' "$PROJECT_DIR/.env.example" \
   || die "OFFSITE_BACKUP_MAX_AGE_DAYS .env.example yok"
