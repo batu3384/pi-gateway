@@ -141,7 +141,7 @@ if [[ "${ENABLE_SYNCTHING:-true}" == "true" ]]; then
 fi
 
 if [[ "${ENABLE_REDIS:-false}" == "true" ]]; then
-  run_check "redis" docker exec redis redis-cli ping
+  run_check "redis" docker exec redis redis-cli --no-auth-warning -a "${REDIS_PASSWORD}" ping
 fi
 
 if [[ "${ENABLE_N8N:-true}" == "true" ]]; then

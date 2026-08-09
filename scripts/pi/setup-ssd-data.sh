@@ -7,6 +7,7 @@ MOUNT="/mnt/ssd"
 LABEL="pi-data"
 DATA_ROOT="${MOUNT}/pi-gateway-data"
 LOG_TAG="[pi-ssd-data]"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 log() { echo "$LOG_TAG $*"; }
 die() { log "HATA: $*"; exit 1; }
@@ -92,7 +93,7 @@ ensure_ext4_partition() {
   fi
 
   log "SSD hazirlaniyor: $disk (~${size_gb}GB) -> tek ext4 partition ($LABEL)"
-  wipefs -a "$disk" || true
+  wipefs -a "$disk"
   parted -s "$disk" mklabel msdos
   parted -s "$disk" mkpart primary ext4 4MiB 100%
   partprobe "$disk" || true
@@ -159,7 +160,7 @@ prepare_data_tree() {
           rmdir "${remote}/data" 2>/dev/null || true
         else
           log "Mevcut data tasinyor -> ${DATA_ROOT}"
-          rsync -a "${remote}/data/" "${DATA_ROOT}/" || true
+          rsync -a "${remote}/data/" "${DATA_ROOT}/"
           rm -rf "${remote}/data"
         fi
       fi
@@ -184,9 +185,12 @@ write_health_hint() {
 
 main() {
   require_root
-  # shellcheck source=/dev/null
-  [[ -f "${REMOTE_DIR:-/home/${PI_USER:-pi}/pi-gateway}/.env" ]] && \
-    source "${REMOTE_DIR:-/home/${PI_USER:-pi}/pi-gateway}/.env" 2>/dev/null || true
+  REMOTE_DIR="${REMOTE_DIR:-/home/${PI_USER:-pi}/pi-gateway}"
+  # shellcheck source=../lib/env-file.sh
+  source "$SCRIPT_DIR/../lib/env-file.sh"
+  _SSD_REMOTE_DIR="$REMOTE_DIR"
+  load_env_file "$REMOTE_DIR/.env" || die ".env dotenv parser hatasi"
+  REMOTE_DIR="$_SSD_REMOTE_DIR"
   STORAGE_TYPE="${STORAGE_TYPE:-hybrid}"
   if [[ "$STORAGE_TYPE" == "ssd-root" || "$STORAGE_TYPE" == "ssd" ]]; then
     log "STORAGE_TYPE=${STORAGE_TYPE} — ayri veri diski kurulumu gerekmez (root=SSD)"
@@ -213,7 +217,10 @@ main() {
 
   if [[ -f "$MARKER" ]]; then
     log "Zaten hazir ($MARKER) — fstab + symlink kontrol"
-    mount_ssd "$part" || true
+    mount_ssd "$part" || die "Hazir SSD mount edilemedi: $part"
+    mountpoint -q "$MOUNT" || die "Hazir SSD mount probe basarisiz: $MOUNT"
+    mounted_part="$(findmnt -n -o SOURCE "$MOUNT" 2>/dev/null || true)"
+    [[ "$mounted_part" == "$part" ]] || die "Yanlis SSD mount: beklenen $part, bulunan ${mounted_part:-yok}"
     ensure_fstab "$part"
     prepare_data_tree
     exit 0

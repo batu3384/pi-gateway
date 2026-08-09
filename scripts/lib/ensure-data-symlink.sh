@@ -9,6 +9,8 @@ DATA_ROOT="/mnt/ssd/pi-gateway-data"
 MODE="${1:-repair}"
 FALLBACK_SD=false
 STORAGE_DEGRADED_FLAG="${STORAGE_DEGRADED_FLAG:-/run/pi-gateway/storage-degraded}"
+SYMLINK_LOCK_FILE="${SYMLINK_LOCK_FILE:-${REMOTE_DIR}/.data-symlink.lock}"
+SYMLINK_LOCK_WAIT_SEC="${SYMLINK_LOCK_WAIT_SEC:-30}"
 # Degraded SD agaci — SSD restore'da rsync ile SSD'ye YAZILMAZ (clobber korumasi)
 SD_DEGRADED_MARKER=".pi-gateway-sd-degraded-ephemeral"
 
@@ -29,8 +31,9 @@ run_as_needed() {
 }
 
 if [[ -f "${REMOTE_DIR}/.env" ]]; then
-  # shellcheck source=/dev/null
-  source "${REMOTE_DIR}/.env"
+  # shellcheck source=env-file.sh
+  source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/env-file.sh"
+  load_env_file "${REMOTE_DIR}/.env" || die ".env dotenv parser hatasi"
   STORAGE_TYPE="${STORAGE_TYPE:-hybrid}"
 fi
 
@@ -150,6 +153,11 @@ ensure_local_data() {
 }
 
 main() {
+  mkdir -p "$(dirname "$SYMLINK_LOCK_FILE")"
+  exec {SYMLINK_LOCK_FD}>>"$SYMLINK_LOCK_FILE" \
+    || die "symlink lock dosyasi acilamadi: $SYMLINK_LOCK_FILE"
+  flock -w "$SYMLINK_LOCK_WAIT_SEC" "$SYMLINK_LOCK_FD" \
+    || die "symlink lock alinamadi (${SYMLINK_LOCK_WAIT_SEC}s)"
   mkdir -p "${REMOTE_DIR}"
 
   if needs_ssd_symlink; then

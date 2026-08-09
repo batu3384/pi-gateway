@@ -1,6 +1,7 @@
 [Unit]
 Description=Pi Gateway DNS health check
 After=network-online.target docker.service
+OnFailure=pi-gateway-health-failure.service
 
 [Service]
 Type=oneshot

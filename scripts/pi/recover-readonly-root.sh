@@ -19,8 +19,14 @@ run_root() {
   fi
 }
 
-# shellcheck source=/dev/null
-[[ -f "$REMOTE_DIR/.env" ]] && set -a && source "$REMOTE_DIR/.env" && set +a
+# shellcheck source=../lib/env-file.sh
+source "$SCRIPT_DIR/../lib/env-file.sh"
+_RECOVER_REMOTE_DIR="$REMOTE_DIR"
+load_env_file "$REMOTE_DIR/.env" || {
+  log "HATA: .env dotenv parser hatasi"
+  exit 1
+}
+REMOTE_DIR="$_RECOVER_REMOTE_DIR"
 # shellcheck source=../lib/compose-profiles.sh
 source "$SCRIPT_DIR/../lib/compose-profiles.sh"
 # shellcheck source=../lib/stack-health.sh
@@ -105,12 +111,15 @@ ensure_ssd_mounted() {
 ensure_data_symlink() {
   needs_ssd || return 0
   if storage_degraded; then
-    if REMOTE_DIR="$REMOTE_DIR" STORAGE_TYPE="$STORAGE_TYPE" \
+    if storage_restore_pending; then
+      log "SSD geri dondu — data symlink SSD'ye onariliyor"
+    elif REMOTE_DIR="$REMOTE_DIR" STORAGE_TYPE="$STORAGE_TYPE" \
       bash "$SCRIPT_DIR/ensure-data-symlink.sh" repair --fallback-sd; then
       return 0
+    else
+      log "WARN: SD fallback symlink basarisiz"
+      return 1
     fi
-    log "WARN: SD fallback symlink basarisiz"
-    return 1
   fi
   if REMOTE_DIR="$REMOTE_DIR" STORAGE_TYPE="$STORAGE_TYPE" \
     bash "$SCRIPT_DIR/ensure-data-symlink.sh" repair; then
@@ -161,7 +170,7 @@ main() {
     exit 1
   fi
 
-  if stack_fully_healthy && root_rw_ok; then
+  if ! storage_restore_pending && stack_fully_healthy && root_rw_ok; then
     log "Stack saglikli ve root rw — kurtarma gerekmedi"
     apply_adguard_rewrites_best_effort "$REMOTE_DIR"
     release_recover_lock
@@ -182,7 +191,11 @@ main() {
     fi
   fi
 
-  ensure_data_symlink || true
+  if ! ensure_data_symlink; then
+    log "HATA: data symlink onarimi basarisiz"
+    release_recover_lock
+    exit 1
+  fi
   if needs_ssd && mountpoint -q /mnt/ssd 2>/dev/null; then
     mkdir -p /mnt/ssd/.disk-probe 2>/dev/null || true
   fi
@@ -216,7 +229,8 @@ main() {
     && (! needs_ssd || { declare -F ssd_mount_healthy >/dev/null 2>&1 && ssd_mount_healthy; }) \
     && stack_dns_core_ok \
     && container_health_ok caddy \
-    && stack_gateway_ok; then
+    && stack_gateway_ok \
+    && (! needs_ssd || [[ "$(readlink -f "$REMOTE_DIR/data" 2>/dev/null)" == "/mnt/ssd/pi-gateway-data" ]]); then
     clear_storage_degraded || log "WARN: degraded flag temizlenemedi"
     log "OK stack ayakta (adguard, unbound, caddy, gateway)"
     apply_adguard_rewrites_best_effort "$REMOTE_DIR"
@@ -231,7 +245,7 @@ main() {
     exit 0
   fi
 
-  if stack_fully_healthy && root_rw_ok; then
+  if ! storage_restore_pending && stack_fully_healthy && root_rw_ok; then
     log "OK stack_fully_healthy"
     apply_adguard_rewrites_best_effort "$REMOTE_DIR"
     release_recover_lock

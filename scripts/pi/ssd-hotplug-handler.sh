@@ -33,8 +33,14 @@ touch_hotplug_run() {
   date +%s | run_root tee "$SSD_HOTPLUG_DEBOUNCE_FILE" >/dev/null 2>&1 || true
 }
 
-# shellcheck source=/dev/null
-[[ -f "$REMOTE_DIR/.env" ]] && set -a && source "$REMOTE_DIR/.env" && set +a
+# shellcheck source=../lib/env-file.sh
+source "$SCRIPT_DIR/../lib/env-file.sh"
+_HOTPLUG_REMOTE_DIR="$REMOTE_DIR"
+load_env_file "$REMOTE_DIR/.env" || {
+  log "HATA: .env dotenv parser hatasi"
+  exit 1
+}
+REMOTE_DIR="$_HOTPLUG_REMOTE_DIR"
 # shellcheck source=../lib/stack-health.sh
 source "$SCRIPT_DIR/../lib/stack-health.sh"
 
@@ -79,7 +85,10 @@ if ssd_mount_healthy; then
     REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/ensure-ssd-fstab.sh" || log "WARN: ensure-fstab"
   fi
   ssd_try_remount || log "WARN: remount"
-  REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/ensure-data-symlink.sh" repair || true
+  if ! REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/ensure-data-symlink.sh" repair; then
+    log "HATA: SSD data symlink onarimi basarisiz"
+    exit 1
+  fi
   if [[ -x "$SCRIPT_DIR/setup-docker-ssd.sh" ]] && [[ "${ENABLE_DOCKER_SSD:-false}" == "true" ]]; then
     REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/setup-docker-ssd.sh" || log "WARN: docker SSD restore atlandi"
     run_root systemctl restart docker 2>/dev/null || true
@@ -137,8 +146,14 @@ if [[ -d "$REMOTE_DIR/compose" ]]; then
     n8n forgejo syncthing uptime-kuma crowdsec redis dozzle netalertx 2>/dev/null || true
 fi
 set_storage_degraded
-REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/ensure-data-symlink.sh" repair --fallback-sd || true
-REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/setup-docker-fallback.sh" || true
+if ! REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/ensure-data-symlink.sh" repair --fallback-sd; then
+  log "HATA: SD fallback data symlink onarimi basarisiz"
+  exit 1
+fi
+if ! REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/setup-docker-fallback.sh"; then
+  log "HATA: Docker SD fallback basarisiz"
+  exit 1
+fi
 # shellcheck source=../lib/notify.sh
 source "$SCRIPT_DIR/../lib/notify.sh"
 notify_ssd_degraded "$(hostname -s)" "USB SSD kopma — DNS degraded (Unbound+AdGuard SD)"

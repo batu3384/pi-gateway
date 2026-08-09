@@ -9,6 +9,7 @@ load_env
 PI_USER="${PI_USER:-pi}"
 PI_HOST="${PI_HOST:-}"
 REMOTE_DIR="${REMOTE_DIR:-/home/$PI_USER/pi-gateway}"
+STORAGE_TYPE="${STORAGE_TYPE:-hybrid}"
 
 [[ -n "$PI_HOST" ]] || die "PI_HOST required"
 
@@ -100,7 +101,7 @@ ENVMERGE
 
 "$SCRIPT_DIR/sync-rendered-configs.sh" || log "WARN: rendered config sync atlandi"
 
-ssh "$PI_USER@$PI_HOST" "REMOTE_DIR='$REMOTE_DIR' TAILSCALE_AUTHKEY='${TAILSCALE_AUTHKEY:-}' TAILSCALE_HOSTNAME='${TAILSCALE_HOSTNAME:-pi-gateway}' STORAGE_TYPE='${STORAGE_TYPE:-hybrid}' PI_INTERFACE='${PI_INTERFACE:-eth0}' bash -s" \
+ssh "$PI_USER@$PI_HOST" "REMOTE_DIR='$REMOTE_DIR' bash -s" \
   < "$SCRIPT_DIR/../pi/bootstrap.sh"
 
 DEPLOY_HOST="${PI_STATIC_IP:-$PI_HOST}"

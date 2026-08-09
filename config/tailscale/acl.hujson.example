@@ -22,13 +22,13 @@
     {
       "action": "accept",
       "src": ["tag:owner-device"],
-      "dst": ["192.168.0.0/16:*"]
+      "dst": ["YOUR_TAILSCALE_LAN_SUBNET:53,80,443,22000"]
     }
   ],
 
   "autoApprovers": {
     "routes": {
-      "192.168.0.0/16": ["group:owners"]
+      "YOUR_TAILSCALE_LAN_SUBNET": ["group:owners"]
     }
   },
 
@@ -37,7 +37,7 @@
       "action": "accept",
       "src": ["tag:owner-device"],
       "dst": ["tag:pi-gateway"],
-      "users": ["autogroup:nonroot", "root"]
+      "users": ["autogroup:nonroot"]
     }
   ]
 }

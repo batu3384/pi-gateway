@@ -11,7 +11,7 @@ PI_USER="${PI_USER:-pi}"
 PI_HOST="${PI_STATIC_IP:-${PI_HOST:-}}"
 REMOTE_DIR="${REMOTE_DIR:-/home/$PI_USER/pi-gateway}"
 LOCAL_REPO="${MAC_BACKUP_DEST:-$HOME/Backups/pi-gateway}/restic"
-RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic:0.17.3}"
+RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic@sha256:8f5a62b422a2cb1277ea0dd6e826fe1acf649e5b9f02d60e5268d5fd1976255a}"
 CHECK_SUBSET="${RESTIC_CHECK_SUBSET:-5%}"
 RESTIC_TIMEOUT_SEC="${RESTIC_TIMEOUT_SEC:-7200}"
 TARGET="${1:-both}"
@@ -37,15 +37,16 @@ case "$TARGET" in
   pi)
     [[ -n "$PI_HOST" ]] || die "PI_STATIC_IP gerekli (target=pi)"
     RESTIC_REMOTE="${RESTIC_REPOSITORY:-${REMOTE_DIR}/data/backups/restic}"
+    [[ "$RESTIC_REMOTE" =~ ^/[A-Za-z0-9._/-]+$ ]] || die "RESTIC_REPOSITORY gecersiz"
     ssh -o ConnectTimeout=15 "$PI_USER@$PI_HOST" \
       "test -d '$RESTIC_REMOTE'" || die "Pi repo yok: $RESTIC_REMOTE"
     ssh -o ConnectTimeout=15 "$PI_USER@$PI_HOST" \
-      "REMOTE_DIR='$REMOTE_DIR' RESTIC_CHECK_SUBSET='$CHECK_SUBSET' RESTIC_TIMEOUT_SEC='$RESTIC_TIMEOUT_SEC' RESTIC_IMAGE='$RESTIC_IMAGE' bash -s" <<'REMOTE'
+      "REMOTE_DIR='$REMOTE_DIR' RESTIC_REPOSITORY='$RESTIC_REMOTE' RESTIC_CHECK_SUBSET='$CHECK_SUBSET' RESTIC_TIMEOUT_SEC='$RESTIC_TIMEOUT_SEC' RESTIC_IMAGE='$RESTIC_IMAGE' bash -s" <<'REMOTE'
 set -euo pipefail
 # shellcheck source=/dev/null
 [[ -f "$REMOTE_DIR/.env" ]] && set -a && source "$REMOTE_DIR/.env" && set +a
-RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-/mnt/ssd/pi-gateway-data/backups/restic}"
-RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic:0.17.3}"
+RESTIC_REPOSITORY="${RESTIC_REPOSITORY:?RESTIC_REPOSITORY missing}"
+RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic@sha256:8f5a62b422a2cb1277ea0dd6e826fe1acf649e5b9f02d60e5268d5fd1976255a}"
 [[ -d "$RESTIC_REPOSITORY" ]] || { echo "[restore-check] HATA: Pi repo yok"; exit 1; }
 timeout "${RESTIC_TIMEOUT_SEC:-7200}" docker run --rm --network none \
   -e RESTIC_PASSWORD \
@@ -61,15 +62,16 @@ REMOTE
       die "PI_STATIC_IP gerekli (target=both)"
     fi
     RESTIC_REMOTE="${RESTIC_REPOSITORY:-${REMOTE_DIR}/data/backups/restic}"
+    [[ "$RESTIC_REMOTE" =~ ^/[A-Za-z0-9._/-]+$ ]] || die "RESTIC_REPOSITORY gecersiz"
     ssh -o ConnectTimeout=15 -o BatchMode=yes "$PI_USER@$PI_HOST" "test -d '$RESTIC_REMOTE'" \
       || die "Pi repo erisilemiyor: $RESTIC_REMOTE"
     ssh -o ConnectTimeout=15 "$PI_USER@$PI_HOST" \
-      "REMOTE_DIR='$REMOTE_DIR' RESTIC_CHECK_SUBSET='$CHECK_SUBSET' RESTIC_TIMEOUT_SEC='$RESTIC_TIMEOUT_SEC' RESTIC_IMAGE='$RESTIC_IMAGE' bash -s" <<'REMOTE'
+      "REMOTE_DIR='$REMOTE_DIR' RESTIC_REPOSITORY='$RESTIC_REMOTE' RESTIC_CHECK_SUBSET='$CHECK_SUBSET' RESTIC_TIMEOUT_SEC='$RESTIC_TIMEOUT_SEC' RESTIC_IMAGE='$RESTIC_IMAGE' bash -s" <<'REMOTE'
 set -euo pipefail
 # shellcheck source=/dev/null
 [[ -f "$REMOTE_DIR/.env" ]] && set -a && source "$REMOTE_DIR/.env" && set +a
-RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-/mnt/ssd/pi-gateway-data/backups/restic}"
-RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic:0.17.3}"
+RESTIC_REPOSITORY="${RESTIC_REPOSITORY:?RESTIC_REPOSITORY missing}"
+RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic@sha256:8f5a62b422a2cb1277ea0dd6e826fe1acf649e5b9f02d60e5268d5fd1976255a}"
 [[ -d "$RESTIC_REPOSITORY" ]] || { echo "[restore-check] HATA: Pi repo yok"; exit 1; }
 timeout "${RESTIC_TIMEOUT_SEC:-7200}" docker run --rm --network none \
   -e RESTIC_PASSWORD \

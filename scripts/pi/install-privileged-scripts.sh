@@ -9,6 +9,7 @@ log() { echo "[install-priv] $*"; }
 
 SCRIPTS=(
   scripts/pi/recover-readonly-root.sh
+  scripts/pi/recover-stack.sh
   scripts/pi/recover-compose-up.sh
   scripts/pi/ensure-ssd-fstab.sh
   scripts/pi/ensure-data-symlink.sh
@@ -18,7 +19,9 @@ SCRIPTS=(
   scripts/pi/check-sd-health.sh
   scripts/pi/setup-docker-fallback.sh
   scripts/pi/ssd-hotplug-handler.sh
+  scripts/pi/setup-ssd-data.sh
   scripts/lib/stack-health.sh
+  scripts/lib/env-file.sh
   scripts/lib/ssd-alive.sh
   scripts/lib/compose-profiles.sh
   scripts/lib/notify.sh
@@ -37,42 +40,57 @@ run_root() {
 
 run_root mkdir -p "$LIB_DIR/scripts/pi" "$LIB_DIR/scripts/lib" /run/pi-gateway /usr/local/sbin
 
+install_verified() {
+  local src="$1" dst="$2" before after
+  [[ -f "$src" ]] || {
+    log "HATA: privileged kaynak yok — $src"
+    exit 1
+  }
+  [[ -z "$(find "$src" -maxdepth 0 -perm /022 2>/dev/null)" ]] || {
+    log "HATA: group/world-writable kaynak reddedildi — $src"
+    exit 1
+  }
+  before="$(sha256sum "$src" | awk '{print $1}')"
+  [[ -n "$before" ]] || {
+    log "HATA: kaynak hash alinamadi — $src"
+    exit 1
+  }
+  run_root install -o root -g root -m 755 -D "$src" "$dst"
+  after="$(run_root sha256sum "$dst" | awk '{print $1}')"
+  [[ "$after" == "$before" ]] || {
+    log "HATA: install hash uyusmazligi — $src"
+    exit 1
+  }
+  [[ "$(sha256sum "$src" | awk '{print $1}')" == "$before" ]] || {
+    log "HATA: kaynak install sirasinda degisti — $src"
+    exit 1
+  }
+}
+
 for rel in "${SCRIPTS[@]}"; do
   src="${REMOTE_DIR}/${rel}"
   dst="${LIB_DIR}/${rel}"
-  if [[ ! -f "$src" ]]; then
-    log "WARN: yok — $rel"
-    continue
-  fi
-  # TOCTOU: world-writable kaynak kopyalama
-  if [[ -n "$(find "$src" -maxdepth 0 -perm -002 2>/dev/null)" ]]; then
-    log "HATA: world-writable kaynak reddedildi — $rel"
-    exit 1
-  fi
-  run_root install -o root -g root -m 755 -D "$src" "$dst"
+  install_verified "$src" "$dst"
 done
 
 ssd_src="${REMOTE_DIR}/scripts/pi/setup-ssd-data.sh"
 if [[ -f "$ssd_src" ]]; then
-  if [[ -n "$(find "$ssd_src" -maxdepth 0 -perm -002 2>/dev/null)" ]]; then
-    log "HATA: world-writable setup-ssd-data reddedildi"
-    exit 1
-  fi
-  run_root install -o root -g root -m 755 -D "$ssd_src" /usr/local/sbin/pi-setup-ssd-data.sh
+  run_root install -o root -g root -m 755 -D \
+    "$LIB_DIR/scripts/pi/setup-ssd-data.sh" /usr/local/sbin/pi-setup-ssd-data.sh
   log "OK /usr/local/sbin/pi-setup-ssd-data.sh"
 fi
 
 # Deploy drift kontrolu + install sonrasi hash (systemd path integrity)
 if command -v sha256sum >/dev/null 2>&1; then
   tmp_sha="$(mktemp)"
-  (cd "$REMOTE_DIR" && sha256sum "${SCRIPTS[@]}" 2>/dev/null) >"$tmp_sha" || true
+  (cd "$REMOTE_DIR" && sha256sum "${SCRIPTS[@]}") >"$tmp_sha"
   run_root install -o root -g root -m 644 "$tmp_sha" "$LIB_DIR/.scripts-sha256"
   rm -f "$tmp_sha"
   tmp_inst="$(mktemp)"
   (
     cd "$LIB_DIR" || exit 0
     sha256sum "${SCRIPTS[@]}" 2>/dev/null
-  ) >"$tmp_inst" || true
+  ) >"$tmp_inst"
   run_root install -o root -g root -m 644 "$tmp_inst" "$LIB_DIR/.installed-sha256"
   rm -f "$tmp_inst"
 fi

@@ -20,9 +20,15 @@ run_root() {
   fi
 }
 
-# shellcheck source=/dev/null
-[[ -f "$REMOTE_DIR/.env" ]] && source "$REMOTE_DIR/.env"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/env-file.sh
+source "$SCRIPT_DIR/../lib/env-file.sh"
+_FALLBACK_REMOTE_DIR="$REMOTE_DIR"
+load_env_file "$REMOTE_DIR/.env" || {
+  log "HATA: .env dotenv parser hatasi"
+  exit 1
+}
+REMOTE_DIR="$_FALLBACK_REMOTE_DIR"
 # shellcheck source=../lib/stack-health.sh
 source "$SCRIPT_DIR/../lib/stack-health.sh"
 
@@ -31,12 +37,12 @@ if is_ssd_root_mode; then
   exit 0
 fi
 
-if mountpoint -q /mnt/ssd 2>/dev/null; then
-  log "SSD mount var — fallback gerekmedi"
+if ssd_mount_healthy; then
+  log "SSD mount/probe saglikli — fallback gerekmedi"
   exit 0
 fi
 
-log "SSD yok — Docker SD fallback (/var/lib/docker)"
+log "SSD yok veya stale — Docker SD fallback (/var/lib/docker)"
 
 run_root mkdir -p "$DOCKER_LEGACY"
 run_root python3 - "$DAEMON_JSON" "$DOCKER_LEGACY" <<'PY'

@@ -12,7 +12,7 @@ PI_HOST="${PI_STATIC_IP:-${PI_HOST:-}}"
 REMOTE_DIR="${REMOTE_DIR:-/home/$PI_USER/pi-gateway}"
 LOCAL_DEST="${MAC_BACKUP_DEST:-$HOME/Backups/pi-gateway}"
 RESTIC_REMOTE="${RESTIC_REPOSITORY:-${REMOTE_DIR}/data/backups/restic}"
-RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic:0.17.3}"
+RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic@sha256:8f5a62b422a2cb1277ea0dd6e826fe1acf649e5b9f02d60e5268d5fd1976255a}"
 RESTIC_REINIT_MARKER="${RESTIC_REINIT_MARKER:-/var/lib/pi-gateway/restic-reinit}"
 
 [[ -n "$PI_HOST" ]] || die "PI_STATIC_IP gerekli"
@@ -42,7 +42,12 @@ if ssh -o ConnectTimeout=15 -o BatchMode=yes "$PI_USER@$PI_HOST" \
 fi
 
 remote_tmp="$(mktemp -d)"
-trap 'rm -rf "$remote_tmp"' EXIT
+STAMP="$(date +%Y%m%d-%H%M%S)"
+stage_root="$LOCAL_DEST/.restic-stage.$$"
+stage_restic="$stage_root/restic"
+stage_config="$LOCAL_DEST/config-snapshots/.stage-$STAMP"
+trap 'rm -rf "$remote_tmp" "$stage_root" "$stage_config"' EXIT
+mkdir -p "$stage_restic" "$stage_config"
 log "On kontrol: snapshot sayisi"
 if ! rsync -az --timeout=60 \
   "$PI_USER@$PI_HOST:$RESTIC_REMOTE/" \
@@ -60,21 +65,32 @@ if [[ "$remote_n" -eq 0 ]]; then
 fi
 
 log "Restic repo: $PI_USER@$PI_HOST:$RESTIC_REMOTE -> $LOCAL_DEST/restic"
-if ! rsync -avz --delete --ignore-errors \
-  "$PI_USER@$PI_HOST:$RESTIC_REMOTE/" \
-  "$LOCAL_DEST/restic/"; then
+if ! rsync -a "$remote_tmp/restic/" "$stage_restic/"; then
   die "restic rsync basarisiz — .last-success yazilmiyor"
 fi
+previous_restic="$LOCAL_DEST/.restic-previous.$$"
+if [[ -d "$LOCAL_DEST/restic" ]]; then
+  mv "$LOCAL_DEST/restic" "$previous_restic" \
+    || die "mevcut offsite repo staging gecisi basarisiz"
+fi
+if ! mv "$stage_restic" "$LOCAL_DEST/restic"; then
+  [[ -d "$previous_restic" ]] && mv "$previous_restic" "$LOCAL_DEST/restic" || true
+  die "offsite repo atomic gecisi basarisiz"
+fi
+rm -rf "$previous_restic"
 
 log "Config snapshot (secrets haric)"
-STAMP="$(date +%Y%m%d-%H%M%S)"
-rsync -avz \
+if ! rsync -avz \
   --exclude '.env' \
   --exclude 'data/**' \
   --exclude 'homepage/logs/**' \
   --exclude 'crowdsec/bouncer/local_api_credentials.yaml' \
   "$PI_USER@$PI_HOST:$REMOTE_DIR/config/" \
-  "$LOCAL_DEST/config-snapshots/$STAMP/" || log "WARN: config snapshot kismi basarisiz (restic OK)"
+  "$stage_config/"; then
+  die "config snapshot basarisiz — .last-success yazilmiyor"
+fi
+mv "$stage_config" "$LOCAL_DEST/config-snapshots/$STAMP" \
+  || die "config snapshot atomic gecisi basarisiz"
 
 date -Iseconds >"$LOCAL_DEST/.last-success"
 log "Stamp: $LOCAL_DEST/.last-success"

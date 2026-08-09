@@ -6,8 +6,12 @@ REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../lib/stack-health.sh
 source "$SCRIPT_DIR/../lib/stack-health.sh"
-# shellcheck source=/dev/null
-[[ -f "$REMOTE_DIR/.env" ]] && source "$REMOTE_DIR/.env"
+# shellcheck source=../lib/env-file.sh
+source "$SCRIPT_DIR/../lib/env-file.sh"
+load_env_file "$REMOTE_DIR/.env" || {
+  echo "[restic] HATA: .env dotenv parser hatasi" >&2
+  exit 1
+}
 
 ENABLE_RESTIC="${ENABLE_RESTIC:-true}"
 RESTIC_PASSWORD="${RESTIC_PASSWORD:-}"
@@ -16,10 +20,11 @@ if is_ssd_root_mode; then
 else
   RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-/mnt/ssd/pi-gateway-data/backups/restic}"
 fi
-RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic:0.17.3}"
+RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic@sha256:8f5a62b422a2cb1277ea0dd6e826fe1acf649e5b9f02d60e5268d5fd1976255a}"
 RESTIC_TIMEOUT_SEC="${RESTIC_TIMEOUT_SEC:-7200}"
 RESTIC_CHOWN_TIMEOUT_SEC="${RESTIC_CHOWN_TIMEOUT_SEC:-120}"
 RESTIC_REINIT_MARKER="${RESTIC_REINIT_MARKER:-/var/lib/pi-gateway/restic-reinit}"
+RESTIC_ALLOW_REINIT="${RESTIC_ALLOW_REINIT:-false}"
 
 log() { echo "[restic] $*"; }
 
@@ -43,6 +48,14 @@ if [[ -L "$DATA_ROOT" ]]; then
 fi
 
 REPO_HOST_PATH="$RESTIC_REPOSITORY"
+if [[ -e "$REPO_HOST_PATH" && ! -d "$REPO_HOST_PATH" ]]; then
+  log "HATA: Restic repository path klasor degil: $REPO_HOST_PATH"
+  exit 1
+fi
+REPO_WAS_PRESENT=0
+if [[ -d "$REPO_HOST_PATH" ]] && find "$REPO_HOST_PATH" -mindepth 1 -print -quit 2>/dev/null | grep -q .; then
+  REPO_WAS_PRESENT=1
+fi
 mkdir -p "$REPO_HOST_PATH"
 
 run_restic() {
@@ -59,6 +72,13 @@ run_restic() {
 export RESTIC_PASSWORD
 
 if ! run_restic snapshots >/dev/null 2>&1; then
+  if [[ "$REPO_WAS_PRESENT" -eq 1 ]]; then
+    log "HATA: mevcut Restic repo okunamiyor — init reddedildi; repair/recovery gerekli"
+    # shellcheck source=../lib/notify.sh
+    source "$SCRIPT_DIR/../lib/notify.sh"
+    notify_backup_fail "$(date -Iseconds)" "existing Restic repo unavailable; init refused"
+    exit 1
+  fi
   log "Repo olusturuluyor: $REPO_HOST_PATH"
   run_restic init
 fi
@@ -87,6 +107,13 @@ if ! do_backup; then
   run_restic repair index 2>/dev/null || true
   run_restic prune 2>/dev/null || true
   if ! do_backup; then
+    if [[ "$RESTIC_ALLOW_REINIT" != "true" ]]; then
+      log "HATA: Restic repo kurtarilamadi — otomatik reinit kapali (RESTIC_ALLOW_REINIT=true ile bilincli kurtarma)"
+      # shellcheck source=../lib/notify.sh
+      source "$SCRIPT_DIR/../lib/notify.sh"
+      notify_backup_fail "$STAMP" "Restic repair failed; automatic reinit disabled"
+      exit 1
+    fi
     log "WARN: repo kurtarilamadi — yedek klasoru yeniden init (GECMIS KORUNUR: .corrupt.*)"
     bak="${REPO_HOST_PATH}.corrupt.$(date +%Y%m%d%H%M%S)"
     mv "$REPO_HOST_PATH" "$bak" 2>/dev/null || true

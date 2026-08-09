@@ -59,6 +59,7 @@ setup_ufw() {
 
   sudo ufw default deny incoming
   sudo ufw default allow outgoing
+  sudo ufw default deny routed
 
   while sudo ufw status numbered 2>/dev/null | grep -F 'pi-gateway dns' | grep -q 'Anywhere'; do
     delete_ufw_rules_matching 'pi-gateway dns' 'Anywhere'

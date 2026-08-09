@@ -1,6 +1,6 @@
 services:
   unbound:
-    image: klutchell/unbound:1.23.1
+    image: klutchell/unbound@sha256:a3412dcc5cf5e98dfde226bca68154a80027aaca5c4ffd864fc89140a446ff57
     container_name: unbound
     restart: unless-stopped
     labels:
@@ -18,7 +18,7 @@ services:
       start_period: 20s
 
   adguard:
-    image: adguard/adguardhome:v0.107.61
+    image: adguard/adguardhome@sha256:a2085b04bbfc4759e68fa1d13d4e1558aede67c783c55820e036a95a36dd3ebf
     container_name: adguard
     restart: unless-stopped
     network_mode: host
@@ -38,7 +38,7 @@ services:
       start_period: 120s
 
   docker-socket-proxy:
-    image: tecnativa/docker-socket-proxy:0.3.0
+    image: tecnativa/docker-socket-proxy@sha256:9e4b9e7517a6b660f2cc903a19b257b1852d5b3344794e3ea334ff00ae677ac2
     container_name: docker-socket-proxy
     restart: unless-stopped
     profiles: ["dozzle"]
@@ -53,7 +53,8 @@ services:
       VERSION: 1
 
   autoheal:
-    image: willfarrell/autoheal:1.2.0
+    # 1.2.0 arm64 manifest (Pi 4 runtime).
+    image: willfarrell/autoheal@sha256:e5f5827d7120a50e15af145cdb44bd7eb3af7f12f3d46d7757ce452c5bb5383e
     container_name: autoheal
     restart: unless-stopped
     profiles: ["autoheal"]
@@ -65,7 +66,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
   caddy:
-    image: caddy:2.9.1-alpine
+    image: caddy@sha256:b4e3952384eb9524a887633ce65c752dd7c71314d2c2acf98cd5c715aaa534f0
     container_name: caddy
     restart: unless-stopped
     profiles: ["caddy"]
@@ -73,8 +74,8 @@ services:
       autoheal: "true"
     ports:
       # Tailscale Serve 100.x:443 tutabilir — Caddy sadece LAN IP
-      - "${PI_STATIC_IP}:80:80"
-      - "${PI_STATIC_IP}:443:443"
+      - "${PI_STATIC_IP:-127.0.0.1}:80:80"
+      - "${PI_STATIC_IP:-127.0.0.1}:443:443"
     volumes:
       - ../config/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - ../config/caddy/certs:/etc/caddy/certs:ro
@@ -87,7 +88,7 @@ services:
         condition: service_started
 
   homepage:
-    image: ghcr.io/gethomepage/homepage:v1.13.2
+    image: ghcr.io/gethomepage/homepage@sha256:a0b71c8e757298d02560186bab9fbe3fc2d375c523a62cc1019177b37e48aa28
     container_name: homepage
     restart: unless-stopped
     labels:
@@ -112,7 +113,7 @@ services:
       - ../data/uptime-kuma:/app/data
 
   dozzle:
-    image: amir20/dozzle:v8.14.12
+    image: amir20/dozzle@sha256:0df89c904da71e94a0c9ed3c89a890f01488321b5f10ac1e0c0bedcead9af6e4
     container_name: dozzle
     restart: unless-stopped
     profiles: ["dozzle"]
@@ -150,7 +151,7 @@ services:
       - "127.0.0.1:${FORGEJO_PORT:-3002}:3000"
 
   syncthing:
-    image: syncthing/syncthing:2.1.2
+    image: syncthing/syncthing@sha256:4464f4161dd0251e20d46bb3aec83363db75d80cef1abdd5d5fd4054b04a004d
     container_name: syncthing
     restart: unless-stopped
     profiles: ["syncthing"]
@@ -167,30 +168,32 @@ services:
       - ../data/projects:/var/syncthing/Projects
     ports:
       - "127.0.0.1:${SYNCTHING_PORT:-8384}:8384"
-      # Sync: LAN (UFW kisitli); 127.0.0.1 bind Mac eslestirmesini kirar
-      - "22000:22000/tcp"
-      - "22000:22000/udp"
+      # Sync: LAN IP (UFW kisitli); global bind WAN'a acik port birakir
+      - "${PI_STATIC_IP:-127.0.0.1}:22000:22000/tcp"
+      - "${PI_STATIC_IP:-127.0.0.1}:22000:22000/udp"
 
   redis:
-    image: redis:7.4-alpine
+    image: redis@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
     container_name: redis
     restart: unless-stopped
     profiles: ["redis"]
     labels:
       autoheal: "true"
-    command: redis-server --appendonly yes
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-CHANGE_ME_redis_password}"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-CHANGE_ME_redis_password}
     volumes:
       - ../data/redis:/data
     ports:
       - "127.0.0.1:6379:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$$REDIS_PASSWORD\" ping"]
       interval: 30s
       timeout: 5s
       retries: 3
 
   n8n:
-    image: docker.n8n.io/n8nio/n8n:2.30.4
+    image: docker.n8n.io/n8nio/n8n@sha256:d1606a508b1e426de07a98fa10f3758ef474b17590c6f181a0dd38c999f8190
     container_name: n8n
     restart: unless-stopped
     profiles: ["n8n"]
@@ -217,7 +220,7 @@ services:
       - ../data/.disk-probe:/host-ssd:ro
 
   netalertx:
-    image: ghcr.io/netalertx/netalertx:26.8.5
+    image: ghcr.io/netalertx/netalertx@sha256:e8d800176d35a2fcc856ddc68c354a6b472e535c6ed42c52d040b715ca9bb127
     container_name: netalertx
     restart: unless-stopped
     profiles: ["netalert"]
@@ -243,7 +246,7 @@ services:
       - /tmp:uid=20211,gid=20211,mode=1700
 
   crowdsec:
-    image: crowdsecurity/crowdsec:v1.6.4
+    image: crowdsecurity/crowdsec@sha256:091229068a9dab7f8c1ae41086669620da2980c6ccc26f9e358a75aaa7cb4a27
     container_name: crowdsec
     restart: unless-stopped
     profiles: ["crowdsec"]
@@ -267,7 +270,7 @@ services:
       start_period: 60s
 
   cloudflared:
-    image: cloudflare/cloudflared:2025.11.1
+    image: cloudflare/cloudflared@sha256:89ee50efb1e9cb2ae30281a8a404fed95eb8f02f0a972617526f8c5b417acae2
     container_name: cloudflared
     restart: unless-stopped
     profiles: ["cloudflare"]
@@ -277,7 +280,7 @@ services:
     network_mode: host
 
   watchtower:
-    image: containrrr/watchtower:1.7.1
+    image: containrrr/watchtower@sha256:6dd50763bbd632a83cb154d5451700530d1e44200b268a4e9488fefdfcf2b038
     container_name: watchtower
     restart: unless-stopped
     profiles: ["watchtower"]

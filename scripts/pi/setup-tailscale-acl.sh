@@ -8,6 +8,7 @@ REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 ACL_TEMPLATE="${REMOTE_DIR}/config/tailscale/acl.hujson.example"
 ACL_LOCAL="${REMOTE_DIR}/config/tailscale/acl.hujson"
 ACL_OWNER="${TAILSCALE_ACL_OWNER:-}"
+ACL_LAN_SUBNET="${TAILSCALE_LAN_SUBNET:-${LAN_SUBNET_CIDR:-}}"
 API_KEY="${TAILSCALE_API_KEY:-}"
 
 log() { echo "[tailscale-acl] $*"; }
@@ -23,19 +24,29 @@ if [[ ! "$ACL_OWNER" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]]; the
   log "WARN: TAILSCALE_ACL_OWNER gecersiz e-posta — ACL atlandi (duzelt: .env)"
   exit 0
 fi
+if [[ ! "$ACL_LAN_SUBNET" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$ ]]; then
+  log "HATA: TAILSCALE_LAN_SUBNET veya LAN_SUBNET_CIDR gecersiz — broad ACL publish reddedildi"
+  exit 1
+fi
 
 [[ -f "$ACL_TEMPLATE" ]] || { log "ACL sablonu yok: $ACL_TEMPLATE"; exit 1; }
 
 mkdir -p "$(dirname "$ACL_LOCAL")"
-python3 - "$ACL_TEMPLATE" "$ACL_LOCAL" "$ACL_OWNER" <<'PY'
+python3 - "$ACL_TEMPLATE" "$ACL_LOCAL" "$ACL_OWNER" "$ACL_LAN_SUBNET" <<'PY'
 import sys
+import ipaddress
 from pathlib import Path
-template, out, owner = sys.argv[1], sys.argv[2], sys.argv[3]
+template, out, owner, lan_subnet = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 text = Path(template).read_text(encoding="utf-8")
 placeholder = "YOUR_TAILSCALE_EMAIL@example.com"
 if placeholder not in text:
     sys.exit("placeholder missing in ACL template")
-Path(out).write_text(text.replace(placeholder, owner), encoding="utf-8")
+try:
+    lan_subnet = str(ipaddress.ip_network(lan_subnet, strict=False))
+except ValueError as exc:
+    sys.exit(f"invalid LAN subnet: {exc}")
+text = text.replace(placeholder, owner).replace("YOUR_TAILSCALE_LAN_SUBNET", lan_subnet)
+Path(out).write_text(text, encoding="utf-8")
 PY
 ACL_FILE="$ACL_LOCAL"
 

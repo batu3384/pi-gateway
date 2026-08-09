@@ -22,6 +22,14 @@ smoke="$ROOT/scripts/pi/smoke-test.sh"
 firewall="$ROOT/scripts/pi/setup-firewall.sh"
 install_priv="$ROOT/scripts/pi/install-privileged-scripts.sh"
 sync_cfg="$ROOT/scripts/mac/sync-rendered-configs.sh"
+ssd_setup="$ROOT/scripts/pi/setup-ssd-data.sh"
+docker_fallback="$ROOT/scripts/pi/setup-docker-fallback.sh"
+backup_snapshot="$ROOT/scripts/pi/backup.sh"
+env_loader="$ROOT/scripts/lib/env-file.sh"
+health_unit="$ROOT/host/systemd/pi-gateway-health.service"
+compose="$ROOT/compose/docker-compose.yml"
+tailscale_acl="$ROOT/config/tailscale/acl.hujson.example"
+tailscale_remote="$ROOT/scripts/pi/setup-tailscale-remote.sh"
 
 # C1: force-recreate fail must not finish_ok / cooldown
 tail_force="$(tail -n 25 "$compose_up")"
@@ -36,7 +44,7 @@ ok "C1 recover-compose fail-closed"
 grep -A25 'repo kurtarilamadi' "$restic" | grep -q 'notify_backup_ok' \
   && die "C2: reinit yolunda notify_backup_ok"
 grep -q 'restic-reinit\|RESTIC_REINIT' "$restic" || die "C2: reinit marker yok"
-grep -q 'rsync.*--delete' "$pull" || die "C2: backup-pull --delete bekleniyor"
+grep -q 'stage_root\|atomic' "$pull" || die "C2: backup-pull staging yok"
 grep -q 'snapshot\|refuse\|REINIT\|fewer\|az' "$pull" || die "C2: pull shrink/reinit gate yok"
 ok "C2 restic reinit + pull gate"
 
@@ -74,7 +82,131 @@ echo "$main_fb" | grep -q 'FALLBACK_SD' || die "C6: FALLBACK_SD gate yok"
 echo "$main_fb" | grep -q 'STORAGE_DEGRADED_FLAG' || die "C6: existing-flag gate yok"
 grep -A12 '^repair_symlink()' "$symlink" | grep -qE 'STORAGE_DEGRADED_FLAG|clear_storage' \
   && die "C6: repair_symlink hala degraded flag siliyor"
+grep -q 'SYMLINK_LOCK_FILE\|flock.*SYMLINK_LOCK' "$symlink" \
+  || die "C6: symlink writer lock yok"
 ok "C6 symlink no dual-writer degrade"
+
+# C7: degraded state must not be treated as full healthy before restore
+grep -q '! storage_restore_pending && stack_fully_healthy' "$recover" \
+  || die "C7: degraded early healthy exit"
+ok "C7 degraded restore cannot early-exit"
+
+# C8: recover path must not clobber SSD symlink with SD fallback
+recover_data="$(grep -A35 '^ensure_data_symlink()' "$recover")"
+echo "$recover_data" | grep -q 'storage_restore_pending' \
+  || die "C8: recover data path lacks SSD health gate"
+echo "$recover_data" | grep -q 'elif REMOTE_DIR' \
+  && echo "$recover_data" | grep -q -- '--fallback-sd' \
+  || die "C8: fallback must be conditional"
+ok "C8 restore keeps SSD data symlink"
+
+# C9: health/watchdog recovery entrypoint must exist in privileged tree
+grep -q 'scripts/pi/recover-stack.sh' "$install_priv" || die "C9: recover-stack privileged install yok"
+ok "C9 recover-stack privileged install"
+
+# C10: initialized SSD mount failure must fail closed
+grep -A8 'if \[\[ -f "\$MARKER"' "$ssd_setup" | grep -q 'mount_ssd.*|| true' && \
+  die "C10: existing SSD marker mount failure yutuluyor"
+grep -A12 'if \[\[ -f "\$MARKER"' "$ssd_setup" | grep -q 'mountpoint' \
+  || die "C10: marker branch mount verify yok"
+ok "C10 SSD marker mount fail-closed"
+
+# C11: Docker fallback must detect stale/hung SSD
+grep -q 'ssd_mount_healthy' "$docker_fallback" || die "C11: Docker fallback stale mount probe yok"
+ok "C11 Docker fallback stale-mount safe"
+
+# C12: corrupt Restic repo must not init before repair/reinit decision
+grep -q 'RESTIC_REPOSITORY.*corrupt\|repo.*corrupt\|restic.*repair' "$restic" \
+  || die "C12: corrupt repo recovery gate yok"
+if grep -q 'if ! run_restic snapshots' "$restic" && \
+  grep -A4 'if ! run_restic snapshots' "$restic" | grep -q 'run_restic init'; then
+  die "C12: corrupt snapshot failure still directly init"
+fi
+ok "C12 Restic corrupt-repo gate"
+
+# C13: atomic/offsite pull must not combine delete with ignore-errors
+grep -q 'rsync.*--delete.*--ignore-errors' "$pull" && \
+  die "C13: destructive rsync ignore-errors"
+ok "C13 backup-pull destructive delete guarded"
+
+# C14: restore-check remote path must match STORAGE_TYPE/RESTIC_REPOSITORY
+grep -q 'RESTIC_REMOTE' "$restore" || die "C14: restore remote path variable yok"
+grep -q 'RESTIC_REPOSITORY=/mnt/ssd/pi-gateway-data/backups/restic' "$restore" && \
+  die "C14: restore-check hardcoded SSD-data path"
+ok "C14 restore path aligned"
+
+# C15: config snapshot must fail instead of printing false success
+grep -q 'cp .*|| true' "$backup_snapshot" && die "C15: backup snapshot cp error swallowed"
+ok "C15 config snapshot fail-closed"
+
+# C16: root systemd scripts use non-evaluating env parser
+[[ -f "$env_loader" ]] || die "C16: safe env loader yok"
+for root_script in \
+  "$ROOT/scripts/pi/recover-readonly-root.sh" \
+  "$ROOT/scripts/pi/stack-watchdog.sh" \
+  "$ROOT/scripts/pi/ssd-hotplug-handler.sh" \
+  "$ROOT/scripts/pi/setup-ssd-data.sh"; do
+  grep -q 'source.*\.env' "$root_script" && die "C16: root script source ediyor: $root_script"
+done
+ok "C16 root env command execution kapali"
+
+# C17: health failure service is wired
+grep -q 'OnFailure=.*pi-gateway-health-failure.service' "$health_unit" \
+  || die "C17: health OnFailure wiring yok"
+ok "C17 health failure alert wiring"
+
+# C18: Syncthing sync ports bind only to LAN IP
+grep -q '"\${PI_STATIC_IP:-127.0.0.1}:22000:22000/tcp"' "$compose" \
+  || die "C18: Syncthing TCP global bind"
+grep -q '"\${PI_STATIC_IP:-127.0.0.1}:22000:22000/udp"' "$compose" \
+  || die "C18: Syncthing UDP global bind"
+ok "C18 Syncthing LAN-only bind"
+
+# C19: Redis opt-in requires authentication
+grep -q 'REDIS_PASSWORD' "$compose" || die "C19: Redis password yok"
+grep -q 'REDIS_PASSWORD' "$ROOT/.env.example" || die "C19: Redis password env yok"
+ok "C19 Redis auth"
+
+# C20: every compose image is digest pinned
+if grep -E '^[[:space:]]+image: ' "$compose" | grep -vq '@sha256:'; then
+  die "C20: mutable compose image tag"
+fi
+ok "C20 compose digest pins"
+
+# C21: Tailscale subnet route is least-privilege and SSH excludes root
+if grep -q '192\.168\.0\.0/16\|"root"' "$tailscale_acl"; then
+  die "C21: broad Tailscale ACL/root SSH access"
+fi
+grep -q 'YOUR_TAILSCALE_LAN_SUBNET:53,80,443,22000' "$tailscale_acl" \
+  || die "C21: Tailscale LAN port allowlist yok"
+grep -q 'DEFAULT_FORWARD_POLICY="DROP"' "$tailscale_remote" \
+  || die "C21: Tailscale forward policy DROP yok"
+grep -q 'ts-subnet-dns-udp\|ts-subnet-https' "$tailscale_remote" \
+  || die "C21: Tailscale route allowlist yok"
+ok "C21 Tailscale least privilege"
+
+# C22: backup service must expose Restic failure to systemd
+grep -q 'restic_failed=1\|exit "\$restic_failed"' "$backup_snapshot" \
+  || die "C22: backup Restic failure swallowed"
+ok "C22 backup failure visible"
+
+# C23: privileged copy checks source stability and final hash
+grep -q 'source install sirasinda degisti\|group/world-writable' "$install_priv" \
+  || die "C23: privileged source TOCTOU guard yok"
+grep -q 'after=.*sha256sum\|install hash uyusmazligi' "$install_priv" \
+  || die "C23: installed hash verification yok"
+ok "C23 privileged install integrity"
+
+# C24: Restic helper image is immutable by default
+grep -q 'restic/restic@sha256:' "$restic" "$pull" "$restore" \
+  || die "C24: Restic helper image mutable"
+ok "C24 Restic image digest pin"
+
+# C25: deploy must not put Tailscale secret in SSH argv
+if grep -q 'ssh .*TAILSCALE_AUTHKEY=' "$deploy"; then
+  die "C25: Tailscale auth key SSH argv leak"
+fi
+ok "C25 deploy secret argv safe"
 
 # W1: offsite missing/stale hard-fail (unless WEAK_BACKUP_OK)
 grep -A25 'last-offsite-backup' "$health" | grep -q 'offsite-backup-missing' \

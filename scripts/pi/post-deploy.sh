@@ -62,7 +62,7 @@ if [[ "$DEPLOY_DEGRADED" -eq 1 ]]; then
 fi
 
 # Placeholder sifreleri fail-closed
-for key in AGH_ADMIN_PASSWORD DOZZLE_ADMIN_PASSWORD RESTIC_PASSWORD FORGEJO_ADMIN_PASSWORD N8N_WEBHOOK_SECRET UPTIME_KUMA_ADMIN_PASSWORD SYNCTHING_GUI_PASSWORD; do
+for key in AGH_ADMIN_PASSWORD DOZZLE_ADMIN_PASSWORD RESTIC_PASSWORD FORGEJO_ADMIN_PASSWORD N8N_WEBHOOK_SECRET UPTIME_KUMA_ADMIN_PASSWORD SYNCTHING_GUI_PASSWORD REDIS_PASSWORD; do
   val="${!key:-}"
   case "$val" in
     ""|CHANGE_ME*|Degistir*)
@@ -80,6 +80,9 @@ for key in AGH_ADMIN_PASSWORD DOZZLE_ADMIN_PASSWORD RESTIC_PASSWORD FORGEJO_ADMI
       fi
       # Uptime Kuma is always deployed (no compose profile) — never skip on ENABLE_N8N
       if [[ "$key" == "SYNCTHING_GUI_PASSWORD" && "${ENABLE_SYNCTHING:-true}" != "true" ]]; then
+        continue
+      fi
+      if [[ "$key" == "REDIS_PASSWORD" && "${ENABLE_REDIS:-false}" != "true" ]]; then
         continue
       fi
       log "HATA: $key bos veya placeholder — .env duzelt"

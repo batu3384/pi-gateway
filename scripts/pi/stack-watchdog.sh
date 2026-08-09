@@ -6,8 +6,14 @@ REMOTE_DIR="${REMOTE_DIR:-/home/${USER:-pi}/pi-gateway}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_TAG="pi-gateway-watchdog"
 
-# shellcheck source=/dev/null
-[[ -f "$REMOTE_DIR/.env" ]] && set -a && source "$REMOTE_DIR/.env" && set +a
+# shellcheck source=../lib/env-file.sh
+source "$SCRIPT_DIR/../lib/env-file.sh"
+_WATCHDOG_REMOTE_DIR="$REMOTE_DIR"
+load_env_file "$REMOTE_DIR/.env" || {
+  log "HATA: .env dotenv parser hatasi"
+  exit 1
+}
+REMOTE_DIR="$_WATCHDOG_REMOTE_DIR"
 # shellcheck source=../lib/stack-health.sh
 source "$SCRIPT_DIR/../lib/stack-health.sh"
 

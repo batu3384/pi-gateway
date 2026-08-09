@@ -34,7 +34,9 @@ if ! SD_HEALTH_AUTO_RECOVER=false SSD_HEALTH_AUTO=true REMOTE_DIR="$REMOTE_DIR" 
   sd_fail=1
 fi
 
-if [[ "$STACK_AUTO_RECOVER" == "true" ]] && { ! stack_fully_healthy || ! root_rw_ok; }; then
+if [[ "$STACK_AUTO_RECOVER" == "true" ]] && {
+  storage_restore_pending || ! stack_fully_healthy || ! root_rw_ok
+}; then
   if stack_recover_suppressed; then
     logger -t "$LOG_TAG" "stack recover atlandi (cooldown/boot grace)"
   else

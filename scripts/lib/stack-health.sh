@@ -116,6 +116,12 @@ storage_degraded() {
   [[ -f "${STORAGE_DEGRADED_FLAG}" ]]
 }
 
+storage_restore_pending() {
+  storage_degraded || return 1
+  declare -F ssd_mount_healthy >/dev/null 2>&1 || return 1
+  ssd_mount_healthy
+}
+
 set_storage_degraded() {
   ensure_runtime_dir
   if touch "$STORAGE_DEGRADED_FLAG" 2>/dev/null; then
@@ -146,6 +152,10 @@ stack_recover_suppressed() {
   local last_ts now uptime_sec cooldown
   if recover_service_running; then
     return 0
+  fi
+  # SSD returned while degraded: recovery is the next state transition, never suppress it.
+  if storage_restore_pending; then
+    return 1
   fi
   cooldown="$STACK_RECOVER_COOLDOWN_SEC"
   if storage_degraded; then
@@ -330,7 +340,7 @@ trigger_stack_recover() {
 
   wait_for_recover_service || true
 
-  if stack_fully_healthy && root_rw_ok; then
+  if ! storage_restore_pending && stack_fully_healthy && root_rw_ok; then
     apply_adguard_rewrites_best_effort "$remote_dir"
     return 0
   fi

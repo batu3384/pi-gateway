@@ -13,15 +13,18 @@ fi
 
 STAMP="$(date +%Y%m%d-%H%M%S)"
 DEST="$REMOTE_DIR/backups/$STAMP"
-mkdir -p "$DEST"
+STAGING="$REMOTE_DIR/backups/.staging-$STAMP-$$"
+mkdir -p "$STAGING"
+trap 'rm -rf "$STAGING"' EXIT
 
-cp "$REMOTE_DIR/compose/docker-compose.yml" "$DEST/" 2>/dev/null || true
-cp -r "$REMOTE_DIR/config" "$DEST/" 2>/dev/null || true
+cp "$REMOTE_DIR/compose/docker-compose.yml" "$STAGING/"
+cp -r "$REMOTE_DIR/config" "$STAGING/"
 
 # .env sifreleri duz metin yedeklenmez — anahtar listesi yeterli (restic sifreli repo)
 if [[ -f "$REMOTE_DIR/.env" ]]; then
-  grep -E '^[A-Z][A-Z0-9_]*=' "$REMOTE_DIR/.env" | cut -d= -f1 | sort > "$DEST/env-keys.txt"
+  grep -E '^[A-Z][A-Z0-9_]*=' "$REMOTE_DIR/.env" | cut -d= -f1 | sort > "$STAGING/env-keys.txt"
 fi
+mv "$STAGING" "$DEST"
 
 echo "Backup saved: $DEST (secrets excluded; use restic for encrypted data)"
 
@@ -31,6 +34,12 @@ source "$SCRIPT_DIR/../lib/notify.sh"
 # shellcheck source=/dev/null
 [[ -f "$REMOTE_DIR/.env" ]] && set -a && source "$REMOTE_DIR/.env" && set +a
 
+restic_failed=0
+if [[ "${ENABLE_RESTIC:-true}" == "true" ]] && [[ ! -x "$REMOTE_DIR/scripts/pi/restic-backup.sh" ]]; then
+  echo "[backup] HATA: restic-backup.sh yok veya executable degil" >&2
+  notify_backup_fail "restic-backup.sh missing"
+  exit 1
+fi
 if [[ -x "$REMOTE_DIR/scripts/pi/restic-backup.sh" ]]; then
   export REMOTE_DIR
   if restic_out="$(bash "$REMOTE_DIR/scripts/pi/restic-backup.sh" 2>&1)"; then
@@ -46,5 +55,7 @@ if [[ -x "$REMOTE_DIR/scripts/pi/restic-backup.sh" ]]; then
     printf '%s\n' "$restic_out"
     echo "[backup] WARN: restic hata"
     notify_backup_fail "$(printf '%s\n' "$restic_out" | tail -5 | tr '\n' ' ')"
+    restic_failed=1
   fi
 fi
+exit "$restic_failed"
