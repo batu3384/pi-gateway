@@ -18,8 +18,10 @@ compose_profiles() {
   printf '%s\n' "${profiles[@]}"
 }
 
-# Caller: mapfile -t profiles < <(compose_profiles)
 load_compose_profiles() {
   profiles=()
-  mapfile -t profiles < <(compose_profiles)
+  local profile
+  while IFS= read -r profile; do
+    [[ -n "$profile" ]] && profiles[${#profiles[@]}]="$profile"
+  done < <(compose_profiles)
 }

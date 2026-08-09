@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Tailscale ACL: yalnizca group:owners -> Pi ve ev LAN
 set -euo pipefail
+export LC_ALL=C
 
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 # shellcheck source=/dev/null

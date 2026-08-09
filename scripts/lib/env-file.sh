@@ -2,7 +2,7 @@
 # Parse simple dotenv assignments without evaluating shell syntax.
 
 load_env_file() {
-  local file="$1" line key value
+  local file="$1" line key value LC_ALL=C
   [[ -r "$file" ]] || return 0
 
   while IFS= read -r line || [[ -n "$line" ]]; do

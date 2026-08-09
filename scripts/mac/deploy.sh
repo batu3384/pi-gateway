@@ -10,8 +10,11 @@ PI_USER="${PI_USER:-pi}"
 PI_HOST="${PI_HOST:-}"
 REMOTE_DIR="${REMOTE_DIR:-/home/$PI_USER/pi-gateway}"
 STORAGE_TYPE="${STORAGE_TYPE:-hybrid}"
+PI_DEPLOY_HOST="${PI_DEPLOY_HOST:-}"
+SSH_HOST="${PI_DEPLOY_HOST:-$PI_HOST}"
+export PI_DEPLOY_HOST
 
-[[ -n "$PI_HOST" ]] || die "PI_HOST required"
+[[ -n "$SSH_HOST" ]] || die "PI_HOST or PI_DEPLOY_HOST required"
 
 "$SCRIPT_DIR/render-config.sh"
 "$SCRIPT_DIR/validate.sh"
@@ -19,11 +22,13 @@ STORAGE_TYPE="${STORAGE_TYPE:-hybrid}"
 
 # shellcheck source=../lib/compose-profiles.sh
 source "$SCRIPT_DIR/../lib/compose-profiles.sh"
-mapfile -t PROFILES < <(compose_profiles)
+load_compose_profiles
+# shellcheck disable=SC2154
+PROFILES=("${profiles[@]}")
 
-log "Deploy -> $PI_USER@$PI_HOST:$REMOTE_DIR"
+log "Deploy -> $PI_USER@$SSH_HOST:$REMOTE_DIR"
 
-ssh -o ConnectTimeout=15 "$PI_USER@$PI_HOST" "mkdir -p '$REMOTE_DIR'"
+ssh -o ConnectTimeout=15 "$PI_USER@$SSH_HOST" "mkdir -p '$REMOTE_DIR'"
 
 rsync -avz --delete \
   --exclude '.git' \
@@ -43,10 +48,10 @@ rsync -avz --delete \
   --exclude 'backups' \
   --exclude '*.bak' \
   --exclude 'legacy/' \
-  "$PROJECT_DIR/" "$PI_USER@$PI_HOST:$REMOTE_DIR/"
+  "$PROJECT_DIR/" "$PI_USER@$SSH_HOST:$REMOTE_DIR/"
 
-scp "$PROJECT_DIR/.env" "$PI_USER@$PI_HOST:/tmp/pi-gateway.env.new"
-ssh "$PI_USER@$PI_HOST" "REMOTE_DIR='$REMOTE_DIR' bash -s" <<'ENVMERGE'
+scp "$PROJECT_DIR/.env" "$PI_USER@$SSH_HOST:/tmp/pi-gateway.env.new"
+ssh "$PI_USER@$SSH_HOST" "REMOTE_DIR='$REMOTE_DIR' bash -s" <<'ENVMERGE'
 set -euo pipefail
 R="${REMOTE_DIR}"
 NEW="/tmp/pi-gateway.env.new"
@@ -101,10 +106,10 @@ ENVMERGE
 
 "$SCRIPT_DIR/sync-rendered-configs.sh" || log "WARN: rendered config sync atlandi"
 
-ssh "$PI_USER@$PI_HOST" "REMOTE_DIR='$REMOTE_DIR' bash -s" \
+ssh "$PI_USER@$SSH_HOST" "REMOTE_DIR='$REMOTE_DIR' bash -s" \
   < "$SCRIPT_DIR/../pi/bootstrap.sh"
 
-DEPLOY_HOST="${PI_STATIC_IP:-$PI_HOST}"
+DEPLOY_HOST="${PI_DEPLOY_HOST:-${PI_STATIC_IP:-$PI_HOST}}"
 
 # Deploy is non-interactive: SSH key auth required (password prompts hang/fail).
 wait_ssh() {

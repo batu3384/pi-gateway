@@ -8,7 +8,7 @@ source "$SCRIPT_DIR/../lib/common.sh"
 load_env
 
 PI_USER="${PI_USER:-pi}"
-PI_HOST="${PI_STATIC_IP:-${PI_HOST:-}}"
+PI_HOST="${PI_DEPLOY_HOST:-${PI_STATIC_IP:-${PI_HOST:-}}}"
 REMOTE_DIR="${REMOTE_DIR:-/home/$PI_USER/pi-gateway}"
 
 [[ -n "$PI_HOST" ]] || die "PI_STATIC_IP gerekli"

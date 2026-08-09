@@ -193,7 +193,7 @@ services:
       retries: 3
 
   n8n:
-    image: docker.n8n.io/n8nio/n8n@sha256:d1606a508b1e426de07a98fa10f3758ef474b17590c6f181a0dd38c999f8190
+    image: docker.n8n.io/n8nio/n8n@sha256:60ad3a0ffd2490c4f0d021b95cb4ef856c4d31fb7fa6a6ffa60fd0f4ed1d89ab
     container_name: n8n
     restart: unless-stopped
     profiles: ["n8n"]

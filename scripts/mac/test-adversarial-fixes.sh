@@ -22,6 +22,7 @@ smoke="$ROOT/scripts/pi/smoke-test.sh"
 firewall="$ROOT/scripts/pi/setup-firewall.sh"
 install_priv="$ROOT/scripts/pi/install-privileged-scripts.sh"
 sync_cfg="$ROOT/scripts/mac/sync-rendered-configs.sh"
+predeploy="$ROOT/scripts/mac/pre-deploy-check.sh"
 ssd_setup="$ROOT/scripts/pi/setup-ssd-data.sh"
 docker_fallback="$ROOT/scripts/pi/setup-docker-fallback.sh"
 backup_snapshot="$ROOT/scripts/pi/backup.sh"
@@ -29,6 +30,7 @@ env_loader="$ROOT/scripts/lib/env-file.sh"
 health_unit="$ROOT/host/systemd/pi-gateway-health.service"
 compose="$ROOT/compose/docker-compose.yml"
 tailscale_acl="$ROOT/config/tailscale/acl.hujson.example"
+tailscale_acl_script="$ROOT/scripts/pi/setup-tailscale-acl.sh"
 tailscale_remote="$ROOT/scripts/pi/setup-tailscale-remote.sh"
 
 # C1: force-recreate fail must not finish_ok / cooldown
@@ -171,6 +173,12 @@ ok "C19 Redis auth"
 if grep -E '^[[:space:]]+image: ' "$compose" | grep -vq '@sha256:'; then
   die "C20: mutable compose image tag"
 fi
+awk '/^[[:space:]]+image: .*@sha256:/ {
+  split($0, digest, "@sha256:")
+  if (length(digest[2]) != 64) bad=1
+}
+END { exit bad }' "$compose" \
+  || die "C20: invalid sha256 digest length"
 ok "C20 compose digest pins"
 
 # C21: Tailscale subnet route is least-privilege and SSH excludes root
@@ -183,6 +191,8 @@ grep -q 'DEFAULT_FORWARD_POLICY="DROP"' "$tailscale_remote" \
   || die "C21: Tailscale forward policy DROP yok"
 grep -q 'ts-subnet-dns-udp\|ts-subnet-https' "$tailscale_remote" \
   || die "C21: Tailscale route allowlist yok"
+grep -q 'LC_ALL=C' "$tailscale_acl_script" \
+  || die "C21: Tailscale ACL regex locale sabit degil"
 ok "C21 Tailscale least privilege"
 
 # C22: backup service must expose Restic failure to systemd
@@ -207,6 +217,18 @@ if grep -q 'ssh .*TAILSCALE_AUTHKEY=' "$deploy"; then
   die "C25: Tailscale auth key SSH argv leak"
 fi
 ok "C25 deploy secret argv safe"
+
+# C26: management SSH address can differ from LAN service bind address
+for deploy_script in "$deploy" "$predeploy" "$sync_cfg"; do
+  grep -q 'PI_DEPLOY_HOST' "$deploy_script" \
+    || die "C26: Tailscale deploy host override yok: $deploy_script"
+done
+ok "C26 deploy host override"
+
+# C27: dotenv identifier regex must be locale-stable on the Pi
+grep -q 'LC_ALL=C' "$env_loader" \
+  || die "C27: dotenv parser locale sabitlemiyor"
+ok "C27 dotenv locale stability"
 
 # W1: offsite missing/stale hard-fail (unless WEAK_BACKUP_OK)
 grep -A25 'last-offsite-backup' "$health" | grep -q 'offsite-backup-missing' \

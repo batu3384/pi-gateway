@@ -13,8 +13,9 @@ PI_USER="${PI_USER:-pi}"
 PI_HOST="${PI_HOST:-}"
 REMOTE_DIR="${REMOTE_DIR:-/home/$PI_USER/pi-gateway}"
 STORAGE_TYPE="${STORAGE_TYPE:-hybrid}"
+PI_DEPLOY_HOST="${PI_DEPLOY_HOST:-}"
 
-[[ -n "$PI_HOST" ]] || die "PI_HOST required"
+[[ -n "${PI_DEPLOY_HOST:-$PI_HOST}" ]] || die "PI_HOST or PI_DEPLOY_HOST required"
 
 if [[ -d "$PROJECT_DIR/data" && ! -L "$PROJECT_DIR/data" ]]; then
   if find "$PROJECT_DIR/data" -type f -print -quit 2>/dev/null | grep -q .; then
@@ -24,7 +25,7 @@ if [[ -d "$PROJECT_DIR/data" && ! -L "$PROJECT_DIR/data" ]]; then
   rm -rf "$PROJECT_DIR/data"
 fi
 
-DEPLOY_HOST="${PI_STATIC_IP:-$PI_HOST}"
+DEPLOY_HOST="${PI_DEPLOY_HOST:-${PI_STATIC_IP:-$PI_HOST}}"
 log "Pre-deploy: data symlink check ($PI_USER@$DEPLOY_HOST)"
 
 # Classify Pi state (fresh vs broken) before soft-failing
