@@ -92,8 +92,7 @@ PY
 rm -f "$NEW"
 ENVMERGE
 "$SCRIPT_DIR/sync-rendered-configs.sh" || log "WARN: rendered config sync atlandi"
-ssh "$PI_USER@$SSH_HOST" "REMOTE_DIR='$REMOTE_DIR' bash -s" \
-  < "$SCRIPT_DIR/../pi/bootstrap.sh"
+ssh "$PI_USER@$SSH_HOST" "REMOTE_DIR='$REMOTE_DIR' bash '$REMOTE_DIR/scripts/pi/bootstrap.sh'"
 DEPLOY_HOST="${PI_DEPLOY_HOST:-${PI_STATIC_IP:-$PI_HOST}}"
 # Deploy is non-interactive: SSH key auth required (password prompts hang/fail).
 wait_ssh() {
@@ -156,8 +155,8 @@ else
   fi
 fi
 sleep 12
-ssh "$PI_USER@$DEPLOY_HOST" "REMOTE_DIR='$REMOTE_DIR' bash -s" < "$SCRIPT_DIR/../pi/post-deploy.sh"
-ssh "$PI_USER@$DEPLOY_HOST" "REMOTE_DIR='$REMOTE_DIR' bash -s" < "$SCRIPT_DIR/../pi/smoke-test.sh"
+ssh "$PI_USER@$DEPLOY_HOST" "REMOTE_DIR='$REMOTE_DIR' bash '$REMOTE_DIR/scripts/pi/post-deploy.sh'"
+ssh "$PI_USER@$DEPLOY_HOST" "REMOTE_DIR='$REMOTE_DIR' bash '$REMOTE_DIR/scripts/pi/smoke-test.sh'"
 log "Deploy complete"
 DOMAIN="${LAN_DOMAIN:-home}"
 log "  Gateway : https://gateway.${DOMAIN}"
