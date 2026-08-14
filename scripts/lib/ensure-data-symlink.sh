@@ -134,6 +134,11 @@ repair_fallback_sd() {
   if [[ -L "${REMOTE_DIR}/data" ]]; then
     rm -f "${REMOTE_DIR}/data"
   fi
+  if [[ -d "${REMOTE_DIR}/data" && ! -w "${REMOTE_DIR}/data" ]]; then
+    local owner
+    owner="$(stat -c '%U' "$REMOTE_DIR" 2>/dev/null || echo "${USER:-pi}")"
+    run_as_needed chown -R "${owner}:${owner}" "${REMOTE_DIR}/data"
+  fi
   ensure_tree_on "${REMOTE_DIR}/data"
   touch "${REMOTE_DIR}/data/${SD_DEGRADED_MARKER}"
   mkdir -p "$(dirname "$STORAGE_DEGRADED_FLAG")" 2>/dev/null || true

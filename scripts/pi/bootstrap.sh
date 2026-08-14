@@ -153,7 +153,11 @@ if [[ -f "$REMOTE_DIR/scripts/pi/ensure-data-symlink.sh" ]]; then
   echo "[bootstrap] Veri dizini kontrolu..."
   data_script="$REMOTE_DIR/scripts/pi/ensure-data-symlink.sh"
   if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
-    REMOTE_DIR="$REMOTE_DIR" STORAGE_TYPE="$STORAGE_TYPE" bash "$data_script" repair || {
+    data_args=(repair)
+    if [[ -f /run/pi-gateway/storage-degraded ]] || ! mountpoint -q /mnt/ssd 2>/dev/null; then
+      data_args+=(--fallback-sd)
+    fi
+    REMOTE_DIR="$REMOTE_DIR" STORAGE_TYPE="$STORAGE_TYPE" bash "$data_script" "${data_args[@]}" || {
       echo "[bootstrap] HATA: data symlink onarilamadi (/mnt/ssd ve STORAGE_FALLBACK_SD kontrol)"
       exit 1
     }
