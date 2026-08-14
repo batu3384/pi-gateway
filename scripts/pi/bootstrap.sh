@@ -115,7 +115,7 @@ sudo systemctl start pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-
 if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
   if [[ -x "$REMOTE_DIR/scripts/pi/ensure-ssd-fstab.sh" ]]; then
     echo "[bootstrap] SSD fstab kontrolu..."
-    sudo bash "$REMOTE_DIR/scripts/pi/ensure-ssd-fstab.sh" || {
+    sudo REMOTE_DIR="$REMOTE_DIR" bash "$REMOTE_DIR/scripts/pi/ensure-ssd-fstab.sh" || {
       echo "[bootstrap] HATA: SSD fstab kontrolu basarisiz"
       exit 1
     }
