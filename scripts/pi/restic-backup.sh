@@ -1,18 +1,13 @@
 #!/usr/bin/env bash
 # Restic yedekleme — config + SSD veri (repo SSD uzerinde, dongusal degil)
 set -euo pipefail
-
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../lib/stack-health.sh
 source "$SCRIPT_DIR/../lib/stack-health.sh"
 # shellcheck source=../lib/env-file.sh
 source "$SCRIPT_DIR/../lib/env-file.sh"
-load_env_file "$REMOTE_DIR/.env" || {
-  echo "[restic] HATA: .env dotenv parser hatasi" >&2
-  exit 1
-}
-
+read_remote_dotenv || { echo "[restic] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 ENABLE_RESTIC="${ENABLE_RESTIC:-true}"
 RESTIC_PASSWORD="${RESTIC_PASSWORD:-}"
 if is_ssd_root_mode; then
@@ -25,12 +20,9 @@ RESTIC_TIMEOUT_SEC="${RESTIC_TIMEOUT_SEC:-7200}"
 RESTIC_CHOWN_TIMEOUT_SEC="${RESTIC_CHOWN_TIMEOUT_SEC:-120}"
 RESTIC_REINIT_MARKER="${RESTIC_REINIT_MARKER:-/var/lib/pi-gateway/restic-reinit}"
 RESTIC_ALLOW_REINIT="${RESTIC_ALLOW_REINIT:-false}"
-
 log() { echo "[restic] $*"; }
-
 [[ "$ENABLE_RESTIC" == "true" ]] || { log "atlandi (ENABLE_RESTIC=false)"; exit 0; }
 [[ -n "$RESTIC_PASSWORD" ]] || { log "HATA: RESTIC_PASSWORD .env icinde bos"; exit 1; }
-
 if is_ssd_root_mode; then
   if ! root_on_ssd; then
     log "HATA: ssd-root modunda root SSD degil — yedek atlandi"
@@ -41,12 +33,10 @@ elif [[ -f /run/pi-gateway/storage-degraded ]] || ! mountpoint -q /mnt/ssd 2>/de
   log "SSD mount yok veya degraded — yedek atlandi"
   exit 0
 fi
-
 DATA_ROOT="${REMOTE_DIR}/data"
 if [[ -L "$DATA_ROOT" ]]; then
   DATA_ROOT="$(readlink -f "$DATA_ROOT")"
 fi
-
 REPO_HOST_PATH="$RESTIC_REPOSITORY"
 if [[ -e "$REPO_HOST_PATH" && ! -d "$REPO_HOST_PATH" ]]; then
   log "HATA: Restic repository path klasor degil: $REPO_HOST_PATH"
@@ -57,7 +47,6 @@ if [[ -d "$REPO_HOST_PATH" ]] && find "$REPO_HOST_PATH" -mindepth 1 -print -quit
   REPO_WAS_PRESENT=1
 fi
 mkdir -p "$REPO_HOST_PATH"
-
 run_restic() {
   timeout "$RESTIC_TIMEOUT_SEC" docker run --rm --network none \
     -e RESTIC_PASSWORD \
@@ -68,9 +57,7 @@ run_restic() {
     -v "${DATA_ROOT}:/backup/data:ro" \
     "$RESTIC_IMAGE" "$@"
 }
-
 export RESTIC_PASSWORD
-
 if ! run_restic snapshots >/dev/null 2>&1; then
   if [[ "$REPO_WAS_PRESENT" -eq 1 ]]; then
     log "HATA: mevcut Restic repo okunamiyor — init reddedildi; repair/recovery gerekli"
@@ -82,11 +69,9 @@ if ! run_restic snapshots >/dev/null 2>&1; then
   log "Repo olusturuluyor: $REPO_HOST_PATH"
   run_restic init
 fi
-
 RESTIC_BACKUP_HOST="${RESTIC_BACKUP_HOST:-${PI_HOSTNAME:-$(hostname -s)}}"
 STAMP="$(date -Iseconds)"
 log "Yedek basliyor ($STAMP)"
-
 do_backup() {
   run_restic backup \
     /backup/config \
@@ -98,7 +83,6 @@ do_backup() {
     --exclude '/backup/data/**/work/data' \
     --exclude '*.tmp'
 }
-
 REINIT_DONE=0
 if ! do_backup; then
   log "WARN: backup fail — restic repair snapshots deneniyor"
@@ -136,13 +120,10 @@ if ! do_backup; then
     }
   fi
 fi
-
 run_restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune
 run_restic snapshots --last
-
 timeout "$RESTIC_CHOWN_TIMEOUT_SEC" sudo chown -R "${USER}:${USER}" "$REPO_HOST_PATH" 2>/dev/null \
   || log "WARN: chown timeout/atlandi ($RESTIC_CHOWN_TIMEOUT_SEC s)"
-
 # shellcheck source=../lib/notify.sh
 source "$SCRIPT_DIR/../lib/notify.sh"
 if [[ "$REINIT_DONE" -eq 1 ]]; then

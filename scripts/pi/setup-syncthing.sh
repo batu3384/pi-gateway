@@ -1,29 +1,26 @@
 #!/usr/bin/env bash
 # Syncthing: Mac cihazini ve Projects klasorunu yapilandirir
 set -euo pipefail
-
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
-# shellcheck source=/dev/null
-[[ -f "$REMOTE_DIR/.env" ]] && source "$REMOTE_DIR/.env"
-
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_PG_ENV_LIB="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}/../lib/env-file.sh"
+PG_SCRIPT_NAME="$(basename "$0")"
+# shellcheck source=../lib/env-file.sh
+source "${_PG_ENV_LIB:?}"
+read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 SYNCTHING_MAC_DEVICE_ID="${SYNCTHING_MAC_DEVICE_ID:-}"
 SYNCTHING_FOLDER_ID="${SYNCTHING_FOLDER_ID:-projects}"
 SYNCTHING_FOLDER_LABEL="${SYNCTHING_FOLDER_LABEL:-Projects}"
 PI_STATIC_IP="${PI_STATIC_IP:-}"
 SYNCTHING_PORT="${SYNCTHING_PORT:-8384}"
-
 log() { echo "[syncthing-setup] $*"; }
-
 [[ -n "$PI_STATIC_IP" ]] || { log "HATA: PI_STATIC_IP bos"; exit 1; }
 [[ -n "$SYNCTHING_MAC_DEVICE_ID" ]] || { log "SYNCTHING_MAC_DEVICE_ID bos — atlandi"; exit 0; }
-
 docker ps --format '{{.Names}}' | grep -q '^syncthing$' || { log "syncthing container yok"; exit 0; }
-
 APIKEY="$(docker exec syncthing sed -n 's:.*<apikey>\([^<]*\)</apikey>.*:\1:p' /var/syncthing/config/config.xml 2>/dev/null | head -1 || true)"
 PI_ID="$(docker exec syncthing sed -n 's:.*<device id="\([^"]*\)".*:\1:p' /var/syncthing/config/config.xml 2>/dev/null | head -1 || true)"
 [[ -n "$APIKEY" && -n "$PI_ID" ]] || { log "Syncthing config okunamadi"; exit 1; }
 BASE="http://127.0.0.1:${SYNCTHING_PORT}"
-
 api() {
   local method="$1" path="$2" data="${3:-}"
   if [[ -n "$data" ]]; then
@@ -33,7 +30,6 @@ api() {
     curl -fsS -X "$method" -H "X-API-Key: $APIKEY" "${BASE}${path}" 2>/dev/null
   fi
 }
-
 device_exists() {
   api GET "/rest/config/devices" | python3 -c "
 import json,sys
@@ -44,7 +40,6 @@ for d in json.load(sys.stdin):
 sys.exit(1)
 " "$SYNCTHING_MAC_DEVICE_ID"
 }
-
 folder_exists() {
   api GET "/rest/config/folders" | python3 -c "
 import json,sys
@@ -55,7 +50,6 @@ for f in json.load(sys.stdin):
 sys.exit(1)
 " "$SYNCTHING_FOLDER_ID"
 }
-
 if ! device_exists; then
   api POST "/rest/config/devices" "$(python3 - <<PY
 import json
@@ -71,17 +65,14 @@ PY
 else
   log "Mac cihazi zaten kayitli"
 fi
-
 # Pi'nin LAN uzerinden sync adresini duyur (Docker NAT)
 export BASE APIKEY PI_STATIC_IP
 python3 <<'PY'
 import json, os, subprocess, sys
-
 base = os.environ["BASE"]
 apikey = os.environ["APIKEY"]
 pi_ip = os.environ["PI_STATIC_IP"]
 addr = f"tcp://{pi_ip}:22000"
-
 raw = subprocess.check_output(
     ["curl", "-fsS", "-H", f"X-API-Key: {apikey}", f"{base}/rest/config/options"],
     text=True,
@@ -96,7 +87,6 @@ for key, val in [
     if opts.get(key) is not val:
         opts[key] = val
         changed = True
-
 if changed:
     subprocess.run(
         [
@@ -109,7 +99,6 @@ if changed:
         check=True,
     )
     print("[syncthing-setup] announce/nat secenekleri guncellendi")
-
 devices = json.loads(subprocess.check_output(
     ["curl", "-fsS", "-H", f"X-API-Key: {apikey}", f"{base}/rest/config/devices"],
     text=True,
@@ -138,10 +127,8 @@ for dev in devices:
         print(f"[syncthing-setup] Pi sync adresi: {addr}")
     break
 PY
-
 mkdir -p "${REMOTE_DIR}/data/projects"
 docker exec syncthing mkdir -p "/var/syncthing/Projects"
-
 if ! folder_exists; then
   api POST "/rest/config/folders" "$(python3 - <<PY
 import json
@@ -166,6 +153,5 @@ PY
 else
   log "Projects klasoru zaten var"
 fi
-
 log "Pi Device ID: ${PI_ID}"
 log "Tamamlandi"

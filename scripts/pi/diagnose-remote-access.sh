@@ -2,21 +2,20 @@
 # Uzaktan erisim teşhisi (Tailscale + *.home + TLS)
 # HTTPS probe: Host header yetmez — TLS SNI icin --resolve kullan
 set -euo pipefail
-
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
-# shellcheck source=/dev/null
-[[ -f "$REMOTE_DIR/.env" ]] && source "$REMOTE_DIR/.env"
-
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_PG_ENV_LIB="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}/../lib/env-file.sh"
+PG_SCRIPT_NAME="$(basename "$0")"
+# shellcheck source=../lib/env-file.sh
+source "${_PG_ENV_LIB:?}"
+read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 LAN_DOMAIN="${LAN_DOMAIN:-home}"
 PI_IP="${PI_STATIC_IP:-127.0.0.1}"
 ok=0 fail=0
-
 pass() { echo "[OK] $*"; ok=$((ok + 1)); }
 fail() { echo "[FAIL] $*"; fail=$((fail + 1)); }
 warn() { echo "[WARN] $*"; }
-
 echo "=== Pi Gateway uzaktan erisim ==="
-
 if command -v tailscale >/dev/null 2>&1 && tailscale status >/dev/null 2>&1; then
   TS_IP="$(tailscale ip -4 2>/dev/null | head -1)"
   TS_DNS="$(tailscale status --json 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('Self',{}).get('DNSName','').rstrip('.'))")"
@@ -53,13 +52,11 @@ else:
 else
   fail "Tailscale bagli degil"
 fi
-
 if dig +short @"${PI_IP}" "gateway.${LAN_DOMAIN}" A 2>/dev/null | grep -qx "${PI_IP}"; then
   pass "AdGuard rewrite gateway.${LAN_DOMAIN} -> ${PI_IP}"
 else
   warn "gateway.${LAN_DOMAIN} rewrite beklenen ${PI_IP} degil"
 fi
-
 # SNI zorunlu: -H Host yetmez (TLS alert / false FAIL)
 gw_code="$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 \
   --resolve "gateway.${LAN_DOMAIN}:443:127.0.0.1" \
@@ -69,7 +66,6 @@ if [[ "$gw_code" =~ ^(401|200|302)$ ]]; then
 else
   fail "Caddy gateway.${LAN_DOMAIN} HTTPS yanit vermiyor (${gw_code})"
 fi
-
 if [[ -n "${TS_DNS:-}" ]]; then
   # Serve uzerinden gercek MagicDNS (localhost Host+SNI yaniltir)
   code="$(curl -sk -o /dev/null -w "%{http_code}" --max-time 8 \
@@ -80,7 +76,6 @@ if [[ -n "${TS_DNS:-}" ]]; then
     fail "Tailscale Serve URL yanit vermiyor (${code})"
   fi
 fi
-
 echo ""
 echo "=== Ozet ==="
 echo "Telefon: http://\${TS_IP}/ veya Serve https://\${TS_DNS}/ (Safari; Telegram ici bazen kirar)"

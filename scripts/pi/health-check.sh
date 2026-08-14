@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=/dev/null
-[[ -f "$REMOTE_DIR/.env" ]] && set -a && source "$REMOTE_DIR/.env" && set +a
-STORAGE_TYPE="${STORAGE_TYPE:-hybrid}"
+_PG_ENV_LIB="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}/../lib/env-file.sh"
+PG_SCRIPT_NAME="$(basename "$0")"
+# shellcheck source=../lib/env-file.sh
+source "${_PG_ENV_LIB:?}"
+read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 # shellcheck source=../lib/adguard-api.sh
 source "$SCRIPT_DIR/../lib/adguard-api.sh"
 # shellcheck source=../lib/stack-health.sh
 source "$SCRIPT_DIR/../lib/stack-health.sh"
-
 LOG_TAG="pi-gateway-health"
 PI_STATIC_IP="${PI_STATIC_IP:-127.0.0.1}"
 LAN_DOMAIN="${LAN_DOMAIN:-home}"
@@ -20,20 +20,17 @@ STACK_AUTO_RECOVER="${STACK_AUTO_RECOVER:-true}"
 fail=0
 FAILURES=()
 sd_fail=0
-
 note_fail() {
   logger -t "$LOG_TAG" "FAIL $1"
   FAILURES+=("$1")
   fail=1
 }
-
 # SD sagligi (kurtarma yok — asagida recover-stack.sh)
 # SSD gozcu: timer'da kurtarsin (SSD_HEALTH_AUTO=true); SD RO recover kapali
 if ! SD_HEALTH_AUTO_RECOVER=false SSD_HEALTH_AUTO=true REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/check-sd-health.sh"; then
   fail=1
   sd_fail=1
 fi
-
 if [[ "$STACK_AUTO_RECOVER" == "true" ]] && {
   storage_restore_pending || ! stack_fully_healthy || ! root_rw_ok
 }; then
@@ -41,18 +38,17 @@ if [[ "$STACK_AUTO_RECOVER" == "true" ]] && {
     logger -t "$LOG_TAG" "stack recover atlandi (cooldown/boot grace)"
   else
     logger -t "$LOG_TAG" "stack/root auto-recover tetikleniyor"
-    bash "$SCRIPT_DIR/recover-stack.sh" || true
+    if ! bash "$SCRIPT_DIR/recover-stack.sh"; then
+      note_fail "stack-recover-failed"
+    fi
   fi
 fi
-
 if ! docker ps --format '{{.Names}}' | grep -q '^unbound$'; then
   note_fail "container unbound down"
 fi
-
 if ! docker ps --format '{{.Names}}' | grep -q '^adguard$'; then
   note_fail "container adguard down"
 fi
-
 if storage_degraded; then
   logger -t "$LOG_TAG" "storage-degraded: core DNS modu (caddy/panel opsiyonel)"
   [[ -d "${REMOTE_DIR}/data" && ! -L "${REMOTE_DIR}/data" ]] || note_fail "storage-degraded-data-missing"
@@ -60,11 +56,9 @@ else
   if ! docker ps --format '{{.Names}}' | grep -q '^caddy$'; then
     note_fail "container caddy down"
   fi
-
   if ! stack_gateway_ok; then
     note_fail "gateway-http"
   fi
-
   if is_ssd_root_mode; then
     root_on_ssd || note_fail "root-still-on-sd-mmcblk"
     [[ -d "${REMOTE_DIR}/data" && ! -L "${REMOTE_DIR}/data" ]] || note_fail "data-native-missing"
@@ -78,7 +72,6 @@ else
       note_fail "ssd-unmounted"
     fi
   fi
-
   optional_down() {
     local name="$1"
     docker ps --format '{{.Names}}' | grep -q "^${name}$" || note_fail "optional-${name}-down"
@@ -90,23 +83,18 @@ else
   [[ "${ENABLE_REDIS:-false}" == "true" ]] && optional_down redis
   [[ "${ENABLE_DOZZLE:-true}" == "true" ]] && optional_down dozzle
 fi
-
 if ! dig +time=2 +tries=1 @127.0.0.1 -p "${UNBOUND_PORT}" cloudflare.com A >/dev/null 2>&1; then
   note_fail "unbound:${UNBOUND_PORT}"
 fi
-
 if ! dig +time=2 +tries=1 @"${PI_STATIC_IP}" cloudflare.com A >/dev/null 2>&1; then
   note_fail "adguard:53"
 fi
-
 if ! dig +time=2 +tries=1 @"${PI_STATIC_IP}" doubleclick.net A 2>/dev/null | grep -Eq '0\.0\.0\.0|127\.0\.0\.0|NXDOMAIN'; then
   note_fail "adguard-block-test"
 fi
-
 if ! dig +time=2 +tries=1 @"${PI_STATIC_IP}" "git.${LAN_DOMAIN}" A +short 2>/dev/null | grep -qx "${PI_STATIC_IP}"; then
   note_fail "adguard-rewrite-git.${LAN_DOMAIN}"
 fi
-
 if [[ -n "${AGH_ADMIN_PASSWORD:-}" ]]; then
   COOKIE="$(mktemp)"
   BASE="http://127.0.0.1:${ADGUARD_WEB_PORT}"
@@ -137,7 +125,6 @@ print('1' if udp_ok and ptr_ok and ttl_ok else '0')
   fi
   rm -f "$COOKIE"
 fi
-
 # SSD varken DNS-only fail'leri ayır (cascade: container/gateway/ssd symlink)
 health_is_dns_only_fail() {
   local f="$1"
@@ -150,7 +137,6 @@ health_is_dns_only_fail() {
       ;;
   esac
 }
-
 if [[ "$fail" -eq 0 ]]; then
   logger -t "$LOG_TAG" "OK dns stack healthy"
   # shellcheck source=../lib/notify.sh
@@ -194,7 +180,6 @@ else
     notify_optional_warn "$host" "$details"
   fi
 fi
-
 DISK_WARN_PCT="${DISK_WARN_PCT:-80}"
 for mount in / /mnt/ssd; do
   if [[ -d "$mount" ]]; then
@@ -207,7 +192,6 @@ for mount in / /mnt/ssd; do
     fi
   fi
 done
-
 # Offsite backup SLA (SSD restic alone ≠ 3-2-1). Marker: make backup-pull
 if [[ "${ENABLE_RESTIC:-true}" == "true" ]]; then
   max_age="${OFFSITE_BACKUP_MAX_AGE_DAYS:-7}"
@@ -231,7 +215,6 @@ if [[ "${ENABLE_RESTIC:-true}" == "true" ]]; then
     fi
   fi
 fi
-
 # Opsiyonel-only: journal'da FAIL kalsın; systemd "Failed" spam olmasın.
 # SD veya çekirdek/SSD fail → exit 1. Offsite SLA da fail-exit (WEAK_BACKUP_OK escape).
 exit_code=0

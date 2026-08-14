@@ -1,48 +1,41 @@
 #!/usr/bin/env bash
 # Docker data-root'u USB SSD'ye tasir (hybrid: OS SD'de, imajlar SSD'de)
 set -euo pipefail
-
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
-# shellcheck source=/dev/null
-[[ -f "$REMOTE_DIR/.env" ]] && source "$REMOTE_DIR/.env"
-STORAGE_TYPE="${STORAGE_TYPE:-hybrid}"
-
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_PG_ENV_LIB="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}/../lib/env-file.sh"
+PG_SCRIPT_NAME="$(basename "$0")"
+# shellcheck source=../lib/env-file.sh
+source "${_PG_ENV_LIB:?}"
+read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 DOCKER_SSD_ROOT="${DOCKER_SSD_ROOT:-/mnt/ssd/docker}"
 DOCKER_LEGACY="/var/lib/docker"
 MARKER="/mnt/ssd/.docker-data-root"
 DAEMON_JSON="/etc/docker/daemon.json"
 DROPIN_DIR="/etc/systemd/system/docker.service.d"
 DROPIN_FILE="${DROPIN_DIR}/pi-gateway-ssd.conf"
-
 log() { echo "[docker-ssd] $*"; }
 die() { log "HATA: $*"; exit 1; }
-
 if [[ "$STORAGE_TYPE" == "ssd-root" || "$STORAGE_TYPE" == "ssd" ]]; then
   log "STORAGE_TYPE=${STORAGE_TYPE} — docker zaten rootfs (SSD) uzerinde, atlandi"
   exit 0
 fi
-
 [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]] || {
   log "STORAGE_TYPE=${STORAGE_TYPE:-?} — SSD docker yalnizca hybrid/ssd-data icin"
   exit 0
 }
-
 [[ "${ENABLE_DOCKER_SSD:-false}" == "true" ]] || { log "ENABLE_DOCKER_SSD=false — atlandi"; exit 0; }
-
 mountpoint -q /mnt/ssd || die "/mnt/ssd mount degil — once SSD kurulumu"
-
 if [[ -f "$MARKER" ]] && docker info 2>/dev/null | grep -q "Docker Root Dir: ${DOCKER_SSD_ROOT}"; then
   log "Zaten aktif: ${DOCKER_SSD_ROOT}"
   exit 0
 fi
-
 pre_cleanup() {
   log "On temizlik (SD alan acma)..."
   sudo apt-get clean -qq 2>/dev/null || true
   docker image rm louislam/uptime-kuma:1 2>/dev/null || true
   docker image prune -f 2>/dev/null || true
 }
-
 configure_daemon() {
   log "daemon.json: data-root=${DOCKER_SSD_ROOT}"
   sudo mkdir -p "$DOCKER_SSD_ROOT"
@@ -60,7 +53,6 @@ cfg["data-root"] = root
 path.write_text(json.dumps(cfg, indent=2) + "\n")
 PY
 }
-
 configure_systemd() {
   log "docker.service: SSD mount tercih (RequiresMountsFor yok — degraded fallback mumkun)"
   sudo mkdir -p "$DROPIN_DIR"
@@ -71,7 +63,6 @@ Wants=mnt-ssd.mount
 EOF
   sudo systemctl daemon-reload
 }
-
 migrate_data() {
   if [[ -d "$DOCKER_LEGACY" ]] && [[ "$(sudo ls -A "$DOCKER_LEGACY" 2>/dev/null)" ]]; then
     if [[ ! -d "${DOCKER_SSD_ROOT}/image" ]] && [[ ! -f "${DOCKER_SSD_ROOT}/engine-id" ]]; then
@@ -87,7 +78,6 @@ migrate_data() {
     sudo mkdir -p "$DOCKER_SSD_ROOT"
   fi
 }
-
 backup_legacy() {
   if [[ -d "$DOCKER_LEGACY" ]] && [[ ! -L "$DOCKER_LEGACY" ]]; then
     local bak
@@ -98,7 +88,6 @@ backup_legacy() {
     fi
   fi
 }
-
 restart_docker() {
   log "Docker yeniden baslatiliyor..."
   sudo systemctl stop docker docker.socket containerd 2>/dev/null || true
@@ -110,18 +99,14 @@ restart_docker() {
   done
   docker info >/dev/null 2>&1 || die "Docker baslamadi"
 }
-
 bring_up_stack() {
   log "Stack yeniden baslatiliyor..."
   cd "${REMOTE_DIR}/compose"
-  # shellcheck source=/dev/null
-  [[ -f "${REMOTE_DIR}/.env" ]] && set -a && source "${REMOTE_DIR}/.env" && set +a
   # shellcheck source=../lib/compose-profiles.sh
   source "${REMOTE_DIR}/scripts/lib/compose-profiles.sh"
   mapfile -t profiles < <(compose_profiles)
   docker compose --env-file ../.env "${profiles[@]}" up -d
 }
-
 verify() {
   local root
   root="$(docker info 2>/dev/null | awk -F': ' '/Docker Root Dir/{print $2}')"
@@ -131,7 +116,6 @@ verify() {
   echo "$DOCKER_SSD_ROOT" | sudo tee "$MARKER" >/dev/null
   log "Dogrulandi: Docker Root Dir = $root"
 }
-
 main() {
   pre_cleanup
   configure_daemon
@@ -145,5 +129,4 @@ main() {
   verify
   log "Tamamlandi — SD kartta ~10GB+ alan acildi"
 }
-
 main "$@"

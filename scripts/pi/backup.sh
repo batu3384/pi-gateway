@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Config snapshot + optional restic (Docker). Must run as PI_USER with REMOTE_DIR set.
 set -euo pipefail
-
 # systemd Environment=REMOTE_DIR wins; never trust root's $USER alone
 if [[ -z "${REMOTE_DIR:-}" ]]; then
   if [[ "$(id -u)" -eq 0 ]]; then
@@ -10,30 +9,27 @@ if [[ -z "${REMOTE_DIR:-}" ]]; then
   fi
   REMOTE_DIR="/home/${USER}/pi-gateway"
 fi
-
 STAMP="$(date +%Y%m%d-%H%M%S)"
 DEST="$REMOTE_DIR/backups/$STAMP"
 STAGING="$REMOTE_DIR/backups/.staging-$STAMP-$$"
 mkdir -p "$STAGING"
 trap 'rm -rf "$STAGING"' EXIT
-
 cp "$REMOTE_DIR/compose/docker-compose.yml" "$STAGING/"
 cp -r "$REMOTE_DIR/config" "$STAGING/"
-
 # .env sifreleri duz metin yedeklenmez — anahtar listesi yeterli (restic sifreli repo)
 if [[ -f "$REMOTE_DIR/.env" ]]; then
   grep -E '^[A-Z][A-Z0-9_]*=' "$REMOTE_DIR/.env" | cut -d= -f1 | sort > "$STAGING/env-keys.txt"
 fi
 mv "$STAGING" "$DEST"
-
 echo "Backup saved: $DEST (secrets excluded; use restic for encrypted data)"
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../lib/notify.sh
 source "$SCRIPT_DIR/../lib/notify.sh"
-# shellcheck source=/dev/null
-[[ -f "$REMOTE_DIR/.env" ]] && set -a && source "$REMOTE_DIR/.env" && set +a
-
+_PG_ENV_LIB="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}/../lib/env-file.sh"
+PG_SCRIPT_NAME="$(basename "$0")"
+# shellcheck source=../lib/env-file.sh
+source "${_PG_ENV_LIB:?}"
+read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 restic_failed=0
 if [[ "${ENABLE_RESTIC:-true}" == "true" ]] && [[ ! -x "$REMOTE_DIR/scripts/pi/restic-backup.sh" ]]; then
   echo "[backup] HATA: restic-backup.sh yok veya executable degil" >&2

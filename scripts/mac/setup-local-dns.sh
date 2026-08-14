@@ -1,21 +1,19 @@
 #!/usr/bin/env bash
 # macOS: *.home sorgularini Pi DNS'e yonlendir
 set -euo pipefail
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
-# shellcheck source=/dev/null
-[[ -f "$PROJECT_DIR/.env" ]] && source "$PROJECT_DIR/.env"
-
+_PG_ENV_LIB="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}/../lib/env-file.sh"
+PG_SCRIPT_NAME="$(basename "$0")"
+# shellcheck source=../lib/env-file.sh
+source "${_PG_ENV_LIB:?}"
+read_project_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 PI_DNS="${PI_STATIC_IP:-}"
 RESOLVER_DIR="/etc/resolver"
 RESOLVER_FILE="${RESOLVER_DIR}/home"
-
 log() { echo "[mac-dns] $*"; }
-
 [[ "$(uname)" == "Darwin" ]] || { log "Sadece macOS"; exit 1; }
 [[ -n "$PI_DNS" ]] || { log "HATA: PI_STATIC_IP gerekli (.env)"; exit 1; }
-
 if [[ -f "$RESOLVER_FILE" ]] && grep -q "$PI_DNS" "$RESOLVER_FILE" 2>/dev/null; then
   log "Zaten ayarli: $RESOLVER_FILE -> $PI_DNS"
 else
@@ -31,10 +29,8 @@ else
     }
   fi
 fi
-
 sudo dscacheutil -flushcache
 sudo killall -HUP mDNSResponder 2>/dev/null || true
-
 log "Test: dig gateway.home +short"
 result="$(dig +time=3 +tries=1 gateway.home +short 2>/dev/null | head -1 || true)"
 if [[ "$result" == "$PI_DNS" ]]; then

@@ -179,9 +179,9 @@ services:
     profiles: ["redis"]
     labels:
       autoheal: "true"
-    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-CHANGE_ME_redis_password}"]
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}"]
     environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-CHANGE_ME_redis_password}
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
     volumes:
       - ../data/redis:/data
     ports:
@@ -205,7 +205,7 @@ services:
       N8N_HOST: n8n.${LAN_DOMAIN:-home}
       N8N_PORT: 5678
       N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
-      N8N_SECURE_COOKIE: "${N8N_SECURE_COOKIE:-false}"
+      N8N_SECURE_COOKIE: "${N8N_SECURE_COOKIE:-true}"
       WEBHOOK_URL: ${N8N_WEBHOOK_URL:-http://n8n.${LAN_DOMAIN:-home}/}
       GENERIC_TIMEZONE: ${TZ:-Europe/Istanbul}
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}

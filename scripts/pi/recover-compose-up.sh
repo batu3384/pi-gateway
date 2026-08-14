@@ -1,19 +1,18 @@
 #!/usr/bin/env bash
 # recover-readonly-root icinden PI_USER ile docker compose up
 set -euo pipefail
-
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=/dev/null
-[[ -f "$REMOTE_DIR/.env" ]] && set -a && source "$REMOTE_DIR/.env" && set +a
-# shellcheck source=../lib/compose-profiles.sh
+_PG_ENV_LIB="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}/../lib/env-file.sh"
+PG_SCRIPT_NAME="$(basename "$0")"
+# shellcheck source=../lib/env-file.sh
+source "${_PG_ENV_LIB:?}"
+read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 source "$SCRIPT_DIR/../lib/compose-profiles.sh"
 # shellcheck source=../lib/stack-health.sh
 source "$SCRIPT_DIR/../lib/stack-health.sh"
-
 cd "$REMOTE_DIR/compose"
 mapfile -t profiles < <(compose_profiles)
-
 # SSD yok/stale: asla full app stack (ephemeral SD data clobber riski)
 ssd_ok=0
 if declare -F ssd_mount_healthy >/dev/null 2>&1; then
@@ -29,7 +28,6 @@ if needs_ssd_storage && [[ "$ssd_ok" -ne 1 ]]; then
     exit 1
   fi
 fi
-
 compose_up() {
   if [[ "${COMPOSE_RECOVER_MODE:-}" == "core-dns" ]]; then
     echo "[recover-compose] mode=core-dns (unbound+adguard; homepage/caddy best-effort)" >&2
@@ -38,7 +36,6 @@ compose_up() {
     docker compose --env-file ../.env "${profiles[@]}" up -d "$@"
   fi
 }
-
 finish_ok() {
   if [[ "${COMPOSE_RECOVER_MODE:-}" != "core-dns" ]] \
     && [[ "${ENABLE_DOZZLE:-true}" == "true" ]] \
@@ -50,22 +47,18 @@ finish_ok() {
   mark_stack_recover_cooldown
   exit 0
 }
-
 finish_fail() {
   echo "[recover-compose] HATA: compose recover basarisiz — cooldown yazilmiyor" >&2
   exit 1
 }
-
 if compose_up; then
   finish_ok
 fi
-
 echo "[recover-compose] WARN: compose up basarisiz — network prune + up" >&2
 docker network prune -f >/dev/null 2>&1 || true
 if compose_up; then
   finish_ok
 fi
-
 echo "[recover-compose] WARN: ikinci deneme basarisiz — son care" >&2
 # Son care: force-recreate — core-dns'de sadece DNS seti (full stack degil)
 if [[ "${COMPOSE_RECOVER_MODE:-}" == "core-dns" ]]; then

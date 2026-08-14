@@ -141,14 +141,24 @@ ok "C14 restore path aligned"
 grep -q 'cp .*|| true' "$backup_snapshot" && die "C15: backup snapshot cp error swallowed"
 ok "C15 config snapshot fail-closed"
 
-# C16: root systemd scripts use non-evaluating env parser
+# C16: privileged/systemd scripts must not shell-evaluate .env
 [[ -f "$env_loader" ]] || die "C16: safe env loader yok"
-for root_script in \
-  "$ROOT/scripts/pi/recover-readonly-root.sh" \
-  "$ROOT/scripts/pi/stack-watchdog.sh" \
-  "$ROOT/scripts/pi/ssd-hotplug-handler.sh" \
-  "$ROOT/scripts/pi/setup-ssd-data.sh"; do
-  grep -q 'source.*\.env' "$root_script" && die "C16: root script source ediyor: $root_script"
+_priv_scripts=(
+  scripts/pi/recover-readonly-root.sh
+  scripts/pi/stack-watchdog.sh
+  scripts/pi/ssd-hotplug-handler.sh
+  scripts/pi/setup-ssd-data.sh
+  scripts/pi/recover-stack.sh
+  scripts/pi/health-check.sh
+  scripts/pi/bootstrap.sh
+  scripts/pi/post-deploy.sh
+  scripts/pi/smoke-test.sh
+)
+for root_script in "${_priv_scripts[@]}"; do
+  f="$ROOT/$root_script"
+  grep -qE 'source.*\.env|set -a && source' "$f" && die "C16: root script source ediyor: $root_script"
+  grep -q 'read_remote_dotenv\|read_dotenv_strict\|load_env_file' "$f" \
+    || die "C16: dotenv loader yok: $root_script"
 done
 ok "C16 root env command execution kapali"
 

@@ -1,28 +1,25 @@
 #!/usr/bin/env bash
 # Telegram bot: /menu + kalici klavye + acilir panel linkleri
 set -euo pipefail
-
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 STATE_DIR="${TELEGRAM_BOT_STATE_DIR:-${REMOTE_DIR}/data/.telegram-bot-state}"
 OFFSET_FILE="${STATE_DIR}/offset"
 PANELS_PY="${REMOTE_DIR}/scripts/lib/telegram-panels.py"
-
-# shellcheck source=/dev/null
-[[ -f "$REMOTE_DIR/.env" ]] && set -a && source "$REMOTE_DIR/.env" && set +a
-
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_PG_ENV_LIB="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}/../lib/env-file.sh"
+PG_SCRIPT_NAME="$(basename "$0")"
+# shellcheck source=../lib/env-file.sh
+source "${_PG_ENV_LIB:?}"
+read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 log() { echo "[telegram-bot] $*"; }
-
 [[ -n "${TELEGRAM_BOT_TOKEN:-}" && -n "${TELEGRAM_CHAT_ID:-}" ]] || {
   log "TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID eksik"
   exit 1
 }
 [[ -f "$PANELS_PY" ]] || { log "HATA: telegram-panels.py yok"; exit 1; }
-
 mkdir -p "$STATE_DIR"
 chmod 700 "$STATE_DIR" 2>/dev/null || true
-
 export LAN_DOMAIN PI_STATIC_IP PANEL_PROTOCOL ENABLE_TLS TAILSCALE_PANEL_URL
-
 resolve_tailscale_url() {
   if [[ -n "${TAILSCALE_PANEL_URL:-}" ]]; then
     return 0
@@ -40,22 +37,18 @@ print(f'https://{d}' if d else '')
 " 2>/dev/null || true)"
   export TAILSCALE_PANEL_URL
 }
-
 resolve_tailscale_url
-
 tg_api() {
   local method="$1"
   shift
   # stdout journal'a dusmesin (PII / buyuk JSON)
   curl -fsS -o /dev/null -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${method}" "$@"
 }
-
 tg_api_json() {
   local method="$1"
   shift
   curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${method}" "$@"
 }
-
 # Telegram tek reply_markup kabul eder — inline + kalici klavye = 2 mesaj
 tg_send_inline() {
   local chat_id="$1"
@@ -68,7 +61,6 @@ tg_send_inline() {
     -d "disable_web_page_preview=true" \
     --data-urlencode "reply_markup=${inline}"
 }
-
 tg_send_reply_keyboard() {
   local chat_id="$1"
   local reply="$2"
@@ -79,7 +71,6 @@ tg_send_reply_keyboard() {
     -d "disable_web_page_preview=true" \
     --data-urlencode "reply_markup=${reply}"
 }
-
 tg_send_text() {
   local chat_id="$1"
   local text="$2"
@@ -89,7 +80,6 @@ tg_send_text() {
     -d "parse_mode=HTML" \
     -d "disable_web_page_preview=true"
 }
-
 send_panel_menu() {
   local chat_id="$1"
   local sub="${2:-all}"
@@ -100,7 +90,6 @@ send_panel_menu() {
   tg_send_inline "$chat_id" "$text" "$inline"
   tg_send_reply_keyboard "$chat_id" "$reply"
 }
-
 register_bot_ui() {
   tg_api setMyCommands \
     -d 'commands=[{"command":"menu","description":"Tum panel linkleri"},{"command":"paneller","description":"Panel menusu"},{"command":"uzak","description":"Tailscale HTTPS linkler"},{"command":"ev","description":"Ev agi linkler"},{"command":"ip","description":"IP yedek linkler"}]' \
@@ -113,7 +102,6 @@ register_bot_ui() {
     -d 'menu_button={"type":"commands"}' \
     >/dev/null 2>&1 || true
 }
-
 handle_message() {
   local chat_id="$1"
   local text="$2"
@@ -145,13 +133,11 @@ handle_message() {
       ;;
   esac
 }
-
 poll_once() {
   local offset resp
   offset="$(cat "$OFFSET_FILE" 2>/dev/null || echo 0)"
   resp="$(tg_api_json getUpdates -d "offset=${offset}" -d "timeout=25" -d 'allowed_updates=["message"]' 2>/dev/null || true)"
   [[ -n "$resp" ]] || return 0
-
   python3 - "$resp" "$TELEGRAM_CHAT_ID" <<'PY' | while IFS=$'\t' read -r next_offset chat_id text; do
 import json, sys
 data = json.loads(sys.argv[1])
@@ -172,7 +158,6 @@ PY
     fi
   done
 }
-
 main_loop() {
   log "basladi (chat=${TELEGRAM_CHAT_ID})"
   register_bot_ui
@@ -181,16 +166,13 @@ main_loop() {
     poll_once || sleep 2
   done
 }
-
 if [[ "${1:-}" == "--once" ]]; then
   register_bot_ui
   send_panel_menu "$TELEGRAM_CHAT_ID" all
   exit 0
 fi
-
 if [[ "${1:-}" == "--poll" ]]; then
   poll_once
   exit 0
 fi
-
 main_loop

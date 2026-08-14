@@ -2,43 +2,38 @@
 # shellcheck disable=SC1083
 # Uptime Kuma: DB kurulumu, admin, monitorler
 set -euo pipefail
-
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
-# shellcheck source=/dev/null
-[[ -f "$REMOTE_DIR/.env" ]] && source "$REMOTE_DIR/.env"
-
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_PG_ENV_LIB="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}/../lib/env-file.sh"
+PG_SCRIPT_NAME="$(basename "$0")"
+# shellcheck source=../lib/env-file.sh
+source "${_PG_ENV_LIB:?}"
+read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 KUMA_URL="${UPTIME_KUMA_URL:-http://127.0.0.1:3001}"
 KUMA_USER="${UPTIME_KUMA_ADMIN_USER:-admin}"
 KUMA_PASS="${UPTIME_KUMA_ADMIN_PASSWORD:-}"
 PI_IP="${PI_STATIC_IP:-}"
 export KUMA_URL KUMA_USER KUMA_PASS
-
 log() { echo "[uptime-kuma-setup] $*"; }
-
 [[ -n "$PI_IP" ]] || { log "HATA: PI_STATIC_IP bos"; exit 1; }
 [[ -n "$KUMA_PASS" ]] || { log "HATA: UPTIME_KUMA_ADMIN_PASSWORD bos"; exit 1; }
 case "$KUMA_PASS" in
   CHANGE_ME*|Degistir*) log "HATA: UPTIME_KUMA_ADMIN_PASSWORD placeholder"; exit 1 ;;
 esac
-
 docker ps --format '{{.Names}}' | grep -q '^uptime-kuma$' || { log "uptime-kuma container yok"; exit 1; }
-
 repair_kuma_db_if_corrupt() {
   local db_dir="${REMOTE_DIR}/data/uptime-kuma"
   local db="${db_dir}/kuma.db"
   local stamp backup
   [[ -f "$db" ]] || return 0
-
   if docker exec uptime-kuma sqlite3 /app/data/kuma.db "PRAGMA integrity_check;" 2>/dev/null | grep -qx 'ok'; then
     return 0
   fi
-
   stamp="$(date +%Y%m%d-%H%M%S)"
   backup="${db_dir}/kuma.db.corrupt-${stamp}"
   log "Kuma DB bozuk — sqlite recover deneniyor"
   docker stop uptime-kuma >/dev/null 2>&1 || true
   cp -a "$db" "$backup"
-
   docker run --rm -u 0 -v "${db_dir}:/db" python:3.12-alpine sh -c '
     set -e
     apk add --no-cache sqlite >/dev/null
@@ -48,7 +43,6 @@ repair_kuma_db_if_corrupt() {
     sqlite3 /db/kuma.db.new "PRAGMA integrity_check;" | grep -qx ok
     chown 1000:1000 /db/kuma.db.new
   '
-
   mv "$db" "${db}.pre-recover"
   mv "${db}.new" "$db"
   rm -f "${db_dir}/recovered.sql"
@@ -56,7 +50,6 @@ repair_kuma_db_if_corrupt() {
   wait_for_kuma_http
   log "Kuma DB recover tamamlandi: ${backup}"
 }
-
 wait_for_kuma_http() {
   local _
   for _ in $(seq 1 40); do
@@ -69,7 +62,6 @@ wait_for_kuma_http() {
   log "HATA: uptime-kuma HTTP hazir degil"
   return 1
 }
-
 ensure_kuma_database() {
   local info
   info="$(curl -fsS "${KUMA_URL}/setup-database-info" 2>/dev/null || true)"
@@ -83,7 +75,6 @@ ensure_kuma_database() {
   docker restart uptime-kuma >/dev/null
   wait_for_kuma_http
 }
-
 sync_password_sqlite() {
   local hash
   hash="$(docker exec uptime-kuma node -e "const b=require('bcryptjs'); console.log(b.hashSync(process.argv[1], 10));" "$KUMA_PASS")"
@@ -94,7 +85,6 @@ sync_password_sqlite() {
     log "Kullanici sifresi guncellendi (sqlite): ${KUMA_USER}"
   fi
 }
-
 ensure_kuma_admin() {
   docker run --rm --network host \
     -e KUMA_URL -e KUMA_USER -e KUMA_PASS \
@@ -103,7 +93,6 @@ ensure_kuma_admin() {
       python - <<'"'"'PY'"'"'
 import os, sys
 from uptime_kuma_api import UptimeKumaApi
-
 url = os.environ["KUMA_URL"]
 user = os.environ["KUMA_USER"]
 password = os.environ["KUMA_PASS"]
@@ -139,12 +128,10 @@ PY
       '
   }
 }
-
 wait_for_kuma_http
 repair_kuma_db_if_corrupt
 ensure_kuma_database
 ensure_kuma_admin
-
 # Kuma compose network gateway (host-network servisler icin); sabit 172.18 varsayma.
 if [[ -n "${DOCKER_GATEWAY:-}" ]]; then
   DOCKER_GW="$DOCKER_GATEWAY"
@@ -171,7 +158,6 @@ else
   N8N_KUMA_WEBHOOK_URL="http://n8n:5678/webhook/uptime-kuma-alert-${secret}"
 fi
 export N8N_KUMA_WEBHOOK_URL
-
 docker run --rm --network host \
   -e KUMA_URL -e KUMA_USER -e KUMA_PASS -e PI_IP -e DOCKER_GW -e LAN_DOMAIN \
   -e TELEGRAM_BOT_TOKEN -e TELEGRAM_CHAT_ID -e UPTIME_KUMA_STATUS_SLUG \
@@ -182,7 +168,6 @@ docker run --rm --network host \
 import os
 import json
 from uptime_kuma_api import UptimeKumaApi, MonitorType
-
 url = os.environ["KUMA_URL"]
 user = os.environ["KUMA_USER"]
 password = os.environ["KUMA_PASS"]
@@ -193,9 +178,7 @@ tg_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
 tg_chat = os.environ.get("TELEGRAM_CHAT_ID", "")
 netalertx_port = os.environ.get("NETALERTX_PORT", "20211")
 slow_timeout = int(os.environ.get("UPTIME_KUMA_SLOW_TIMEOUT", "90"))
-
 ok = ["200-299", "301", "302", "307", "308", "401"]
-
 monitors = [
     ("Pi Gateway", MonitorType.PING, {"hostname": pi_ip}),
     ("Homepage", MonitorType.HTTP, {"url": "http://homepage:3000", "accepted_statuscodes": ok}),
@@ -223,7 +206,6 @@ monitors = [
     ("Unbound DNS", MonitorType.PORT, {"hostname": "unbound", "port": 5335}),
     ("Redis", MonitorType.PORT, {"hostname": "redis", "port": 6379}),
 ]
-
 if os.environ.get("ENABLE_NETALERTX", "true") == "true":
     monitors.append((f"devices.{lan}", MonitorType.HTTP, {
         "url": "https://caddy:443",
@@ -237,10 +219,8 @@ if os.environ.get("ENABLE_NETALERTX", "true") == "true":
         "url": f"http://{gw}:{netalertx_port}",
         "accepted_statuscodes": ok,
     }))
-
 api = UptimeKumaApi(url, timeout=30)
 api.login(user, password)
-
 status_slug = os.environ.get("UPTIME_KUMA_STATUS_SLUG", "pi-gateway")
 pages = {p.get("slug"): p for p in api.get_status_pages()}
 if status_slug not in pages:
@@ -248,11 +228,9 @@ if status_slug not in pages:
     print(f"status-page: {status_slug} eklendi")
 else:
     print(f"status-page: {status_slug} zaten var")
-
 use_n8n = os.environ.get("ENABLE_N8N", "true") == "true"
 n8n_hook = os.environ.get("N8N_KUMA_WEBHOOK_URL", "http://n8n:5678/webhook/uptime-kuma-alert")
 existing = {n.get("name") for n in api.get_notifications()}
-
 if use_n8n:
     if "n8n Webhook" not in existing:
         api.add_notification(
@@ -293,7 +271,6 @@ elif tg_token and tg_chat:
         print("notification: Telegram eklendi")
     else:
         print("notification: Telegram zaten var")
-
 by_name = {m.get("name"): m for m in api.get_monitors() if m.get("type") != "group"}
 slow_monitors = {f"devices.{lan}", f"logs.{lan}", "NetAlertX"}
 updated = added = 0
@@ -314,5 +291,4 @@ api.disconnect()
 print(f"done: {added} yeni, {updated} guncellendi")
 PY
   '
-
 log "Tamamlandi — ${KUMA_URL}"

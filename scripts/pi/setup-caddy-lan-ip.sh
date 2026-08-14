@@ -4,11 +4,13 @@
 # LAN 192.x: basic_auth VAR
 # handle_path yerine strip+Location rewrite — uygulama redirect'leri kirilmasin
 set -euo pipefail
-
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
-# shellcheck source=/dev/null
-[[ -f "$REMOTE_DIR/.env" ]] && source "$REMOTE_DIR/.env"
-
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_PG_ENV_LIB="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}/../lib/env-file.sh"
+PG_SCRIPT_NAME="$(basename "$0")"
+# shellcheck source=../lib/env-file.sh
+source "${_PG_ENV_LIB:?}"
+read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 PI_IP="${PI_STATIC_IP:-}"
 TS_IP=""
 if command -v tailscale >/dev/null 2>&1; then
@@ -17,28 +19,20 @@ fi
 ADGUARD_WEB_PORT="${ADGUARD_WEB_PORT:-8080}"
 NETALERTX_PORT="${NETALERTX_PORT:-20211}"
 CADDYFILE="${REMOTE_DIR}/config/caddy/Caddyfile"
-
 log() { echo "[caddy-lan-ip] $*"; }
-
 [[ -f "$CADDYFILE" ]] || { log "Caddyfile yok — atlandi"; exit 0; }
 [[ -n "$PI_IP" || -n "$TS_IP" ]] || { log "IP yok — atlandi"; exit 0; }
-
 python3 - "$CADDYFILE" "$PI_IP" "$TS_IP" "$ADGUARD_WEB_PORT" "$NETALERTX_PORT" <<'PY'
 import sys
 from pathlib import Path
-
 caddyfile, pi_ip, ts_ip, agh_port, nax_port = sys.argv[1:6]
 path = Path(caddyfile)
 text = path.read_text()
 start = "# BEGIN DIRECT IP PANELS"
 end = "# END DIRECT IP PANELS"
 upstream = pi_ip or ts_ip
-
-
 def is_tailscale_ip(ip: str) -> bool:
     return ip.startswith("100.")
-
-
 def path_proxy(prefix: str, backend: str) -> str:
     # strip prefix; rewrite root-relative Location. Absolute https://… redirects
     # may still escape /p/ — apps that emit absolute URLs need app-level root_url.
@@ -48,8 +42,6 @@ def path_proxy(prefix: str, backend: str) -> str:
 \t\t\theader_down Location / /{prefix}/
 \t\t}}
 \t}}"""
-
-
 def panel_block(ip: str, with_auth: bool, auth: str) -> str:
     auth_line = (auth if with_auth and auth else "\t# no basic_auth — Tailscale ACL / Telegram")
     parts = [
@@ -68,8 +60,6 @@ def panel_block(ip: str, with_auth: bool, auth: str) -> str:
         "}",
     ]
     return "\n".join(parts)
-
-
 auth = ""
 for line in text.splitlines():
     if line.strip().startswith("basic_auth {"):
@@ -80,38 +70,31 @@ for line in text.splitlines():
                 break
         auth = "\n".join(auth_lines)
         break
-
 ips = []
 if pi_ip:
     ips.append(pi_ip)
 if ts_ip and ts_ip not in ips:
     ips.append(ts_ip)
-
 blocks = []
 for ip in ips:
     with_auth = not is_tailscale_ip(ip)
     blocks.append(panel_block(ip, with_auth, auth))
-
 section = start + "\n" + "\n\n".join(blocks) + "\n" + end
-
 if "# BEGIN LAN IP PANEL" in text:
     pre, rest = text.split("# BEGIN LAN IP PANEL", 1)
     _, post = rest.split("# END LAN IP PANEL", 1)
     text = pre.rstrip() + "\n\n" + post.lstrip()
-
 if start in text:
     pre, rest = text.split(start, 1)
     _, post = rest.split(end, 1)
     text = pre.rstrip() + "\n\n" + section + "\n" + post.lstrip()
 else:
     text = text.rstrip() + "\n\n" + section + "\n"
-
 path.write_text(text)
 for ip in ips:
     mode = "auth" if not is_tailscale_ip(ip) else "no-auth"
     print(f"[caddy-lan-ip] http://{ip}/p/... ({mode})")
 PY
-
 # Dogrudan :8080/:20211 tailscale0 kapat — sadece Caddy 80/443
 if command -v ufw >/dev/null 2>&1; then
   while true; do
@@ -124,7 +107,6 @@ if command -v ufw >/dev/null 2>&1; then
     fi
   done
 fi
-
 docker exec caddy caddy reload --config /etc/caddy/Caddyfile 2>/dev/null \
   || docker restart caddy >/dev/null 2>&1 || true
 log "Tamamlandi"

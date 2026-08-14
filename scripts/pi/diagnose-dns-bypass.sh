@@ -1,39 +1,34 @@
 #!/usr/bin/env bash
 # Reklam engelleme / DNS bypass teşhisi
 set -euo pipefail
-
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
-# shellcheck source=/dev/null
-[[ -f "$REMOTE_DIR/.env" ]] && source "$REMOTE_DIR/.env"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_PG_ENV_LIB="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}/../lib/env-file.sh"
+PG_SCRIPT_NAME="$(basename "$0")"
+# shellcheck source=../lib/env-file.sh
+source "${_PG_ENV_LIB:?}"
+read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 # shellcheck source=../lib/adguard-api.sh
 source "$SCRIPT_DIR/../lib/adguard-api.sh"
-
 PI_IP="${PI_STATIC_IP:-}"
 ADGUARD_WEB_PORT="${ADGUARD_WEB_PORT:-8080}"
 AGH_ADMIN_USER="${AGH_ADMIN_USER:-admin}"
 AGH_ADMIN_PASSWORD="${AGH_ADMIN_PASSWORD:-}"
-
 ok=0 fail=0
 pass() { echo "[OK] $*"; ok=$((ok + 1)); }
 fail() { echo "[FAIL] $*"; fail=$((fail + 1)); }
 warn() { echo "[WARN] $*"; }
-
 echo "=== Reklam engelleme (DNS) teşhisi ==="
 echo "NETWORK_MODE=${NETWORK_MODE:-router-dns}"
-
 if dig +short @"${PI_IP}" doubleclick.net A 2>/dev/null | grep -qx '0.0.0.0'; then
   pass "Pi DNS doubleclick.net engelliyor"
 else
   fail "Pi DNS doubleclick.net engellemiyor"
 fi
-
 if dig +short @8.8.8.8 doubleclick.net A 2>/dev/null | grep -qv '0.0.0.0'; then
   pass "Karsilastirma: Google DNS engellemiyor (beklenen)"
 else
   warn "Google DNS de 0.0.0.0 dondu — garip"
 fi
-
 if [[ -n "$AGH_ADMIN_PASSWORD" ]]; then
   COOKIE="$(mktemp)"
   trap 'rm -f "$COOKIE"' EXIT
@@ -53,7 +48,6 @@ print(f'[OK] AdGuard: {b}/{q} engellendi ({round(100*b/max(1,q),1)}%)')
     fail "AdGuard API login"
   fi
 fi
-
 echo ""
 echo "=== Cihazlar query log'da mi? (son 50) ==="
 if [[ -n "${AGH_ADMIN_PASSWORD:-}" ]]; then
@@ -71,7 +65,6 @@ else:
         print(f'  {ip}: {n} sorgu')
 " || true
 fi
-
 echo ""
 echo "=== Bilinen sinirlar ==="
 echo "  YouTube / Instagram / TikTok feed: DNS ile engellenmez"

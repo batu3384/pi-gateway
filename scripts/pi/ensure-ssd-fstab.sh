@@ -1,18 +1,14 @@
 #!/usr/bin/env bash
 # /mnt/ssd fstab satirini dogrular — silinirse veya yanlissa duzeltir
 set -euo pipefail
-
 export PATH="/usr/sbin:/sbin:${PATH}"
-
 MOUNT="/mnt/ssd"
 LABEL="pi-data"
 LOG_TAG="pi-gateway-fstab"
-
 log() {
   logger -t "$LOG_TAG" "$*"
   echo "[ensure-fstab] $*"
 }
-
 run_root() {
   if [[ "$(id -u)" -eq 0 ]]; then
     "$@"
@@ -20,11 +16,9 @@ run_root() {
     sudo "$@"
   fi
 }
-
 root_disk() {
   findmnt -n -o SOURCE / | sed -E 's/p?[0-9]+$//; s/[0-9]+$//'
 }
-
 partition_id() {
   local part="$1"
   local id
@@ -37,7 +31,6 @@ partition_id() {
   [[ -n "$id" ]] || return 1
   echo "UUID=${id}"
 }
-
 find_ssd_partition() {
   local by_label root base dev part existing_id expected_part
   export PATH="/usr/sbin:/sbin:${PATH}"
@@ -46,7 +39,6 @@ find_ssd_partition() {
     echo "$by_label"
     return 0
   fi
-
   existing_id="$(fstab_entry_id || true)"
   if [[ -n "$existing_id" ]]; then
     expected_part="$(blkid "$existing_id" -o device 2>/dev/null || true)"
@@ -56,7 +48,6 @@ find_ssd_partition() {
     fi
     log "WARN: fstab kimligi mevcut diski gostermiyor — yeniden aranacak"
   fi
-
   root="$(root_disk)"
   for dev in /dev/sd[a-z]; do
     [[ -b "$dev" ]] || continue
@@ -83,11 +74,9 @@ find_ssd_partition() {
   done
   return 1
 }
-
 fstab_entry_id() {
   awk -v mnt="$MOUNT" '$2 == mnt {print $1; exit}' /etc/fstab 2>/dev/null
 }
-
 fstab_entry_matches() {
   local part="$1"
   local current expected
@@ -95,21 +84,17 @@ fstab_entry_matches() {
   current="$(fstab_entry_id || true)"
   [[ -n "$current" && "$current" == "$expected" ]]
 }
-
 write_fstab_entry() {
   local part="$1"
   local entry id_spec
-
   if fstab_entry_matches "$part"; then
     log "fstab OK ($MOUNT -> $part)"
     return 0
   fi
-
   id_spec="$(partition_id "$part")" || {
     log "WARN: partition kimligi alinamadi: $part"
     return 1
   }
-
   entry="${id_spec} ${MOUNT} ext4 defaults,noatime,nofail,x-systemd.device-timeout=30 0 2"
   if fstab_entry_id >/dev/null 2>&1; then
     log "fstab guncelleniyor (eski satir degisiyor)"
@@ -121,16 +106,17 @@ write_fstab_entry() {
   run_root systemctl daemon-reload 2>/dev/null || true
   log "fstab guncellendi"
 }
-
 main() {
-  # shellcheck source=/dev/null
-  [[ -f "${REMOTE_DIR:-/home/${USER}/pi-gateway}/.env" ]] && source "${REMOTE_DIR:-/home/${USER}/pi-gateway}/.env" 2>/dev/null || true
-  STORAGE_TYPE="${STORAGE_TYPE:-hybrid}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_PG_ENV_LIB="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}/../lib/env-file.sh"
+PG_SCRIPT_NAME="$(basename "$0")"
+# shellcheck source=../lib/env-file.sh
+source "${_PG_ENV_LIB:?}"
+read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
   if [[ "$STORAGE_TYPE" == "ssd-root" || "$STORAGE_TYPE" == "ssd" ]]; then
     log "STORAGE_TYPE=${STORAGE_TYPE} — ayri /mnt/ssd fstab gerekmez, atlandi"
     exit 0
   fi
-
   local part attempt
   local max_attempts="${ENSURE_FSTAB_MAX_ATTEMPTS:-15}"
   [[ "$max_attempts" =~ ^[0-9]+$ ]] || max_attempts=15
@@ -153,5 +139,4 @@ main() {
   fi
   exit 1
 }
-
 main "$@"

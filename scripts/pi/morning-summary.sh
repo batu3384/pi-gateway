@@ -1,18 +1,16 @@
 #!/usr/bin/env bash
 # Sabah özeti — Telegram (n8n owner gerektirmez)
 set -euo pipefail
-
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=/dev/null
-[[ -f "$REMOTE_DIR/.env" ]] && source "$REMOTE_DIR/.env"
-# shellcheck source=../lib/notify.sh
+_PG_ENV_LIB="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}/../lib/env-file.sh"
+PG_SCRIPT_NAME="$(basename "$0")"
+# shellcheck source=../lib/env-file.sh
+source "${_PG_ENV_LIB:?}"
+read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 source "$SCRIPT_DIR/../lib/notify.sh"
-
 log() { echo "[morning-summary] $*"; }
-
 notify_enabled || { log "Telegram eksik"; exit 0; }
-
 host="$(hostname -s)"
 gateway="$(panel_url gateway)"
 disk="$(df -h / /mnt/ssd 2>/dev/null | tail -n +2 || df -h / | tail -n +2)"
@@ -20,28 +18,20 @@ containers="$(docker ps --format '{{.Names}}\t{{.Status}}' 2>/dev/null | head -1
 load="$(uptime 2>/dev/null | sed 's/.*load average/load:/')"
 running="$(docker ps -q 2>/dev/null | wc -l | tr -d ' ')"
 healthy="$(docker ps --filter health=healthy --format '{{.Names}}' 2>/dev/null | wc -l | tr -d ' ')"
-
 body="$(cat <<EOF
 <b>${host}</b> — günlük durum
-
 <b>Paneller:</b> ${gateway}
 <b>Konteyner:</b> ${running} çalışıyor, ${healthy} healthy
-
 <b>Disk</b>
 <pre>${disk}</pre>
-
 <b>Servisler</b>
 <pre>${containers}</pre>
-
 <b>${load}</b>
 EOF
 )"
-
 if ! notify_send_message "☀️ Pi Gateway — Sabah özeti
-
 ${body}" "HTML"; then
   log "HATA: Telegram gonderilemedi"
   exit 1
 fi
-
 log "Gönderildi"

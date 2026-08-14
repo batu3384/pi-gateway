@@ -38,4 +38,7 @@ grep -q 'ENABLE_REDIS:-false' "$SMOKE" \
   || die "smoke REDIS default false degil"
 ok "redis default kapali"
 
+grep -q 'tailscale-connected' "$SMOKE" || die "tailscale smoke yok"
+ok "tailscale smoke"
+
 echo "[test-smoke-contract] Tum kontroller gecti"

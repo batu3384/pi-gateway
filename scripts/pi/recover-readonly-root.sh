@@ -1,16 +1,13 @@
 #!/usr/bin/env bash
 # Boot: SSD mount + symlink + read-only root kurtarma + Docker stack
 set -euo pipefail
-
 REMOTE_DIR="${REMOTE_DIR:-/home/${PI_USER:-pi}/pi-gateway}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_TAG="pi-gateway-recover"
-
 log() {
   logger -t "$LOG_TAG" "$*"
   echo "[recover-ro] $*"
 }
-
 run_root() {
   if [[ "$(id -u)" -eq 0 ]]; then
     "$@"
@@ -18,27 +15,20 @@ run_root() {
     sudo "$@"
   fi
 }
-
 # shellcheck source=../lib/env-file.sh
 source "$SCRIPT_DIR/../lib/env-file.sh"
+read_remote_dotenv || { echo "[recover-ro] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 _RECOVER_REMOTE_DIR="$REMOTE_DIR"
-load_env_file "$REMOTE_DIR/.env" || {
-  log "HATA: .env dotenv parser hatasi"
-  exit 1
-}
 REMOTE_DIR="$_RECOVER_REMOTE_DIR"
 # shellcheck source=../lib/compose-profiles.sh
 source "$SCRIPT_DIR/../lib/compose-profiles.sh"
 # shellcheck source=../lib/stack-health.sh
 source "$SCRIPT_DIR/../lib/stack-health.sh"
-
 STORAGE_TYPE="${STORAGE_TYPE:-hybrid}"
 PI_GATEWAY_USER="$(pi_user_from_remote_dir "$REMOTE_DIR")"
-
 needs_ssd() {
   needs_ssd_storage
 }
-
 # hybrid kalintisi: ssd-root'ta /mnt/ssd fstab yok
 if needs_ssd; then
   # Health/recover dongusunda 15x2s beklemeyi kes — disk yoksa hizli degraded
@@ -49,12 +39,10 @@ if needs_ssd; then
   ENSURE_FSTAB_MAX_ATTEMPTS="$local_fstab_attempts" bash "$SCRIPT_DIR/ensure-ssd-fstab.sh" \
     || log "WARN: fstab kontrolu basarisiz"
 fi
-
 if is_ssd_root_mode && ! root_on_ssd; then
   log "HATA: STORAGE_TYPE=ssd-root ama root mmcblk — cutover/EEPROM onar (repair-cutover-bootfs.sh)"
   exit 1
 fi
-
 ensure_root_rw() {
   if root_rw_ok; then
     return 0
@@ -66,7 +54,6 @@ ensure_root_rw() {
   }
   root_rw_ok
 }
-
 ensure_ssd_mounted() {
   needs_ssd || return 0
   # Stale mount: mountpoint true ama I/O olu — degraded clear YASAK (hotplug/recover success clear)
@@ -107,7 +94,6 @@ ensure_ssd_mounted() {
   log "WARN: SSD mount basarisiz"
   return 1
 }
-
 ensure_data_symlink() {
   needs_ssd || return 0
   if storage_degraded; then
@@ -128,7 +114,6 @@ ensure_data_symlink() {
   log "WARN: data symlink onarimi basarisiz"
   return 1
 }
-
 enter_degraded_mode() {
   log "SSD yok — degraded mod (core-dns: Unbound+AdGuard SD)"
   ensure_runtime_dir
@@ -150,7 +135,6 @@ enter_degraded_mode() {
   source "$SCRIPT_DIR/../lib/notify.sh"
   notify_ssd_degraded "$(hostname -s)" "SSD mount yok — core DNS SD uzerinde"
 }
-
 run_compose_recover() {
   local mode="${1:-full}"
   if [[ "$mode" == "core-dns" ]]; then
@@ -159,24 +143,20 @@ run_compose_recover() {
     run_compose_up "$REMOTE_DIR" "$PI_GATEWAY_USER"
   fi
 }
-
 main() {
   if ! ensure_root_rw; then
     exit 1
   fi
-
   if ! acquire_recover_lock_wait; then
     log "HATA: kurtarma kilidi alinamadi (timeout)"
     exit 1
   fi
-
   if ! storage_restore_pending && stack_fully_healthy && root_rw_ok; then
     log "Stack saglikli ve root rw — kurtarma gerekmedi"
     apply_adguard_rewrites_best_effort "$REMOTE_DIR"
     release_recover_lock
     exit 0
   fi
-
   local recover_mode="full"
   if needs_ssd; then
     if ensure_ssd_mounted; then
@@ -190,7 +170,6 @@ main() {
       exit 1
     fi
   fi
-
   if ! ensure_data_symlink; then
     log "HATA: data symlink onarimi basarisiz"
     release_recover_lock
@@ -199,19 +178,16 @@ main() {
   if needs_ssd && mountpoint -q /mnt/ssd 2>/dev/null; then
     mkdir -p /mnt/ssd/.disk-probe 2>/dev/null || true
   fi
-
   if ! systemctl is-active --quiet containerd 2>/dev/null; then
     log "containerd baslatiliyor"
     run_root systemctl start containerd || log "WARN: containerd start basarisiz"
     sleep 2
   fi
-
   if ! systemctl is-active --quiet docker 2>/dev/null; then
     log "docker baslatiliyor"
     run_root systemctl start docker || log "WARN: docker start basarisiz"
     sleep 3
   fi
-
   if ! stack_core_ok; then
     if [[ -d "$REMOTE_DIR/compose" ]]; then
       log "docker compose up -d (mode=$recover_mode)"
@@ -223,7 +199,6 @@ main() {
       sleep 10
     fi
   fi
-
   # Full stack (SSD saglikli + DNS + caddy + gateway): degraded bayragini burada temizle
   if root_rw_ok \
     && (! needs_ssd || { declare -F ssd_mount_healthy >/dev/null 2>&1 && ssd_mount_healthy; }) \
@@ -237,24 +212,20 @@ main() {
     release_recover_lock
     exit 0
   fi
-
   if storage_degraded && stack_dns_core_ok && root_rw_ok; then
     log "OK degraded DNS core ayakta (gateway/caddy eksik olabilir)"
     apply_adguard_rewrites_best_effort "$REMOTE_DIR"
     release_recover_lock
     exit 0
   fi
-
   if ! storage_restore_pending && stack_fully_healthy && root_rw_ok; then
     log "OK stack_fully_healthy"
     apply_adguard_rewrites_best_effort "$REMOTE_DIR"
     release_recover_lock
     exit 0
   fi
-
   log "WARN: stack eksik — adguard/unbound/caddy veya gateway erisimi yok"
   release_recover_lock
   exit 1
 }
-
 main "$@"

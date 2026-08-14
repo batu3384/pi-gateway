@@ -65,6 +65,7 @@ Full walkthrough: **[INSTALL.md](INSTALL.md)**
 ```bash
 make doctor      # local prerequisite checks
 make validate    # render + contract tests (Pi can be offline)
+make test        # alias for validate (CI / runtime-check)
 make discover    # network discovery → writes .env
 make deploy      # push stack to Pi
 make dns-test    # DNS checks from Mac

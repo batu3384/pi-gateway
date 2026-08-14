@@ -27,3 +27,30 @@ load_env_file() {
     export "$key"
   done <"$file"
 }
+
+read_dotenv_strict() {
+  local file="$1"
+  [[ -r "$file" ]] || return 0
+  load_env_file "$file"
+}
+
+read_remote_dotenv() {
+  local remote="${REMOTE_DIR:-}"
+  [[ -n "$remote" && -f "$remote/.env" ]] || return 0
+  read_dotenv_strict "$remote/.env"
+}
+
+read_project_dotenv() {
+  local project="${PROJECT_DIR:-}"
+  [[ -n "$project" && -f "$project/.env" ]] || return 0
+  read_dotenv_strict "$project/.env"
+}
+
+read_project_or_example_dotenv() {
+  local project="${PROJECT_DIR:-}"
+  if [[ -n "$project" && -f "$project/.env" ]]; then
+    read_dotenv_strict "$project/.env"
+  elif [[ -n "$project" && -f "$project/.env.example" ]]; then
+    read_dotenv_strict "$project/.env.example"
+  fi
+}

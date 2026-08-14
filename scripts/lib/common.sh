@@ -4,13 +4,9 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 load_env() {
-  if [[ -f "$PROJECT_DIR/.env" ]]; then
-    # shellcheck source=/dev/null
-    source "$PROJECT_DIR/.env"
-  elif [[ -f "$PROJECT_DIR/.env.example" ]]; then
-    # shellcheck source=/dev/null
-    source "$PROJECT_DIR/.env.example"
-  fi
+  # shellcheck source=env-file.sh
+  source "$(dirname "${BASH_SOURCE[0]}")/env-file.sh"
+  read_project_or_example_dotenv || die ".env dotenv parser hatasi"
 }
 
 log() { printf '[pi-gateway] %s\n' "$*"; }

@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 # CrowdSec kararlarini UFW'ye uygular (Docker LAPI + host UFW)
 set -euo pipefail
-
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
-# shellcheck source=/dev/null
-[[ -f "$REMOTE_DIR/.env" ]] && source "$REMOTE_DIR/.env"
-
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_PG_ENV_LIB="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}/../lib/env-file.sh"
+PG_SCRIPT_NAME="$(basename "$0")"
+# shellcheck source=../lib/env-file.sh
+source "${_PG_ENV_LIB:?}"
+read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 log() { echo "[crowdsec-bouncer] $*"; }
-
 docker ps --format '{{.Names}}' | grep -q '^crowdsec$' || {
   log "crowdsec container yok — atlandi"
   exit 0
 }
-
 install_host_bouncer() {
   if command -v crowdsec-firewall-bouncer >/dev/null 2>&1; then
     return 0
@@ -23,12 +23,10 @@ install_host_bouncer() {
   fi
   return 1
 }
-
 configure_host_bouncer() {
   local key
   BOUNCER_NAME="${CROWDSEC_BOUNCER_NAME:-pi-firewall-bouncer}"
   LAPI_URL="${CROWDSEC_LAPI_URL:-http://127.0.0.1:8082}"
-
   if [[ -z "${CROWDSEC_BOUNCER_KEY:-}" ]]; then
     key="$(docker exec crowdsec cscli bouncers add "$BOUNCER_NAME" -o raw 2>/dev/null | tail -1 || true)"
     [[ -n "$key" ]] || return 1
@@ -37,7 +35,6 @@ configure_host_bouncer() {
       sed -i "s|^CROWDSEC_BOUNCER_KEY=.*|CROWDSEC_BOUNCER_KEY=${key}|" "$REMOTE_DIR/.env" || \
       echo "CROWDSEC_BOUNCER_KEY=${key}" >> "$REMOTE_DIR/.env"
   fi
-
   sudo mkdir -p /etc/crowdsec/bouncers
   sudo tee /etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml >/dev/null <<EOF
 mode: iptables
@@ -51,7 +48,6 @@ iptables_chains:
 EOF
   sudo systemctl enable --now crowdsec-firewall-bouncer 2>/dev/null
 }
-
 sync_ufw_decisions() {
   local ip
   while read -r ip; do
@@ -61,7 +57,6 @@ sync_ufw_decisions() {
     log "UFW deny: $ip"
   done < <(docker exec crowdsec cscli decisions list -o raw 2>/dev/null | awk '{print $1}' | grep -E '^[0-9]+\.' || true)
 }
-
 if install_host_bouncer && configure_host_bouncer; then
   log "Host firewall bouncer aktif"
 else
@@ -76,5 +71,4 @@ else
     sudo systemctl enable --now pi-gateway-crowdsec-ufw.timer
   fi
 fi
-
 log "Tamamlandi"

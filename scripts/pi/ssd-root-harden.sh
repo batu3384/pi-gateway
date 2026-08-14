@@ -5,38 +5,33 @@
 # - zayif sifre uyarisi + ssh key onerisi
 # - legacy SD neutralize (opsiyonel)
 set -euo pipefail
-
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 CONFIRM_NEUTRALIZE="${CONFIRM_NEUTRALIZE:-false}"
 CONFIRM_EEPROM_FIX="${CONFIRM_EEPROM_FIX:-no}"
 LOG_TAG="pi-gateway-ssd-root-harden"
-
 log() { echo "[ssd-root-harden] $*"; logger -t "$LOG_TAG" "$*" 2>/dev/null || true; }
 die() { log "HATA: $*"; exit 1; }
 ok() { log "OK: $*"; }
-
-# shellcheck source=/dev/null
-[[ -f "$REMOTE_DIR/.env" ]] && set -a && source "$REMOTE_DIR/.env" && set +a
-STORAGE_TYPE="${STORAGE_TYPE:-hybrid}"
-
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_PG_ENV_LIB="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}/../lib/env-file.sh"
+PG_SCRIPT_NAME="$(basename "$0")"
+# shellcheck source=../lib/env-file.sh
+source "${_PG_ENV_LIB:?}"
+read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 root_src="$(findmnt -n -o SOURCE / || true)"
 [[ -n "$root_src" ]] || die "root mount okunamadi"
-
 if echo "$root_src" | grep -q mmcblk; then
   die "root hala SD ($root_src). Cutover basarisiz — SD+SSD Mac'te verify-ssd-root calistir"
 fi
 ok "root SSD uzerinde: $root_src"
-
 if [[ "$STORAGE_TYPE" != "ssd-root" && "$STORAGE_TYPE" != "ssd" ]]; then
   log "WARN: STORAGE_TYPE=$STORAGE_TYPE — .env'de ssd-root yap"
 fi
-
 # Root RW
 if findmnt -n -o OPTIONS / | tr ',' '\n' | grep -qx ro; then
   die "root read-only"
 fi
 ok "root read-write"
-
 # EEPROM
 if command -v rpi-eeprom-config >/dev/null 2>&1; then
   eeprom="$(sudo rpi-eeprom-config 2>/dev/null || true)"
@@ -75,7 +70,6 @@ if command -v rpi-eeprom-config >/dev/null 2>&1; then
 else
   log "WARN: rpi-eeprom-config yok"
 fi
-
 # SSH: password auth + zayiflik
 if [[ -f /etc/ssh/sshd_config ]]; then
   if grep -Eiq '^\s*PasswordAuthentication\s+yes' /etc/ssh/sshd_config; then
@@ -87,7 +81,6 @@ if [[ -f "$HOME/.ssh/authorized_keys" ]] && [[ -s "$HOME/.ssh/authorized_keys" ]
 else
   log "WARN: ~/.ssh/authorized_keys bos — Mac'ten ssh-copy-id yap, sonra passwd + PasswordAuthentication no"
 fi
-
 # cloud-init ilk boot materyalini boot partition'dan sil (fiziksel erisim riski)
 for boot in /boot/firmware /boot; do
   if [[ -f "$boot/user-data" ]]; then
@@ -100,7 +93,6 @@ for boot in /boot/firmware /boot; do
     log "OK: $boot cloud-init ilk boot dosyalari silindi"
   fi
 done
-
 # Legacy SD
 if [[ -b /dev/mmcblk0p2 ]]; then
   parttype="$(lsblk -no PARTTYPE /dev/mmcblk0p2 2>/dev/null || true)"
@@ -119,5 +111,4 @@ if [[ -b /dev/mmcblk0p2 ]]; then
     log "WARN: mmcblk0p2 PARTTYPE=$parttype — neutralize onerilir"
   fi
 fi
-
 log "Tamamlandi. Sonraki: deploy + smoke + passwd"

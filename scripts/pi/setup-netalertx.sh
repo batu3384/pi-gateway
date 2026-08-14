@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # NetAlertX: subnet tarama, webhook (n8n), plugin ayarlari
 set -euo pipefail
-
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
-# shellcheck source=/dev/null
-[[ -f "$REMOTE_DIR/.env" ]] && source "$REMOTE_DIR/.env"
-
+_PG_ENV_LIB="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}/../lib/env-file.sh"
+PG_SCRIPT_NAME="$(basename "$0")"
+# shellcheck source=../lib/env-file.sh
+source "${_PG_ENV_LIB:?}"
+read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 NETALERTX_PORT="${NETALERTX_PORT:-20211}"
 NETALERTX_LISTEN_ADDR="${NETALERTX_LISTEN_ADDR:-172.17.0.1}"
 NETALERTX_PASSWORD="${NETALERTX_PASSWORD:-${AGH_ADMIN_PASSWORD:-}}"
@@ -24,20 +25,16 @@ AGH_ADMIN_PASSWORD="${AGH_ADMIN_PASSWORD:-}"
 DATA_DIR="${REMOTE_DIR}/data/netalertx"
 CONF_FILE="${DATA_DIR}/config/app.conf"
 MARKER="${DATA_DIR}/.pi-gateway-configured"
-
 log() { echo "[netalertx-setup] $*"; }
-
 [[ "${ENABLE_NETALERTX:-true}" == "true" ]] || { log "NetAlertX kapali"; exit 0; }
 [[ -n "${NETALERTX_PASSWORD:-}" ]] || { log "HATA: NETALERTX_PASSWORD veya AGH_ADMIN_PASSWORD gerekli"; exit 1; }
 [[ -n "${AGH_ADMIN_PASSWORD:-}" ]] || { log "HATA: AGH_ADMIN_PASSWORD gerekli (ADGUARDIMP)"; exit 1; }
 docker ps --format '{{.Names}}' | grep -q '^netalertx$' || { log "HATA: netalertx container yok"; exit 1; }
-
 case "${N8N_WEBHOOK_SECRET:-}" in
   ""|CHANGE_ME*)
     [[ "${ENABLE_N8N:-true}" != "true" ]] || { log "HATA: N8N_WEBHOOK_SECRET gerekli"; exit 1; }
     ;;
 esac
-
 scan_subnet() {
   if [[ -n "${NETALERTX_SCAN_SUBNETS:-}" ]]; then
     printf '%s' "${NETALERTX_SCAN_SUBNETS}"
@@ -45,12 +42,10 @@ scan_subnet() {
   fi
   printf '%s --interface=%s' "${LAN_SUBNET_CIDR}" "${PI_INTERFACE}"
 }
-
 webhook_url() {
   local secret="${N8N_WEBHOOK_SECRET:-}"
   printf 'http://127.0.0.1:%s/webhook/netalert-device-alert-%s' "$N8N_PORT" "$secret"
 }
-
 wait_http() {
   local _
   local url="http://${NETALERTX_LISTEN_ADDR}:${NETALERTX_PORT}/"
@@ -67,12 +62,9 @@ wait_http() {
   log "HATA: NetAlertX HTTP hazir degil (${NETALERTX_LISTEN_ADDR}:${NETALERTX_PORT})"
   return 1
 }
-
 mkdir -p "${DATA_DIR}/config" "${DATA_DIR}/db"
 chown -R 20211:20211 "${DATA_DIR}" 2>/dev/null || sudo chown -R 20211:20211 "${DATA_DIR}" 2>/dev/null || true
-
 wait_http
-
 export CONF_FILE SCAN_SUBNET WEBHOOK_URL MARKER PANEL_PROTOCOL LAN_DOMAIN NETALERTX_PASSWORD
 export AGH_ADMIN_USER AGH_ADMIN_PASSWORD ADGUARD_WEB_PORT
 SCAN_SUBNET="$(scan_subnet)"
@@ -81,13 +73,11 @@ WEBHOOK_URL="$(webhook_url)"
 PLUGINS='["ARPSCAN","DIGSCAN","NSLOOKUP","ICMP","WEBHOOK","NEWDEV","NTFPRCS","DBCLNP","CUSTPROP","SETPWD","SYNC","UI","MAINT","VNDRPDT","ADGUARDIMP","AVAHISCAN"]'
 # shellcheck disable=SC2090
 export SCAN_SUBNET WEBHOOK_URL PLUGINS
-
 python3 <<'PY'
 import os
 import re
 import time
 from pathlib import Path
-
 conf = Path(os.environ["CONF_FILE"])
 marker = Path(os.environ["MARKER"])
 subnet = os.environ["SCAN_SUBNET"]
@@ -102,14 +92,12 @@ lan = os.environ.get("LAN_DOMAIN", "home")
 proto = os.environ.get("PANEL_PROTOCOL", "https")
 dashboard = f"{proto}://devices.{lan}"
 scan_value = f"['{subnet}']"
-
 for _ in range(36):
     if conf.is_file() and conf.stat().st_size > 10:
         break
     time.sleep(5)
 else:
     raise SystemExit("[netalertx-setup] HATA: app.conf olusmadi — container loglarina bakin")
-
 text = conf.read_text()
 updates = {
     "LOADED_PLUGINS": plugins,
@@ -138,7 +126,6 @@ updates = {
     "REPORT_DASHBOARD_URL": f"'{dashboard}'",
 }
 changed = False
-
 for key, value in updates.items():
     pattern = rf"^{re.escape(key)}\s*=.*$"
     replacement = f"{key}={value}"
@@ -150,7 +137,6 @@ for key, value in updates.items():
     else:
         text = text.rstrip() + "\n" + replacement + "\n"
         changed = True
-
 if changed or not marker.is_file():
     import subprocess
     import tempfile
@@ -168,16 +154,13 @@ if changed or not marker.is_file():
 else:
     print("[netalertx-setup] app.conf zaten guncel")
 PY
-
 if [[ "$(cat "$MARKER" 2>/dev/null)" == "ok" ]]; then
   docker restart netalertx >/dev/null 2>&1 || true
   wait_http || true
 fi
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 bash "$SCRIPT_DIR/import-adguard-names-to-netalertx.sh" || log "WARN: AdGuard isim importu atlandi"
 bash "$SCRIPT_DIR/enrich-netalertx-names.sh"
 bash "$SCRIPT_DIR/sync-adguard-persistent-clients.sh" || log "WARN: AdGuard istemci senkronu atlandi"
-
 log "Tamamlandi — https://devices.${LAN_DOMAIN:-home}"
 log "Giris: NetAlertX UI sifresi (NETALERTX_PASSWORD veya AGH_ADMIN_PASSWORD)"

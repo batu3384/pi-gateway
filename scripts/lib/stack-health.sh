@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Stack sagligi ve kurtarma kilidi (health-check, watchdog, recover-ro)
 set -euo pipefail
-
 # recover-ro TimeoutStartSec (360) altinda kalmali; waiter biraz daha uzun bekler
 STACK_RECOVER_WAIT_SEC="${STACK_RECOVER_WAIT_SEC:-330}"
 STACK_LOCK_FILE="${STACK_LOCK_FILE:-/run/pi-gateway/stack-recover.lock}"
@@ -13,7 +12,6 @@ STACK_BOOT_GRACE_SEC="${STACK_BOOT_GRACE_SEC:-120}"
 SSD_HOTPLUG_STATE_FILE="${SSD_HOTPLUG_STATE_FILE:-/var/lib/pi-gateway/ssd-hotplug-mounted}"
 SSD_HOTPLUG_DEBOUNCE_SEC="${SSD_HOTPLUG_DEBOUNCE_SEC:-30}"
 PI_GATEWAY_RUNTIME_DIR="${PI_GATEWAY_RUNTIME_DIR:-/run/pi-gateway}"
-
 # SSD canlilik (probe / soft-reset) — ayni dizinde veya REMOTE_DIR
 _STACK_HEALTH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 if [[ -f "${_STACK_HEALTH_DIR}/ssd-alive.sh" ]]; then
@@ -24,7 +22,6 @@ elif [[ -n "${REMOTE_DIR:-}" && -f "${REMOTE_DIR}/scripts/lib/ssd-alive.sh" ]]; 
   source "${REMOTE_DIR}/scripts/lib/ssd-alive.sh"
 fi
 unset _STACK_HEALTH_DIR
-
 # /run/pi-gateway owner yazabilir olsun (root hotplug sonrasi stuck flag onleme)
 ensure_runtime_dir() {
   local owner
@@ -40,7 +37,6 @@ ensure_runtime_dir() {
     sudo chmod 775 "$PI_GATEWAY_RUNTIME_DIR" 2>/dev/null || true
   fi
 }
-
 runtime_rm() {
   local path="$1"
   rm -f "$path" 2>/dev/null && return 0
@@ -50,7 +46,6 @@ runtime_rm() {
     sudo rm -f "$path" 2>/dev/null || return 1
   fi
 }
-
 runtime_write() {
   local path="$1" content="$2"
   ensure_runtime_dir
@@ -66,18 +61,15 @@ runtime_write() {
     sudo chown "${owner}:${owner}" "$path" 2>/dev/null || true
   fi
 }
-
 needs_ssd_storage() {
   # hybrid/ssd-data: ayri /mnt/ssd veri diski
   [[ "${STORAGE_TYPE:-hybrid}" == "hybrid" || "${STORAGE_TYPE:-}" == "ssd-data" ]]
 }
-
 # SSD yok ama data/ symlink degil (SD uzerinde native agac) — paneller calisabilir
 sd_data_native_ok() {
   local remote="${REMOTE_DIR:-}"
   [[ -n "$remote" && -d "${remote}/data" && ! -L "${remote}/data" ]]
 }
-
 # SSD yokken Unbound+AdGuard (core-dns) SD uzerinde — varsayilan acik.
 # STORAGE_FALLBACK_SD=true ayni yolu acar (geriye uyum).
 # Ikisi de false ise fail-closed (DNS de dusebilir).
@@ -85,19 +77,16 @@ dns_degraded_on_ssd_loss() {
   [[ "${DNS_DEGRADED_ON_SSD_LOSS:-true}" == "true" ]] \
     || [[ "${STORAGE_FALLBACK_SD:-false}" == "true" ]]
 }
-
 # ssd-root: OS root USB/SSD uzerinde olmali (mmcblk yasak)
 is_ssd_root_mode() {
   [[ "${STORAGE_TYPE:-hybrid}" == "ssd-root" || "${STORAGE_TYPE:-hybrid}" == "ssd" ]]
 }
-
 root_on_ssd() {
   local src
   src="$(findmnt -n -o SOURCE / 2>/dev/null || true)"
   [[ -n "$src" ]] || return 1
   ! echo "$src" | grep -q 'mmcblk'
 }
-
 pi_user_from_remote_dir() {
   local remote_dir="$1"
   if [[ "$remote_dir" =~ /home/([^/]+)/ ]]; then
@@ -106,22 +95,18 @@ pi_user_from_remote_dir() {
     echo "${PI_USER:-pi}"
   fi
 }
-
 root_rw_ok() {
   ! findmnt -n -o OPTIONS / 2>/dev/null | tr ',' '\n' | grep -qx 'ro'
 }
-
 storage_degraded() {
   # Flag presence only. Do NOT auto-clear here — hotplug/recover must clear after stack restore.
   [[ -f "${STORAGE_DEGRADED_FLAG}" ]]
 }
-
 storage_restore_pending() {
   storage_degraded || return 1
   declare -F ssd_mount_healthy >/dev/null 2>&1 || return 1
   ssd_mount_healthy
 }
-
 set_storage_degraded() {
   ensure_runtime_dir
   if touch "$STORAGE_DEGRADED_FLAG" 2>/dev/null; then
@@ -129,7 +114,6 @@ set_storage_degraded() {
   fi
   runtime_write "$STORAGE_DEGRADED_FLAG" ""
 }
-
 clear_storage_degraded() {
   [[ -f "$STORAGE_DEGRADED_FLAG" ]] || return 0
   if runtime_rm "$STORAGE_DEGRADED_FLAG"; then
@@ -139,7 +123,6 @@ clear_storage_degraded() {
   echo "[stack-health] HATA: degraded flag silinemedi: $STORAGE_DEGRADED_FLAG" >&2
   return 1
 }
-
 mark_stack_recover_cooldown() {
   ensure_runtime_dir
   runtime_write "$STACK_RECOVER_COOLDOWN_FILE" "$(date +%s)" || {
@@ -147,7 +130,6 @@ mark_stack_recover_cooldown() {
     return 0
   }
 }
-
 stack_recover_suppressed() {
   local last_ts now uptime_sec cooldown
   if recover_service_running; then
@@ -174,7 +156,6 @@ stack_recover_suppressed() {
   fi
   return 1
 }
-
 # Degraded: sadece DNS core (mount sart degil). Tam saglik: gateway dahil.
 stack_dns_core_ok() {
   systemctl is-active --quiet docker 2>/dev/null || return 1
@@ -182,7 +163,6 @@ stack_dns_core_ok() {
   container_health_ok 'unbound' || return 1
   return 0
 }
-
 # 0 = saglikli, 1 = unhealthy/missing (Health=none = healthcheck yok, ayakta say)
 container_health_ok() {
   local name="$1"
@@ -191,7 +171,6 @@ container_health_ok() {
   status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$name" 2>/dev/null)" || return 1
   [[ "$status" == "healthy" || "$status" == "none" ]]
 }
-
 # 0 = core ayakta, 1 = bozuk (isim = donus kodu)
 stack_core_ok() {
   if needs_ssd_storage && ! storage_degraded; then
@@ -209,7 +188,6 @@ stack_core_ok() {
   container_health_ok 'caddy' || return 1
   return 0
 }
-
 stack_gateway_ok() {
   local domain="${LAN_DOMAIN:-home}"
   local code
@@ -224,7 +202,6 @@ stack_gateway_ok() {
   fi
   [[ "$code" == "200" || "$code" == "401" || "$code" == "302" || "$code" == "307" ]]
 }
-
 stack_fully_healthy() {
   stack_core_ok || return 1
   # SSD degraded: Unbound+AdGuard yeterli (panel/Caddy best-effort)
@@ -233,7 +210,6 @@ stack_fully_healthy() {
   fi
   stack_gateway_ok
 }
-
 recover_service_running() {
   local state
   state="$(systemctl show -p ActiveState --value pi-gateway-recover-ro.service 2>/dev/null || true)"
@@ -241,7 +217,6 @@ recover_service_running() {
   # Script dogrudan cagrildiginda systemd activating olmayabilir — lock dosyasi
   [[ -f "$STACK_LOCK_FILE" ]] && fuser -s "$STACK_LOCK_FILE" 2>/dev/null
 }
-
 wait_for_recover_service() {
   local waited=0
   while recover_service_running && (( waited < STACK_RECOVER_WAIT_SEC )); do
@@ -250,7 +225,6 @@ wait_for_recover_service() {
   done
   ! recover_service_running
 }
-
 acquire_recover_lock_wait() {
   local owner
   owner="$(pi_user_from_remote_dir "${REMOTE_DIR:-/home/${PI_USER:-pi}/pi-gateway}")"
@@ -263,12 +237,10 @@ acquire_recover_lock_wait() {
   exec {STACK_LOCK_FD}>>"$STACK_LOCK_FILE" || return 1
   flock -w "${STACK_RECOVER_WAIT_SEC}" "$STACK_LOCK_FD" || return 1
 }
-
 release_recover_lock() {
   [[ -n "${STACK_LOCK_FD:-}" ]] || return 0
   flock -u "$STACK_LOCK_FD" 2>/dev/null || true
 }
-
 run_compose_up() {
   local remote_dir="$1"
   local pi_user="$2"
@@ -291,7 +263,6 @@ run_compose_up() {
     REMOTE_DIR="$remote_dir" COMPOSE_RECOVER_MODE="${COMPOSE_RECOVER_MODE:-}" bash "$script"
   fi
 }
-
 recover_script_path() {
   local remote_dir="$1"
   local lib="${PI_GATEWAY_LIB_DIR:-/usr/local/lib/pi-gateway}"
@@ -304,7 +275,6 @@ recover_script_path() {
     echo "${remote_dir}/scripts/pi/recover-readonly-root.sh"
   fi
 }
-
 apply_adguard_rewrites_best_effort() {
   local remote_dir="${1:-${REMOTE_DIR:-}}"
   local lib="${PI_GATEWAY_LIB_DIR:-/usr/local/lib/pi-gateway}"
@@ -331,25 +301,20 @@ apply_adguard_rewrites_best_effort() {
   fi
   return 0
 }
-
 trigger_stack_recover() {
   local remote_dir="${1:-${REMOTE_DIR:-/home/${USER:-pi}/pi-gateway}}"
   local script
   script="$(recover_script_path "$remote_dir")"
   [[ -f "$script" ]] || return 1
-
   wait_for_recover_service || true
-
   if ! storage_restore_pending && stack_fully_healthy && root_rw_ok; then
     apply_adguard_rewrites_best_effort "$remote_dir"
     return 0
   fi
-
   if stack_recover_suppressed; then
     logger -t pi-gateway-recover "recover atlandi (cooldown/boot grace)"
     return 1
   fi
-
   if REMOTE_DIR="$remote_dir" bash "$script"; then
     mark_stack_recover_cooldown
     stack_fully_healthy && root_rw_ok

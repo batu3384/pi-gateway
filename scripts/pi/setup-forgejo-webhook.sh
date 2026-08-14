@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Forgejo -> n8n push webhook
 set -euo pipefail
-
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
-# shellcheck source=/dev/null
-[[ -f "$REMOTE_DIR/.env" ]] && source "$REMOTE_DIR/.env"
-
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_PG_ENV_LIB="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}/../lib/env-file.sh"
+PG_SCRIPT_NAME="$(basename "$0")"
+# shellcheck source=../lib/env-file.sh
+source "${_PG_ENV_LIB:?}"
+read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 FORGEJO_PORT="${FORGEJO_PORT:-3002}"
 FORGEJO_ADMIN_USER="${FORGEJO_ADMIN_USER:-admin}"
 FORGEJO_REPO_NAME="${FORGEJO_REPO_NAME:-pi-gateway}"
@@ -19,14 +21,11 @@ if [[ -z "$N8N_WEBHOOK_URL" ]]; then
 fi
 TOKEN_FILE="${REMOTE_DIR}/data/forgejo/.n8n-api-token"
 TOKEN_NAME="pi-gateway-n8n"
-
 log() { echo "[forgejo-webhook] $*"; }
-
 [[ "${ENABLE_FORGEJO:-true}" == "true" ]] || exit 0
 [[ "${ENABLE_N8N:-true}" == "true" ]] || exit 0
 docker ps --format '{{.Names}}' | grep -q '^forgejo$' || { log "HATA: forgejo yok"; exit 1; }
 docker ps --format '{{.Names}}' | grep -q '^n8n$' || { log "HATA: n8n yok"; exit 1; }
-
 api_token() {
   if [[ -f "$TOKEN_FILE" ]]; then
     cat "$TOKEN_FILE"
@@ -52,25 +51,20 @@ api_token() {
   chmod 600 "$TOKEN_FILE"
   printf '%s' "$token"
 }
-
 TOKEN="$(api_token || true)"
 [[ -n "$TOKEN" ]] || { log "HATA: Forgejo API token alinamadi"; exit 1; }
-
 API="http://127.0.0.1:${FORGEJO_PORT}/api/v1"
 AUTH=(-H "Authorization: token ${TOKEN}")
-
 if ! curl -fsS "${AUTH[@]}" "${API}/version" >/dev/null 2>&1; then
   log "Forgejo API hazir degil"
   exit 0
 fi
-
 forgejo_http_code() {
   local method="$1"
   local url="$2"
   shift 2
   curl -sS -o /dev/null -w '%{http_code}' -X "$method" "${AUTH[@]}" "$@" "$url" 2>/dev/null || echo 000
 }
-
 ensure_repo() {
   local code
   code="$(forgejo_http_code GET "${API}/repos/${FORGEJO_ADMIN_USER}/${FORGEJO_REPO_NAME}")"
@@ -102,7 +96,6 @@ PY
   log "HATA: repo olusturulamadi (HTTP $code)"
   return 1
 }
-
 if ! ensure_repo; then
   log "Repo olusturulamadi — API token yenileniyor"
   rm -f "$TOKEN_FILE"
@@ -111,10 +104,8 @@ if ! ensure_repo; then
   AUTH=(-H "Authorization: token ${TOKEN}")
   ensure_repo || exit 1
 fi
-
 hooks="$(curl -fsS "${AUTH[@]}" \
   "${API}/repos/${FORGEJO_ADMIN_USER}/${FORGEJO_REPO_NAME}/hooks" 2>/dev/null || echo '[]')"
-
 if echo "$hooks" | python3 -c "
 import json, sys
 url = sys.argv[1]
@@ -124,7 +115,6 @@ sys.exit(0 if any((h.get('config') or {}).get('url') == url for h in hooks) else
   log "Webhook zaten var: $N8N_WEBHOOK_URL"
   exit 0
 fi
-
 payload="$(python3 - <<PY
 import json
 print(json.dumps({
@@ -138,11 +128,9 @@ print(json.dumps({
 }))
 PY
 )"
-
 code="$(forgejo_http_code POST "${API}/repos/${FORGEJO_ADMIN_USER}/${FORGEJO_REPO_NAME}/hooks" \
   -H "Content-Type: application/json" \
   -d "$payload")"
-
 if [[ "$code" == "201" ]]; then
   log "Webhook eklendi: ${FORGEJO_ADMIN_USER}/${FORGEJO_REPO_NAME} -> $N8N_WEBHOOK_URL"
 else

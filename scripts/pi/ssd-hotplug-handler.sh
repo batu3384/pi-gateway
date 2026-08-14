@@ -1,17 +1,14 @@
 #!/usr/bin/env bash
 # SSD hotplug: kopma / yeniden takilma (+ stale mount + soft-reset)
 set -euo pipefail
-
 REMOTE_DIR="${REMOTE_DIR:-/home/${PI_USER:-pi}/pi-gateway}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_TAG="pi-gateway-ssd-hotplug"
 SSD_HOTPLUG_DEBOUNCE_FILE="${SSD_HOTPLUG_DEBOUNCE_FILE:-/var/lib/pi-gateway/ssd-hotplug-last-run}"
-
 log() {
   logger -t "$LOG_TAG" "$*"
   echo "[ssd-hotplug] $*"
 }
-
 run_root() {
   if [[ "$(id -u)" -eq 0 ]]; then
     "$@"
@@ -19,7 +16,6 @@ run_root() {
     sudo "$@"
   fi
 }
-
 hotplug_debounced() {
   local last now
   [[ -f "$SSD_HOTPLUG_DEBOUNCE_FILE" ]] || return 1
@@ -27,35 +23,27 @@ hotplug_debounced() {
   now="$(date +%s)"
   (( now - last < SSD_HOTPLUG_DEBOUNCE_SEC ))
 }
-
 touch_hotplug_run() {
   run_root mkdir -p "$(dirname "$SSD_HOTPLUG_DEBOUNCE_FILE")" 2>/dev/null || true
   date +%s | run_root tee "$SSD_HOTPLUG_DEBOUNCE_FILE" >/dev/null 2>&1 || true
 }
-
 # shellcheck source=../lib/env-file.sh
 source "$SCRIPT_DIR/../lib/env-file.sh"
+read_remote_dotenv || { echo "[ssd-hotplug] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 _HOTPLUG_REMOTE_DIR="$REMOTE_DIR"
-load_env_file "$REMOTE_DIR/.env" || {
-  log "HATA: .env dotenv parser hatasi"
-  exit 1
-}
 REMOTE_DIR="$_HOTPLUG_REMOTE_DIR"
 # shellcheck source=../lib/stack-health.sh
 source "$SCRIPT_DIR/../lib/stack-health.sh"
-
 if is_ssd_root_mode; then
   log "ssd-root: hotplug handler atlandi"
   exit 0
 fi
-
 # Stale mount: mountpoint var ama I/O olu — lazy umount + soft-reset
 if mountpoint -q /mnt/ssd 2>/dev/null && ! ssd_mount_healthy; then
   log "Stale/hung SSD mount — umount + soft-reset"
   run_root umount -l /mnt/ssd 2>/dev/null || true
   ssd_usb_soft_reset || log "WARN: soft-reset basarisiz"
 fi
-
 # Henuz mount degil ama block var — remount dene
 if ! ssd_mount_healthy && ssd_block_present; then
   log "SSD block var, mount yok — remount"
@@ -64,7 +52,6 @@ if ! ssd_mount_healthy && ssd_block_present; then
     ssd_usb_soft_reset || true
   fi
 fi
-
 if ssd_mount_healthy; then
   # Degraded bayrak varken asla early-exit — tam stack restore zorunlu
   if [[ ! -f "${STORAGE_DEGRADED_FLAG:-/run/pi-gateway/storage-degraded}" ]] \
@@ -114,21 +101,17 @@ if ssd_mount_healthy; then
   notify_ssd_restored "$(hostname -s)"
   exit 0
 fi
-
 log "SSD mount yok / sagliksiz"
 run_root rm -f "$SSD_HOTPLUG_STATE_FILE" 2>/dev/null || true
-
 # Soft-reset bir kez daha (cihaz yarim enumerate) — reentry korumasi
 if [[ "${SSD_HOTPLUG_REENTRY:-0}" != "1" ]] && ssd_usb_soft_reset && ssd_mount_healthy; then
   log "soft-reset sonrasi SSD saglikli — restore'a don"
   exec env SSD_HOTPLUG_REENTRY=1 REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/ssd-hotplug-handler.sh"
 fi
-
 # Degraded oncesi stale mount kalintisini temizle (symlink clear bug onleme)
 if mountpoint -q /mnt/ssd 2>/dev/null && ! ssd_mount_healthy; then
   run_root umount -l /mnt/ssd 2>/dev/null || true
 fi
-
 if ! dns_degraded_on_ssd_loss; then
   log "HATA: DNS_DEGRADED_ON_SSD_LOSS=false — degraded moda gecilmiyor (fail-closed)"
   # shellcheck source=../lib/notify.sh
@@ -136,7 +119,6 @@ if ! dns_degraded_on_ssd_loss; then
   notify_ssd_degraded "$(hostname -s)" "SSD kopma — fail-closed (DNS_DEGRADED_ON_SSD_LOSS=false)"
   exit 1
 fi
-
 log "DNS degraded moda gecis (core-dns SD)"
 if [[ -d "$REMOTE_DIR/compose" ]]; then
   cd "$REMOTE_DIR/compose"
@@ -157,7 +139,6 @@ fi
 # shellcheck source=../lib/notify.sh
 source "$SCRIPT_DIR/../lib/notify.sh"
 notify_ssd_degraded "$(hostname -s)" "USB SSD kopma — DNS degraded (Unbound+AdGuard SD)"
-
 if [[ -d "$REMOTE_DIR/compose" ]]; then
   COMPOSE_RECOVER_MODE=core-dns run_compose_up "$REMOTE_DIR" "$(pi_user_from_remote_dir "$REMOTE_DIR")" \
     || log "WARN: core-dns compose basarisiz"

@@ -4,16 +4,21 @@ env_val = $(shell awk -F= -v k='$(1)' '$$1 == k { sub(/^[^=]*=/, ""); print; exi
 ifneq (,$(wildcard .env))
   PI_USER ?= $(call env_val,PI_USER)
   PI_STATIC_IP ?= $(call env_val,PI_STATIC_IP)
+  PI_DEPLOY_HOST ?= $(call env_val,PI_DEPLOY_HOST)
   REMOTE_DIR ?= $(call env_val,REMOTE_DIR)
 endif
 
 PI_USER ?= pi
 REMOTE_DIR ?= /home/$(PI_USER)/pi-gateway
+PI_SSH_HOST ?= $(if $(PI_DEPLOY_HOST),$(PI_DEPLOY_HOST),$(PI_STATIC_IP))
 
-.PHONY: setup validate render deploy deploy-fast install discover mac-dns harden status dns-test test-remote backup-pull backup-cron restore-check verify-data pi-access trust-ca tls-certs telegram-menu firewall morning-test sync-configs docker-ssd check-pi-env doctor diagnose-remote diagnose-dns recover-stack
+.PHONY: setup validate test render deploy deploy-fast install discover mac-dns harden status dns-test test-remote backup-pull backup-cron restore-check verify-data pi-access trust-ca tls-certs telegram-menu firewall morning-test sync-configs docker-ssd check-pi-env doctor diagnose-remote diagnose-dns recover-stack
 
 check-pi-env:
-	@test -n "$(PI_STATIC_IP)" || (echo "PI_STATIC_IP required — edit .env or run make discover" && exit 1)
+	@test -n "$(PI_SSH_HOST)" || (echo "PI_STATIC_IP or PI_DEPLOY_HOST required — edit .env or run make discover" && exit 1)
+
+test:
+	@./scripts/mac/validate.sh
 
 doctor:
 	@chmod +x scripts/mac/doctor.sh 2>/dev/null || true
@@ -45,7 +50,7 @@ sync-configs:
 	@make render && ./scripts/mac/sync-rendered-configs.sh
 
 morning-test: check-pi-env
-	@ssh "$(PI_USER)@$(PI_STATIC_IP)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/morning-summary.sh"'
+	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/morning-summary.sh"'
 
 verify-data:
 	@chmod +x scripts/mac/pre-deploy-check.sh scripts/lib/ensure-data-symlink.sh scripts/pi/ensure-data-symlink.sh 2>/dev/null || true
@@ -65,7 +70,7 @@ syncthing:
 	@./scripts/mac/setup-syncthing.sh
 
 harden: check-pi-env
-	@ssh "$(PI_USER)@$(PI_STATIC_IP)" "REMOTE_DIR='$(REMOTE_DIR)' bash -s" < ./scripts/pi/harden-host.sh
+	@ssh "$(PI_USER)@$(PI_SSH_HOST)" "REMOTE_DIR='$(REMOTE_DIR)' bash -s" < ./scripts/pi/harden-host.sh
 
 status:
 	@chmod +x scripts/mac/status.sh 2>/dev/null || true
@@ -76,13 +81,13 @@ dns-test:
 	@./scripts/mac/dns-test.sh
 
 test-remote: check-pi-env
-	@ssh "$(PI_USER)@$(PI_STATIC_IP)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/health-check.sh" && REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/smoke-test.sh"'
+	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/health-check.sh" && REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/smoke-test.sh"'
 
 telegram-test: check-pi-env
-	@ssh "$(PI_USER)@$(PI_STATIC_IP)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/test-telegram.sh"'
+	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/test-telegram.sh"'
 
 telegram-menu: check-pi-env
-	@ssh "$(PI_USER)@$(PI_STATIC_IP)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/telegram-menu.sh"'
+	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/telegram-menu.sh"'
 
 pi-access:
 	@chmod +x scripts/mac/setup-pi-access.sh 2>/dev/null || true
@@ -112,25 +117,25 @@ restore-check:
 	@./scripts/mac/restore-check.sh both
 
 diagnose-remote: check-pi-env
-	@ssh "$(PI_USER)@$(PI_STATIC_IP)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/diagnose-remote-access.sh"'
+	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/diagnose-remote-access.sh"'
 
 diagnose-dns: check-pi-env
-	@ssh "$(PI_USER)@$(PI_STATIC_IP)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/diagnose-dns-bypass.sh"'
+	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/diagnose-dns-bypass.sh"'
 
 recover-stack: check-pi-env
-	@ssh "$(PI_USER)@$(PI_STATIC_IP)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/recover-stack.sh"'
+	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/recover-stack.sh"'
 
 firewall: check-pi-env
-	@ssh "$(PI_USER)@$(PI_STATIC_IP)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-firewall.sh"'
+	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-firewall.sh"'
 
 docker-ssd: check-pi-env
-	@scp scripts/pi/setup-docker-ssd.sh "$(PI_USER)@$(PI_STATIC_IP):$(REMOTE_DIR)/scripts/pi/setup-docker-ssd.sh"
-	@ssh "$(PI_USER)@$(PI_STATIC_IP)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-docker-ssd.sh"'
+	@scp scripts/pi/setup-docker-ssd.sh "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/scripts/pi/setup-docker-ssd.sh"
+	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-docker-ssd.sh"'
 
 tailscale-acl: check-pi-env
 	@chmod +x scripts/pi/setup-tailscale-acl.sh 2>/dev/null || true
-	@ssh "$(PI_USER)@$(PI_STATIC_IP)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-tailscale-acl.sh"'
+	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-tailscale-acl.sh"'
 
 n8n-workflows: check-pi-env
 	@chmod +x scripts/pi/setup-n8n-workflows.sh scripts/pi/setup-forgejo-webhook.sh 2>/dev/null || true
-	@ssh "$(PI_USER)@$(PI_STATIC_IP)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-n8n-workflows.sh" && REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-uptime-kuma.sh" && REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-forgejo-webhook.sh"'
+	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-n8n-workflows.sh" && REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-uptime-kuma.sh" && REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-forgejo-webhook.sh"'

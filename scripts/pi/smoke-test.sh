@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
-
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
-# shellcheck source=/dev/null
-[[ -f "$REMOTE_DIR/.env" ]] && set -a && source "$REMOTE_DIR/.env" && set +a
-STORAGE_TYPE="${STORAGE_TYPE:-hybrid}"
-
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_PG_ENV_LIB="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}/../lib/env-file.sh"
+PG_SCRIPT_NAME="$(basename "$0")"
+# shellcheck source=../lib/env-file.sh
+source "${_PG_ENV_LIB:?}"
+read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 PI_STATIC_IP="${PI_STATIC_IP:-127.0.0.1}"
 ADGUARD_WEB_PORT="${ADGUARD_WEB_PORT:-8080}"
 LAN_DOMAIN="${LAN_DOMAIN:-home}"
@@ -18,10 +18,8 @@ DOZZLE_PORT="${DOZZLE_PORT:-9999}"
 NETALERTX_PORT="${NETALERTX_PORT:-20211}"
 NETALERTX_LISTEN_ADDR="${NETALERTX_LISTEN_ADDR:-172.17.0.1}"
 UFW_ADMIN_EXPOSURE="${UFW_ADMIN_EXPOSURE:-caddy-only}"
-
 checks=0
 pass=0
-
 run_check() {
   local name="$1"; shift
   checks=$((checks + 1))
@@ -32,10 +30,8 @@ run_check() {
     echo "FAIL $name"
   fi
 }
-
 CADDY_AUTH_USER="${CADDY_AUTH_USER:-${AGH_ADMIN_USER:-admin}}"
 CADDY_AUTH_PASSWORD="${CADDY_AUTH_PASSWORD:-${AGH_ADMIN_PASSWORD:-}}"
-
 run_caddy_auth_checks() {
   local host="$1"
   local resolve_ip="${PI_STATIC_IP:-127.0.0.1}"
@@ -44,12 +40,10 @@ run_caddy_auth_checks() {
   run_check "caddy-${host}-auth-ok" bash -c \
     'if [[ "${ENABLE_TLS:-false}" == "true" ]]; then code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 -u "'"${CADDY_AUTH_USER}"':'"${CADDY_AUTH_PASSWORD}"'" --resolve "'"${host}"'.'"${LAN_DOMAIN}"':443:'"${resolve_ip}"'" "https://'"${host}"'.'"${LAN_DOMAIN}"'/"); else code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 -u "'"${CADDY_AUTH_USER}"':'"${CADDY_AUTH_PASSWORD}"'" -H "Host: '"${host}"'.'"${LAN_DOMAIN}"'" http://127.0.0.1/); fi; [[ "$code" == "200" || "$code" == "302" || "$code" == "307" ]]'
 }
-
 DEGRADED=0
 if [[ -f /run/pi-gateway/storage-degraded ]]; then
   DEGRADED=1
 fi
-
 if [[ "$STORAGE_TYPE" == "ssd-root" || "$STORAGE_TYPE" == "ssd" ]]; then
   run_check "root-on-ssd" bash -c '! findmnt -n -o SOURCE / | grep -q mmcblk'
   run_check "root-rw" bash -c '! findmnt -n -o OPTIONS / | tr "," "\n" | grep -qx ro'
@@ -75,7 +69,6 @@ elif [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
     run_check "sd-health" bash -c "REMOTE_DIR='${REMOTE_DIR}' bash '${REMOTE_DIR}/scripts/pi/check-sd-health.sh'"
   fi
 fi
-
 run_check "unbound-5335" dig +time=3 +tries=1 @127.0.0.1 -p 5335 cloudflare.com A
 run_check "adguard-53" dig +time=3 +tries=1 @"$PI_STATIC_IP" cloudflare.com A
 run_check "adguard-block" bash -c \
@@ -86,7 +79,6 @@ run_check "dns-rewrite-logs" bash -c \
   "dig +time=3 +tries=1 @${PI_STATIC_IP} logs.${LAN_DOMAIN} A +short | grep -qx '${PI_STATIC_IP}'"
 run_check "dns-rewrite-devices" bash -c \
   "dig +time=3 +tries=1 @${PI_STATIC_IP} devices.${LAN_DOMAIN} A +short | grep -qx '${PI_STATIC_IP}'"
-
 # Degraded: sadece DNS (+ opsiyonel caddy/homepage). App panel smoke yok.
 if [[ "$DEGRADED" -eq 1 ]]; then
   run_check "adguard-ui" curl -fsS "http://127.0.0.1:${ADGUARD_WEB_PORT}/"
@@ -95,7 +87,6 @@ if [[ "$DEGRADED" -eq 1 ]]; then
   [[ "$pass" -eq "$checks" ]]
   exit $?
 fi
-
 if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
   auth_pass="${CADDY_AUTH_PASSWORD:-${AGH_ADMIN_PASSWORD:-}}"
   case "${auth_pass}" in
@@ -117,33 +108,26 @@ if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
       ;;
   esac
 fi
-
 run_check "homepage" curl -fsS "http://127.0.0.1:3040"
 run_check "uptime-kuma" curl -fsS "http://127.0.0.1:3001"
 run_check "adguard-ui" curl -fsS "http://127.0.0.1:${ADGUARD_WEB_PORT}/"
-
 if [[ "${ENABLE_CADDY:-true}" == "true" ]] && [[ -z "${CADDY_AUTH_PASSWORD:-}" ]]; then
   run_check "gateway-http" bash -c \
     'if [[ "${ENABLE_TLS:-false}" == "true" ]]; then code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 --resolve "gateway.'"${LAN_DOMAIN}"':443:'"${PI_STATIC_IP}"'" "https://gateway.'"${LAN_DOMAIN}"'/"); else code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 -H "Host: gateway.'"${LAN_DOMAIN}"'" "http://'"${PI_STATIC_IP}"'/"); fi; [[ "$code" == "200" || "$code" == "401" || "$code" == "302" || "$code" == "307" ]]'
 fi
-
 if [[ "${ENABLE_DOZZLE:-true}" == "true" ]]; then
   run_check "dozzle" curl -fsS -u "${DOZZLE_ADMIN_USER:-admin}:${DOZZLE_ADMIN_PASSWORD}" "http://127.0.0.1:${DOZZLE_PORT}/"
 fi
-
 if [[ "${ENABLE_FORGEJO:-true}" == "true" ]]; then
   run_check "forgejo" bash -c \
     "for _ in 1 2 3 4 5; do curl -fsS \"http://127.0.0.1:${FORGEJO_PORT}/\" >/dev/null && exit 0; sleep 3; done; exit 1"
 fi
-
 if [[ "${ENABLE_SYNCTHING:-true}" == "true" ]]; then
   run_check "syncthing" curl -fsS "http://127.0.0.1:${SYNCTHING_PORT}/"
 fi
-
 if [[ "${ENABLE_REDIS:-false}" == "true" ]]; then
   run_check "redis" docker exec redis redis-cli --no-auth-warning -a "${REDIS_PASSWORD}" ping
 fi
-
 if [[ "${ENABLE_N8N:-true}" == "true" ]]; then
   run_check "n8n" bash -c \
     "for _ in 1 2 3 4 5; do curl -fsS \"http://127.0.0.1:${N8N_PORT}/\" >/dev/null && exit 0; sleep 4; done; exit 1"
@@ -159,7 +143,6 @@ if [[ "${ENABLE_N8N:-true}" == "true" ]]; then
       ;;
   esac
 fi
-
 if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
   run_check "netalertx" bash -c \
     "for _ in 1 2 3 4 5 6; do curl -fsS -L \"http://${NETALERTX_LISTEN_ADDR:-172.17.0.1}:${NETALERTX_PORT}/\" >/dev/null && exit 0; sleep 5; done; exit 1"
@@ -177,24 +160,20 @@ if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
       ;;
   esac
 fi
-
 run_check "privileged-lib-installed" test -x /usr/local/lib/pi-gateway/scripts/pi/recover-readonly-root.sh
 run_check "privileged-lib-sync" diff -q \
   "${REMOTE_DIR}/scripts/lib/stack-health.sh" \
   /usr/local/lib/pi-gateway/scripts/lib/stack-health.sh
 run_check "privileged-lib-hash" bash -c \
   '[[ -f /usr/local/lib/pi-gateway/.installed-sha256 ]] && (cd /usr/local/lib/pi-gateway && sha256sum -c .installed-sha256 >/dev/null)'
-
 if [[ "${ENABLE_CROWDSEC:-true}" == "true" ]]; then
   run_check "crowdsec" bash -c \
     'code=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:8082/v1/heartbeat"); [[ "$code" == "200" || "$code" == "401" ]]'
 fi
-
 if [[ "${NETWORK_MODE:-router-dns}" == "adguard-dhcp" ]]; then
   run_check "adguard-dhcp-config" bash -c \
     'grep -A5 "^dhcp:" "'"${REMOTE_DIR}"'/config/adguard/AdGuardHome.yaml" | grep -q "enabled: true"'
 fi
-
 if [[ "${ENABLE_UFW:-true}" == "true" ]] && [[ -x /usr/sbin/ufw ]]; then
   run_check "ufw-active" bash -c 'sudo -n /usr/sbin/ufw status | grep -q "Status: active"'
   run_check "ufw-ssh-lan" bash -c \
@@ -215,7 +194,6 @@ if [[ "${ENABLE_UFW:-true}" == "true" ]] && [[ -x /usr/sbin/ufw ]]; then
     fi
   fi
 fi
-
 if [[ "${ENABLE_SYNCTHING:-true}" == "true" ]] && docker ps --format '{{.Names}}' | grep -q '^syncthing$'; then
   case "${SYNCTHING_GUI_PASSWORD:-}" in
     ""|CHANGE_ME*|Degistir*)
@@ -228,6 +206,16 @@ if [[ "${ENABLE_SYNCTHING:-true}" == "true" ]] && docker ps --format '{{.Names}}
       ;;
   esac
 fi
-
+if command -v tailscale >/dev/null 2>&1 && tailscale status >/dev/null 2>&1; then
+  run_check "tailscale-connected" tailscale status
+  case "${TAILSCALE_ACL_OWNER:-}" in
+    ""|CHANGE_ME*) ;;
+    *)
+      run_check "tailscale-acl-rendered" test -f "${REMOTE_DIR}/config/tailscale/acl.hujson"
+      run_check "tailscale-acl-owner" grep -Fq "${TAILSCALE_ACL_OWNER}" "${REMOTE_DIR}/config/tailscale/acl.hujson"
+      ;;
+  esac
+  run_check "tailscale-serve" bash -c 'tailscale serve status 2>/dev/null | grep -qE "443|https"'
+fi
 echo "Smoke test: $pass/$checks passed"
 [[ "$pass" -eq "$checks" ]]

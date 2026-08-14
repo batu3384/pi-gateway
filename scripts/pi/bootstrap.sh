@@ -1,25 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 PI_INTERFACE="${PI_INTERFACE:-eth0}"
 TAILSCALE_AUTHKEY="${TAILSCALE_AUTHKEY:-}"
 TAILSCALE_HOSTNAME="${TAILSCALE_HOSTNAME:-pi-gateway}"
 STORAGE_TYPE="${STORAGE_TYPE:-hybrid}"
 ENABLE_CROWDSEC="${ENABLE_CROWDSEC:-true}"
-
-# shellcheck source=/dev/null
-[[ -f "$REMOTE_DIR/.env" ]] && source "$REMOTE_DIR/.env"
-STORAGE_TYPE="${STORAGE_TYPE:-hybrid}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_PG_ENV_LIB="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}/../lib/env-file.sh"
+PG_SCRIPT_NAME="$(basename "$0")"
+# shellcheck source=../lib/env-file.sh
+source "${_PG_ENV_LIB:?}"
+read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 ENABLE_CROWDSEC="${ENABLE_CROWDSEC:-true}"
-
 echo "[bootstrap] Pi Gateway host preparation"
-
 if ! command -v docker >/dev/null 2>&1; then
   curl -fsSL https://get.docker.com | sh
 fi
 sudo usermod -aG docker "$USER" || true
-
 if systemctl is-active --quiet systemd-resolved 2>/dev/null; then
   sudo mkdir -p /etc/systemd/resolved.conf.d
   echo -e "[Resolve]\nDNSStubListener=no" | sudo tee /etc/systemd/resolved.conf.d/pi-gateway.conf >/dev/null
@@ -28,49 +26,46 @@ if systemctl is-active --quiet systemd-resolved 2>/dev/null; then
     sudo ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
   fi
 fi
-
 if [[ -f "$REMOTE_DIR/host/sysctl/99-pi-gateway.conf" ]]; then
   sudo cp "$REMOTE_DIR/host/sysctl/99-pi-gateway.conf" /etc/sysctl.d/99-pi-gateway.conf
   sudo sysctl --system >/dev/null 2>&1 || true
 fi
-
 if [[ -f "$REMOTE_DIR/host/dhcpcd/pi-gateway.conf" ]]; then
   sudo mkdir -p /etc/dhcpcd.conf.d
   sudo cp "$REMOTE_DIR/host/dhcpcd/pi-gateway.conf" /etc/dhcpcd.conf.d/pi-gateway.conf
   grep -q 'pi-gateway.conf' /etc/dhcpcd.conf 2>/dev/null || echo 'include /etc/dhcpcd.conf.d/pi-gateway.conf' | sudo tee -a /etc/dhcpcd.conf >/dev/null
   sudo systemctl restart dhcpcd 2>/dev/null || sudo rc-service dhcpcd restart 2>/dev/null || true
 fi
-
 if ! command -v log2ram >/dev/null 2>&1; then
   timeout 180 bash -c 'curl -fsSL https://github.com/azlux/log2ram/raw/master/install.sh 2>/dev/null | sudo bash' 2>/dev/null || \
     echo "[bootstrap] log2ram install skipped"
 fi
-
 if ! grep -q '^dtparam=watchdog=on' /boot/firmware/config.txt 2>/dev/null; then
   echo 'dtparam=watchdog=on' | sudo tee -a /boot/firmware/config.txt >/dev/null 2>&1 || true
 fi
 sudo systemctl enable watchdog 2>/dev/null || true
-
 if ! command -v tailscale >/dev/null 2>&1; then
   curl -fsSL https://tailscale.com/install.sh | sh
 fi
 if [[ -n "$TAILSCALE_AUTHKEY" ]]; then
   timeout 120 sudo tailscale up --auth-key="$TAILSCALE_AUTHKEY" --hostname="$TAILSCALE_HOSTNAME" || true
 fi
-
 if [[ -f "$REMOTE_DIR/scripts/pi/harden-host.sh" ]]; then
   echo "[bootstrap] Host sertlestirme..."
   export REMOTE_DIR
-  bash "$REMOTE_DIR/scripts/pi/harden-host.sh" || \
-    echo "[bootstrap] WARN: harden-host atlandi"
+  bash "$REMOTE_DIR/scripts/pi/harden-host.sh" || {
+    echo "[bootstrap] HATA: harden-host basarisiz"
+    exit 1
+  }
 fi
 if [[ -f "$REMOTE_DIR/scripts/pi/setup-firewall.sh" ]] && [[ "${ENABLE_UFW:-true}" == "true" ]]; then
   echo "[bootstrap] UFW firewall..."
   export REMOTE_DIR
-  bash "$REMOTE_DIR/scripts/pi/setup-firewall.sh" || \
-    echo "[bootstrap] WARN: firewall setup atlandi"
+  bash "$REMOTE_DIR/scripts/pi/setup-firewall.sh" || {
+    echo "[bootstrap] HATA: firewall setup basarisiz"
+    exit 1
+  }
 fi
-
 # Persistent journal — USB disconnect loglari reboot sonrasi kalsin
 if [[ -d "$REMOTE_DIR/host/systemd/journald.conf.d" ]]; then
   echo "[bootstrap] journald persistent..."
@@ -79,7 +74,6 @@ if [[ -d "$REMOTE_DIR/host/systemd/journald.conf.d" ]]; then
   sudo mkdir -p /var/log/journal
   sudo systemctl restart systemd-journald 2>/dev/null || true
 fi
-
 # JMicron autosuspend off
 if [[ -f "$REMOTE_DIR/host/udev/99-pi-gateway-jmicron.rules" ]]; then
   echo "[bootstrap] udev JMicron rules..."
@@ -87,7 +81,6 @@ if [[ -f "$REMOTE_DIR/host/udev/99-pi-gateway-jmicron.rules" ]]; then
   sudo udevadm control --reload-rules 2>/dev/null || true
   sudo udevadm trigger --subsystem-match=usb 2>/dev/null || true
 fi
-
 for unit in pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-crowdsec-ufw.timer pi-gateway-morning.timer pi-gateway-stack-watchdog.timer pi-gateway-netalertx-names.timer pi-data-symlink.timer pi-ssd-watch.path; do
   [[ -f "$REMOTE_DIR/host/systemd/$unit" ]] && sudo cp "$REMOTE_DIR/host/systemd/$unit" "/etc/systemd/system/$unit"
 done
@@ -102,13 +95,11 @@ install_systemd_unit() {
       -e "s|Group=PI_USER|Group=${USER}|g" \
       "$src" | sudo tee "$dst" >/dev/null
 }
-
 if [[ -x "$REMOTE_DIR/scripts/pi/install-privileged-scripts.sh" ]]; then
   echo "[bootstrap] Root-owned privileged scriptler kuruluyor..."
   privileged_script="$REMOTE_DIR/scripts/pi/install-privileged-scripts.sh"
   REMOTE_DIR="$REMOTE_DIR" bash "$privileged_script"
 fi
-
 for svc in pi-gateway-health.service pi-gateway-backup.service pi-gateway-adguard-config.service pi-gateway-health-failure.service pi-gateway-crowdsec-ufw.service pi-data-symlink.service pi-data-symlink-repair.service pi-gateway-morning.service pi-gateway-recover-ro.service pi-gateway-stack-watchdog.service pi-gateway-netalertx-names.service pi-gateway-ensure-fstab.service pi-ssd-data.service pi-ssd-watch.service pi-gateway-telegram-bot.service; do
   install_systemd_unit "$svc"
 done
@@ -121,7 +112,6 @@ if [[ "${ENABLE_CROWDSEC:-true}" == "true" ]]; then
   sudo systemctl enable --now pi-gateway-crowdsec-ufw.timer 2>/dev/null || true
 fi
 sudo systemctl start pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-morning.timer pi-gateway-stack-watchdog.timer pi-gateway-netalertx-names.timer 2>/dev/null || true
-
 if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
   if [[ -x "$REMOTE_DIR/scripts/pi/ensure-ssd-fstab.sh" ]]; then
     echo "[bootstrap] SSD fstab kontrolu..."
@@ -158,7 +148,6 @@ if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
     exit 1
   fi
 fi
-
 # Veri dizini: hybrid=symlink, ssd-root=native
 if [[ -f "$REMOTE_DIR/scripts/pi/ensure-data-symlink.sh" ]]; then
   echo "[bootstrap] Veri dizini kontrolu..."
@@ -178,7 +167,6 @@ else
     "$REMOTE_DIR/data/redis" "$REMOTE_DIR/data/n8n" "$REMOTE_DIR/data/crowdsec"
 fi
 sudo chown -R "$USER:$USER" "$REMOTE_DIR/config/adguard" 2>/dev/null || true
-
 if [[ "$STORAGE_TYPE" == "ssd-root" || "$STORAGE_TYPE" == "ssd" ]]; then
   ROOT_SRC="$(findmnt -n -o SOURCE / 2>/dev/null || true)"
   if echo "$ROOT_SRC" | grep -q mmcblk; then
@@ -188,11 +176,8 @@ if [[ "$STORAGE_TYPE" == "ssd-root" || "$STORAGE_TYPE" == "ssd" ]]; then
   fi
   echo "[bootstrap] Storage: SSD root OK ($ROOT_SRC)"
 fi
-
 sudo mkdir -p /run/pi-gateway/notify 2>/dev/null || true
 sudo chown "$USER:$USER" /run/pi-gateway/notify 2>/dev/null || true
 sudo chmod 775 /run/pi-gateway/notify 2>/dev/null || true
-
 chmod +x "$REMOTE_DIR"/scripts/pi/*.sh "$REMOTE_DIR"/scripts/lib/*.sh 2>/dev/null || true
-
 echo "[bootstrap] complete"

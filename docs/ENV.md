@@ -4,7 +4,8 @@
 
 | Variable | Description |
 |----------|-------------|
-| `PI_HOST` / `PI_STATIC_IP` | Pi address |
+| `PI_HOST` / `PI_STATIC_IP` | Pi LAN address (service bind, DNS) |
+| `PI_DEPLOY_HOST` | Optional SSH/deploy host (e.g. Tailscale `100.x` when LAN unreachable) |
 | `AGH_ADMIN_PASSWORD` | AdGuard admin (≥12 characters) |
 | `LAN_GATEWAY`, `LAN_SUBNET_CIDR` | Filled by `discover-remote.sh` |
 
