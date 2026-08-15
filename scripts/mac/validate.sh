@@ -75,6 +75,10 @@ chmod +x "$SCRIPT_DIR/test-roadmap-path-a.sh" 2>/dev/null || true
 if [[ -f "$SCRIPT_DIR/test-roadmap-path-a.sh" ]]; then
   "$SCRIPT_DIR/test-roadmap-path-a.sh"
 fi
+chmod +x "$SCRIPT_DIR/test-homepage-unified-login.sh" 2>/dev/null || true
+if [[ -f "$SCRIPT_DIR/test-homepage-unified-login.sh" ]]; then
+  "$SCRIPT_DIR/test-homepage-unified-login.sh"
+fi
 
 # Mac: docker compose plugin yoksa docker-compose (v2 standalone / OrbStack)
 compose_config() {

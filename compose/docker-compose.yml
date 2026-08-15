@@ -87,12 +87,30 @@ services:
       homepage:
         condition: service_started
 
+  gateway-state:
+    image: nginx:1.27.4-alpine@sha256:4ff102c5d78d254a6f0da062b3cf39eaf07f01eec0927fd21e219d0af8bc0591
+    container_name: gateway-state
+    restart: unless-stopped
+    volumes:
+      - /var/lib/pi-gateway:/usr/share/nginx/html:ro
+    expose:
+      - "80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/state.json || test -f /usr/share/nginx/html/state.json"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
   homepage:
     image: ghcr.io/gethomepage/homepage@sha256:a0b71c8e757298d02560186bab9fbe3fc2d375c523a62cc1019177b37e48aa28
     container_name: homepage
     restart: unless-stopped
     labels:
       autoheal: "true"
+    depends_on:
+      gateway-state:
+        condition: service_started
     ports:
       - "127.0.0.1:3040:3000"
     volumes:

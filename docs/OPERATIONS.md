@@ -44,22 +44,25 @@ Setup: `make pi-access`
 
 With `ENABLE_TLS=true` (default), all panels use **HTTPS** (`https://*.home`). HTTP only with `WEAK_TLS_OK=yes`.
 
-### Dual login (normal)
+### Unified login (`UNIFIED_LOGIN=true`, default)
 
-1. **Caddy basic auth** — all `*.home` panels (default: `AGH_ADMIN_USER` + `AGH_ADMIN_PASSWORD`; `CADDY_AUTH_*` if set)
-2. **App login** — each service's own user/password (except Homepage)
+`AGH_ADMIN_USER` + `AGH_ADMIN_PASSWORD` = **tek sifre** Caddy ve servis GUI'leri icin. Deploy `sync-service-passwords` ile Dozzle, Uptime Kuma, Forgejo, Syncthing ve NetAlertX sifrelerini esitler.
 
-| URL | Service | Caddy | App |
-|-----|---------|-------|-----|
-| https://gateway.home | Homepage (main panel) | `AGH_ADMIN_*` | — |
+| URL | Service | Caddy | App (unified) |
+|-----|---------|-------|---------------|
+| https://gateway.home | Homepage + gateway widget | `AGH_ADMIN_*` | — |
 | https://panel.home | Homepage (alias) | same | — |
-| https://status.home | Uptime Kuma | same | `UPTIME_KUMA_ADMIN_*` |
-| https://logs.home | Dozzle | same | `DOZZLE_ADMIN_*` |
+| https://status.home | Uptime Kuma | same | same |
+| https://logs.home | Dozzle | same | same |
 | https://dns.home | AdGuard | same | `AGH_ADMIN_*` |
-| https://git.home | Forgejo | same | `FORGEJO_ADMIN_*` |
-| https://sync.home | Syncthing | same | `SYNCTHING_GUI_*` |
-| https://n8n.home | n8n | same | Owner (web UI on first setup) |
-| https://devices.home | NetAlertX (network inventory) | same | NetAlertX UI (password on first launch) |
+| https://git.home | Forgejo | same | same |
+| https://sync.home | Syncthing | same | same |
+| https://n8n.home | n8n | same | Owner (ilk kurulum; Caddy auth yeterli) |
+| https://devices.home | NetAlertX | — (API dongusu) | `AGH_ADMIN_*` |
+
+Homepage **Gateway durumu** widget: `state.json` (SSD, yedek, drill metrikleri).
+
+`UNIFIED_LOGIN=false` ise eski dual-login: her servis icin ayri `.env` sifresi.
 
 Public status page: `https://status.home/status/pi-gateway` (after Caddy auth).
 

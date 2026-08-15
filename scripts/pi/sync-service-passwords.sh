@@ -4,6 +4,9 @@ set -euo pipefail
 
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/unified-login.sh
+source "$SCRIPT_DIR/../lib/unified-login.sh"
+apply_unified_login
 
 log() { echo "[sync-passwords] $*"; }
 

@@ -135,7 +135,12 @@ elif [[ "$STORAGE_TYPE" == "ssd-root" || "$STORAGE_TYPE" == "ssd" ]]; then
   run_step_critical "ssd-root harden" env REMOTE_DIR="$REMOTE_DIR" CONFIRM_NEUTRALIZE="${CONFIRM_NEUTRALIZE:-}" CONFIRM_EEPROM_FIX="${CONFIRM_EEPROM_FIX:-}" "$SCRIPT_DIR/ssd-root-harden.sh"
 fi
 run_step_critical "AdGuard yapilandirma" "$SCRIPT_DIR/configure-adguard.sh"
-if [[ "${SYNC_SERVICE_PASSWORDS:-false}" == "true" ]]; then
+# shellcheck source=../lib/unified-login.sh
+source "$SCRIPT_DIR/../lib/unified-login.sh"
+apply_unified_login
+if [[ "${UNIFIED_LOGIN:-true}" == "true" ]]; then
+  run_step_critical "Servis sifreleri (unified login)" "$SCRIPT_DIR/sync-service-passwords.sh"
+elif [[ "${SYNC_SERVICE_PASSWORDS:-false}" == "true" ]]; then
   run_step_optional "Servis sifreleri" "$SCRIPT_DIR/sync-service-passwords.sh"
 fi
 run_step_optional "Host sertlestirme" "$SCRIPT_DIR/harden-host.sh"

@@ -51,6 +51,30 @@ widgets:
       cpu: true
       memory: true
       disk: /
+  - customapi:
+      label: Gateway durumu
+      url: http://gateway-state/state.json
+      refreshInterval: 120000
+      mappings:
+        - field: ts
+          label: Guncellendi
+          format: relativeDate
+        - field: storage_degraded
+          label: Depolama modu
+        - field: ssd_mount_healthy
+          label: SSD saglik
+        - field: docker_root_on_ssd
+          label: Docker SSD
+        - field: root_usage_pct
+          label: SD doluluk
+          format: percent
+        - field: ssd_usage_pct
+          label: SSD doluluk
+          format: percent
+        - field: offsite_backup_age_days
+          label: Offsite yedek (gun)
+        - field: backup_restore_drill_age_days
+          label: Restore drill (gun)
   - uptimekuma:
       url: ${PANEL_PROTOCOL}://status.${LAN_DOMAIN}
       slug: ${UPTIME_KUMA_STATUS_SLUG}

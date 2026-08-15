@@ -169,6 +169,9 @@ run_check "privileged-lib-hash" bash -c \
 if [[ "$DEGRADED" -eq 0 ]]; then
   run_check "gateway-state-json" test -f /var/lib/pi-gateway/state.json
   run_check "gateway-metrics-prom" test -f /var/lib/pi-gateway/metrics/pi_gateway.prom
+  run_check "gateway-state-container" bash -c 'docker ps --format "{{.Names}}" | grep -qx gateway-state'
+  run_check "gateway-state-http" bash -c \
+    'docker exec gateway-state wget -q -O- http://127.0.0.1/state.json | grep -q storage_degraded'
 fi
 if [[ "${ENABLE_CROWDSEC:-true}" == "true" ]]; then
   run_check "crowdsec" bash -c \

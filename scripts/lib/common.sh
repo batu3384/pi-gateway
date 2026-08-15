@@ -9,6 +9,9 @@ load_env() {
   # shellcheck source=env-file.sh
   source "$(dirname "${BASH_SOURCE[0]}")/env-file.sh"
   read_project_or_example_dotenv || die ".env dotenv parser hatasi"
+  # shellcheck source=unified-login.sh
+  source "$(dirname "${BASH_SOURCE[0]}")/unified-login.sh"
+  apply_unified_login
 }
 
 log() { printf '[pi-gateway] %s\n' "$*"; }

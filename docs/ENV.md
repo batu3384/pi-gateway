@@ -22,6 +22,8 @@
 
 | Variable | Description |
 |----------|-------------|
+| `UNIFIED_LOGIN` | `true` (default): `AGH_ADMIN_*` = Caddy + Dozzle/Kuma/Forgejo/Syncthing/NetAlertX |
+| `SYNC_SERVICE_PASSWORDS` | `true` (default with unified): deploy sonrasi GUI sifre esitleme |
 | `UFW_ADMIN_EXPOSURE` | `full` or `caddy-only` |
 | `TELEGRAM_BOT_TOKEN` | @BotFather token |
 | `TELEGRAM_CHAT_ID` | Notification channel |

@@ -59,6 +59,10 @@ if [[ -f "$PROJECT_DIR/.env" ]]; then
   check_pw() {
     local name="$1" val="$2" enabled="$3"
     [[ "$enabled" == "true" ]] || return 0
+    if [[ "${UNIFIED_LOGIN:-true}" == "true" && "$name" != "RESTIC_PASSWORD" ]]; then
+      ok "$name (unified login -> AGH_ADMIN_PASSWORD)"
+      return 0
+    fi
     if is_placeholder "$val"; then
       fail "$name empty or placeholder (required when enabled)"
     else
