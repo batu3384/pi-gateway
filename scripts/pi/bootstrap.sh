@@ -54,6 +54,15 @@ fi
 if [[ -n "$TAILSCALE_AUTHKEY" ]]; then
   timeout 120 sudo tailscale up --auth-key="$TAILSCALE_AUTHKEY" --hostname="$TAILSCALE_HOSTNAME" || true
 fi
+# DNS gateway: Tailscale MagicDNS (100.100.100.100) dis cozumlemeyi kirar — yerel AdGuard kullan
+if command -v tailscale >/dev/null 2>&1 && tailscale status --json 2>/dev/null | python3 -c \
+  "import json,sys; sys.exit(0 if json.load(sys.stdin).get('BackendState')=='Running' else 1)" 2>/dev/null; then
+  sudo tailscale set --accept-dns=false 2>/dev/null || true
+fi
+if ! grep -qE '^nameserver[[:space:]]+127\.0\.0\.1' /etc/resolv.conf 2>/dev/null; then
+  echo -e "nameserver 127.0.0.1\nnameserver 192.168.1.1" | sudo tee /etc/resolv.conf >/dev/null
+  echo "[bootstrap] resolv.conf -> 127.0.0.1 (yerel AdGuard)"
+fi
 if [[ -f "$REMOTE_DIR/scripts/pi/harden-host.sh" ]]; then
   echo "[bootstrap] Host sertlestirme..."
   export REMOTE_DIR
