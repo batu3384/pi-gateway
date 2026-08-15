@@ -26,13 +26,25 @@ die() { echo "[backup-drill] HATA: $*" >&2; exit 1; }
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
 log "restore $DRILL_SUBSET -> $tmpdir"
-if ! timeout "$DRILL_TIMEOUT_SEC" docker run --rm --network none \
-  -e RESTIC_PASSWORD \
-  -v "${LOCAL_REPO}:/repo:ro" \
-  -v "${tmpdir}:/restore" \
-  "$RESTIC_IMAGE" \
-  -r "local:/repo" restore "$DRILL_SUBSET" --target /restore; then
-  die "restic restore basarisiz"
+restored=0
+if docker info >/dev/null 2>&1; then
+  if timeout "$DRILL_TIMEOUT_SEC" docker run --rm --network none \
+    -e RESTIC_PASSWORD \
+    -v "${LOCAL_REPO}:/repo:ro" \
+    -v "${tmpdir}:/restore" \
+    "$RESTIC_IMAGE" \
+    -r "local:/repo" restore "$DRILL_SUBSET" --target /restore; then
+    restored=1
+  fi
+fi
+if [[ "$restored" -eq 0 ]]; then
+  if command -v restic >/dev/null 2>&1; then
+    log "docker yok — native restic"
+    RESTIC_PASSWORD="$RESTIC_PASSWORD" timeout "$DRILL_TIMEOUT_SEC" \
+      restic -r "$LOCAL_REPO" restore "$DRILL_SUBSET" --target "$tmpdir" || die "restic restore basarisiz"
+  else
+    die "restic restore basarisiz (docker yok, native restic yok)"
+  fi
 fi
 
 [[ -d "$tmpdir/backup/config" ]] || die "restore: backup/config yok"

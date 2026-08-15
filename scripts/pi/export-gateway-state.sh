@@ -108,12 +108,16 @@ data = {
 with open(tmp, "w", encoding="utf-8") as f:
     json.dump(data, f, indent=2)
     f.write("\n")
-os.replace(tmp, path)
 PY
+if [[ "$(id -u)" -eq 0 ]]; then
+  install -m 644 "$json_tmp" "$STATE_JSON"
+else
+  run_as_needed install -m 644 "$json_tmp" "$STATE_JSON"
+fi
+rm -f "$json_tmp"
 if [[ "$(id -u)" -eq 0 ]]; then
   chown "${USER}:${USER}" "$STATE_JSON" "$METRICS_FILE" 2>/dev/null || true
 else
   run_as_needed chown "${USER}:${USER}" "$STATE_JSON" "$METRICS_FILE" 2>/dev/null || true
 fi
-rm -f "$json_tmp"
 echo "[export-state] OK ${METRICS_FILE}"
