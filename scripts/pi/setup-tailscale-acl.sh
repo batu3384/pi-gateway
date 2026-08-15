@@ -27,6 +27,7 @@ if [[ ! "$ACL_LAN_SUBNET" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$ ]]; then
   log "HATA: TAILSCALE_LAN_SUBNET veya LAN_SUBNET_CIDR gecersiz — broad ACL publish reddedildi"
   exit 1
 fi
+ACL_TEMPLATE="${ACL_TEMPLATE:-${REMOTE_DIR}/config/tailscale/acl.hujson.example}"
 [[ -f "$ACL_TEMPLATE" ]] || { log "ACL sablonu yok: $ACL_TEMPLATE"; exit 1; }
 mkdir -p "$(dirname "$ACL_LOCAL")"
 python3 - "$ACL_TEMPLATE" "$ACL_LOCAL" "$ACL_OWNER" "$ACL_LAN_SUBNET" <<'PY'
