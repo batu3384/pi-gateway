@@ -47,6 +47,7 @@ if [[ -f /run/pi-gateway/storage-degraded ]]; then
 fi
 # shellcheck source=../lib/stack-health.sh
 if [[ "$DEPLOY_DEGRADED" -eq 0 ]] && [[ -f "$REMOTE_DIR/scripts/lib/stack-health.sh" ]]; then
+  source "$REMOTE_DIR/scripts/lib/stack-health.sh"
   storage_degraded && DEPLOY_DEGRADED=1
 fi
 if [[ "$DEPLOY_DEGRADED" -eq 1 ]]; then

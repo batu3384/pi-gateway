@@ -31,6 +31,23 @@ elif [[ ! -f "${CONFIG}/config.yaml" ]]; then
   mkdir -p "$CONFIG" "$DB"
 fi
 
+# AdGuard host:8080 ile cakismasin — LAPI 8082 (network_mode: host)
+ensure_lapi_listen_port() {
+  local cfg="${CONFIG}/config.yaml"
+  if [[ -f "$cfg" ]] && grep -q 'listen_uri:' "$cfg"; then
+    sed -i 's|listen_uri:.*|listen_uri: 127.0.0.1:8082|' "$cfg"
+  elif [[ ! -f "$cfg" ]]; then
+    cat >"$cfg" <<'EOF'
+api:
+  server:
+    listen_uri: 127.0.0.1:8082
+EOF
+  else
+    printf '\napi:\n  server:\n    listen_uri: 127.0.0.1:8082\n' >>"$cfg"
+  fi
+}
+ensure_lapi_listen_port
+
 cd "${REMOTE_DIR}/compose"
 docker compose --env-file ../.env --profile crowdsec up -d crowdsec
 

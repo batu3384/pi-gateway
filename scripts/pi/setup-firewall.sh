@@ -17,11 +17,17 @@ ENABLE_FAIL2BAN="${ENABLE_FAIL2BAN:-true}"
 UFW_ADMIN_EXPOSURE="${UFW_ADMIN_EXPOSURE:-caddy-only}"
 log() { echo "[firewall] $*"; }
 install_packages() {
-  if ! command -v ufw >/dev/null 2>&1 || ! command -v fail2ban-client >/dev/null 2>&1; then
-    log "Paketler kuruluyor (ufw, fail2ban)..."
-    sudo apt-get update -qq
-    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ufw fail2ban
+  if command -v ufw >/dev/null 2>&1 && command -v fail2ban-client >/dev/null 2>&1; then
+    return 0
   fi
+  log "Paketler kuruluyor (ufw, fail2ban)..."
+  sudo systemctl stop packagekit packagekit.service 2>/dev/null || true
+  sudo systemctl stop unattended-upgrades 2>/dev/null || true
+  if ! timeout 180 sudo apt-get update -qq; then
+    log "HATA: apt-get update timeout — packagekit kapali mi?"
+    return 1
+  fi
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ufw fail2ban
 }
 tailscale_connected() {
   command -v tailscale >/dev/null 2>&1 || return 1
