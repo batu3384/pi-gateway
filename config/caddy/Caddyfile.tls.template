@@ -40,6 +40,12 @@ logs.__LAN_DOMAIN__ {
   reverse_proxy dozzle:8080
 }
 
+grafana.__LAN_DOMAIN__ {
+  tls /etc/caddy/certs/__LAN_DOMAIN__.pem /etc/caddy/certs/__LAN_DOMAIN__-key.pem
+  __CADDY_BASIC_AUTH__
+  reverse_proxy grafana:3000
+}
+
 devices.__LAN_DOMAIN__ {
   tls /etc/caddy/certs/__LAN_DOMAIN__.pem /etc/caddy/certs/__LAN_DOMAIN__-key.pem
   # Host-network NetAlertX: docker0 (LAN IP loopback'a ulasmaz)

@@ -145,6 +145,7 @@ export TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:-}"
 export UPTIME_KUMA_STATUS_SLUG="${UPTIME_KUMA_STATUS_SLUG:-pi-gateway}"
 export ENABLE_N8N="${ENABLE_N8N:-true}"
 export ENABLE_NETALERTX="${ENABLE_NETALERTX:-true}"
+export ENABLE_MONITORING="${ENABLE_MONITORING:-true}"
 export NETALERTX_PORT="${NETALERTX_PORT:-20211}"
 export UPTIME_KUMA_SLOW_TIMEOUT="${UPTIME_KUMA_SLOW_TIMEOUT:-90}"
 export LAN_DOMAIN="${LAN_DOMAIN:-home}"
@@ -161,7 +162,7 @@ export N8N_KUMA_WEBHOOK_URL
 docker run --rm --network host \
   -e KUMA_URL -e KUMA_USER -e KUMA_PASS -e PI_IP -e DOCKER_GW -e LAN_DOMAIN \
   -e TELEGRAM_BOT_TOKEN -e TELEGRAM_CHAT_ID -e UPTIME_KUMA_STATUS_SLUG \
-  -e ENABLE_N8N -e N8N_KUMA_WEBHOOK_URL -e ENABLE_NETALERTX -e NETALERTX_PORT -e UPTIME_KUMA_SLOW_TIMEOUT \
+  -e ENABLE_N8N -e N8N_KUMA_WEBHOOK_URL -e ENABLE_NETALERTX -e ENABLE_MONITORING -e NETALERTX_PORT -e UPTIME_KUMA_SLOW_TIMEOUT \
   python:3.12-alpine sh -c '
     pip install -q uptime-kuma-api2
     python - <<'"'"'PY'"'"'
@@ -206,6 +207,15 @@ monitors = [
     ("Unbound DNS", MonitorType.PORT, {"hostname": "unbound", "port": 5335}),
     ("Redis", MonitorType.PORT, {"hostname": "redis", "port": 6379}),
 ]
+if os.environ.get("ENABLE_MONITORING", "true") == "true":
+    monitors.append(("Grafana", MonitorType.HTTP, {
+        "url": "http://grafana:3000/api/health",
+        "accepted_statuscodes": ok,
+    }))
+    monitors.append(("Prometheus", MonitorType.HTTP, {
+        "url": "http://prometheus:9090/-/ready",
+        "accepted_statuscodes": ok,
+    }))
 if os.environ.get("ENABLE_NETALERTX", "true") == "true":
     monitors.append((f"devices.{lan}", MonitorType.HTTP, {
         "url": "https://caddy:443",

@@ -42,6 +42,8 @@ Setup: `make pi-access`
 
 ## Panels (`*.home`)
 
+Visibility stack (Path B): `docs/VISIBILITY.md` — Grafana, Prometheus, Homepage widget.
+
 With `ENABLE_TLS=true` (default), all panels use **HTTPS** (`https://*.home`). HTTP only with `WEAK_TLS_OK=yes`.
 
 ### Unified login (`UNIFIED_LOGIN=true`, default)

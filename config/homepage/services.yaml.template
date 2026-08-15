@@ -46,6 +46,11 @@ services:
       description: Ag cihaz envanteri
       icon: mdi-lan
 
+  - Grafana:
+      href: ${PANEL_PROTOCOL}://grafana.${LAN_DOMAIN}
+      description: Metrik grafikleri
+      icon: grafana.png
+
 widgets:
   - resources:
       cpu: true

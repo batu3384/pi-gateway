@@ -75,6 +75,7 @@ if [[ -f "$PROJECT_DIR/.env" ]]; then
   check_pw "SYNCTHING_GUI_PASSWORD" "${SYNCTHING_GUI_PASSWORD:-}" "${ENABLE_SYNCTHING:-true}"
   check_pw "RESTIC_PASSWORD" "${RESTIC_PASSWORD:-}" "${ENABLE_RESTIC:-true}"
   check_pw "UPTIME_KUMA_ADMIN_PASSWORD" "${UPTIME_KUMA_ADMIN_PASSWORD:-}" "true"
+  check_pw "GRAFANA_ADMIN_PASSWORD" "${GRAFANA_ADMIN_PASSWORD:-}" "${ENABLE_MONITORING:-true}"
 
   if [[ "${ENABLE_N8N:-true}" == "true" ]]; then
     if [[ -z "${N8N_ENCRYPTION_KEY:-}" ]]; then

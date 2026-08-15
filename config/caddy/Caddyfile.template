@@ -37,6 +37,11 @@ http://logs.__LAN_DOMAIN__ {
   reverse_proxy dozzle:8080
 }
 
+http://grafana.__LAN_DOMAIN__ {
+  __CADDY_BASIC_AUTH__
+  reverse_proxy grafana:3000
+}
+
 http://devices.__LAN_DOMAIN__ {
   # Host-network NetAlertX: docker0 (LAN IP loopback'a ulasmaz)
   reverse_proxy 172.17.0.1:__NETALERTX_PORT__ {

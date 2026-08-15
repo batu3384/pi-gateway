@@ -148,8 +148,13 @@ if [[ "$COMPOSE_MODE" == "core-dns" ]]; then
     "REMOTE_DIR='$REMOTE_DIR' COMPOSE_RECOVER_MODE=core-dns bash '$REMOTE_DIR/scripts/pi/recover-compose-up.sh'"
 else
   if [[ "${DEPLOY_SKIP_PULL:-false}" == "true" ]]; then
-    log "docker compose up -d --remove-orphans (pull skipped — DEPLOY_SKIP_PULL=true)"
-    ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" "cd '$REMOTE_DIR/compose' && docker compose --env-file ../.env $PROFILE_ARGS up -d --remove-orphans"
+    log "canary compose up (pull skipped — DEPLOY_SKIP_PULL=true)"
+    ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" \
+      "REMOTE_DIR='$REMOTE_DIR' DEPLOY_SKIP_PULL=true bash '$REMOTE_DIR/scripts/pi/canary-compose-update.sh'"
+  elif [[ "${ENABLE_CANARY_COMPOSE_UPDATE:-true}" == "true" ]]; then
+    log "canary compose update (DNS -> edge -> rest)"
+    ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" \
+      "REMOTE_DIR='$REMOTE_DIR' bash '$REMOTE_DIR/scripts/pi/canary-compose-update.sh'"
   else
     ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" "cd '$REMOTE_DIR/compose' && docker compose --env-file ../.env $PROFILE_ARGS pull && docker compose --env-file ../.env $PROFILE_ARGS up -d --remove-orphans"
   fi

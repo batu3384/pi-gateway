@@ -14,6 +14,7 @@ compose_profiles() {
   [[ "${ENABLE_NETALERTX:-true}" == "true" ]] && profiles+=(--profile netalert)
   [[ "${ENABLE_CROWDSEC:-true}" == "true" ]] && profiles+=(--profile crowdsec)
   [[ -n "${CLOUDFLARE_TUNNEL_TOKEN:-}" ]] && profiles+=(--profile cloudflare)
+  [[ "${ENABLE_MONITORING:-true}" == "true" ]] && profiles+=(--profile monitoring)
   [[ "${ENABLE_WATCHTOWER:-false}" == "true" ]] && profiles+=(--profile watchtower)
   printf '%s\n' "${profiles[@]}"
 }

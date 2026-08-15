@@ -20,4 +20,6 @@ apply_unified_login() {
   export SYNCTHING_GUI_USER="${SYNCTHING_GUI_USER:-$user}"
   export SYNCTHING_GUI_PASSWORD="$pass"
   export NETALERTX_PASSWORD="${NETALERTX_PASSWORD:-$pass}"
+  export GRAFANA_ADMIN_USER="${GRAFANA_ADMIN_USER:-$user}"
+  export GRAFANA_ADMIN_PASSWORD="$pass"
 }

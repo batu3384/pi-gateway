@@ -58,7 +58,7 @@ print(len(json.load(sys.stdin)))
     exit 1
   fi
 }
-DOMAINS=(gateway dns status panel git sync n8n logs devices)
+DOMAINS=(gateway dns status panel git sync n8n logs devices grafana)
 for sub in "${DOMAINS[@]}"; do
   add_rewrite "${sub}.${LAN_DOMAIN}" "$PI_STATIC_IP"
 done

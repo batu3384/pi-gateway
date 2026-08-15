@@ -22,8 +22,10 @@
 
 | Variable | Description |
 |----------|-------------|
-| `UNIFIED_LOGIN` | `true` (default): `AGH_ADMIN_*` = Caddy + Dozzle/Kuma/Forgejo/Syncthing/NetAlertX |
+| `UNIFIED_LOGIN` | `true` (default): `AGH_ADMIN_*` = Caddy + Dozzle/Kuma/Forgejo/Syncthing/NetAlertX/Grafana |
 | `SYNC_SERVICE_PASSWORDS` | `true` (default with unified): deploy sonrasi GUI sifre esitleme |
+| `ENABLE_MONITORING` | `true`: Prometheus + Grafana + node-exporter (`grafana.home`) |
+| `ENABLE_CANARY_COMPOSE_UPDATE` | `true`: deploy DNS-once, wait, then edge + apps |
 | `UFW_ADMIN_EXPOSURE` | `full` or `caddy-only` |
 | `TELEGRAM_BOT_TOKEN` | @BotFather token |
 | `TELEGRAM_CHAT_ID` | Notification channel |

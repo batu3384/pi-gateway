@@ -79,6 +79,8 @@ run_check "dns-rewrite-logs" bash -c \
   "dig +time=3 +tries=1 @${PI_STATIC_IP} logs.${LAN_DOMAIN} A +short | grep -qx '${PI_STATIC_IP}'"
 run_check "dns-rewrite-devices" bash -c \
   "dig +time=3 +tries=1 @${PI_STATIC_IP} devices.${LAN_DOMAIN} A +short | grep -qx '${PI_STATIC_IP}'"
+run_check "dns-rewrite-grafana" bash -c \
+  "dig +time=3 +tries=1 @${PI_STATIC_IP} grafana.${LAN_DOMAIN} A +short | grep -qx '${PI_STATIC_IP}'"
 # Degraded: sadece DNS (+ opsiyonel caddy/homepage). App panel smoke yok.
 if [[ "$DEGRADED" -eq 1 ]]; then
   run_check "adguard-ui" curl -fsS "http://127.0.0.1:${ADGUARD_WEB_PORT}/"
@@ -172,6 +174,15 @@ if [[ "$DEGRADED" -eq 0 ]]; then
   run_check "gateway-state-container" bash -c 'docker ps --format "{{.Names}}" | grep -qx gateway-state'
   run_check "gateway-state-http" bash -c \
     'docker exec gateway-state wget -q -O- http://127.0.0.1/state.json | grep -q storage_degraded'
+fi
+if [[ "${ENABLE_MONITORING:-true}" == "true" ]]; then
+  run_check "prometheus-container" bash -c 'docker ps --format "{{.Names}}" | grep -qx prometheus'
+  run_check "grafana-container" bash -c 'docker ps --format "{{.Names}}" | grep -qx grafana'
+  run_check "node-exporter-container" bash -c 'docker ps --format "{{.Names}}" | grep -qx node-exporter'
+  run_check "prometheus-ready" bash -c \
+    'curl -fsS --max-time 5 http://127.0.0.1:9090/-/ready | grep -q OK'
+  run_check "grafana-ready" bash -c \
+    'curl -fsS --max-time 5 http://127.0.0.1:'"${GRAFANA_PORT:-3030}"'/api/health | grep -q ok'
 fi
 if [[ "${ENABLE_CROWDSEC:-true}" == "true" ]]; then
   run_check "crowdsec" bash -c \
