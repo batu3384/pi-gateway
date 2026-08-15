@@ -16,8 +16,11 @@ ENABLE_UFW="${ENABLE_UFW:-true}"
 ENABLE_FAIL2BAN="${ENABLE_FAIL2BAN:-true}"
 UFW_ADMIN_EXPOSURE="${UFW_ADMIN_EXPOSURE:-caddy-only}"
 log() { echo "[firewall] $*"; }
+pkg_on_path() {
+  command -v "$1" >/dev/null 2>&1 || [[ -x "/usr/sbin/$1" ]]
+}
 install_packages() {
-  if command -v ufw >/dev/null 2>&1 && command -v fail2ban-client >/dev/null 2>&1; then
+  if pkg_on_path ufw && pkg_on_path fail2ban-client; then
     return 0
   fi
   log "Paketler kuruluyor (ufw, fail2ban)..."
