@@ -330,6 +330,7 @@ services:
       - --storage.tsdb.path=/prometheus
       - --storage.tsdb.retention.time=30d
       - --web.enable-lifecycle
+    user: "${PROMETHEUS_UID:-1000}:${PROMETHEUS_GID:-1000}"
     volumes:
       - ../config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ../data/prometheus:/prometheus
@@ -347,8 +348,8 @@ services:
       prometheus:
         condition: service_started
     environment:
-      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-}
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-${AGH_ADMIN_USER:-admin}}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-${AGH_ADMIN_PASSWORD}}
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-https://grafana.${LAN_DOMAIN:-home}}
       GF_AUTH_ANONYMOUS_ENABLED: "false"

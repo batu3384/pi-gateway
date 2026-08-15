@@ -145,6 +145,11 @@ elif [[ "${SYNC_SERVICE_PASSWORDS:-false}" == "true" ]]; then
 fi
 run_step_optional "Host sertlestirme" "$SCRIPT_DIR/harden-host.sh"
 if [[ "$DEPLOY_DEGRADED" -eq 0 ]]; then
+if [[ "${ENABLE_MONITORING:-true}" == "true" ]]; then
+  run_step_critical "Monitoring data dirs" "$SCRIPT_DIR/ensure-monitoring-data.sh"
+  run_step_optional "Monitoring stack restart" bash -c \
+    'cd "'"$REMOTE_DIR"'/compose" && docker compose --env-file ../.env --profile monitoring up -d prometheus grafana node-exporter'
+fi
 if [[ "${ENABLE_FORGEJO:-true}" == "true" ]]; then
   run_step_optional "Forgejo admin" "$SCRIPT_DIR/setup-forgejo.sh"
 fi

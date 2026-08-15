@@ -72,6 +72,9 @@ phase_edge() {
 
 phase_rest() {
   log "phase 3/3: kalan servisler"
+  if [[ "${ENABLE_MONITORING:-true}" == "true" ]] && [[ -x "$SCRIPT_DIR/ensure-monitoring-data.sh" ]]; then
+    REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/ensure-monitoring-data.sh"
+  fi
   if [[ "$SKIP_PULL" == "true" ]]; then
     compose up -d --remove-orphans
     return 0

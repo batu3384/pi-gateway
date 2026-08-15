@@ -207,7 +207,11 @@ if [[ -f "$REMOTE_DIR/scripts/pi/ensure-data-symlink.sh" ]]; then
 else
   mkdir -p "$REMOTE_DIR/data/adguard/work" "$REMOTE_DIR/data/uptime-kuma" \
     "$REMOTE_DIR/data/forgejo" "$REMOTE_DIR/data/syncthing" "$REMOTE_DIR/data/projects" \
-    "$REMOTE_DIR/data/redis" "$REMOTE_DIR/data/n8n" "$REMOTE_DIR/data/crowdsec"
+    "$REMOTE_DIR/data/redis" "$REMOTE_DIR/data/n8n" "$REMOTE_DIR/data/crowdsec" \
+    "$REMOTE_DIR/data/prometheus" "$REMOTE_DIR/data/grafana"
+fi
+if [[ "${ENABLE_MONITORING:-true}" == "true" ]] && [[ -x "$REMOTE_DIR/scripts/pi/ensure-monitoring-data.sh" ]]; then
+  REMOTE_DIR="$REMOTE_DIR" bash "$REMOTE_DIR/scripts/pi/ensure-monitoring-data.sh" || true
 fi
 sudo chown -R "$USER:$USER" "$REMOTE_DIR/config/adguard" 2>/dev/null || true
 if [[ "$STORAGE_TYPE" == "ssd-root" || "$STORAGE_TYPE" == "ssd" ]]; then
