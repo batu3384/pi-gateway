@@ -25,13 +25,13 @@ fi
 if ssd_under_voltage; then
   log "WARN: undervolt (vcgencmd get_throttled)"
 fi
-ssd_usb_disable_autosuspend || true
 run_hotplug() {
   REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/ssd-hotplug-handler.sh" || true
 }
 # Degraded: disk donmus olabilir — poll restore
 if storage_degraded; then
   log "degraded — remount/soft-reset poll"
+  ssd_usb_disable_autosuspend || true
   if ssd_try_remount || ssd_usb_soft_reset || ssd_mount_healthy; then
     if ssd_mount_healthy; then
       log "SSD geri — hotplug restore"
@@ -42,7 +42,7 @@ if storage_degraded; then
   log "hala degraded"
   exit 1
 fi
-# Saglikli gorunuyor mu?
+# Saglikli gorunuyor mu? USB sysfs poke yok (JMS583 30s poll)
 if ssd_mount_healthy; then
   if ssd_recent_io_errors; then
     log "WARN: son 15 dk USB/SSD I/O — probe OK, izleniyor"
@@ -53,6 +53,7 @@ fi
   log "SSD sagliksiz; SSD_HEALTH_AUTO=false — aksiyon yok"
   exit 1
 }
+ssd_usb_disable_autosuspend || true
 # Once block var ama mount yok — once remount (USB reset gereksiz)
 if ssd_block_present && ssd_try_remount; then
   log "remount OK — hotplug restore"

@@ -127,7 +127,9 @@ else
 fi
 base=$(echo "$base" | sed -E "s|root=PARTUUID=[^ ]+||g; s/  +/ /g; s/^ //; s/ $//")
 base="root=PARTUUID=${SD_ROOT_PARTUUID} rootfstype=ext4 rootwait ${base}"
-printf '%s\n' "usb-storage.quirks=${QUIRK} ${base}" | sed -E 's/  +/ /g; s/^ //; s/ $//' > "$BOOT_SD/cmdline.txt"
+printf '%s\n' "root=PARTUUID=${SD_ROOT_PARTUUID} rootfstype=ext4 rootwait ${base}" \
+  | sed -E 's/  +/ /g; s/^ //; s/ $//' > "$BOOT_SD/cmdline.txt"
+apply_jmicron_cmdline_file "$BOOT_SD/cmdline.txt" "$QUIRK"
 
 [[ -f "$BOOT_SD/cmdline.txt.bak-pre-ssd-root" ]] || \
   cp "$BOOT_SD/cmdline.txt.bak-ssd-root-attempt" "$BOOT_SD/cmdline.txt.bak-pre-ssd-root" 2>/dev/null || true

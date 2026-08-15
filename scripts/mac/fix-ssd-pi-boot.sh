@@ -49,14 +49,11 @@ CONFIG="$BOOT/config.txt"
 log "SSD: $DISK"
 log "USB quirk: $QUIRK"
 
-# cmdline.txt — UAS kapat (Pi uyumluluk)
-if grep -q "usb-storage.quirks=" "$CMDLINE" 2>/dev/null; then
-  sed -i '' "s|usb-storage.quirks=[^ ]*|usb-storage.quirks=${QUIRK}|" "$CMDLINE"
-  log "cmdline quirks guncellendi"
-else
-  sed -i '' "1s|^|usb-storage.quirks=${QUIRK} |" "$CMDLINE"
-  log "cmdline quirks eklendi"
-fi
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/usb-quirk.sh
+source "$SCRIPT_DIR/../lib/usb-quirk.sh"
+apply_jmicron_cmdline_file "$CMDLINE" "$QUIRK"
+log "cmdline: UAS off + NO_LPM + autosuspend=-1"
 
 # config.txt — guc + boot gecikmesi
 grep -q "^boot_delay=" "$CONFIG" 2>/dev/null || echo "boot_delay=5" >> "$CONFIG"

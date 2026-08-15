@@ -87,15 +87,16 @@ fstab_entry_matches() {
 write_fstab_entry() {
   local part="$1"
   local entry id_spec
-  if fstab_entry_matches "$part"; then
-    log "fstab OK ($MOUNT -> $part)"
-    return 0
-  fi
   id_spec="$(partition_id "$part")" || {
     log "WARN: partition kimligi alinamadi: $part"
     return 1
   }
-  entry="${id_spec} ${MOUNT} ext4 defaults,noatime,nofail,x-systemd.device-timeout=30 0 2"
+  entry="${id_spec} ${MOUNT} ext4 defaults,noatime,nodiscard,nofail,x-systemd.device-timeout=30 0 2"
+  if fstab_entry_matches "$part" \
+    && awk -v mnt="$MOUNT" '$2 == mnt && $4 ~ /(^|,)nodiscard(,|$)/ { found=1 } END { exit !found }' /etc/fstab; then
+    log "fstab OK ($MOUNT -> $part)"
+    return 0
+  fi
   if fstab_entry_id >/dev/null 2>&1; then
     log "fstab guncelleniyor (eski satir degisiyor)"
     run_root sed -i.bak "/[[:space:]]${MOUNT//\//\\/}[[:space:]]/d" /etc/fstab

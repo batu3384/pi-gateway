@@ -3,12 +3,17 @@
 set -euo pipefail
 
 ROOTDELAY="${PI_ROOTDELAY:-25}"
+_USB_QUIRK_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/usb-quirk.sh"
+# shellcheck source=usb-quirk.sh
+source "$_USB_QUIRK_LIB"
 
 normalize_cmdline_parts() {
   local line="$1"
   line=$(echo "$line" | tr '\n' ' ')
   line=$(echo "$line" | sed -E \
     's/usb-storage\.quirks=[^ ]* ?//g;
+     s/usbcore\.quirks=[^ ]* ?//g;
+     s/usbcore\.autosuspend=[^ ]* ?//g;
      s/rootdelay=[0-9]+ ?//g;
      s/(^| )quiet( |$)/ /g;
      s/(^| )splash( |$)/ /g;
@@ -21,7 +26,7 @@ build_ssd_root_cmdline() {
   local base_line="$2"
   local parts
   parts="$(normalize_cmdline_parts "$base_line")"
-  echo "usb-storage.quirks=${quirk} rootdelay=${ROOTDELAY} ${parts}"
+  echo "usb-storage.quirks=$(normalize_storage_quirk "$quirk") usbcore.quirks=$(usbcore_quirk_from_storage "$quirk") usbcore.autosuspend=-1 rootdelay=${ROOTDELAY} ${parts}"
 }
 
 cmdline_has_resize() {

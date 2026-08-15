@@ -90,13 +90,9 @@ apply_sd_post_flash() {
 apply_sd_usb_storage_quirks() {
   local boot="$1"
   local cmdline="$boot/cmdline.txt"
-  local line
-  line=$(tr -d '\n' < "$cmdline")
-  line=$(echo "$line" | sed -E 's/usb-storage\.quirks=[^ ]* //g')
-  line=$(echo "$line" | sed -E 's/\bquiet\b//g; s/\bsplash\b//g')
-  line=$(echo "$line" | sed -E 's/  +/ /g' | sed -E 's/^ +| +$//g')
-  # SD boot; quirks sadece takili JMicron SSD veri diski icin
-  echo "usb-storage.quirks=152d:0583:u ${line}" > "$cmdline"
+  # shellcheck source=../lib/usb-quirk.sh
+  source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/usb-quirk.sh"
+  apply_jmicron_cmdline_file "$cmdline" "152d:0583:u"
 
   local config="$boot/config.txt"
   for kv in "hdmi_force_hotplug=1" "usb_max_current_enable=1"; do

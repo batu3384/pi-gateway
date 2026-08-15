@@ -19,15 +19,26 @@ SSD_USB_RESET_REBOOT="${SSD_USB_RESET_REBOOT:-false}"
 SSD_USB_AUTHORIZED_RESET="${SSD_USB_AUTHORIZED_RESET:-false}"
 # lsusb bos + block yok: host port disable (tak-cikar yerine yazilim)
 SSD_USB_PORT_DISABLE_CYCLE="${SSD_USB_PORT_DISABLE_CYCLE:-true}"
-SSD_USB_HOST_PORT="${SSD_USB_HOST_PORT:-2}"
+# 0 = hatirlanan + USB3 once; >0 = once bu port numarasi
+SSD_USB_HOST_PORT="${SSD_USB_HOST_PORT:-0}"
+SSD_USB_PORT_STATE_FILE="${SSD_USB_PORT_STATE_FILE:-/var/lib/pi-gateway/ssd-usb-port}"
 SSD_USB_PORT_OFF_SEC="${SSD_USB_PORT_OFF_SEC:-5}"
 SSD_USB_PORT_ON_SEC="${SSD_USB_PORT_ON_SEC:-10}"
+# Bir recovery tick'te hatirlanan porttan sonra kac ekstra port (hepsi birden DEGIL)
+SSD_USB_PORT_SCAN_MAX="${SSD_USB_PORT_SCAN_MAX:-1}"
+# USB hala enumerate ama I/O olu: port cycle
+SSD_USB_CYCLE_ON_HANG="${SSD_USB_CYCLE_ON_HANG:-true}"
+# Port power'dan once usb-storage unbind/bind
+SSD_USB_STORAGE_REBIND="${SSD_USB_STORAGE_REBIND:-true}"
+# Bir soft_reset icinde rate-limit tek say
+SSD_USB_RESET_COUNTED=0
 # Son care: xhci PCI unbind/rebind (rate-limit; varsayilan KAPALI — tum USB3 collateral)
 SSD_USB_XHCI_REBIND="${SSD_USB_XHCI_REBIND:-false}"
 SSD_USB_XHCI_PCI="${SSD_USB_XHCI_PCI:-0000:01:00.0}"
 SSD_USB_XHCI_UNBIND_SEC="${SSD_USB_XHCI_UNBIND_SEC:-5}"
 SSD_USB_XHCI_BIND_SEC="${SSD_USB_XHCI_BIND_SEC:-12}"
 SSD_USB_REBOOT_STAMP_FILE="${SSD_USB_REBOOT_STAMP_FILE:-/var/lib/pi-gateway/ssd-usb-reboot-stamp}"
+SSD_USB_RESET_LOCK_DIR="${SSD_USB_RESET_LOCK_DIR:-/run/pi-gateway/ssd-usb-reset.lock}"
 
 _ssd_alive_root() {
   if [[ "$(id -u)" -eq 0 ]]; then
@@ -49,13 +60,42 @@ ssd_sysfs_write() {
   printf '%s\n' "$value" | _ssd_alive_root tee "$path" >/dev/null
 }
 
+_ssd_probe_path_ok() {
+  local probe="$1"
+  [[ -n "$probe" && "$probe" == /* && ! -d "$probe" ]] || return 1
+  [[ "$probe" != *$'\n'* && "$probe" != *$'\r'* ]] || return 1
+}
+
 _ssd_probe_write() {
   local probe="$1"
-  [[ -n "$probe" && ! -d "$probe" ]] || return 1
-  if command -v timeout >/dev/null 2>&1; then
-    timeout "$SSD_PROBE_TIMEOUT_SEC" bash -c "echo \"ok \$(date +%s)\" >'${probe}'" 2>/dev/null
+  _ssd_probe_path_ok "$probe" || return 1
+  # fsync: page-cache write JMS583 hung mount'ta false-green olur
+  if command -v python3 >/dev/null 2>&1; then
+    if command -v timeout >/dev/null 2>&1; then
+      timeout "$SSD_PROBE_TIMEOUT_SEC" python3 -c '
+import os, sys, time
+p = sys.argv[1]
+fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+try:
+    os.write(fd, ("ok %d\n" % int(time.time())).encode())
+    os.fsync(fd)
+finally:
+    os.close(fd)
+' "$probe" 2>/dev/null
+    else
+      python3 -c '
+import os, sys, time
+p = sys.argv[1]
+fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+try:
+    os.write(fd, ("ok %d\n" % int(time.time())).encode())
+    os.fsync(fd)
+finally:
+    os.close(fd)
+' "$probe" 2>/dev/null
+    fi
   else
-    echo "ok $(date +%s)" >"$probe" 2>/dev/null
+    printf 'ok %s\n' "$(date +%s)" >"$probe" 2>/dev/null
   fi
 }
 
@@ -95,13 +135,23 @@ ssd_mount_healthy() {
   # Root fallback (mount root root-owned)
   for probe in "${SSD_PROBE_FILE}" "${SSD_MOUNT}/.pi-gateway-io-probe"; do
     [[ -d "$probe" ]] && continue
+    _ssd_probe_path_ok "$probe" || continue
     if [[ "$(id -u)" -eq 0 ]]; then
       _ssd_probe_write "$probe" && return 0
     else
-      if command -v timeout >/dev/null 2>&1; then
-        timeout "$SSD_PROBE_TIMEOUT_SEC" sudo bash -c "echo \"ok \$(date +%s)\" >'${probe}'" 2>/dev/null && return 0
+      if command -v python3 >/dev/null 2>&1 && command -v timeout >/dev/null 2>&1; then
+        timeout "$SSD_PROBE_TIMEOUT_SEC" sudo python3 -c '
+import os, sys, time
+p = sys.argv[1]
+fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+try:
+    os.write(fd, ("ok %d\n" % int(time.time())).encode())
+    os.fsync(fd)
+finally:
+    os.close(fd)
+' "$probe" 2>/dev/null && return 0
       else
-        sudo bash -c "echo ok \$(date +%s) >'${probe}'" 2>/dev/null && return 0
+        printf 'ok %s\n' "$(date +%s)" | sudo tee "$probe" >/dev/null 2>/dev/null && return 0
       fi
     fi
   done
@@ -123,19 +173,51 @@ ssd_find_usb_sysfs() {
   return 1
 }
 
+ssd_usb_remember_port() {
+  local sys port_sys
+  sys="$(ssd_find_usb_sysfs 2>/dev/null || true)"
+  [[ -n "$sys" && -L "${sys}/port" ]] || return 1
+  port_sys="$(readlink -f "${sys}/port" 2>/dev/null || true)"
+  ssd_usb_port_path_ok "$port_sys" || return 1
+  _ssd_alive_root mkdir -p "$(dirname "$SSD_USB_PORT_STATE_FILE")" 2>/dev/null || true
+  if [[ "$(id -u)" -eq 0 ]]; then
+    printf '%s\n' "$port_sys" >"$SSD_USB_PORT_STATE_FILE"
+  else
+    printf '%s\n' "$port_sys" | sudo tee "$SSD_USB_PORT_STATE_FILE" >/dev/null
+  fi
+}
+
+ssd_usb_disable_lpm() {
+  local sys f
+  sys="$(ssd_find_usb_sysfs 2>/dev/null || true)"
+  [[ -n "$sys" ]] || return 0
+  for f in \
+    "${sys}/power/usb3_hardware_lpm_u1" \
+    "${sys}/power/usb3_hardware_lpm_u2" \
+    "${sys}/power/usb3_lpm_permit"; do
+    [[ -f "$f" ]] || continue
+    ssd_sysfs_write "$f" 0 || ssd_sysfs_write "$f" disable || true
+  done
+}
+
 ssd_usb_disable_autosuspend() {
   local sys
+  if [[ -f /sys/module/usbcore/parameters/autosuspend ]]; then
+    ssd_sysfs_write /sys/module/usbcore/parameters/autosuspend -1 || true
+  fi
   sys="$(ssd_find_usb_sysfs 2>/dev/null || true)"
   [[ -n "$sys" ]] || return 0
   if [[ -f "${sys}/power/control" ]]; then
-    _ssd_alive_root bash -c "echo on >'${sys}/power/control'" 2>/dev/null || true
+    ssd_sysfs_write "${sys}/power/control" on || true
   fi
   if [[ -f "${sys}/power/autosuspend" ]]; then
-    _ssd_alive_root bash -c "echo -1 >'${sys}/power/autosuspend'" 2>/dev/null || true
+    ssd_sysfs_write "${sys}/power/autosuspend" -1 || true
   fi
   if [[ -f "${sys}/power/autosuspend_delay_ms" ]]; then
-    _ssd_alive_root bash -c "echo -1 >'${sys}/power/autosuspend_delay_ms'" 2>/dev/null || true
+    ssd_sysfs_write "${sys}/power/autosuspend_delay_ms" -1 || true
   fi
+  ssd_usb_disable_lpm
+  ssd_usb_remember_port || true
 }
 
 ssd_usb_reset_rate_limited() {
@@ -150,6 +232,12 @@ ssd_usb_reset_rate_limited() {
     fi
   fi
   return 1
+}
+
+ssd_usb_reset_record_once() {
+  [[ "${SSD_USB_RESET_COUNTED:-0}" == "1" ]] && return 0
+  ssd_usb_reset_record
+  SSD_USB_RESET_COUNTED=1
 }
 
 ssd_usb_reset_record() {
@@ -182,15 +270,70 @@ ssd_usb_bus_dropout() {
   return 0
 }
 
+ssd_usb_port_path_ok() {
+  local p="$1"
+  [[ "$p" == /sys/* ]] || return 1
+  [[ "$p" =~ /usb[0-9]+-port[0-9]+$ ]] || return 1
+  [[ -f "${p}/disable" ]] || return 1
+}
+
+ssd_usb_iface_ok() {
+  [[ "$1" =~ ^[0-9]+-[0-9.]+(:[0-9]+\.[0-9]+)$ ]]
+}
+
 ssd_usb_port_sysfs() {
-  local port="${SSD_USB_HOST_PORT:-2}"
+  local port="${SSD_USB_HOST_PORT:-0}"
   local p
   [[ "$port" =~ ^[0-9]+$ ]] || return 1
+  (( port > 0 )) || return 1
   for p in \
     "/sys/bus/usb/devices/usb2-port${port}" \
+    "/sys/bus/usb/devices/usb1-port${port}" \
     "/sys/devices/platform/scb/fd500000.pcie/pci0000:00/0000:00:00.0/0000:01:00.0/usb2/2-0:1.0/usb2-port${port}"; do
-    [[ -f "${p}/disable" ]] && { echo "$p"; return 0; }
+    ssd_usb_port_path_ok "$p" && { echo "$p"; return 0; }
   done
+  return 1
+}
+
+# Hatirlanan → SSD_USB_HOST_PORT → USB3 (usb2) → USB2 (usb1). Hepsi birden degil.
+ssd_usb_port_candidates() {
+  local p remembered="" q
+  if [[ -f "$SSD_USB_PORT_STATE_FILE" ]]; then
+    remembered="$(tr -d '[:space:]' <"$SSD_USB_PORT_STATE_FILE" 2>/dev/null || true)"
+    if ssd_usb_port_path_ok "$remembered"; then
+      printf '%s\n' "$remembered"
+    else
+      remembered=""
+    fi
+  fi
+  p="$(ssd_usb_port_sysfs 2>/dev/null || true)"
+  if [[ -n "$p" && "$p" != "$remembered" ]] && ssd_usb_port_path_ok "$p"; then
+    printf '%s\n' "$p"
+  fi
+  for q in \
+    /sys/bus/usb/devices/usb2-port[1-8] \
+    /sys/bus/usb/devices/usb3-port[1-8] \
+    /sys/bus/usb/devices/usb1-port[1-8] \
+    /sys/bus/usb/devices/usb4-port[1-8]; do
+    [[ "$q" == "$remembered" || "$q" == "$p" ]] && continue
+    ssd_usb_port_path_ok "$q" || continue
+    printf '%s\n' "$q"
+  done
+}
+
+ssd_usb_port_cycle_one() {
+  local port_sys="$1"
+  ssd_usb_port_path_ok "$port_sys" || return 1
+  echo "[ssd-alive] USB port disable cycle: $port_sys" >&2
+  ssd_sysfs_write "${port_sys}/disable" 1 || return 1
+  sleep "${SSD_USB_PORT_OFF_SEC:-5}"
+  ssd_sysfs_write "${port_sys}/disable" 0 || true
+  sleep "${SSD_USB_PORT_ON_SEC:-10}"
+  command -v udevadm >/dev/null 2>&1 && _ssd_alive_root udevadm settle --timeout=15 2>/dev/null || sleep 3
+  if ssd_find_usb_sysfs >/dev/null 2>&1 || ssd_block_present; then
+    ssd_usb_remember_port || true
+    return 0
+  fi
   return 1
 }
 
@@ -200,17 +343,50 @@ ssd_usb_port_disable_cycle() {
     echo "[ssd-alive] port disable rate-limit (${SSD_USB_RESET_MAX}/${SSD_USB_RESET_WINDOW_SEC}s)" >&2
     return 1
   fi
-  local port_sys
-  port_sys="$(ssd_usb_port_sysfs 2>/dev/null || true)"
-  [[ -n "$port_sys" ]] || return 1
-  ssd_usb_reset_record
-  echo "[ssd-alive] USB port disable cycle: $port_sys" >&2
-  ssd_sysfs_write "${port_sys}/disable" 1 || true
-  sleep "${SSD_USB_PORT_OFF_SEC:-5}"
-  ssd_sysfs_write "${port_sys}/disable" 0 || true
-  sleep "${SSD_USB_PORT_ON_SEC:-10}"
-  command -v udevadm >/dev/null 2>&1 && _ssd_alive_root udevadm settle --timeout=15 2>/dev/null || sleep 3
-  ssd_find_usb_sysfs >/dev/null 2>&1 || ssd_block_present
+  local port_sys tried=0 max_extra i
+  max_extra="${SSD_USB_PORT_SCAN_MAX:-1}"
+  [[ "$max_extra" =~ ^[0-9]+$ ]] || max_extra=1
+  local -a ports=()
+  while IFS= read -r port_sys; do
+    [[ -n "$port_sys" ]] || continue
+    ssd_usb_port_path_ok "$port_sys" || continue
+    ports+=("$port_sys")
+  done < <(ssd_usb_port_candidates)
+  ((${#ports[@]} > 0)) || return 1
+  ssd_usb_reset_record_once
+  if ssd_usb_port_cycle_one "${ports[0]}"; then
+    return 0
+  fi
+  for ((i = 1; i < ${#ports[@]} && tried < max_extra; i++)); do
+    tried=$((tried + 1))
+    if ssd_usb_port_cycle_one "${ports[$i]}"; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Cihaz var, SCSI katmani donmus: unbind/bind (port power'dan hafif)
+ssd_usb_storage_rebind() {
+  [[ "${SSD_USB_STORAGE_REBIND:-true}" == "true" ]] || return 1
+  local sys iface name any=0
+  sys="$(ssd_find_usb_sysfs 2>/dev/null || true)"
+  [[ -n "$sys" && -d /sys/bus/usb/drivers/usb-storage ]] || return 1
+  for iface in "$sys":*; do
+    [[ -e "$iface" ]] || continue
+    name="${iface##*/}"
+    ssd_usb_iface_ok "$name" || continue
+    [[ -e "/sys/bus/usb/drivers/usb-storage/$name" ]] || continue
+    echo "[ssd-alive] usb-storage unbind/bind: $name" >&2
+    ssd_sysfs_write /sys/bus/usb/drivers/usb-storage/unbind "$name" || true
+    sleep 1
+    ssd_sysfs_write /sys/bus/usb/drivers/usb-storage/bind "$name" || true
+    any=1
+  done
+  (( any == 1 )) || return 1
+  sleep 2
+  command -v udevadm >/dev/null 2>&1 && _ssd_alive_root udevadm settle --timeout=10 2>/dev/null || true
+  ssd_block_present
 }
 
 ssd_xhci_rebind() {
@@ -225,7 +401,7 @@ ssd_xhci_rebind() {
     return 1
   }
   [[ -e "/sys/bus/pci/drivers/xhci_hcd/${dev}" ]] || return 1
-  ssd_usb_reset_record
+  ssd_usb_reset_record_once
   echo "[ssd-alive] xhci rebind: $dev" >&2
   ssd_sysfs_write "/sys/bus/pci/drivers/xhci_hcd/unbind" "$dev" || return 1
   sleep "${SSD_USB_XHCI_UNBIND_SEC:-5}"
@@ -257,16 +433,29 @@ ssd_usb_reboot_once() {
   _ssd_alive_root systemctl reboot || true
 }
 
-# Soft-reset: port cycle / xhci / autosuspend / remount; authorized cycle opt-in
-ssd_usb_soft_reset() {
-  if ssd_usb_bus_dropout; then
-    ssd_usb_port_disable_cycle || true
-    if ssd_usb_bus_dropout; then
-      ssd_xhci_rebind || true
-    fi
-  fi
+_ssd_usb_soft_reset_body() {
+  SSD_USB_RESET_COUNTED=0
 
   ssd_usb_disable_autosuspend
+
+  if mountpoint -q "$SSD_MOUNT" 2>/dev/null && ! ssd_mount_healthy; then
+    echo "[ssd-alive] hung mount — umount -l $SSD_MOUNT" >&2
+    _ssd_alive_root umount -l "$SSD_MOUNT" 2>/dev/null || true
+  fi
+
+  if ssd_find_usb_sysfs >/dev/null 2>&1 && ! ssd_mount_healthy; then
+    ssd_usb_storage_rebind || true
+    ssd_try_remount || true
+    ssd_mount_healthy && return 0
+  fi
+
+  if ssd_usb_bus_dropout || { [[ "${SSD_USB_CYCLE_ON_HANG:-true}" == "true" ]] && ! ssd_mount_healthy; }; then
+    ssd_usb_port_disable_cycle || true
+  fi
+
+  if ssd_usb_bus_dropout; then
+    ssd_xhci_rebind || true
+  fi
 
   if [[ "$SSD_USB_AUTHORIZED_RESET" == "true" ]]; then
     if ssd_usb_reset_rate_limited; then
@@ -277,7 +466,7 @@ ssd_usb_soft_reset() {
     local sys
     sys="$(ssd_find_usb_sysfs 2>/dev/null || true)"
     if [[ -n "$sys" && -f "${sys}/authorized" ]]; then
-      ssd_usb_reset_record
+      ssd_usb_reset_record_once
       echo "[ssd-alive] USB authorized cycle: $sys" >&2
       ssd_sysfs_write "${sys}/authorized" 0 || true
       sleep 2
@@ -294,7 +483,7 @@ ssd_usb_soft_reset() {
   if ssd_block_present; then
     local disk
     disk="$(blkid -L "$SSD_LABEL" 2>/dev/null || true)"
-    if [[ -n "$disk" ]]; then
+    if [[ -n "$disk" && "$disk" == /dev/* ]]; then
       _ssd_alive_root partprobe "$(echo "$disk" | sed -E 's/p?[0-9]+$//')" 2>/dev/null || true
     fi
   fi
@@ -306,6 +495,39 @@ ssd_usb_soft_reset() {
     ssd_usb_reboot_once || true
   fi
   return 1
+}
+
+# Merdiven: LPM off → umount hung → usb-storage rebind → hatirlanan port → ekstra 1 port → xhci opt-in
+ssd_usb_soft_reset() {
+  local lockdir="${SSD_USB_RESET_LOCK_DIR:-/run/pi-gateway/ssd-usb-reset.lock}"
+  local lock_owned=0 rc mtime now parent
+  parent="$(dirname "$lockdir")"
+  # sudo yok: Mac validate sudo prompt olmasin. Pi health root.
+  if [[ "$(id -u)" -eq 0 ]]; then
+    mkdir -p "$parent" 2>/dev/null || true
+  fi
+  if [[ -d "$lockdir" ]]; then
+    mtime="$(stat -f %m "$lockdir" 2>/dev/null || stat -c %Y "$lockdir" 2>/dev/null || echo 0)"
+    now="$(date +%s)"
+    if [[ "$mtime" =~ ^[0-9]+$ ]] && (( now - mtime > 400 )); then
+      echo "[ssd-alive] stale reset lock — siliniyor" >&2
+      rmdir "$lockdir" 2>/dev/null || true
+    fi
+  fi
+  if [[ -d "$parent" && -w "$parent" ]]; then
+    if mkdir "$lockdir" 2>/dev/null; then
+      lock_owned=1
+    elif [[ -d "$lockdir" ]]; then
+      echo "[ssd-alive] soft-reset zaten calisiyor" >&2
+      return 1
+    fi
+  fi
+  _ssd_usb_soft_reset_body
+  rc=$?
+  if [[ "$lock_owned" == "1" ]]; then
+    rmdir "$lockdir" 2>/dev/null || true
+  fi
+  return "$rc"
 }
 
 ssd_try_remount() {
@@ -326,9 +548,10 @@ ssd_quirk_present() {
   local f
   for f in /boot/firmware/cmdline.txt /media/*/bootfs/cmdline.txt /boot/cmdline.txt; do
     [[ -r "$f" ]] || continue
-    if grep -q "usb-storage.quirks=${SSD_USB_VID}:${SSD_USB_PID}:u" "$f" 2>/dev/null; then
-      return 0
-    fi
+    grep -q "usb-storage.quirks=${SSD_USB_VID}:${SSD_USB_PID}:u" "$f" 2>/dev/null || continue
+    grep -q "usbcore.quirks=${SSD_USB_VID}:${SSD_USB_PID}:k" "$f" 2>/dev/null || continue
+    grep -q 'usbcore.autosuspend=-1' "$f" 2>/dev/null || continue
+    return 0
   done
   return 1
 }

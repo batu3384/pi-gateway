@@ -81,7 +81,17 @@ if [[ -f "$REMOTE_DIR/host/udev/99-pi-gateway-jmicron.rules" ]]; then
   sudo udevadm control --reload-rules 2>/dev/null || true
   sudo udevadm trigger --subsystem-match=usb 2>/dev/null || true
 fi
-for unit in pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-crowdsec-ufw.timer pi-gateway-morning.timer pi-gateway-stack-watchdog.timer pi-gateway-netalertx-names.timer pi-data-symlink.timer pi-ssd-watch.path; do
+if [[ -f /boot/firmware/cmdline.txt && -f "$REMOTE_DIR/scripts/lib/usb-quirk.sh" ]]; then
+  echo "[bootstrap] JMicron cmdline (UAS off + NO_LPM + autosuspend=-1)..."
+  if [[ "$REMOTE_DIR" =~ ^/[a-zA-Z0-9._/-]+$ && "$REMOTE_DIR" != *..* ]]; then
+    sudo env REMOTE_DIR="$REMOTE_DIR" bash -c \
+      'source "$REMOTE_DIR/scripts/lib/usb-quirk.sh"; apply_jmicron_cmdline_file /boot/firmware/cmdline.txt 152d:0583:u' \
+      || echo "[bootstrap] WARN: cmdline quirk patch atlandi"
+  else
+    echo "[bootstrap] WARN: REMOTE_DIR guvenli degil — cmdline skip"
+  fi
+fi
+for unit in pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-crowdsec-ufw.timer pi-gateway-morning.timer pi-gateway-stack-watchdog.timer pi-gateway-netalertx-names.timer pi-data-symlink.timer pi-ssd-watch.path pi-ssd-health.timer; do
   [[ -f "$REMOTE_DIR/host/systemd/$unit" ]] && sudo cp "$REMOTE_DIR/host/systemd/$unit" "/etc/systemd/system/$unit"
 done
 install_systemd_unit() {
@@ -100,18 +110,21 @@ if [[ -x "$REMOTE_DIR/scripts/pi/install-privileged-scripts.sh" ]]; then
   privileged_script="$REMOTE_DIR/scripts/pi/install-privileged-scripts.sh"
   REMOTE_DIR="$REMOTE_DIR" bash "$privileged_script"
 fi
-for svc in pi-gateway-health.service pi-gateway-backup.service pi-gateway-adguard-config.service pi-gateway-health-failure.service pi-gateway-crowdsec-ufw.service pi-data-symlink.service pi-data-symlink-repair.service pi-gateway-morning.service pi-gateway-recover-ro.service pi-gateway-stack-watchdog.service pi-gateway-netalertx-names.service pi-gateway-ensure-fstab.service pi-ssd-data.service pi-ssd-watch.service pi-gateway-telegram-bot.service; do
+for svc in pi-gateway-health.service pi-gateway-backup.service pi-gateway-adguard-config.service pi-gateway-health-failure.service pi-gateway-crowdsec-ufw.service pi-data-symlink.service pi-data-symlink-repair.service pi-gateway-morning.service pi-gateway-recover-ro.service pi-gateway-stack-watchdog.service pi-gateway-netalertx-names.service pi-gateway-ensure-fstab.service pi-ssd-data.service pi-ssd-watch.service pi-ssd-health.service pi-gateway-telegram-bot.service; do
   install_systemd_unit "$svc"
 done
 sudo systemctl daemon-reload
 sudo systemctl enable pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-adguard-config.service pi-gateway-morning.timer pi-gateway-recover-ro.service pi-gateway-stack-watchdog.timer pi-gateway-netalertx-names.timer 2>/dev/null || true
 if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
-  sudo systemctl enable pi-data-symlink.service pi-gateway-ensure-fstab.service pi-data-symlink.timer pi-ssd-watch.path pi-ssd-data.service 2>/dev/null || true
+  sudo systemctl enable pi-data-symlink.service pi-gateway-ensure-fstab.service pi-data-symlink.timer pi-ssd-watch.path pi-ssd-data.service pi-ssd-health.timer 2>/dev/null || true
 fi
 if [[ "${ENABLE_CROWDSEC:-true}" == "true" ]]; then
   sudo systemctl enable --now pi-gateway-crowdsec-ufw.timer 2>/dev/null || true
 fi
 sudo systemctl start pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-morning.timer pi-gateway-stack-watchdog.timer pi-gateway-netalertx-names.timer 2>/dev/null || true
+if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
+  sudo systemctl start pi-ssd-health.timer 2>/dev/null || true
+fi
 if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
   if [[ -x "$REMOTE_DIR/scripts/pi/ensure-ssd-fstab.sh" ]]; then
     echo "[bootstrap] SSD fstab kontrolu..."

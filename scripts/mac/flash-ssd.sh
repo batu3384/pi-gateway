@@ -94,26 +94,19 @@ EOF
 }
 
 # Forum kanitli Pi 4 + JMicron JMS583 (152d:0583) duzeltmeleri:
-# - usb-storage.quirks=VID:PID:u  → UAS kapat (Geekworm / RPi forum)
-# - rootdelay=25                  → SSD gec hazir olursa bekle (JMicron son deneme)
-# - boot_delay=5                  → EEPROM USB taramasi icin sure
-# - quiet/splash kaldir           → HDMI dusse bile boot log gorunsun
-# - hdmi_force_hotplug=1          → sinyal kaybinda HDMI'yi zorla acik tut
+# - usb-storage.quirks=VID:PID:u  → UAS kapat
+# - usbcore.quirks=VID:PID:k      → USB_QUIRK_NO_LPM (link power kopmalari)
+# - usbcore.autosuspend=-1
+# - rootdelay=25
 apply_pi_usb_boot_fixes() {
   local boot="$1"
   local quirk="${2:-152d:0583:u}"
   local cmdline="$boot/cmdline.txt"
   local config="$boot/config.txt"
-  local line
+  # shellcheck source=../lib/usb-quirk.sh
+  source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/usb-quirk.sh"
+  apply_jmicron_cmdline_file "$cmdline" "$quirk"
 
-  line=$(tr -d '\n' < "$cmdline")
-  line=$(echo "$line" | sed -E 's/usb-storage\.quirks=[^ ]* //g')
-  line=$(echo "$line" | sed -E 's/rootdelay=[0-9]+ //g')
-  line=$(echo "$line" | sed -E 's/\bquiet\b//g; s/\bsplash\b//g')
-  line=$(echo "$line" | sed -E 's/  +/ /g' | sed -E 's/^ +| +$//g')
-  echo "usb-storage.quirks=${quirk} rootdelay=25 ${line}" > "$cmdline"
-
-  # config.txt — [all] altina ekle / guncelle
   for kv in "boot_delay=5" "usb_max_current_enable=1" "hdmi_force_hotplug=1"; do
     key="${kv%%=*}"
     if grep -q "^${key}=" "$config" 2>/dev/null; then
@@ -123,7 +116,7 @@ apply_pi_usb_boot_fixes() {
     fi
   done
 
-  log "Pi USB boot fix: quirks=${quirk}, rootdelay=25, boot_delay=5, hdmi_force_hotplug=1 (quiet/splash kapali, hdmi_drive yok)"
+  log "Pi USB boot fix: quirks=${quirk} + NO_LPM + autosuspend=-1"
 }
 
 detect_usb_quirk() {

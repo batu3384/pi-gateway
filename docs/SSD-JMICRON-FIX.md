@@ -62,11 +62,12 @@ USB-SATA adapter with ASMedia chipset. 24/7 USB boot with JMicron is not recomme
 
 Kernel quirk alone is not enough when the bridge flaps after boot. Pi Gateway software path:
 
-1. **Detect** — `ssd_mount_healthy()`: `mountpoint` + timed write to `/mnt/ssd/pi-gateway-data/.pi-gateway-io-probe` (fallback `/mnt/ssd/.pi-gateway-io-probe`; `.disk-probe` is a directory for n8n bind, not the IO probe).
-2. **Soft-reset** — `ssd_usb_soft_reset()`: **port disable cycle** (`usb2-portN/disable`) when `lsusb` empty; optional **xhci PCI rebind** (`SSD_USB_XHCI_REBIND=true`, default **off** — collateral on all USB3); autosuspend off, remount; optional `SSD_USB_AUTHORIZED_RESET=true` for `authorized` 0→1 (default **off**). Rate-limited. `SSD_USB_RESET_REBOOT=true` reboots at most once per 2× window (no loop).
-3. **Degraded** — if still dead: `/run/pi-gateway/storage-degraded`, stop app containers, `COMPOSE_RECOVER_MODE=core-dns`.
-4. **Restore** — hotplug `PathExistsGone`/`PathChanged` + `ssd-health` poll: remount first → clear flag → full stack.
+1. **Prevent** — cmdline: `usb-storage.quirks=152d:0583:u` (UAS off) + `usbcore.quirks=152d:0583:k` (`USB_QUIRK_NO_LPM`) + `usbcore.autosuspend=-1`. fstab: `nodiscard`. udev: `power/control=on`, USB3 LPM U1/U2 off.
+2. **Detect** — `ssd_mount_healthy()`: `mountpoint` + timed write probe. `pi-ssd-health.timer` every **30s** (plus health-check 2min). udev `add|remove` → `pi-ssd-watch.service`.
+3. **Soft-reset merdiven** — (1) LPM/autosuspend off (2) hung mount `umount -l` (3) usb-storage unbind/bind (4) hatirlanan USB port cycle, ayni tick'te en fazla 1 ekstra port (hepsi birden DEGIL) (5) opt-in xHCI rebind (`SSD_USB_XHCI_REBIND=true`). Rate-limit tek slot per recovery.
+4. **Degraded** — if still dead: `/run/pi-gateway/storage-degraded`, stop app containers, `COMPOSE_RECOVER_MODE=core-dns`.
+5. **Restore** — remount → symlink → full stack.
 
-udev: `host/udev/99-pi-gateway-jmicron.rules` (`power/control=on`).
+udev: `host/udev/99-pi-gateway-jmicron.rules`.
 
-**Ceiling:** if `lsusb` never shows the device (bus dead), soft-reset may fail — optional `SSD_USB_RESET_REBOOT=true` (default off). Hardware upgrade still wins for 24/7 root-on-USB.
+**Ceiling:** if the VL805 host controller itself wedges, port cycle may not enumerate — optional `SSD_USB_RESET_REBOOT=true` (default off). Software path is the default; enclosure firmware update is extra, not required.

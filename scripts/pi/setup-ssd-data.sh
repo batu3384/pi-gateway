@@ -107,7 +107,7 @@ ensure_fstab() {
   local uuid
   uuid="$(blkid -o value -s PARTUUID "$part")"
   [[ -n "$uuid" ]] || die "PARTUUID alinamadi: $part"
-  local entry="PARTUUID=${uuid} ${MOUNT} ext4 defaults,noatime,nofail,x-systemd.device-timeout=30 0 2"
+  local entry="PARTUUID=${uuid} ${MOUNT} ext4 defaults,noatime,nodiscard,nofail,x-systemd.device-timeout=30 0 2"
   if grep -qF "$MOUNT" /etc/fstab 2>/dev/null; then
     log "fstab guncelleniyor"
     sed -i.bak "/[[:space:]]${MOUNT//\//\\/}[[:space:]]/d" /etc/fstab

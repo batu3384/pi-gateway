@@ -1,3 +1,17 @@
-# JMicron JMS583 — autosuspend kapat (Pi USB SSD flapping)
+# JMicron JMS583 — autosuspend + USB3 LPM kapat (Pi USB SSD flapping)
 ACTION=="add|change", SUBSYSTEM=="usb", ATTR{idVendor}=="152d", ATTR{idProduct}=="0583", \
   ATTR{power/control}="on", ATTR{power/autosuspend}="-1"
+
+ACTION=="add|change", SUBSYSTEM=="usb", ATTR{idVendor}=="152d", ATTR{idProduct}=="0583", \
+  ATTR{power/usb3_hardware_lpm_u1}="0"
+
+ACTION=="add|change", SUBSYSTEM=="usb", ATTR{idVendor}=="152d", ATTR{idProduct}=="0583", \
+  ATTR{power/usb3_hardware_lpm_u2}="0"
+
+# Kopma/takilma: PathExistsGone kacirir (stale by-label) — systemd oneshot
+ACTION=="add|remove", SUBSYSTEM=="usb", ENV{ID_VENDOR_ID}=="152d", ENV{ID_MODEL_ID}=="0583", \
+  TAG+="systemd", ENV{SYSTEMD_WANTS}="pi-ssd-watch.service"
+
+# change = her I/O uevent — storm. add|remove yeterli; hung I/O = pi-ssd-health.timer
+ACTION=="add|remove", SUBSYSTEM=="block", ENV{ID_FS_LABEL}=="pi-data", \
+  TAG+="systemd", ENV{SYSTEMD_WANTS}="pi-ssd-watch.service"

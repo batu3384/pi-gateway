@@ -55,23 +55,10 @@ done
 log "1/5 Boot dosyalari OK"
 
 # --- 2. cmdline.txt (kernel asaması — quirks burada) ---
-# NOT: quirks rainbow/bootloader asamasini DUZELTMEZ; kernel acildiktan sonra UAS icin sart.
-python3 - "$BOOT/cmdline.txt" "$QUIRK" <<'PY'
-import sys
-from pathlib import Path
-path, quirk = Path(sys.argv[1]), sys.argv[2]
-parts = path.read_text().replace("\n", "").split()
-keep = [p for p in parts if not p.startswith("usb-storage.quirks=")
-        and not p.startswith("rootdelay=")
-        and p not in ("quiet", "splash")]
-# rootwait zaten olmali
-if "rootwait" not in keep:
-    keep.append("rootwait")
-out = [f"usb-storage.quirks={quirk}", "rootdelay=25"] + keep
-path.write_text(" ".join(out) + "\n")
-print(path.read_text().strip())
-PY
-log "2/5 cmdline.txt guncellendi (quirks + rootdelay=25, quiet/splash yok)"
+# shellcheck source=../lib/usb-quirk.sh
+source "$PROJECT_DIR/scripts/lib/usb-quirk.sh"
+apply_jmicron_cmdline_file "$BOOT/cmdline.txt" "$QUIRK"
+log "2/5 cmdline.txt guncellendi (UAS off + NO_LPM + autosuspend=-1)"
 
 # --- 3. config.txt ---
 python3 - "$BOOT/config.txt" <<'PY'
