@@ -1,0 +1,16 @@
+[Unit]
+Description=Pi Gateway SSD SMART wear check
+After=mnt-ssd.mount
+Wants=mnt-ssd.mount
+
+[Service]
+Type=oneshot
+User=PI_USER
+Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
+ExecStart=/home/PI_USER/pi-gateway/scripts/pi/check-ssd-smart.sh
+Nice=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -21,6 +21,12 @@ prune_safe() {
     log "degraded — docker image prune atlandi"
     return 0
   fi
+  local docker_root
+  docker_root="$(docker info 2>/dev/null | awk -F': ' '/Docker Root Dir/{print $2; exit}')" || true
+  if [[ "${ENABLE_DOCKER_SSD:-false}" == "true" && -n "$docker_root" && "$docker_root" != "/var/lib/docker" ]]; then
+    log "docker data-root SD degil (${docker_root}) — image prune atlandi"
+    return 0
+  fi
   # Kullanilmayan imajlar (calisan container imajlari korunur)
   docker image prune -a -f 2>/dev/null || true
 }

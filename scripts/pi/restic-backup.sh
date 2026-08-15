@@ -132,4 +132,9 @@ if [[ "$REINIT_DONE" -eq 1 ]]; then
   exit 1
 fi
 notify_backup_ok "$STAMP"
+if [[ -x "$SCRIPT_DIR/restic-offsite-copy.sh" ]]; then
+  if ! bash "$SCRIPT_DIR/restic-offsite-copy.sh"; then
+    log "WARN: offsite copy basarisiz (local backup OK)"
+  fi
+fi
 log "Tamamlandi"

@@ -95,8 +95,10 @@ Mac: make install
 ## Hybrid storage layout
 
 ```
-SD (mmcblk):  /           OS root, /var/lib/docker (default)
+SD (mmcblk):  /           OS root
+              /var/lib/docker (default; ENABLE_DOCKER_SSD=false)
 USB SSD:      /mnt/ssd/
+                docker/            <- ENABLE_DOCKER_SSD=true (opt-in)
                 pi-gateway-data/   <- ~/pi-gateway/data symlink
                   adguard/work/
                   uptime-kuma/

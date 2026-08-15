@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly SSD SMART check (Sunday 04:30)
+
+[Timer]
+OnCalendar=Sun *-*-* 04:30:00
+Persistent=true
+AccuracySec=1h
+
+[Install]
+WantedBy=timers.target

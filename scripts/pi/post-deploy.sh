@@ -189,12 +189,15 @@ if [[ "${ENABLE_UFW:-true}" == "true" ]]; then
   run_step_critical "UFW firewall" "$SCRIPT_DIR/setup-firewall.sh"
 fi
 if [[ "$DEPLOY_DEGRADED" -eq 0 ]]; then
-if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
-  if [[ "${ENABLE_DOCKER_SSD:-false}" == "true" ]]; then
-    if [[ ! -f /mnt/ssd/.docker-data-root ]] || [[ ! -f /etc/systemd/system/docker.service.d/pi-gateway-ssd.conf ]]; then
-      run_step_optional "Docker SSD tasima" "$SCRIPT_DIR/setup-docker-ssd.sh"
+  if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
+    if [[ "${ENABLE_DOCKER_SSD:-false}" == "true" ]]; then
+      if [[ ! -f /mnt/ssd/.docker-data-root ]] || [[ ! -f /etc/systemd/system/docker.service.d/pi-gateway-ssd.conf ]]; then
+        run_step_optional "Docker SSD tasima" "$SCRIPT_DIR/setup-docker-ssd.sh"
+      fi
     fi
   fi
-fi
+  run_step_optional "SLO push monitors" "$SCRIPT_DIR/setup-slo-monitors.sh"
+  run_step_optional "SSD SMART timer" "$SCRIPT_DIR/setup-ssd-smart-timer.sh"
+  run_step_critical "Post-deploy integration" "$SCRIPT_DIR/post-deploy-integration.sh"
 fi
 log "Post-deploy tamamlandi"

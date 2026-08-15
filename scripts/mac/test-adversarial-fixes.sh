@@ -312,4 +312,9 @@ grep -A8 'prune_safe' "$prune_sd_space" | grep -q 'degraded' \
   || die "C30: prune degraded docker guard yok"
 ok "C30 prune degraded docker guard"
 
+# C28b: recover-ro uses SKIP_COMPOSE_UP (no double compose with setup-docker-ssd)
+grep -A6 'setup-docker-ssd.sh' "$recover" | grep -q 'SKIP_COMPOSE_UP=true' \
+  || die "C28b: recover-ro SKIP_COMPOSE_UP yok"
+ok "C28b recover-ro SKIP_COMPOSE_UP"
+
 echo "[test-adversarial] Tum kontroller gecti"

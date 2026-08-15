@@ -66,6 +66,10 @@ if ssd_mount_healthy; then
   fi
   touch_hotplug_run
   log "SSD mount OK — tam stack restore"
+  if ! recover_lock_acquire; then
+    log "HATA: kurtarma kilidi alinamadi (timeout)"
+    exit 1
+  fi
   ensure_runtime_dir
   # fstab drift onarimi + acik remount (flag HENUZ silinmez)
   if [[ -x "$SCRIPT_DIR/ensure-ssd-fstab.sh" ]]; then
@@ -74,21 +78,33 @@ if ssd_mount_healthy; then
   ssd_try_remount || log "WARN: remount"
   if ! REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/ensure-data-symlink.sh" repair; then
     log "HATA: SSD data symlink onarimi basarisiz"
+    recover_lock_release
     exit 1
   fi
   if [[ -x "$SCRIPT_DIR/setup-docker-ssd.sh" ]] && [[ "${ENABLE_DOCKER_SSD:-false}" == "true" ]]; then
-    REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/setup-docker-ssd.sh" || log "WARN: docker SSD restore atlandi"
+    if ! REMOTE_DIR="$REMOTE_DIR" SKIP_COMPOSE_UP=true bash "$SCRIPT_DIR/setup-docker-ssd.sh"; then
+      log "HATA: docker SSD restore basarisiz"
+      recover_lock_release
+      exit 1
+    fi
+    if ! docker_ssd_root_ok; then
+      log "HATA: docker root SSD'de degil ($(docker_data_root || echo bilinmiyor))"
+      recover_lock_release
+      exit 1
+    fi
   fi
-  if ! REMOTE_DIR="$REMOTE_DIR" bash "$(recover_script_path "$REMOTE_DIR")"; then
+  if ! REMOTE_DIR="$REMOTE_DIR" SKIP_RECOVER_LOCK=true bash "$(recover_script_path "$REMOTE_DIR")"; then
     log "HATA: recover basarisiz — degraded flag korunuyor, notify yok"
+    recover_lock_release
     exit 1
   fi
   # Recover success gate (full stack) — flag clear recover icinde; burada dogrula
   if storage_degraded; then
     log "WARN: recover bitti ama degraded flag duruyor — clear deneniyor"
-    if stack_dns_core_ok && container_health_ok caddy && stack_gateway_ok; then
+    if stack_dns_core_ok && container_health_ok caddy && stack_gateway_ok && docker_ssd_root_ok; then
       clear_storage_degraded || log "WARN: degraded flag temizlenemedi"
     else
+      recover_lock_release
       exit 1
     fi
   fi
@@ -98,6 +114,7 @@ if ssd_mount_healthy; then
   # shellcheck source=../lib/notify.sh
   source "$SCRIPT_DIR/../lib/notify.sh"
   notify_ssd_restored "$(hostname -s)"
+  recover_lock_release
   exit 0
 fi
 log "SSD mount yok / sagliksiz"
@@ -119,6 +136,10 @@ if ! dns_degraded_on_ssd_loss; then
   exit 1
 fi
 log "DNS degraded moda gecis (core-dns SD)"
+if ! recover_lock_acquire; then
+  log "HATA: kurtarma kilidi alinamadi (timeout)"
+  exit 1
+fi
 if [[ -d "$REMOTE_DIR/compose" ]]; then
   cd "$REMOTE_DIR/compose"
   # shellcheck source=../lib/compose-profiles.sh
@@ -129,10 +150,12 @@ fi
 set_storage_degraded
 if ! REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/ensure-data-symlink.sh" repair --fallback-sd; then
   log "HATA: SD fallback data symlink onarimi basarisiz"
+  recover_lock_release
   exit 1
 fi
 if ! REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/setup-docker-fallback.sh"; then
   log "HATA: Docker SD fallback basarisiz"
+  recover_lock_release
   exit 1
 fi
 # shellcheck source=../lib/notify.sh
@@ -143,4 +166,5 @@ if [[ -d "$REMOTE_DIR/compose" ]]; then
     || log "WARN: core-dns compose basarisiz"
 fi
 mark_stack_recover_cooldown
+recover_lock_release
 exit 0

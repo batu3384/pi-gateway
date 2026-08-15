@@ -38,4 +38,8 @@ if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
 fi
 echo "--- health ---"
 REMOTE_DIR="$REMOTE_DIR" bash "$REMOTE_DIR/scripts/pi/health-check.sh" && echo "health: OK" || echo "health: FAIL"
+if [[ -f /var/lib/pi-gateway/state.json ]]; then
+  echo "--- gateway state ---"
+  python3 -m json.tool /var/lib/pi-gateway/state.json 2>/dev/null || cat /var/lib/pi-gateway/state.json
+fi
 REMOTE

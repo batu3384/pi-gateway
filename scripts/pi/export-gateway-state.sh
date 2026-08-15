@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# Prometheus textfile + JSON gateway state (health timer / make status)
+set -euo pipefail
+REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+METRICS_DIR="${PI_GATEWAY_METRICS_DIR:-/var/lib/pi-gateway/metrics}"
+METRICS_FILE="${METRICS_DIR}/pi_gateway.prom"
+STATE_JSON="${PI_GATEWAY_STATE_JSON:-/var/lib/pi-gateway/state.json}"
+OFFSITE_MARKER="${OFFSITE_MARKER:-/var/lib/pi-gateway/last-offsite-backup}"
+DRILL_MARKER="${DRILL_MARKER:-/var/lib/pi-gateway/last-backup-restore-drill}"
+OFFSITE_COPY_MARKER="${OFFSITE_COPY_MARKER:-/var/lib/pi-gateway/last-restic-offsite-copy}"
+# shellcheck source=../lib/env-file.sh
+source "$SCRIPT_DIR/../lib/env-file.sh"
+read_remote_dotenv || { echo "[export-state] HATA: .env dotenv parser hatasi" >&2; exit 1; }
+# shellcheck source=../lib/stack-health.sh
+source "$SCRIPT_DIR/../lib/stack-health.sh"
+
+run_as_needed() {
+  if [[ "$(id -u)" -eq 0 ]]; then
+    "$@"
+  else
+    sudo "$@"
+  fi
+}
+
+usage_pct() {
+  local mount="$1"
+  df "$mount" 2>/dev/null | awk 'NR==2 {gsub(/%/,""); print $5}' || echo ""
+}
+
+file_age_days() {
+  local path="$1"
+  [[ -f "$path" ]] || { echo -1; return 0; }
+  python3 -c "import os,time; print(int((time.time()-os.path.getmtime('$path'))//86400))"
+}
+
+degraded=0
+storage_degraded && degraded=1
+ssd_ok=0
+if declare -F ssd_mount_healthy >/dev/null 2>&1; then
+  ssd_mount_healthy && ssd_ok=1
+elif mountpoint -q /mnt/ssd 2>/dev/null; then
+  ssd_ok=1
+fi
+docker_ssd=0
+if [[ "${ENABLE_DOCKER_SSD:-false}" == "true" ]] && docker_ssd_root_ok; then
+  docker_ssd=1
+fi
+root_pct="$(usage_pct /)"
+ssd_pct="$(usage_pct /mnt/ssd)"
+offsite_age="$(file_age_days "$OFFSITE_MARKER")"
+drill_age="$(file_age_days "$DRILL_MARKER")"
+offsite_copy_age="$(file_age_days "$OFFSITE_COPY_MARKER")"
+ts="$(date -Iseconds)"
+
+tmp="$(mktemp)"
+cat >"$tmp" <<EOF
+# HELP pi_gateway_storage_degraded 1 when core-dns degraded mode is active
+# TYPE pi_gateway_storage_degraded gauge
+pi_gateway_storage_degraded ${degraded}
+# HELP pi_gateway_ssd_mount_healthy 1 when SSD mount passes write probe
+# TYPE pi_gateway_ssd_mount_healthy gauge
+pi_gateway_ssd_mount_healthy ${ssd_ok}
+# HELP pi_gateway_docker_root_on_ssd 1 when Docker data-root matches DOCKER_SSD_ROOT
+# TYPE pi_gateway_docker_root_on_ssd gauge
+pi_gateway_docker_root_on_ssd ${docker_ssd}
+# HELP pi_gateway_root_usage_percent SD root filesystem usage percent
+# TYPE pi_gateway_root_usage_percent gauge
+pi_gateway_root_usage_percent ${root_pct:-0}
+# HELP pi_gateway_ssd_usage_percent SSD mount usage percent (-1 if unmounted)
+# TYPE pi_gateway_ssd_usage_percent gauge
+pi_gateway_ssd_usage_percent ${ssd_pct:--1}
+# HELP pi_gateway_offsite_backup_age_days Days since last Mac backup-pull stamp on Pi (-1 missing)
+# TYPE pi_gateway_offsite_backup_age_days gauge
+pi_gateway_offsite_backup_age_days ${offsite_age}
+# HELP pi_gateway_backup_restore_drill_age_days Days since last restore drill (-1 missing)
+# TYPE pi_gateway_backup_restore_drill_age_days gauge
+pi_gateway_backup_restore_drill_age_days ${drill_age}
+# HELP pi_gateway_restic_offsite_copy_age_days Days since last B2/R2 copy (-1 missing/disabled)
+# TYPE pi_gateway_restic_offsite_copy_age_days gauge
+pi_gateway_restic_offsite_copy_age_days ${offsite_copy_age}
+EOF
+
+run_as_needed mkdir -p "$METRICS_DIR" "$(dirname "$STATE_JSON")" 2>/dev/null || true
+if [[ "$(id -u)" -eq 0 ]]; then
+  install -m 644 "$tmp" "$METRICS_FILE"
+else
+  run_as_needed install -m 644 "$tmp" "$METRICS_FILE"
+fi
+rm -f "$tmp"
+
+json_tmp="$(mktemp)"
+python3 - "$json_tmp" "$STATE_JSON" "$ts" "$degraded" "$ssd_ok" "$docker_ssd" "${root_pct:-}" "${ssd_pct:-}" \
+  "$offsite_age" "$drill_age" "$offsite_copy_age" <<'PY'
+import json, os, sys
+tmp, path = sys.argv[1], sys.argv[2]
+data = {
+    "ts": sys.argv[3],
+    "storage_degraded": int(sys.argv[4]),
+    "ssd_mount_healthy": int(sys.argv[5]),
+    "docker_root_on_ssd": int(sys.argv[6]),
+    "root_usage_pct": int(sys.argv[7] or 0),
+    "ssd_usage_pct": int(sys.argv[8]) if sys.argv[8] else None,
+    "offsite_backup_age_days": int(sys.argv[9]),
+    "backup_restore_drill_age_days": int(sys.argv[10]),
+    "restic_offsite_copy_age_days": int(sys.argv[11]),
+}
+with open(tmp, "w", encoding="utf-8") as f:
+    json.dump(data, f, indent=2)
+    f.write("\n")
+os.replace(tmp, path)
+PY
+if [[ "$(id -u)" -eq 0 ]]; then
+  chown "${USER}:${USER}" "$STATE_JSON" "$METRICS_FILE" 2>/dev/null || true
+else
+  run_as_needed chown "${USER}:${USER}" "$STATE_JSON" "$METRICS_FILE" 2>/dev/null || true
+fi
+rm -f "$json_tmp"
+echo "[export-state] OK ${METRICS_FILE}"

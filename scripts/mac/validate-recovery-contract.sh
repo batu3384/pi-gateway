@@ -56,7 +56,7 @@ grep -q 'stack_fully_healthy && root_rw_ok' "$PROJECT_DIR/scripts/pi/recover-rea
 ok "recover early exit root_rw_ok"
 
 line_rw="$(grep -n 'ensure_root_rw' "$PROJECT_DIR/scripts/pi/recover-readonly-root.sh" | head -1 | cut -d: -f1)"
-line_lock="$(grep -n 'acquire_recover_lock_wait' "$PROJECT_DIR/scripts/pi/recover-readonly-root.sh" | head -1 | cut -d: -f1)"
+line_lock="$(grep -n 'recover_lock_acquire' "$PROJECT_DIR/scripts/pi/recover-readonly-root.sh" | head -1 | cut -d: -f1)"
 [[ -n "$line_rw" && -n "$line_lock" && "$line_rw" -lt "$line_lock" ]] \
   || die "remount lock'tan once degil (rw=$line_rw lock=$line_lock)"
 ok "remount lock'tan once"

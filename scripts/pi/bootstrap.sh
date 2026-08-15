@@ -117,7 +117,7 @@ if [[ -f "$REMOTE_DIR/scripts/lib/usb-quirk.sh" ]]; then
     echo "[bootstrap] WARN: cmdline.txt bulunamadi (bootfs mount?)"
   fi
 fi
-for unit in pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-crowdsec-ufw.timer pi-gateway-morning.timer pi-gateway-stack-watchdog.timer pi-gateway-netalertx-names.timer pi-data-symlink.timer pi-ssd-watch.path pi-ssd-health.timer; do
+for unit in pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-crowdsec-ufw.timer pi-gateway-morning.timer pi-gateway-stack-watchdog.timer pi-gateway-netalertx-names.timer pi-data-symlink.timer pi-ssd-watch.path pi-ssd-health.timer pi-gateway-ssd-smart.timer; do
   [[ -f "$REMOTE_DIR/host/systemd/$unit" ]] && sudo cp "$REMOTE_DIR/host/systemd/$unit" "/etc/systemd/system/$unit"
 done
 install_systemd_unit() {
@@ -136,7 +136,7 @@ if [[ -x "$REMOTE_DIR/scripts/pi/install-privileged-scripts.sh" ]]; then
   privileged_script="$REMOTE_DIR/scripts/pi/install-privileged-scripts.sh"
   REMOTE_DIR="$REMOTE_DIR" bash "$privileged_script"
 fi
-for svc in pi-gateway-health.service pi-gateway-backup.service pi-gateway-adguard-config.service pi-gateway-health-failure.service pi-gateway-crowdsec-ufw.service pi-data-symlink.service pi-data-symlink-repair.service pi-gateway-morning.service pi-gateway-recover-ro.service pi-gateway-stack-watchdog.service pi-gateway-netalertx-names.service pi-gateway-ensure-fstab.service pi-ssd-data.service pi-ssd-watch.service pi-ssd-health.service pi-gateway-telegram-bot.service; do
+for svc in pi-gateway-health.service pi-gateway-backup.service pi-gateway-adguard-config.service pi-gateway-health-failure.service pi-gateway-crowdsec-ufw.service pi-data-symlink.service pi-data-symlink-repair.service pi-gateway-morning.service pi-gateway-recover-ro.service pi-gateway-stack-watchdog.service pi-gateway-netalertx-names.service pi-gateway-ensure-fstab.service pi-ssd-data.service pi-ssd-watch.service pi-ssd-health.service pi-gateway-ssd-smart.service pi-gateway-telegram-bot.service; do
   install_systemd_unit "$svc"
 done
 sudo systemctl daemon-reload

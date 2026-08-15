@@ -30,7 +30,7 @@ if ssd_under_voltage; then
   log "WARN: undervolt (vcgencmd get_throttled)"
 fi
 run_hotplug() {
-  REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/ssd-hotplug-handler.sh" || true
+  REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/ssd-hotplug-handler.sh"
 }
 # Degraded: disk donmus olabilir — poll restore
 if storage_degraded; then

@@ -10,7 +10,8 @@ Production: **SD = boot + root**, **SSD = data** (`/mnt/ssd`). Details: `docs/SS
 findmnt -n -o SOURCE /          # mmcblk0p2 (SD root)
 findmnt -n -o SOURCE /mnt/ssd    # /dev/sda1
 readlink -f ~/pi-gateway/data    # /mnt/ssd/pi-gateway-data
-docker info | grep "Docker Root Dir"   # /var/lib/docker (default)
+docker info | grep "Docker Root Dir"   # /var/lib/docker (default) or /mnt/ssd/docker (ENABLE_DOCKER_SSD=true)
+cat /var/lib/pi-gateway/state.json     # export-gateway-state (health timer)
 ```
 
 SSD image / hybrid boot: `scripts/mac/restore-hybrid-boot.sh`  
@@ -77,6 +78,9 @@ Remote access: Tailscale enabled + MagicDNS (`home` split DNS). Details: `docs/T
 | USB SSD power | Direct USB3 + ≥3A PSU; if drops use powered **480M+** hub (not 12M Full-Speed) |
 | `make backup-pull` | Restic + config offsite copy |
 | `make backup-cron` | Weekly backup-pull (Sunday 03:00) |
+| `make backup-restore-drill` | Restore latest offsite snapshot to temp + verify |
+| `make config-drift` | Rendered config hash Mac vs Pi |
+| `make restore-check` | `restic check` Pi + Mac offsite |
 
 ## Deploy
 
@@ -117,14 +121,32 @@ ssh pi 'REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/setup-firewall.sh'
 
 ## Disk full
 
-In hybrid mode: **SD** = OS + Docker images; **SSD** = app data.
+In hybrid mode: **SD** = OS (+ Docker if `ENABLE_DOCKER_SSD=false`); **SSD** = app data (+ Docker if `ENABLE_DOCKER_SSD=true`).
 
 ```bash
 df -h / /mnt/ssd
 docker info | grep "Docker Root Dir"
 ```
 
+`prune-sd-space.sh` (health ≥65%): apt/journal; docker prune only when data-root is on SD and not degraded.
+
 `docker system prune` (careful). Restic `forget --prune` runs daily.
+
+## Gateway state (observability)
+
+Health timer writes:
+
+- `/var/lib/pi-gateway/state.json` — human JSON (`make status`)
+- `/var/lib/pi-gateway/metrics/pi_gateway.prom` — Prometheus textfile
+
+SLO PUSH heartbeats → Uptime Kuma (`docs/SLO.md`).
+
+## Backup confidence (3-2-1)
+
+1. Pi SSD restic (encrypted) — daily timer
+2. Mac `make backup-pull` — weekly cron recommended
+3. Optional B2/R2 — `RESTIC_OFFSITE_ENABLED=true` (after local backup)
+4. Monthly `make backup-restore-drill` — proves restore works
 
 ## Notifications
 

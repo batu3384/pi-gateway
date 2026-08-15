@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "skill": "codebase-audit",
+  "date": "2026-08-16",
+  "root": "/Users/batuhanyuksel/Documents/raspberrypi",
+  "verdict": "CONCERNS",
+  "runtime": "static",
+  "findings": [
+    {"id": "CA-001", "severity": "Major", "category": "Correctness", "path": "scripts/pi/recover-readonly-root.sh:184"},
+    {"id": "CA-002", "severity": "Major", "category": "Correctness", "path": "scripts/pi/setup-docker-ssd.sh:102"},
+    {"id": "CA-003", "severity": "Major", "category": "Testing", "path": "scripts/mac/test-adversarial-fixes.sh"},
+    {"id": "CA-004", "severity": "Minor", "category": "Correctness", "path": "scripts/pi/prune-sd-space.sh:24"},
+    {"id": "CA-005", "severity": "Minor", "category": "Observability", "path": "scripts/pi/ssd-health.sh:33"},
+    {"id": "CA-006", "severity": "Minor", "category": "Concurrency", "path": "scripts/pi/ssd-hotplug-handler.sh"},
+    {"id": "CA-007", "severity": "Info", "category": "Completeness", "path": "scripts/lib/telegram-panels.py"},
+    {"id": "CA-008", "severity": "Info", "category": "Security architecture", "path": ".env"},
+    {"id": "CA-009", "severity": "Trivial", "category": "Documentation", "path": "docs/ARCHITECTURE.md:98"}
+  ]
+}

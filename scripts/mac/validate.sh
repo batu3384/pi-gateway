@@ -67,6 +67,14 @@ chmod +x "$SCRIPT_DIR/test-adversarial-fixes.sh" 2>/dev/null || true
 if [[ -f "$SCRIPT_DIR/test-adversarial-fixes.sh" ]]; then
   "$SCRIPT_DIR/test-adversarial-fixes.sh"
 fi
+chmod +x "$SCRIPT_DIR/test-ssd-fsm.sh" 2>/dev/null || true
+if [[ -f "$SCRIPT_DIR/test-ssd-fsm.sh" ]]; then
+  "$SCRIPT_DIR/test-ssd-fsm.sh"
+fi
+chmod +x "$SCRIPT_DIR/test-roadmap-path-a.sh" 2>/dev/null || true
+if [[ -f "$SCRIPT_DIR/test-roadmap-path-a.sh" ]]; then
+  "$SCRIPT_DIR/test-roadmap-path-a.sh"
+fi
 
 # Mac: docker compose plugin yoksa docker-compose (v2 standalone / OrbStack)
 compose_config() {

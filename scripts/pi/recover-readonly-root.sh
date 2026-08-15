@@ -147,14 +147,14 @@ main() {
   if ! ensure_root_rw; then
     exit 1
   fi
-  if ! acquire_recover_lock_wait; then
+  if ! recover_lock_acquire; then
     log "HATA: kurtarma kilidi alinamadi (timeout)"
     exit 1
   fi
   if ! storage_restore_pending && stack_fully_healthy && root_rw_ok; then
     log "Stack saglikli ve root rw — kurtarma gerekmedi"
     apply_adguard_rewrites_best_effort "$REMOTE_DIR"
-    release_recover_lock
+    recover_lock_release
     exit 0
   fi
   local recover_mode="full"
@@ -166,13 +166,13 @@ main() {
       recover_mode="core-dns"
     else
       log "HATA: SSD mount basarisiz ve DNS_DEGRADED_ON_SSD_LOSS=false (fail-closed)"
-      release_recover_lock
+      recover_lock_release
       exit 1
     fi
   fi
   if ! ensure_data_symlink; then
     log "HATA: data symlink onarimi basarisiz"
-    release_recover_lock
+    recover_lock_release
     exit 1
   fi
   # Degraded fallback sonrasi watchdog/health yolu: Docker root SD'de kalabilir
@@ -181,8 +181,16 @@ main() {
     && { ! declare -F ssd_mount_healthy >/dev/null 2>&1 || ssd_mount_healthy; }; then
     if [[ -f "$SCRIPT_DIR/setup-docker-ssd.sh" ]]; then
       log "Docker SSD root dogrulaniyor (recover-ro)"
-      REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/setup-docker-ssd.sh" \
-        || log "WARN: docker SSD restore atlandi"
+      if ! REMOTE_DIR="$REMOTE_DIR" SKIP_COMPOSE_UP=true bash "$SCRIPT_DIR/setup-docker-ssd.sh"; then
+        log "HATA: docker SSD restore basarisiz"
+        recover_lock_release
+        exit 1
+      fi
+      if ! docker_ssd_root_ok; then
+        log "HATA: docker root SSD'de degil ($(docker_data_root || echo bilinmiyor))"
+        recover_lock_release
+        exit 1
+      fi
     fi
   fi
   if needs_ssd && mountpoint -q /mnt/ssd 2>/dev/null; then
@@ -212,6 +220,7 @@ main() {
   # Full stack (SSD saglikli + DNS + caddy + gateway): degraded bayragini burada temizle
   if root_rw_ok \
     && (! needs_ssd || { declare -F ssd_mount_healthy >/dev/null 2>&1 && ssd_mount_healthy; }) \
+    && docker_ssd_root_ok \
     && stack_dns_core_ok \
     && container_health_ok caddy \
     && stack_gateway_ok \
@@ -219,23 +228,23 @@ main() {
     clear_storage_degraded || log "WARN: degraded flag temizlenemedi"
     log "OK stack ayakta (adguard, unbound, caddy, gateway)"
     apply_adguard_rewrites_best_effort "$REMOTE_DIR"
-    release_recover_lock
+    recover_lock_release
     exit 0
   fi
   if storage_degraded && stack_dns_core_ok && root_rw_ok; then
     log "OK degraded DNS core ayakta (gateway/caddy eksik olabilir)"
     apply_adguard_rewrites_best_effort "$REMOTE_DIR"
-    release_recover_lock
+    recover_lock_release
     exit 0
   fi
-  if ! storage_restore_pending && stack_fully_healthy && root_rw_ok; then
+  if ! storage_restore_pending && stack_fully_healthy && root_rw_ok && docker_ssd_root_ok; then
     log "OK stack_fully_healthy"
     apply_adguard_rewrites_best_effort "$REMOTE_DIR"
-    release_recover_lock
+    recover_lock_release
     exit 0
   fi
   log "WARN: stack eksik — adguard/unbound/caddy veya gateway erisimi yok"
-  release_recover_lock
+  recover_lock_release
   exit 1
 }
 main "$@"

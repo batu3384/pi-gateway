@@ -68,9 +68,14 @@ Experimental `ssd-root`: `docs/SSD-ROOT.md` + `scripts/mac/migrate-sd-boot-ssd-r
 | `RESTIC_REPOSITORY` | Path on SSD (not offsite by itself) |
 | `MAC_BACKUP_DEST` | Mac `backup-pull` destination |
 | `OFFSITE_BACKUP_MAX_AGE_DAYS` | Default `7`; `0` disables age check |
+| `BACKUP_DRILL_MAX_AGE_DAYS` | Default `30`; restore drill SLA (`make backup-restore-drill`); `0` off |
 | `WEAK_BACKUP_OK` | `yes` = allow stale offsite in doctor |
+| `RESTIC_OFFSITE_ENABLED` | `false`; `true` copies local repo to B2/R2 after backup |
+| `RESTIC_OFFSITE_REPOSITORY` | S3 URL e.g. `s3:https://s3...backblazeb2.com/bucket/pi-gateway` |
+| `RESTIC_OFFSITE_ACCESS_KEY_ID` | B2/R2 key (S3-compatible) |
+| `RESTIC_OFFSITE_SECRET_ACCESS_KEY` | B2/R2 secret |
 
-SSD restic alone is **not** 3-2-1. Run `make backup-pull` / `make backup-cron`. See [ADR-004](adr/004-backup-3321.md).
+SSD restic alone is **not** 3-2-1. Run `make backup-pull` / `make backup-cron` / `make backup-restore-drill`. See [ADR-004](adr/004-backup-3321.md) and [SLO.md](SLO.md).
 
 ## TLS
 

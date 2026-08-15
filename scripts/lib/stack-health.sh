@@ -98,6 +98,25 @@ pi_user_from_remote_dir() {
 root_rw_ok() {
   ! findmnt -n -o OPTIONS / 2>/dev/null | tr ',' '\n' | grep -qx 'ro'
 }
+docker_data_root() {
+  docker info 2>/dev/null | awk -F': ' '/Docker Root Dir/{print $2; exit}'
+}
+# ENABLE_DOCKER_SSD=true iken daemon root beklenen SSD yolunda mi
+docker_ssd_root_ok() {
+  [[ "${ENABLE_DOCKER_SSD:-false}" == "true" ]] || return 0
+  local expected="${DOCKER_SSD_ROOT:-/mnt/ssd/docker}"
+  local actual
+  actual="$(docker_data_root)"
+  [[ -n "$actual" && "$actual" == "$expected" ]]
+}
+recover_lock_acquire() {
+  [[ "${SKIP_RECOVER_LOCK:-false}" == "true" ]] && return 0
+  acquire_recover_lock_wait
+}
+recover_lock_release() {
+  [[ "${SKIP_RECOVER_LOCK:-false}" == "true" ]] && return 0
+  release_recover_lock
+}
 storage_degraded() {
   # Flag presence only. Do NOT auto-clear here — hotplug/recover must clear after stack restore.
   [[ -f "${STORAGE_DEGRADED_FLAG}" ]]

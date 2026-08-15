@@ -166,6 +166,10 @@ run_check "privileged-lib-sync" diff -q \
   /usr/local/lib/pi-gateway/scripts/lib/stack-health.sh
 run_check "privileged-lib-hash" bash -c \
   '[[ -f /usr/local/lib/pi-gateway/.installed-sha256 ]] && (cd /usr/local/lib/pi-gateway && sha256sum -c .installed-sha256 >/dev/null)'
+if [[ "$DEGRADED" -eq 0 ]]; then
+  run_check "gateway-state-json" test -f /var/lib/pi-gateway/state.json
+  run_check "gateway-metrics-prom" test -f /var/lib/pi-gateway/metrics/pi_gateway.prom
+fi
 if [[ "${ENABLE_CROWDSEC:-true}" == "true" ]]; then
   run_check "crowdsec" bash -c \
     'code=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:8082/v1/heartbeat"); [[ "$code" == "200" || "$code" == "401" ]]'

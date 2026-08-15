@@ -125,7 +125,11 @@ main() {
   migrate_data
   restart_docker
   backup_legacy
-  bring_up_stack
+  if [[ "${SKIP_COMPOSE_UP:-false}" != "true" ]]; then
+    bring_up_stack
+  else
+    log "SKIP_COMPOSE_UP=true — compose recover-ro/hotplug'a birakildi"
+  fi
   verify
   log "Tamamlandi — SD kartta ~10GB+ alan acildi"
 }

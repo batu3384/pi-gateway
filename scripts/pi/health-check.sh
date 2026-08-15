@@ -220,6 +220,34 @@ if [[ "${ENABLE_RESTIC:-true}" == "true" ]]; then
     fi
   fi
 fi
+# Backup restore drill SLA (Mac: make backup-restore-drill)
+drill_max="${BACKUP_DRILL_MAX_AGE_DAYS:-30}"
+drill_marker="/var/lib/pi-gateway/last-backup-restore-drill"
+if [[ "$drill_max" != "0" ]] && [[ "${ENABLE_RESTIC:-true}" == "true" ]]; then
+  if [[ ! -f "$drill_marker" ]]; then
+    if [[ "${WEAK_BACKUP_OK:-}" == "yes" ]]; then
+      logger -t "$LOG_TAG" "WARN backup-restore-drill-missing WEAK_BACKUP_OK=yes"
+    else
+      note_fail "backup-restore-drill-missing"
+    fi
+  else
+    drill_age="$(python3 -c "import os,time; print(int((time.time()-os.path.getmtime('$drill_marker'))//86400))")"
+    if (( drill_age > drill_max )); then
+      if [[ "${WEAK_BACKUP_OK:-}" == "yes" ]]; then
+        logger -t "$LOG_TAG" "WARN backup-restore-drill-stale(${drill_age}d) WEAK_BACKUP_OK=yes"
+      else
+        note_fail "backup-restore-drill-stale(${drill_age}d)"
+      fi
+    fi
+  fi
+fi
+if [[ -x "$SCRIPT_DIR/export-gateway-state.sh" ]]; then
+  REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/export-gateway-state.sh" >/dev/null 2>&1 \
+    || logger -t "$LOG_TAG" "WARN export-gateway-state failed"
+fi
+if [[ -x "$SCRIPT_DIR/push-slo-heartbeat.sh" ]]; then
+  REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/push-slo-heartbeat.sh" >/dev/null 2>&1 || true
+fi
 # Opsiyonel-only: journal'da FAIL kalsın; systemd "Failed" spam olmasın.
 # SD veya çekirdek/SSD fail → exit 1. Offsite SLA da fail-exit (WEAK_BACKUP_OK escape).
 exit_code=0
