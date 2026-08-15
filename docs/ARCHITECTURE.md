@@ -110,7 +110,7 @@ USB SSD:      /mnt/ssd/
 
 Symlink: `~/pi-gateway/data` → `/mnt/ssd/pi-gateway-data`
 
-Docker images default to SD (`/var/lib/docker`). If you see I/O issues on JMicron USB SSD, keep `ENABLE_DOCKER_SSD=false` (recommended).
+Docker images default to SD (`/var/lib/docker`). Set `ENABLE_DOCKER_SSD=true` to move `data-root` to `/mnt/ssd/docker` (frees SD space; more USB I/O on JMicron). On SSD loss, `setup-docker-fallback.sh` reverts Docker to SD; when SSD returns, `setup-docker-ssd.sh` runs from `ssd-hotplug-handler.sh` and `recover-readonly-root.sh`.
 
 Experimental alternative: `ssd-root` — `docs/SSD-ROOT.md`
 

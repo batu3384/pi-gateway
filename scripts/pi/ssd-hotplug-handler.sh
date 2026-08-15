@@ -78,7 +78,6 @@ if ssd_mount_healthy; then
   fi
   if [[ -x "$SCRIPT_DIR/setup-docker-ssd.sh" ]] && [[ "${ENABLE_DOCKER_SSD:-false}" == "true" ]]; then
     REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/setup-docker-ssd.sh" || log "WARN: docker SSD restore atlandi"
-    run_root systemctl restart docker 2>/dev/null || true
   fi
   if ! REMOTE_DIR="$REMOTE_DIR" bash "$(recover_script_path "$REMOTE_DIR")"; then
     log "HATA: recover basarisiz — degraded flag korunuyor, notify yok"

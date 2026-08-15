@@ -52,7 +52,7 @@
 | `SSD_HOTPLUG_DEBOUNCE_SEC` | `30` | Debounce after SSD restore |
 | `SSD_USB_RESET_REBOOT` | `false` | If `true`, reboot after reset budget exhausted (last resort) |
 | `SSD_USB_AUTHORIZED_RESET` | `false` | If `true`, USB `authorized` 0→1 cycle (risky on JMS583) |
-| `ENABLE_DOCKER_SSD` | `false` | `true`: Docker `data-root` on SSD; I/O risk on JMicron USB |
+| `ENABLE_DOCKER_SSD` | `false` | `true`: Docker `data-root` on `/mnt/ssd/docker`; degraded → SD fallback; restore re-runs `setup-docker-ssd.sh` |
 | `DOCKER_SSD_ROOT` | `/mnt/ssd/docker` | Target when `ENABLE_DOCKER_SSD=true` |
 | `STACK_RECOVER_COOLDOWN_SEC` | `180` | Auto-recover wait after compose up |
 | `STACK_BOOT_GRACE_SEC` | `120` | Post-boot recover delay |

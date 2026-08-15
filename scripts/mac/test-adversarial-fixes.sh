@@ -25,6 +25,8 @@ sync_cfg="$ROOT/scripts/mac/sync-rendered-configs.sh"
 predeploy="$ROOT/scripts/mac/pre-deploy-check.sh"
 ssd_setup="$ROOT/scripts/pi/setup-ssd-data.sh"
 docker_fallback="$ROOT/scripts/pi/setup-docker-fallback.sh"
+docker_ssd="$ROOT/scripts/pi/setup-docker-ssd.sh"
+prune_sd_space="$ROOT/scripts/pi/prune-sd-space.sh"
 backup_snapshot="$ROOT/scripts/pi/backup.sh"
 env_loader="$ROOT/scripts/lib/env-file.sh"
 health_unit="$ROOT/host/systemd/pi-gateway-health.service"
@@ -290,5 +292,25 @@ ok "W2 netalert graphql ufw"
 grep -q 'installed-sha256\|scripts-sha256\|sha256sum -c' "$install_priv" "$smoke" "$health" \
   || die "W4: runtime hash verify yok"
 ok "W4 lib hash verify"
+
+# C28: recover-ro must restore Docker SSD (watchdog/health path, not only hotplug)
+grep -q 'setup-docker-ssd.sh' "$recover" || die "C28: recover-ro setup-docker-ssd yok"
+grep -A20 'ensure_data_symlink' "$recover" | grep -q 'ENABLE_DOCKER_SSD' \
+  || die "C28: recover-ro docker SSD gate yok"
+grep -A20 'ensure_data_symlink' "$recover" | grep -q 'recover_mode.*full' \
+  || die "C28: recover-ro full-mode docker SSD gate yok"
+ok "C28 recover-ro docker SSD restore"
+
+# C29: hotplug must not restart docker after setup-docker-ssd (script restarts internally)
+if grep -A3 'setup-docker-ssd.sh' "$hotplug" | grep -q 'systemctl restart docker'; then
+  die "C29: hotplug kosulsuz docker restart"
+fi
+ok "C29 hotplug no redundant docker restart"
+
+# C30: prune-sd skips docker prune when storage degraded
+grep -q 'STORAGE_DEGRADED_FLAG' "$prune_sd_space" || die "C30: prune degraded flag yok"
+grep -A8 'prune_safe' "$prune_sd_space" | grep -q 'degraded' \
+  || die "C30: prune degraded docker guard yok"
+ok "C30 prune degraded docker guard"
 
 echo "[test-adversarial] Tum kontroller gecti"

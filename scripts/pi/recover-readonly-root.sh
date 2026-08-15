@@ -175,6 +175,16 @@ main() {
     release_recover_lock
     exit 1
   fi
+  # Degraded fallback sonrasi watchdog/health yolu: Docker root SD'de kalabilir
+  if [[ "$recover_mode" == "full" ]] \
+    && [[ "${ENABLE_DOCKER_SSD:-false}" == "true" ]] \
+    && { ! declare -F ssd_mount_healthy >/dev/null 2>&1 || ssd_mount_healthy; }; then
+    if [[ -f "$SCRIPT_DIR/setup-docker-ssd.sh" ]]; then
+      log "Docker SSD root dogrulaniyor (recover-ro)"
+      REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/setup-docker-ssd.sh" \
+        || log "WARN: docker SSD restore atlandi"
+    fi
+  fi
   if needs_ssd && mountpoint -q /mnt/ssd 2>/dev/null; then
     mkdir -p /mnt/ssd/.disk-probe 2>/dev/null || true
   fi

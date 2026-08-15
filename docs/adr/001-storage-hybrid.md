@@ -11,7 +11,7 @@ Pi 4B USB SSD (often JMicron) is unreliable as root. SD wears under Docker write
 ## Decision
 
 - `STORAGE_TYPE=hybrid`: OS on SD (`/`), app data on `/mnt/ssd/pi-gateway-data` via `~/pi-gateway/data` symlink.
-- Docker images stay on SD (`ENABLE_DOCKER_SSD=false` default).
+- Docker images: default SD (`ENABLE_DOCKER_SSD=false`). Opt-in `ENABLE_DOCKER_SSD=true` moves `data-root` to `/mnt/ssd/docker`; on SSD loss `setup-docker-fallback.sh` reverts to `/var/lib/docker` (degraded). Restore paths (`ssd-hotplug`, `recover-readonly-root`) re-run `setup-docker-ssd.sh` when SSD is healthy again.
 - On SSD loss: `DNS_DEGRADED_ON_SSD_LOSS=true` keeps Unbound+AdGuard on SD; panels may stop.
 - `ssd-root` is **experimental** — see `docs/SSD-ROOT.md`, scripts under Mac migrate/cutover.
 - **Runtime recovery (software):** `ssd_mount_healthy` (timed write + `fsync`) detects hung mounts. `ssd_usb_soft_reset` merdiven: LPM/autosuspend off → lazy umount → usb-storage unbind/bind → remembered USB port cycle (`SSD_USB_PORT_SCAN_MAX=1`, not all ports) → opt-in xHCI. `pi-ssd-health.timer` 30s + udev `add|remove` → `pi-ssd-watch`. Degraded = core-dns; restore = remount + symlink + full stack.
