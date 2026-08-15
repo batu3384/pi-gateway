@@ -14,6 +14,7 @@ die() { echo "[test-ssd-alive] HATA: $*" >&2; exit 1; }
 ok() { echo "[test-ssd-alive] OK: $*"; }
 
 [[ -f "$SSD_ALIVE" ]] || die "ssd-alive.sh yok"
+# shellcheck source=../lib/ssd-alive.sh
 source "$SSD_ALIVE"
 
 declare -F ssd_block_present >/dev/null || die "ssd_block_present yok"

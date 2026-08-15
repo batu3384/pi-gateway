@@ -2,7 +2,6 @@
 # macOS: *.home sorgularini Pi DNS'e yonlendir
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 _PG_ENV_LIB="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}/../lib/env-file.sh"
 PG_SCRIPT_NAME="$(basename "$0")"
 # shellcheck source=../lib/env-file.sh

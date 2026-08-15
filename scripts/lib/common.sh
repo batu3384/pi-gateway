@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Sourced by mac/pi scripts for PROJECT_DIR + helpers
+# shellcheck disable=SC2034
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 load_env() {

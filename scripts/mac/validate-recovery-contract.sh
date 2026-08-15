@@ -11,6 +11,7 @@ ok() { echo "[validate-recovery] OK: $*"; }
 
 [[ -f "$STACK_HEALTH" ]] || die "stack-health.sh yok"
 
+# shellcheck source=../lib/stack-health.sh
 source "$STACK_HEALTH"
 
 if root_rw_ok 2>/dev/null; then
