@@ -9,9 +9,10 @@ PG_SCRIPT_NAME="$(basename "$0")"
 # shellcheck source=../lib/env-file.sh
 source "${_PG_ENV_LIB:?}"
 read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
+if [[ -z "${TELEGRAM_BOT_TOKEN:-}" || -z "${TELEGRAM_CHAT_ID:-}" ]]; then
   log "Telegram eksik — atlandi"
   exit 0
-}
+fi
 unit=pi-gateway-telegram-bot.service
 [[ -f "$REMOTE_DIR/host/systemd/$unit" ]] || { log "HATA: $unit yok"; exit 1; }
 sudo cp "$REMOTE_DIR/host/systemd/$unit" "/etc/systemd/system/$unit"
