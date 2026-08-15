@@ -262,7 +262,7 @@ services:
       - ../data/crowdsec/db:/var/lib/crowdsec/data
       - /var/log/journal:/var/log/journal:ro
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8082/v1/heartbeat || curl -sf http://127.0.0.1:8082/v1/heartbeat >/dev/null"]
+      test: ["CMD-SHELL", "wget -S -O /dev/null http://127.0.0.1:8082/v1/heartbeat 2>&1 | grep -qE 'HTTP/1\\.[01] (200|401)'"]
       interval: 30s
       timeout: 10s
       retries: 5

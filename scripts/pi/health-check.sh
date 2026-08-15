@@ -181,6 +181,7 @@ else
   fi
 fi
 DISK_WARN_PCT="${DISK_WARN_PCT:-80}"
+DISK_PRUNE_PCT="${DISK_PRUNE_PCT:-65}"
 for mount in / /mnt/ssd; do
   if [[ -d "$mount" ]]; then
     usage="$(df "$mount" 2>/dev/null | awk 'NR==2 {gsub(/%/,""); print $5}')"
@@ -189,6 +190,10 @@ for mount in / /mnt/ssd; do
       source "$SCRIPT_DIR/../lib/notify.sh"
       notify_disk_warn "$mount" "$usage"
       logger -t "$LOG_TAG" "WARN disk ${mount} at ${usage}%"
+    fi
+    if [[ "$mount" == "/" ]] && [[ -n "${usage:-}" ]] && (( usage >= DISK_PRUNE_PCT )); then
+      REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/prune-sd-space.sh" || \
+        logger -t "$LOG_TAG" "WARN sd-prune failed"
     fi
   fi
 done

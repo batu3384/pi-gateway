@@ -21,6 +21,10 @@ if is_ssd_root_mode || ! needs_ssd_storage; then
 fi
 if ! ssd_quirk_present; then
   log "WARN: cmdline usb-storage.quirks=${SSD_USB_VID}:${SSD_USB_PID}:u yok"
+elif ! grep -q "usb-storage.quirks=${SSD_USB_VID}:${SSD_USB_PID}:u" /proc/cmdline 2>/dev/null \
+  || ! grep -q "usbcore.quirks=${SSD_USB_VID}:${SSD_USB_PID}:k" /proc/cmdline 2>/dev/null \
+  || ! grep -q 'usbcore.autosuspend=-1' /proc/cmdline 2>/dev/null; then
+  log "WARN: boot cmdline quirks var ama canli kernel'de yok — reboot gerekli"
 fi
 if ssd_under_voltage; then
   log "WARN: undervolt (vcgencmd get_throttled)"
