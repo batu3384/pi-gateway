@@ -46,7 +46,14 @@ EOF
     printf '\napi:\n  server:\n    listen_uri: 127.0.0.1:8082\n' >>"$cfg"
   fi
 }
+ensure_lapi_credentials() {
+  local cred="${CONFIG}/local_api_credentials.yaml"
+  if [[ -f "$cred" ]] && grep -q '^url:' "$cred"; then
+    sed -i 's|^url:.*|url: http://127.0.0.1:8082|' "$cred"
+  fi
+}
 ensure_lapi_listen_port
+ensure_lapi_credentials
 
 cd "${REMOTE_DIR}/compose"
 docker compose --env-file ../.env --profile crowdsec up -d crowdsec
