@@ -168,6 +168,15 @@ ok "setup-ssd-data wipe korumasi"
 grep -q 'Kurtarma tamamlandi ama root hala read-only' "$PROJECT_DIR/scripts/pi/check-sd-health.sh" \
   || die "check-sd-health yanlis recovered raporu duzeltilmemis"
 ok "check-sd-health recovered mantigi"
+sd_health="$PROJECT_DIR/scripts/pi/check-sd-health.sh"
+grep -q 'mmcblk.*(error|timeout)' "$sd_health" \
+  || die "check-sd-health kernel-io-errors mmcblk filtrelemiyor"
+if grep -Fq "ext4.*(error|checksum)|I/O error|mmcblk.*(error|timeout)|Buffer I/O error" "$sd_health"; then
+  die "check-sd-health kernel-io-errors hâlâ USB SSD (sdb) EXT4 yakalıyor"
+fi
+grep -A20 '_ssd_only=1' "$sd_health" | grep -q 'kernel-io-errors' \
+  || die "check-sd-health _ssd_only kernel-io-errors ile SSD yolunu kiriyor"
+ok "check-sd-health SSD I/O SD-kart telegrami degil"
 
 grep -q '__CADDY_BASIC_AUTH__' "$PROJECT_DIR/config/caddy/Caddyfile.template" \
   && grep -A3 'http://gateway\.__LAN_DOMAIN__' "$PROJECT_DIR/config/caddy/Caddyfile.template" | grep -q '__CADDY_BASIC_AUTH__' \

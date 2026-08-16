@@ -46,9 +46,11 @@ if ! touch "${REMOTE_DIR}/.sd-write-test" 2>/dev/null; then
 else
   rm -f "${REMOTE_DIR}/.sd-write-test"
 fi
+# SD kart I/O = mmcblk. USB SSD (sdb1) EXT4/Buffer I/O usb-ssd-disconnect'e gider;
+# aksi halde kernel-io-errors + ssd-health-fail notify_sd_warn ("SD kart degistir") basar.
 RECENT_KERNEL_ERRORS="$(
   journalctl -k -b --no-pager --since "15 min ago" 2>/dev/null \
-    | grep -iE 'ext4.*(error|checksum)|I/O error|mmcblk.*(error|timeout)|Buffer I/O error' \
+    | grep -iE 'mmcblk.*(error|timeout)|Buffer I/O error on dev mmcblk|ext4.*mmcblk.*(error|checksum)' \
     | grep -vi 'orphan cleanup on readonly' \
     | tail -5 || true
 )"
@@ -121,12 +123,23 @@ if [[ -n "$USB_SSD_ERRORS" ]]; then
   DETAILS="$(printf '%s\n\nUSB/SSD:\n%s' "$DETAILS" "$USB_SSD_ERRORS")"
 fi
 _ssd_only=1
+_has_ssd_issue=0
 for _i in "${ISSUES[@]+"${ISSUES[@]}"}"; do
   case "$_i" in
-    ssd-health-fail|usb-ssd-disconnect) ;;
-    *) _ssd_only=0; break ;;
+    ssd-health-fail|usb-ssd-disconnect)
+      _has_ssd_issue=1
+      ;;
+    kernel-io-errors)
+      ;;
+    *)
+      _ssd_only=0
+      break
+      ;;
   esac
 done
+if [[ "$_ssd_only" -eq 1 && "$_has_ssd_issue" -eq 0 ]]; then
+  _ssd_only=0
+fi
 if [[ "$_ssd_only" -eq 1 ]]; then
   notify_ssd_degraded "$(hostname -s)" "$DETAILS"
   unset _ssd_only _i
