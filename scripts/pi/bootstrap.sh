@@ -213,7 +213,8 @@ else
     "$REMOTE_DIR/data/prometheus" "$REMOTE_DIR/data/grafana"
 fi
 if [[ "${ENABLE_MONITORING:-true}" == "true" ]] && [[ -x "$REMOTE_DIR/scripts/pi/ensure-monitoring-data.sh" ]]; then
-  REMOTE_DIR="$REMOTE_DIR" bash "$REMOTE_DIR/scripts/pi/ensure-monitoring-data.sh" || true
+  ensure_mon="$REMOTE_DIR/scripts/pi/ensure-monitoring-data.sh"
+  REMOTE_DIR="$REMOTE_DIR" bash "$ensure_mon" || true
 fi
 sudo chown -R "$USER:$USER" "$REMOTE_DIR/config/adguard" 2>/dev/null || true
 if [[ "$STORAGE_TYPE" == "ssd-root" || "$STORAGE_TYPE" == "ssd" ]]; then
