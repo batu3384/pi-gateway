@@ -54,7 +54,10 @@
 | `SSD_USB_PORT_ROTATE` | `true` | Hatirlanan port yokken USB3 adaylarini tick'te kaydir |
 | `SSD_USB_CYCLE_ON_HANG` | `true` | USB enumerate olsa da I/O oluyse port cycle |
 | `SSD_USB_STORAGE_REBIND` | `true` | Port power oncesi usb-storage unbind/bind |
-| `SSD_USB_XHCI_REBIND` | `false` | Opt-in xHCI PCI rebind (all USB3 collateral) |
+| `SSD_USB_XHCI_REBIND` | `false` | Force xHCI PCI rebind (all USB3 collateral) |
+| `SSD_USB_XHCI_AUTO_ON_DROPOUT` | `true` | Bus dropout: xhci without explicit `SSD_USB_XHCI_REBIND` |
+| `SSD_USB_XHCI_RESET_MAX` | `2` | xHCI rebind attempts per window (separate from port cycle) |
+| `SSD_USB_XHCI_RESET_WINDOW_SEC` | `900` | xHCI rate-limit window |
 | `SSD_HOTPLUG_DEBOUNCE_SEC` | `30` | Debounce after SSD restore |
 | `SSD_USB_RESET_REBOOT` | `false` | If `true`, reboot after reset budget exhausted (last resort) |
 | `SSD_USB_AUTHORIZED_RESET` | `false` | If `true`, USB `authorized` 0→1 cycle (risky on JMS583) |

@@ -13,6 +13,9 @@ SSD_USB_PID="${SSD_USB_PID:-0583}"
 SSD_USB_RESET_MAX="${SSD_USB_RESET_MAX:-3}"
 SSD_USB_RESET_WINDOW_SEC="${SSD_USB_RESET_WINDOW_SEC:-900}"
 SSD_USB_RESET_STATE_FILE="${SSD_USB_RESET_STATE_FILE:-/var/lib/pi-gateway/ssd-usb-reset-state}"
+SSD_USB_XHCI_RESET_STATE_FILE="${SSD_USB_XHCI_RESET_STATE_FILE:-/var/lib/pi-gateway/ssd-usb-xhci-reset-state}"
+SSD_USB_XHCI_RESET_MAX="${SSD_USB_XHCI_RESET_MAX:-2}"
+SSD_USB_XHCI_RESET_WINDOW_SEC="${SSD_USB_XHCI_RESET_WINDOW_SEC:-900}"
 # ponytail: total bus dropout soft-reset ile kurtulamayabilir — SSD_USB_RESET_REBOOT=true upgrade
 SSD_USB_RESET_REBOOT="${SSD_USB_RESET_REBOOT:-false}"
 # JMicron authorized 0→1 bazi kutularda enumerate kaybettirir — varsayilan kapali
@@ -38,8 +41,10 @@ SSD_USB_CYCLE_ON_HANG="${SSD_USB_CYCLE_ON_HANG:-true}"
 SSD_USB_STORAGE_REBIND="${SSD_USB_STORAGE_REBIND:-true}"
 # Bir soft_reset icinde rate-limit tek say
 SSD_USB_RESET_COUNTED=0
-# Son care: xhci PCI unbind/rebind (rate-limit; varsayilan KAPALI — tum USB3 collateral)
+# Son care: xhci PCI unbind/rebind — port kotasindan ayri sayac
 SSD_USB_XHCI_REBIND="${SSD_USB_XHCI_REBIND:-false}"
+# Bus dropout (lsusb bos): JMicron hybrid'de xhci otomatik; opt-out SSD_USB_XHCI_AUTO_ON_DROPOUT=false
+SSD_USB_XHCI_AUTO_ON_DROPOUT="${SSD_USB_XHCI_AUTO_ON_DROPOUT:-true}"
 SSD_USB_XHCI_PCI="${SSD_USB_XHCI_PCI:-0000:01:00.0}"
 SSD_USB_XHCI_UNBIND_SEC="${SSD_USB_XHCI_UNBIND_SEC:-5}"
 SSD_USB_XHCI_BIND_SEC="${SSD_USB_XHCI_BIND_SEC:-12}"
@@ -330,6 +335,10 @@ ssd_usb_disable_autosuspend() {
 }
 
 ssd_usb_reset_rate_limited() {
+  ssd_usb_port_reset_rate_limited
+}
+
+ssd_usb_port_reset_rate_limited() {
   local now count ts
   now="$(date +%s)"
   if [[ -f "$SSD_USB_RESET_STATE_FILE" ]]; then
@@ -341,6 +350,44 @@ ssd_usb_reset_rate_limited() {
     fi
   fi
   return 1
+}
+
+ssd_usb_xhci_reset_rate_limited() {
+  local now count ts
+  now="$(date +%s)"
+  if [[ -f "$SSD_USB_XHCI_RESET_STATE_FILE" ]]; then
+    read -r ts count <"$SSD_USB_XHCI_RESET_STATE_FILE" || true
+    ts="${ts:-0}"
+    count="${count:-0}"
+    if (( now - ts < SSD_USB_XHCI_RESET_WINDOW_SEC )) && (( count >= SSD_USB_XHCI_RESET_MAX )); then
+      return 0
+    fi
+  fi
+  return 1
+}
+
+ssd_usb_xhci_reset_record() {
+  local now count ts
+  now="$(date +%s)"
+  _ssd_alive_root mkdir -p "$(dirname "$SSD_USB_XHCI_RESET_STATE_FILE")" 2>/dev/null || true
+  if [[ -f "$SSD_USB_XHCI_RESET_STATE_FILE" ]]; then
+    read -r ts count <"$SSD_USB_XHCI_RESET_STATE_FILE" || true
+    ts="${ts:-0}"
+    count="${count:-0}"
+    if (( now - ts >= SSD_USB_XHCI_RESET_WINDOW_SEC )); then
+      ts="$now"
+      count=0
+    fi
+  else
+    ts="$now"
+    count=0
+  fi
+  count=$((count + 1))
+  if [[ "$(id -u)" -eq 0 ]]; then
+    printf '%s %s\n' "$ts" "$count" >"$SSD_USB_XHCI_RESET_STATE_FILE"
+  else
+    printf '%s %s\n' "$ts" "$count" | sudo tee "$SSD_USB_XHCI_RESET_STATE_FILE" >/dev/null
+  fi
 }
 
 ssd_usb_reset_record_once() {
@@ -375,6 +422,7 @@ ssd_usb_reset_record() {
 
 ssd_usb_reset_clear() {
   _ssd_alive_root rm -f "$SSD_USB_RESET_STATE_FILE" 2>/dev/null || true
+  _ssd_alive_root rm -f "$SSD_USB_XHCI_RESET_STATE_FILE" 2>/dev/null || true
   SSD_USB_RESET_COUNTED=0
 }
 
@@ -382,6 +430,43 @@ ssd_usb_bus_dropout() {
   ssd_find_usb_sysfs >/dev/null 2>&1 && return 1
   ssd_block_present && return 1
   return 0
+}
+
+# USB sysfs yok ama blkid hala sd* — disconnect sonrasi ghost node
+ssd_ghost_block_present() {
+  ssd_find_usb_sysfs >/dev/null 2>&1 && return 1
+  ssd_block_present
+}
+
+ssd_ghost_block_cleanup() {
+  local disk dev_base del
+  ssd_ghost_block_present || return 1
+  disk="$(blkid -L "$SSD_LABEL" 2>/dev/null || true)"
+  [[ -n "$disk" && "$disk" == /dev/sd* ]] || return 1
+  dev_base="$(echo "$disk" | sed -E 's/p?[0-9]+$//')"
+  del="${dev_base}/device/delete"
+  [[ -f "$del" ]] || return 1
+  echo "[ssd-alive] ghost block ${dev_base} — device/delete" >&2
+  if mountpoint -q "$SSD_MOUNT" 2>/dev/null; then
+    _ssd_alive_root umount -l "$SSD_MOUNT" 2>/dev/null || true
+  fi
+  ssd_sysfs_write "$del" 1 || return 1
+  command -v udevadm >/dev/null 2>&1 && _ssd_alive_root udevadm settle --timeout=10 2>/dev/null || sleep 2
+}
+
+ssd_usb_port_cycle_allowed() {
+  [[ "${SSD_USB_PORT_DISABLE_CYCLE:-true}" == "true" ]] || return 1
+  if ssd_under_voltage; then
+    echo "[ssd-alive] undervolt — port disable atlandi" >&2
+    return 1
+  fi
+  return 0
+}
+
+ssd_xhci_rebind_enabled() {
+  [[ "${SSD_USB_XHCI_REBIND:-false}" == "true" ]] && return 0
+  [[ "${SSD_USB_XHCI_AUTO_ON_DROPOUT:-true}" == "true" ]] && ssd_usb_bus_dropout && return 0
+  return 1
 }
 
 ssd_usb_port_path_ok() {
@@ -540,8 +625,8 @@ ssd_usb_port_cycle_one() {
 }
 
 ssd_usb_port_disable_cycle() {
-  [[ "${SSD_USB_PORT_DISABLE_CYCLE:-true}" == "true" ]] || return 1
-  if ssd_usb_reset_rate_limited; then
+  ssd_usb_port_cycle_allowed || return 1
+  if ssd_usb_port_reset_rate_limited; then
     echo "[ssd-alive] port disable rate-limit (${SSD_USB_RESET_MAX}/${SSD_USB_RESET_WINDOW_SEC}s)" >&2
     return 1
   fi
@@ -597,9 +682,9 @@ ssd_usb_storage_rebind() {
 }
 
 ssd_xhci_rebind() {
-  [[ "${SSD_USB_XHCI_REBIND:-false}" == "true" ]] || return 1
-  if ssd_usb_reset_rate_limited; then
-    echo "[ssd-alive] xhci rebind rate-limit (${SSD_USB_RESET_MAX}/${SSD_USB_RESET_WINDOW_SEC}s)" >&2
+  ssd_xhci_rebind_enabled || return 1
+  if ssd_usb_xhci_reset_rate_limited; then
+    echo "[ssd-alive] xhci rebind rate-limit (${SSD_USB_XHCI_RESET_MAX}/${SSD_USB_XHCI_RESET_WINDOW_SEC}s)" >&2
     return 1
   fi
   local dev="${SSD_USB_XHCI_PCI:-0000:01:00.0}"
@@ -608,7 +693,7 @@ ssd_xhci_rebind() {
     return 1
   }
   [[ -e "/sys/bus/pci/drivers/xhci_hcd/${dev}" ]] || return 1
-  ssd_usb_reset_record_once
+  ssd_usb_xhci_reset_record
   echo "[ssd-alive] xhci rebind: $dev" >&2
   ssd_sysfs_write "/sys/bus/pci/drivers/xhci_hcd/unbind" "$dev" || return 1
   sleep "${SSD_USB_XHCI_UNBIND_SEC:-5}"
@@ -661,11 +746,12 @@ _ssd_usb_soft_reset_body() {
   fi
 
   if ssd_usb_bus_dropout; then
+    ssd_ghost_block_cleanup || true
     ssd_xhci_rebind || true
   fi
 
   if [[ "$SSD_USB_AUTHORIZED_RESET" == "true" ]]; then
-    if ssd_usb_reset_rate_limited; then
+    if ssd_usb_port_reset_rate_limited; then
       echo "[ssd-alive] USB authorized rate-limit (${SSD_USB_RESET_MAX}/${SSD_USB_RESET_WINDOW_SEC}s)" >&2
       ssd_usb_reboot_once || true
       return 1
@@ -687,7 +773,9 @@ _ssd_usb_soft_reset_body() {
   if mountpoint -q "$SSD_MOUNT" 2>/dev/null && ! ssd_mount_healthy; then
     _ssd_alive_root umount -l "$SSD_MOUNT" 2>/dev/null || true
   fi
-  if ssd_block_present; then
+  if ssd_ghost_block_present; then
+    ssd_ghost_block_cleanup || true
+  elif ssd_block_present && ! ssd_usb_bus_dropout; then
     local disk
     disk="$(blkid -L "$SSD_LABEL" 2>/dev/null || true)"
     if [[ -n "$disk" && "$disk" == /dev/* ]]; then
@@ -698,7 +786,7 @@ _ssd_usb_soft_reset_body() {
   if ssd_mount_healthy; then
     return 0
   fi
-  if ssd_usb_bus_dropout && ssd_usb_reset_rate_limited; then
+  if ssd_usb_bus_dropout && ssd_usb_port_reset_rate_limited && ssd_usb_xhci_reset_rate_limited; then
     ssd_usb_reboot_once || true
   fi
   return 1

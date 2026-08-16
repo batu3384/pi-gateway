@@ -27,7 +27,7 @@ elif ! grep -q "usb-storage.quirks=${SSD_USB_VID}:${SSD_USB_PID}:u" /proc/cmdlin
   log "WARN: boot cmdline quirks var ama canli kernel'de yok — reboot gerekli"
 fi
 if ssd_under_voltage; then
-  log "WARN: undervolt (vcgencmd get_throttled)"
+  log "WARN: undervolt (vcgencmd get_throttled) — agresif USB port cycle kapali"
 fi
 run_hotplug() {
   REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/ssd-hotplug-handler.sh"
@@ -54,7 +54,17 @@ if storage_degraded; then
       exit 0
     fi
   fi
-  log "hala degraded — beklenen FSM (timer OK)"
+  if ssd_usb_bus_dropout; then
+    if ssd_usb_port_reset_rate_limited && ssd_usb_xhci_reset_rate_limited; then
+      log "WARN: port+xhci rate-limit — soft-reset beklemede (timer OK)"
+    elif ssd_usb_port_reset_rate_limited; then
+      log "WARN: port cycle rate-limit — xhci poll devam (timer OK)"
+    else
+      log "WARN: USB bus dropout — soft-reset yetersiz (timer OK)"
+    fi
+  else
+    log "hala degraded — beklenen FSM (timer OK)"
+  fi
   exit 0
 fi
 # Saglikli gorunuyor mu? USB sysfs poke yok (JMS583 30s poll)
@@ -87,7 +97,17 @@ if ssd_mount_healthy; then
   exit 0
 fi
 if storage_degraded; then
-  log "hala degraded — beklenen FSM (timer OK)"
+  if ssd_usb_bus_dropout; then
+    if ssd_usb_port_reset_rate_limited && ssd_usb_xhci_reset_rate_limited; then
+      log "WARN: port+xhci rate-limit — soft-reset beklemede (timer OK)"
+    elif ssd_usb_port_reset_rate_limited; then
+      log "WARN: port cycle rate-limit — xhci poll devam (timer OK)"
+    else
+      log "WARN: USB bus dropout — soft-reset yetersiz (timer OK)"
+    fi
+  else
+    log "hala degraded — beklenen FSM (timer OK)"
+  fi
   exit 0
 fi
 exit 1

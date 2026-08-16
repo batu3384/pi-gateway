@@ -77,7 +77,9 @@ grep -q 'dns_degraded_on_ssd_loss' "$STACK_HEALTH" || die "stack-health dns_degr
 grep -q 'DNS_DEGRADED_ON_SSD_LOSS' "$HOTPLUG" || die "hotplug DNS_DEGRADED_ON_SSD_LOSS yok"
 grep -q 'dns_degraded_on_ssd_loss' "$HOTPLUG" || die "hotplug dns_degraded_on_ssd_loss cagrisi yok"
 grep -q 'fail-closed' "$HOTPLUG" || die "hotplug fail-closed guard yok"
-grep -q 'COMPOSE_RECOVER_MODE=core-dns' "$HOTPLUG" || die "hotplug core-dns compose yok"
+grep -q 'prometheus grafana node-exporter' "$PROJECT_DIR/scripts/pi/ssd-hotplug-handler.sh" \
+  || die "hotplug degraded monitoring stop yok"
+ok "hotplug monitoring stop"
 ok "ssd-hotplug DNS degraded"
 
 grep -q 'dns_degraded_on_ssd_loss' "$RECOVER" || die "recover dns_degraded_on_ssd_loss yok"

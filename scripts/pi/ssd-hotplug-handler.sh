@@ -151,7 +151,8 @@ if [[ -d "$REMOTE_DIR/compose" ]]; then
   # shellcheck source=../lib/compose-profiles.sh
   source "$SCRIPT_DIR/../lib/compose-profiles.sh" 2>/dev/null || true
   docker compose --env-file "$REMOTE_DIR/.env" stop \
-    n8n forgejo syncthing uptime-kuma crowdsec redis dozzle netalertx 2>/dev/null || true
+    n8n forgejo syncthing uptime-kuma crowdsec redis dozzle netalertx \
+    prometheus grafana node-exporter 2>/dev/null || true
 fi
 set_storage_degraded
 if ! REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/ensure-data-symlink.sh" repair --fallback-sd; then
