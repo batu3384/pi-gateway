@@ -28,6 +28,7 @@ SCRIPTS=(
   scripts/lib/adguard-api.sh
   scripts/lib/ensure-data-symlink.sh
   scripts/pi/ssd-health.sh
+  scripts/pi/prune-sd-space.sh
 )
 
 run_root() {

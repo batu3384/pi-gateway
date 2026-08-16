@@ -32,6 +32,14 @@ fi
 run_hotplug() {
   REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/ssd-hotplug-handler.sh"
 }
+# Gozlem (health-check): USB reset yok — sahip pi-ssd-health.timer
+if [[ "$SSD_HEALTH_AUTO" != "true" ]]; then
+  if ssd_mount_healthy; then
+    exit 0
+  fi
+  log "SSD sagliksiz; SSD_HEALTH_AUTO=false — aksiyon yok"
+  exit 1
+fi
 # Degraded: disk donmus olabilir — poll restore
 if storage_degraded; then
   log "degraded — remount/soft-reset poll"
@@ -43,8 +51,8 @@ if storage_degraded; then
       exit 0
     fi
   fi
-  log "hala degraded"
-  exit 1
+  log "hala degraded — beklenen FSM (timer OK)"
+  exit 0
 fi
 # Saglikli gorunuyor mu? USB sysfs poke yok (JMS583 30s poll)
 if ssd_mount_healthy; then
@@ -53,10 +61,6 @@ if ssd_mount_healthy; then
   fi
   exit 0
 fi
-[[ "$SSD_HEALTH_AUTO" == "true" ]] || {
-  log "SSD sagliksiz; SSD_HEALTH_AUTO=false — aksiyon yok"
-  exit 1
-}
 ssd_usb_disable_autosuspend || true
 # Once block var ama mount yok — once remount (USB reset gereksiz)
 if ssd_block_present && ssd_try_remount; then
@@ -76,7 +80,7 @@ if ssd_mount_healthy; then
   exit 0
 fi
 if storage_degraded; then
-  log "hala degraded"
-  exit 1
+  log "hala degraded — beklenen FSM (timer OK)"
+  exit 0
 fi
 exit 1

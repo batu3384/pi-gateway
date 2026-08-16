@@ -65,6 +65,7 @@ elif [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
   fi
   run_check "root-rw" bash -c '! findmnt -n -o OPTIONS / | tr "," "\n" | grep -qx ro'
   run_check "ssd-fstab" bash -c 'grep -qE "[[:space:]]/mnt/ssd[[:space:]]" /etc/fstab'
+  run_check "ssd-health-timer" systemctl is-active pi-ssd-health.timer
   if [[ "$DEGRADED" -eq 0 ]]; then
     run_check "sd-health" bash -c "REMOTE_DIR='${REMOTE_DIR}' bash '${REMOTE_DIR}/scripts/pi/check-sd-health.sh'"
   fi

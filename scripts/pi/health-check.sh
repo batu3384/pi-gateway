@@ -25,9 +25,8 @@ note_fail() {
   FAILURES+=("$1")
   fail=1
 }
-# SD sagligi (kurtarma yok — asagida recover-stack.sh)
-# SSD gozcu: timer'da kurtarsin (SSD_HEALTH_AUTO=true); SD RO recover kapali
-if ! SD_HEALTH_AUTO_RECOVER=false SSD_HEALTH_AUTO=true REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/check-sd-health.sh"; then
+# SD sagligi (SSD kurtarma yok — pi-ssd-health.timer). SD RO recover kapali.
+if ! SD_HEALTH_AUTO_RECOVER=false SSD_HEALTH_AUTO=false REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/check-sd-health.sh"; then
   fail=1
   sd_fail=1
 fi
@@ -64,12 +63,16 @@ else
     [[ -d "${REMOTE_DIR}/data" && ! -L "${REMOTE_DIR}/data" ]] || note_fail "data-native-missing"
   elif [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
     if [[ ! -L "${REMOTE_DIR}/data" ]] || [[ "$(readlink -f "${REMOTE_DIR}/data")" != "/mnt/ssd/pi-gateway-data" ]]; then
-      note_fail "data-ssd-symlink-broken"
+      if declare -F ssd_mount_healthy >/dev/null 2>&1 && ssd_mount_healthy; then
+        note_fail "data-ssd-symlink-broken"
+      else
+        logger -t "$LOG_TAG" "WARN data symlink (SSD yok — pi-ssd-health.timer sahip)"
+      fi
     fi
     if declare -F ssd_mount_healthy >/dev/null 2>&1; then
-      ssd_mount_healthy || note_fail "ssd-unhealthy"
+      ssd_mount_healthy || logger -t "$LOG_TAG" "WARN ssd-unhealthy (pi-ssd-health.timer sahip)"
     elif ! mountpoint -q /mnt/ssd 2>/dev/null; then
-      note_fail "ssd-unmounted"
+      logger -t "$LOG_TAG" "WARN ssd-unmounted (pi-ssd-health.timer sahip)"
     fi
   fi
   optional_down() {
@@ -153,7 +156,7 @@ else
   has_optional=0
   for f in "${FAILURES[@]}"; do
     case "$f" in
-      ssd-unmounted|storage-degraded*|data-ssd-symlink*|data-native-missing)
+      ssd-unmounted|ssd-unhealthy|storage-degraded*|data-ssd-symlink*|data-native-missing)
         has_ssd=1
         ;;
       optional-*)
@@ -198,7 +201,10 @@ for mount in / /mnt/ssd; do
   fi
 done
 # Offsite backup SLA (SSD restic alone ≠ 3-2-1). Marker: make backup-pull
-if [[ "${ENABLE_RESTIC:-true}" == "true" ]]; then
+# Degraded: data disk yok — SLA fail systemd spam olmasin
+if storage_degraded; then
+  logger -t "$LOG_TAG" "WARN offsite/drill SLA atlandi (storage-degraded)"
+elif [[ "${ENABLE_RESTIC:-true}" == "true" ]]; then
   max_age="${OFFSITE_BACKUP_MAX_AGE_DAYS:-7}"
   marker="/var/lib/pi-gateway/last-offsite-backup"
   if [[ "$max_age" != "0" ]]; then
@@ -223,7 +229,7 @@ fi
 # Backup restore drill SLA (Mac: make backup-restore-drill)
 drill_max="${BACKUP_DRILL_MAX_AGE_DAYS:-30}"
 drill_marker="/var/lib/pi-gateway/last-backup-restore-drill"
-if [[ "$drill_max" != "0" ]] && [[ "${ENABLE_RESTIC:-true}" == "true" ]]; then
+if [[ "$drill_max" != "0" ]] && [[ "${ENABLE_RESTIC:-true}" == "true" ]] && ! storage_degraded; then
   if [[ ! -f "$drill_marker" ]]; then
     if [[ "${WEAK_BACKUP_OK:-}" == "yes" ]]; then
       logger -t "$LOG_TAG" "WARN backup-restore-drill-missing WEAK_BACKUP_OK=yes"

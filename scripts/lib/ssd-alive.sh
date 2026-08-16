@@ -24,8 +24,9 @@ SSD_USB_HOST_PORT="${SSD_USB_HOST_PORT:-0}"
 SSD_USB_PORT_STATE_FILE="${SSD_USB_PORT_STATE_FILE:-/var/lib/pi-gateway/ssd-usb-port}"
 SSD_USB_PORT_OFF_SEC="${SSD_USB_PORT_OFF_SEC:-5}"
 SSD_USB_PORT_ON_SEC="${SSD_USB_PORT_ON_SEC:-10}"
-# Bir recovery tick'te hatirlanan porttan sonra kac ekstra port (hepsi birden DEGIL)
-SSD_USB_PORT_SCAN_MAX="${SSD_USB_PORT_SCAN_MAX:-1}"
+# Hatirlanan porttan sonra kac ekstra USB3 port (Pi4: platform usb2-port1..4)
+SSD_USB_PORT_SCAN_MAX="${SSD_USB_PORT_SCAN_MAX:-8}"
+SSD_USB_RESET_LOCK_WAIT_SEC="${SSD_USB_RESET_LOCK_WAIT_SEC:-45}"
 # USB hala enumerate ama I/O olu: port cycle
 SSD_USB_CYCLE_ON_HANG="${SSD_USB_CYCLE_ON_HANG:-true}"
 # Port power'dan once usb-storage unbind/bind
@@ -273,7 +274,8 @@ ssd_usb_bus_dropout() {
 ssd_usb_port_path_ok() {
   local p="$1"
   [[ "$p" == /sys/* ]] || return 1
-  [[ "$p" =~ /usb[0-9]+-port[0-9]+$ ]] || return 1
+  # usb2-portN (xhci) veya 1-1-portN (Pi4 USB2 VIA hub)
+  [[ "$p" =~ /usb[0-9]+-port[0-9]+$ || "$p" =~ /[0-9]+-[0-9.]+-port[0-9]+$ ]] || return 1
   [[ -f "${p}/disable" ]] || return 1
 }
 
@@ -295,30 +297,41 @@ ssd_usb_port_sysfs() {
   return 1
 }
 
-# Hatirlanan → SSD_USB_HOST_PORT → USB3 (usb2) → USB2 (usb1). Hepsi birden degil.
+# Pi4: /sys/bus/usb/devices/usb2-portN yok; gercek path
+# USB3: .../usb2/2-0:1.0/usb2-portN  USB2: .../1-1:1.0/1-1-portN
+# usb1-port1 = VIA hub kok — tarama disi (tum USB2 collateral)
+ssd_usb_discover_xhci_ports() {
+  local p
+  while IFS= read -r p; do
+    [[ -n "$p" ]] || continue
+    ssd_usb_port_path_ok "$p" && printf '%s\n' "$p"
+  done < <(find /sys/devices/platform/scb /sys/bus/usb/devices \
+    \( -name 'usb2-port[1-4]' -o -name '1-1-port[1-4]' \) 2>/dev/null | sort)
+}
+
+_ssd_port_emit() {
+  local x r
+  x="$1"
+  ssd_usb_port_path_ok "$x" || return 0
+  r="$(readlink -f "$x" 2>/dev/null || echo "$x")"
+  [[ "${_SSD_PORT_SEEN:-}" == *"|${r}|"* ]] && return 0
+  _SSD_PORT_SEEN="${_SSD_PORT_SEEN:-|}${r}|"
+  printf '%s\n' "$r"
+}
+
+# Hatirlanan → SSD_USB_HOST_PORT → tum USB3 xhci portlari (Pi4 usb2-port1..4)
 ssd_usb_port_candidates() {
   local p remembered="" q
+  _SSD_PORT_SEEN="|"
   if [[ -f "$SSD_USB_PORT_STATE_FILE" ]]; then
     remembered="$(tr -d '[:space:]' <"$SSD_USB_PORT_STATE_FILE" 2>/dev/null || true)"
-    if ssd_usb_port_path_ok "$remembered"; then
-      printf '%s\n' "$remembered"
-    else
-      remembered=""
-    fi
+    _ssd_port_emit "$remembered"
   fi
   p="$(ssd_usb_port_sysfs 2>/dev/null || true)"
-  if [[ -n "$p" && "$p" != "$remembered" ]] && ssd_usb_port_path_ok "$p"; then
-    printf '%s\n' "$p"
-  fi
-  for q in \
-    /sys/bus/usb/devices/usb2-port[1-8] \
-    /sys/bus/usb/devices/usb3-port[1-8] \
-    /sys/bus/usb/devices/usb1-port[1-8] \
-    /sys/bus/usb/devices/usb4-port[1-8]; do
-    [[ "$q" == "$remembered" || "$q" == "$p" ]] && continue
-    ssd_usb_port_path_ok "$q" || continue
-    printf '%s\n' "$q"
-  done
+  [[ -n "$p" ]] && _ssd_port_emit "$p"
+  while IFS= read -r q; do
+    [[ -n "$q" ]] && _ssd_port_emit "$q"
+  done < <(ssd_usb_discover_xhci_ports)
 }
 
 ssd_usb_port_cycle_one() {
@@ -344,8 +357,8 @@ ssd_usb_port_disable_cycle() {
     return 1
   fi
   local port_sys tried=0 max_extra i
-  max_extra="${SSD_USB_PORT_SCAN_MAX:-1}"
-  [[ "$max_extra" =~ ^[0-9]+$ ]] || max_extra=1
+  max_extra="${SSD_USB_PORT_SCAN_MAX:-8}"
+  [[ "$max_extra" =~ ^[0-9]+$ ]] || max_extra=8
   local -a ports=()
   while IFS= read -r port_sys; do
     [[ -n "$port_sys" ]] || continue
@@ -353,16 +366,18 @@ ssd_usb_port_disable_cycle() {
     ports+=("$port_sys")
   done < <(ssd_usb_port_candidates)
   ((${#ports[@]} > 0)) || return 1
-  ssd_usb_reset_record_once
   if ssd_usb_port_cycle_one "${ports[0]}"; then
+    ssd_usb_reset_record_once
     return 0
   fi
   for ((i = 1; i < ${#ports[@]} && tried < max_extra; i++)); do
     tried=$((tried + 1))
     if ssd_usb_port_cycle_one "${ports[$i]}"; then
+      ssd_usb_reset_record_once
       return 0
     fi
   done
+  ssd_usb_reset_record_once
   return 1
 }
 
@@ -497,30 +512,42 @@ _ssd_usb_soft_reset_body() {
   return 1
 }
 
-# Merdiven: LPM off → umount hung → usb-storage rebind → hatirlanan port → ekstra 1 port → xhci opt-in
+# Merdiven: LPM off → umount hung → usb-storage rebind → USB3 port tarama → xhci opt-in
 ssd_usb_soft_reset() {
   local lockdir="${SSD_USB_RESET_LOCK_DIR:-/run/pi-gateway/ssd-usb-reset.lock}"
-  local lock_owned=0 rc mtime now parent
+  local lock_owned=0 rc mtime now parent waited=0
+  local max_wait="${SSD_USB_RESET_LOCK_WAIT_SEC:-45}"
   parent="$(dirname "$lockdir")"
   # sudo yok: Mac validate sudo prompt olmasin. Pi health root.
   if [[ "$(id -u)" -eq 0 ]]; then
     mkdir -p "$parent" 2>/dev/null || true
   fi
-  if [[ -d "$lockdir" ]]; then
-    mtime="$(stat -f %m "$lockdir" 2>/dev/null || stat -c %Y "$lockdir" 2>/dev/null || echo 0)"
-    now="$(date +%s)"
-    if [[ "$mtime" =~ ^[0-9]+$ ]] && (( now - mtime > 400 )); then
-      echo "[ssd-alive] stale reset lock — siliniyor" >&2
-      rmdir "$lockdir" 2>/dev/null || true
-    fi
-  fi
+  [[ "$max_wait" =~ ^[0-9]+$ ]] || max_wait=45
   if [[ -d "$parent" && -w "$parent" ]]; then
-    if mkdir "$lockdir" 2>/dev/null; then
-      lock_owned=1
-    elif [[ -d "$lockdir" ]]; then
-      echo "[ssd-alive] soft-reset zaten calisiyor" >&2
-      return 1
-    fi
+    while true; do
+      if [[ -d "$lockdir" ]]; then
+        mtime="$(stat -f %m "$lockdir" 2>/dev/null || stat -c %Y "$lockdir" 2>/dev/null || echo 0)"
+        now="$(date +%s)"
+        if [[ "$mtime" =~ ^[0-9]+$ ]] && (( now - mtime > 400 )); then
+          echo "[ssd-alive] stale reset lock — siliniyor" >&2
+          rmdir "$lockdir" 2>/dev/null || true
+        fi
+      fi
+      if mkdir "$lockdir" 2>/dev/null; then
+        lock_owned=1
+        break
+      fi
+      if [[ -d "$lockdir" ]]; then
+        if (( waited >= max_wait )); then
+          echo "[ssd-alive] soft-reset kilit bekleme doldu (${max_wait}s)" >&2
+          return 1
+        fi
+        sleep 1
+        waited=$((waited + 1))
+        continue
+      fi
+      break
+    done
   fi
   _ssd_usb_soft_reset_body
   rc=$?

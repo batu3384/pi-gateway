@@ -149,6 +149,8 @@ if [[ "${ENABLE_CROWDSEC:-true}" == "true" ]]; then
 fi
 sudo systemctl start pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-morning.timer pi-gateway-stack-watchdog.timer pi-gateway-netalertx-names.timer 2>/dev/null || true
 if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
+  sudo systemctl reset-failed pi-ssd-health.service 2>/dev/null || true
+  sudo systemctl enable --now pi-ssd-health.timer 2>/dev/null || true
   sudo systemctl start pi-ssd-health.timer 2>/dev/null || true
 fi
 if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then

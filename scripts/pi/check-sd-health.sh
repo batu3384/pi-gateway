@@ -117,5 +117,25 @@ DETAILS="$(printf '%s\n' "${ISSUES[@]}")"
 if [[ -n "$RECENT_KERNEL_ERRORS" ]]; then
   DETAILS="$(printf '%s\n\nKernel:\n%s' "$DETAILS" "$RECENT_KERNEL_ERRORS")"
 fi
+if [[ -n "$USB_SSD_ERRORS" ]]; then
+  DETAILS="$(printf '%s\n\nUSB/SSD:\n%s' "$DETAILS" "$USB_SSD_ERRORS")"
+fi
+_ssd_only=1
+for _i in "${ISSUES[@]+"${ISSUES[@]}"}"; do
+  case "$_i" in
+    ssd-health-fail|usb-ssd-disconnect) ;;
+    *) _ssd_only=0; break ;;
+  esac
+done
+if [[ "$_ssd_only" -eq 1 ]]; then
+  notify_ssd_degraded "$(hostname -s)" "$DETAILS"
+  unset _ssd_only _i
+  if root_rw_ok; then
+    log "SSD degraded (root rw) — health fail yok; kurtarma pi-ssd-health.timer"
+    exit 0
+  fi
+  exit 1
+fi
+unset _ssd_only _i
 notify_sd_warn "$(hostname -s)" "$DETAILS" "$RECOVERED"
 exit 1

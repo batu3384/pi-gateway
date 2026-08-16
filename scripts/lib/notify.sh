@@ -204,8 +204,8 @@ notify_backup_fail() {
 notify_health_systemd_fail() {
   local host="$1"
   local body
-  body="$(printf '<b>%s</b> — zamanlanmış sağlık kontrolü başarısız.\n\nDetay için Pi üzerinde:\n<code>journalctl -t pi-gateway-health -n 20</code>' "$host")"
-  notify_telegram "⚠️ Pi Gateway — Sağlık" "$body" "health-systemd" "HTML"
+  body="$(printf '<b>%s</b> — zamanlanmış sağlık kontrolü başarısız.\n\nDetay için Pi üzerinde:\n<code>journalctl -t pi-gateway-health -n 20</code>\n\n<i>Aynı sorun sürerken en fazla saatte bir hatırlatılır.</i>' "$host")"
+  notify_send_with_transition "health-systemd" "fail" "⚠️ Pi Gateway — Sağlık" "$body" "HTML"
 }
 
 notify_disk_warn() {
