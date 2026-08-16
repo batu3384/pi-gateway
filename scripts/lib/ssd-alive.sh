@@ -22,6 +22,11 @@ SSD_USB_PORT_DISABLE_CYCLE="${SSD_USB_PORT_DISABLE_CYCLE:-true}"
 # 0 = hatirlanan + USB3 once; >0 = once bu port numarasi
 SSD_USB_HOST_PORT="${SSD_USB_HOST_PORT:-0}"
 SSD_USB_PORT_STATE_FILE="${SSD_USB_PORT_STATE_FILE:-/var/lib/pi-gateway/ssd-usb-port}"
+SSD_USB_PORT_FAILS_FILE="${SSD_USB_PORT_FAILS_FILE:-/var/lib/pi-gateway/ssd-usb-port-fails}"
+SSD_USB_PORT_CURSOR_FILE="${SSD_USB_PORT_CURSOR_FILE:-/var/lib/pi-gateway/ssd-usb-port-cursor}"
+# Bus dropout + bu kadar basarisiz tam tarama → hatirlanan port silinir
+SSD_USB_PORT_FORGET_FAILS="${SSD_USB_PORT_FORGET_FAILS:-2}"
+SSD_USB_PORT_ROTATE="${SSD_USB_PORT_ROTATE:-true}"
 SSD_USB_PORT_OFF_SEC="${SSD_USB_PORT_OFF_SEC:-5}"
 SSD_USB_PORT_ON_SEC="${SSD_USB_PORT_ON_SEC:-10}"
 # Hatirlanan porttan sonra kac ekstra USB3 port (Pi4: platform usb2-port1..4)
@@ -174,18 +179,121 @@ ssd_find_usb_sysfs() {
   return 1
 }
 
+ssd_usb_port_label() {
+  basename "${1:-unknown}"
+}
+
+_ssd_usb_port_canon() {
+  readlink -f "$1" 2>/dev/null || echo "$1"
+}
+
+ssd_usb_port_fail_get() {
+  local port="$1" line key cnt
+  port="$(_ssd_usb_port_canon "$port")"
+  [[ -f "$SSD_USB_PORT_FAILS_FILE" ]] || return 1
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    key="${line%% *}"
+    cnt="${line##* }"
+    key="$(_ssd_usb_port_canon "$key")"
+    if [[ "$key" == "$port" && "$cnt" =~ ^[0-9]+$ ]]; then
+      echo "$cnt"
+      return 0
+    fi
+  done <"$SSD_USB_PORT_FAILS_FILE"
+  return 1
+}
+
+ssd_usb_port_fail_record() {
+  local port="$1" fails=0 line key cnt updated=0 tmp
+  port="$(_ssd_usb_port_canon "$port")"
+  ssd_usb_port_path_ok "$port" || return 1
+  fails="$(ssd_usb_port_fail_get "$port" 2>/dev/null || echo 0)"
+  fails=$((fails + 1))
+  tmp="$(mktemp)"
+  _ssd_alive_root mkdir -p "$(dirname "$SSD_USB_PORT_FAILS_FILE")" 2>/dev/null || true
+  if [[ -f "$SSD_USB_PORT_FAILS_FILE" ]]; then
+    while IFS= read -r line; do
+      [[ -n "$line" ]] || continue
+      key="${line%% *}"
+      cnt="${line##* }"
+      key="$(_ssd_usb_port_canon "$key")"
+      if [[ "$key" == "$port" ]]; then
+        printf '%s %s\n' "$port" "$fails" >>"$tmp"
+        updated=1
+      else
+        printf '%s\n' "$line" >>"$tmp"
+      fi
+    done <"$SSD_USB_PORT_FAILS_FILE"
+  fi
+  [[ "$updated" -eq 1 ]] || printf '%s %s\n' "$port" "$fails" >>"$tmp"
+  if [[ "$(id -u)" -eq 0 ]]; then
+    install -m 644 "$tmp" "$SSD_USB_PORT_FAILS_FILE"
+  else
+    _ssd_alive_root install -m 644 "$tmp" "$SSD_USB_PORT_FAILS_FILE"
+  fi
+  rm -f "$tmp"
+}
+
+ssd_usb_port_fail_clear() {
+  local port="$1" line key tmp updated=0
+  port="$(_ssd_usb_port_canon "$port")"
+  [[ -f "$SSD_USB_PORT_FAILS_FILE" ]] || return 0
+  tmp="$(mktemp)"
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    key="${line%% *}"
+    key="$(_ssd_usb_port_canon "$key")"
+    if [[ "$key" == "$port" ]]; then
+      updated=1
+      continue
+    fi
+    printf '%s\n' "$line" >>"$tmp"
+  done <"$SSD_USB_PORT_FAILS_FILE"
+  if [[ "$updated" -eq 1 ]]; then
+    if [[ -s "$tmp" ]]; then
+      if [[ "$(id -u)" -eq 0 ]]; then
+        install -m 644 "$tmp" "$SSD_USB_PORT_FAILS_FILE"
+      else
+        _ssd_alive_root install -m 644 "$tmp" "$SSD_USB_PORT_FAILS_FILE"
+      fi
+    else
+      _ssd_alive_root rm -f "$SSD_USB_PORT_FAILS_FILE" 2>/dev/null || true
+    fi
+  fi
+  rm -f "$tmp"
+}
+
+ssd_usb_port_forget() {
+  _ssd_alive_root rm -f "$SSD_USB_PORT_STATE_FILE" 2>/dev/null || true
+  echo "[ssd-alive] hatirlanan USB port silindi (basarisiz tarama)" >&2
+}
+
 ssd_usb_remember_port() {
-  local sys port_sys
+  local sys port_sys prev=""
   sys="$(ssd_find_usb_sysfs 2>/dev/null || true)"
   [[ -n "$sys" && -L "${sys}/port" ]] || return 1
-  port_sys="$(readlink -f "${sys}/port" 2>/dev/null || true)"
+  port_sys="$(_ssd_usb_port_canon "$(readlink -f "${sys}/port" 2>/dev/null || true)")"
   ssd_usb_port_path_ok "$port_sys" || return 1
+  if [[ -f "$SSD_USB_PORT_STATE_FILE" ]]; then
+    prev="$(tr -d '[:space:]' <"$SSD_USB_PORT_STATE_FILE" 2>/dev/null || true)"
+    prev="$(_ssd_usb_port_canon "$prev")"
+  fi
   _ssd_alive_root mkdir -p "$(dirname "$SSD_USB_PORT_STATE_FILE")" 2>/dev/null || true
   if [[ "$(id -u)" -eq 0 ]]; then
     printf '%s\n' "$port_sys" >"$SSD_USB_PORT_STATE_FILE"
   else
     printf '%s\n' "$port_sys" | sudo tee "$SSD_USB_PORT_STATE_FILE" >/dev/null
   fi
+  ssd_usb_port_fail_clear "$port_sys" || true
+  if [[ "$prev" != "$port_sys" ]]; then
+    echo "[ssd-alive] SSD port ogrenildi: $(ssd_usb_port_label "$port_sys")" >&2
+  fi
+}
+
+# udev/hotplug: enumerate varsa port dosyasini guncelle
+ssd_usb_learn_live_port() {
+  ssd_usb_remember_port
 }
 
 ssd_usb_disable_lpm() {
@@ -313,14 +421,13 @@ _ssd_port_emit() {
   local x r
   x="$1"
   ssd_usb_port_path_ok "$x" || return 0
-  r="$(readlink -f "$x" 2>/dev/null || echo "$x")"
+  r="$(_ssd_usb_port_canon "$x")"
   [[ "${_SSD_PORT_SEEN:-}" == *"|${r}|"* ]] && return 0
   _SSD_PORT_SEEN="${_SSD_PORT_SEEN:-|}${r}|"
   printf '%s\n' "$r"
 }
 
-# Hatirlanan → SSD_USB_HOST_PORT → tum USB3 xhci portlari (Pi4 usb2-port1..4)
-ssd_usb_port_candidates() {
+_ssd_usb_port_collect_raw() {
   local p remembered="" q
   _SSD_PORT_SEEN="|"
   if [[ -f "$SSD_USB_PORT_STATE_FILE" ]]; then
@@ -334,6 +441,61 @@ ssd_usb_port_candidates() {
   done < <(ssd_usb_discover_xhci_ports)
 }
 
+# Dusuk fail → once; cursor ile her tick farkli porttan basla
+ssd_usb_port_candidates() {
+  local -a raw=() ordered=() out=()
+  local remembered="" rfails=0 cursor=0 i n f line p
+
+  if ssd_find_usb_sysfs >/dev/null 2>&1; then
+    ssd_usb_learn_live_port || true
+  elif ssd_usb_bus_dropout && [[ -f "$SSD_USB_PORT_STATE_FILE" ]]; then
+    remembered="$(tr -d '[:space:]' <"$SSD_USB_PORT_STATE_FILE" 2>/dev/null || true)"
+    rfails="$(ssd_usb_port_fail_get "$remembered" 2>/dev/null || echo 0)"
+    if [[ "$rfails" =~ ^[0-9]+$ ]] \
+      && (( rfails >= SSD_USB_PORT_FORGET_FAILS )); then
+      ssd_usb_port_forget
+    fi
+  fi
+
+  while IFS= read -r p; do
+    [[ -n "$p" ]] && raw+=("$p")
+  done < <(_ssd_usb_port_collect_raw)
+  ((${#raw[@]} > 0)) || return 0
+
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    ordered+=("${line#* }")
+  done < <(
+    for p in "${raw[@]}"; do
+      f="$(ssd_usb_port_fail_get "$p" 2>/dev/null || echo 0)"
+      [[ "$f" =~ ^[0-9]+$ ]] || f=0
+      printf '%04d %s\n' "$f" "$p"
+    done | sort -n | awk '{ $1=""; sub(/^ /,""); print }'
+  )
+
+  if [[ "${SSD_USB_PORT_ROTATE:-true}" == "true" ]] && ((${#ordered[@]} > 1)); then
+    if [[ -f "$SSD_USB_PORT_CURSOR_FILE" ]]; then
+      cursor="$(tr -d '[:space:]' <"$SSD_USB_PORT_CURSOR_FILE" 2>/dev/null || echo 0)"
+      [[ "$cursor" =~ ^[0-9]+$ ]] || cursor=0
+    fi
+    cursor=$((cursor % ${#ordered[@]}))
+    for ((i = 0; i < ${#ordered[@]}; i++)); do
+      out+=("${ordered[$(( (cursor + i) % ${#ordered[@]} ))]}")
+    done
+    n=$(( (cursor + 1) % ${#ordered[@]} ))
+    _ssd_alive_root mkdir -p "$(dirname "$SSD_USB_PORT_CURSOR_FILE")" 2>/dev/null || true
+    if [[ "$(id -u)" -eq 0 ]]; then
+      printf '%s\n' "$n" >"$SSD_USB_PORT_CURSOR_FILE"
+    else
+      printf '%s\n' "$n" | sudo tee "$SSD_USB_PORT_CURSOR_FILE" >/dev/null
+    fi
+    printf '%s\n' "${out[@]}"
+    return 0
+  fi
+
+  printf '%s\n' "${ordered[@]}"
+}
+
 ssd_usb_port_cycle_one() {
   local port_sys="$1"
   ssd_usb_port_path_ok "$port_sys" || return 1
@@ -344,7 +506,7 @@ ssd_usb_port_cycle_one() {
   sleep "${SSD_USB_PORT_ON_SEC:-10}"
   command -v udevadm >/dev/null 2>&1 && _ssd_alive_root udevadm settle --timeout=15 2>/dev/null || sleep 3
   if ssd_find_usb_sysfs >/dev/null 2>&1 || ssd_block_present; then
-    ssd_usb_remember_port || true
+    ssd_usb_learn_live_port || true
     return 0
   fi
   return 1
@@ -366,16 +528,19 @@ ssd_usb_port_disable_cycle() {
     ports+=("$port_sys")
   done < <(ssd_usb_port_candidates)
   ((${#ports[@]} > 0)) || return 1
+  echo "[ssd-alive] port tarama: ${#ports[@]} aday (ilk=$(ssd_usb_port_label "${ports[0]}"))" >&2
   if ssd_usb_port_cycle_one "${ports[0]}"; then
     ssd_usb_reset_record_once
     return 0
   fi
+  ssd_usb_port_fail_record "${ports[0]}" || true
   for ((i = 1; i < ${#ports[@]} && tried < max_extra; i++)); do
     tried=$((tried + 1))
     if ssd_usb_port_cycle_one "${ports[$i]}"; then
       ssd_usb_reset_record_once
       return 0
     fi
+    ssd_usb_port_fail_record "${ports[$i]}" || true
   done
   ssd_usb_reset_record_once
   return 1

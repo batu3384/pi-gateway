@@ -34,6 +34,11 @@ _HOTPLUG_REMOTE_DIR="$REMOTE_DIR"
 REMOTE_DIR="$_HOTPLUG_REMOTE_DIR"
 # shellcheck source=../lib/stack-health.sh
 source "$SCRIPT_DIR/../lib/stack-health.sh"
+if ssd_find_usb_sysfs >/dev/null 2>&1; then
+  if ssd_usb_learn_live_port 2>/dev/null; then
+    log "USB enumerate — port kaydi guncellendi"
+  fi
+fi
 if is_ssd_root_mode; then
   log "ssd-root: hotplug handler atlandi"
   exit 0

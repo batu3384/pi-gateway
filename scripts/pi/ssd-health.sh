@@ -43,6 +43,7 @@ fi
 # Degraded: disk donmus olabilir — poll restore
 if storage_degraded; then
   log "degraded — remount/soft-reset poll"
+  ssd_usb_learn_live_port 2>/dev/null || true
   ssd_usb_disable_autosuspend || true
   if ssd_try_remount || ssd_usb_soft_reset || ssd_mount_healthy; then
     if ssd_mount_healthy; then
