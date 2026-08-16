@@ -89,6 +89,12 @@ grep -q 'note_fail "ssd-unhealthy"' "$ROOT/scripts/pi/health-check.sh" \
   && die "C40: health-check hâlâ ssd-unhealthy fail"
 grep -q 'offsite/drill SLA atlandi' "$ROOT/scripts/pi/health-check.sh" \
   || die "C40: degraded offsite SLA skip yok"
+grep -q 'notify_health_systemd_ok' "$ROOT/scripts/lib/notify.sh" \
+  || die "C40: health-systemd ok yok"
+grep -q 'health_is_slo_fail' "$ROOT/scripts/pi/health-check.sh" \
+  || die "C40: SLO fail ayrimi yok"
+grep -q 'offsite-\*' "$ROOT/scripts/pi/health-check.sh" \
+  || die "C40: offsite soft-exit yok"
 ok "C40 health-check SSD gozlem-only"
 
 echo "[test-ssd-fsm] Tum kontroller gecti"

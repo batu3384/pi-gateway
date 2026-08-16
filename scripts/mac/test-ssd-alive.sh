@@ -37,8 +37,13 @@ grep -q "1-1-port" "$SSD_ALIVE" || die "USB2 hub port kesfi yok"
 grep -q 'ssd_usb_learn_live_port' "$SSD_ALIVE" || die "port ogrenme yok"
 grep -q 'ssd_usb_port_forget' "$SSD_ALIVE" || die "port unutma yok"
 grep -q 'SSD_USB_PORT_ROTATE' "$SSD_ALIVE" || die "port rotate yok"
+grep -q 'ssd_usb_reset_clear' "$SSD_ALIVE" || die "kota sifir yok"
+grep -q 'ssd_usb_discover_usb2_hub_ports' "$SSD_ALIVE" || die "USB2 hub son-care yok"
+grep -q 'Hatirlanan port her zaman ilk' "$SSD_ALIVE" || die "ogrenilen port oncelik yok"
 grep -q 'ssd_usb_port_fail_record' "$SSD_ALIVE" || die "port fail kayit yok"
 grep -q 'ssd_usb_learn_live_port' "$HOTPLUG" || die "hotplug port ogrenme yok"
+grep -q 'OnUnitInactiveSec' "$PROJECT_DIR/host/systemd/pi-ssd-health.timer" \
+  || die "ssd-health timer OnUnitInactiveSec yok"
 grep -q 'ssd_usb_disable_lpm' "$SSD_ALIVE" || die "LPM disable yok"
 grep -q 'ssd_usb_reset_record_once' "$SSD_ALIVE" || die "rate-limit session yok"
 grep -q 'ssd_usb_port_cycle_one' "$SSD_ALIVE" || die "tek port cycle yok"
@@ -132,6 +137,10 @@ grep -q 'pi-ssd-health.timer' "$PROJECT_DIR/scripts/pi/bootstrap.sh" || die "ssd
 ok "udev jmicron"
 
 grep -q 'ssd-alive.sh' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" || die "priv ssd-alive yok"
+grep -q 'telegram-bot.sh' "$PROJECT_DIR/scripts/lib/telegram-panels.py" \
+  || die "telegram-panels CLI caller dokuman yok"
+grep -q '/var/lib/pi-gateway/telegram-bot-state' "$PROJECT_DIR/scripts/pi/telegram-bot.sh" \
+  || die "telegram-bot offset var/lib degil"
 grep -q 'prune-sd-space.sh' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" || die "priv prune-sd yok"
 grep -q 'world-writable' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" || die "priv TOCTOU guard yok"
 ok "privileged install"

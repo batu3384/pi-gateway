@@ -3,7 +3,7 @@ Description=Pi Gateway SSD liveness poll (JMicron flap)
 
 [Timer]
 OnBootSec=45s
-OnUnitActiveSec=30s
+OnUnitInactiveSec=30s
 AccuracySec=5s
 
 [Install]

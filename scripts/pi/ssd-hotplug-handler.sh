@@ -119,6 +119,7 @@ if ssd_mount_healthy; then
   # shellcheck source=../lib/notify.sh
   source "$SCRIPT_DIR/../lib/notify.sh"
   notify_ssd_restored "$(hostname -s)"
+  ssd_usb_reset_clear 2>/dev/null || true
   recover_lock_release
   exit 0
 fi

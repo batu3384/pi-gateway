@@ -35,6 +35,7 @@ run_hotplug() {
 # Gozlem (health-check): USB reset yok — sahip pi-ssd-health.timer
 if [[ "$SSD_HEALTH_AUTO" != "true" ]]; then
   if ssd_mount_healthy; then
+    ssd_usb_reset_clear
     exit 0
   fi
   log "SSD sagliksiz; SSD_HEALTH_AUTO=false — aksiyon yok"
@@ -48,6 +49,7 @@ if storage_degraded; then
   if ssd_try_remount || ssd_usb_soft_reset || ssd_mount_healthy; then
     if ssd_mount_healthy; then
       log "SSD geri — hotplug restore"
+      ssd_usb_reset_clear
       run_hotplug
       exit 0
     fi
@@ -57,6 +59,7 @@ if storage_degraded; then
 fi
 # Saglikli gorunuyor mu? USB sysfs poke yok (JMS583 30s poll)
 if ssd_mount_healthy; then
+  ssd_usb_reset_clear
   if ssd_recent_io_errors; then
     log "WARN: son 15 dk USB/SSD I/O — probe OK, izleniyor"
   fi
@@ -66,18 +69,21 @@ ssd_usb_disable_autosuspend || true
 # Once block var ama mount yok — once remount (USB reset gereksiz)
 if ssd_block_present && ssd_try_remount; then
   log "remount OK — hotplug restore"
+  ssd_usb_reset_clear
   run_hotplug
   exit 0
 fi
 log "SSD sagliksiz — soft-reset"
 if ssd_usb_soft_reset && ssd_mount_healthy; then
   log "soft-reset OK — hotplug restore"
+  ssd_usb_reset_clear
   run_hotplug
   exit 0
 fi
 log "soft-reset yetersiz — hotplug degraded yolu"
 run_hotplug
 if ssd_mount_healthy; then
+  ssd_usb_reset_clear
   exit 0
 fi
 if storage_degraded; then

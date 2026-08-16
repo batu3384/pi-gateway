@@ -51,7 +51,7 @@
 | `SSD_USB_HOST_PORT` | `0` | `0` = hatirlanan + USB3 once; `>0` = once bu port numarasi |
 | `SSD_USB_PORT_SCAN_MAX` | `8` | Hatirlanan porttan sonra ayni tick'te kac ekstra USB3 port |
 | `SSD_USB_PORT_FORGET_FAILS` | `2` | Bus dropout + bu kadar basarisiz tarama → hatirlanan port sil |
-| `SSD_USB_PORT_ROTATE` | `true` | Her timer tick farkli porttan basla (otomatik tarama) |
+| `SSD_USB_PORT_ROTATE` | `true` | Hatirlanan port yokken USB3 adaylarini tick'te kaydir |
 | `SSD_USB_CYCLE_ON_HANG` | `true` | USB enumerate olsa da I/O oluyse port cycle |
 | `SSD_USB_STORAGE_REBIND` | `true` | Port power oncesi usb-storage unbind/bind |
 | `SSD_USB_XHCI_REBIND` | `false` | Opt-in xHCI PCI rebind (all USB3 collateral) |

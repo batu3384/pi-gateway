@@ -373,6 +373,11 @@ ssd_usb_reset_record() {
   fi
 }
 
+ssd_usb_reset_clear() {
+  _ssd_alive_root rm -f "$SSD_USB_RESET_STATE_FILE" 2>/dev/null || true
+  SSD_USB_RESET_COUNTED=0
+}
+
 ssd_usb_bus_dropout() {
   ssd_find_usb_sysfs >/dev/null 2>&1 && return 1
   ssd_block_present && return 1
@@ -405,16 +410,25 @@ ssd_usb_port_sysfs() {
   return 1
 }
 
-# Pi4: /sys/bus/usb/devices/usb2-portN yok; gercek path
-# USB3: .../usb2/2-0:1.0/usb2-portN  USB2: .../1-1:1.0/1-1-portN
-# usb1-port1 = VIA hub kok — tarama disi (tum USB2 collateral)
+# Pi4 USB3: .../usb2/2-0:1.0/usb2-portN
+# usb1-port1 = VIA hub kok — tarama disi
 ssd_usb_discover_xhci_ports() {
   local p
   while IFS= read -r p; do
     [[ -n "$p" ]] || continue
     ssd_usb_port_path_ok "$p" && printf '%s\n' "$p"
   done < <(find /sys/devices/platform/scb /sys/bus/usb/devices \
-    \( -name 'usb2-port[1-4]' -o -name '1-1-port[1-4]' \) 2>/dev/null | sort)
+    -name 'usb2-port[1-4]' 2>/dev/null | sort)
+}
+
+# USB2 hub (1-1-portN) — USB3 tukendikten sonra
+ssd_usb_discover_usb2_hub_ports() {
+  local p
+  while IFS= read -r p; do
+    [[ -n "$p" ]] || continue
+    ssd_usb_port_path_ok "$p" && printf '%s\n' "$p"
+  done < <(find /sys/devices/platform/scb /sys/bus/usb/devices \
+    -name '1-1-port[1-4]' 2>/dev/null | sort)
 }
 
 _ssd_port_emit() {
@@ -427,24 +441,22 @@ _ssd_port_emit() {
   printf '%s\n' "$r"
 }
 
-_ssd_usb_port_collect_raw() {
-  local p remembered="" q
-  _SSD_PORT_SEEN="|"
-  if [[ -f "$SSD_USB_PORT_STATE_FILE" ]]; then
-    remembered="$(tr -d '[:space:]' <"$SSD_USB_PORT_STATE_FILE" 2>/dev/null || true)"
-    _ssd_port_emit "$remembered"
-  fi
+_ssd_usb_port_collect_rest() {
+  local p q
   p="$(ssd_usb_port_sysfs 2>/dev/null || true)"
   [[ -n "$p" ]] && _ssd_port_emit "$p"
   while IFS= read -r q; do
     [[ -n "$q" ]] && _ssd_port_emit "$q"
   done < <(ssd_usb_discover_xhci_ports)
+  while IFS= read -r q; do
+    [[ -n "$q" ]] && _ssd_port_emit "$q"
+  done < <(ssd_usb_discover_usb2_hub_ports)
 }
 
-# Dusuk fail → once; cursor ile her tick farkli porttan basla
+# Hatirlanan port her zaman ilk. Rotate yalniz hatirlanan yokken (USB3 rest).
 ssd_usb_port_candidates() {
-  local -a raw=() ordered=() out=()
-  local remembered="" rfails=0 cursor=0 i n f line p
+  local -a rest=() ordered=() out=()
+  local remembered="" rfails=0 cursor=0 i n f line p have_remembered=0
 
   if ssd_find_usb_sysfs >/dev/null 2>&1; then
     ssd_usb_learn_live_port || true
@@ -457,23 +469,37 @@ ssd_usb_port_candidates() {
     fi
   fi
 
+  _SSD_PORT_SEEN="|"
+  remembered=""
+  if [[ -f "$SSD_USB_PORT_STATE_FILE" ]]; then
+    remembered="$(tr -d '[:space:]' <"$SSD_USB_PORT_STATE_FILE" 2>/dev/null || true)"
+    if ssd_usb_port_path_ok "$remembered"; then
+      remembered="$(_ssd_usb_port_canon "$remembered")"
+      have_remembered=1
+      _ssd_port_emit "$remembered" >/dev/null
+    else
+      remembered=""
+    fi
+  fi
+
   while IFS= read -r p; do
-    [[ -n "$p" ]] && raw+=("$p")
-  done < <(_ssd_usb_port_collect_raw)
-  ((${#raw[@]} > 0)) || return 0
+    [[ -n "$p" ]] && rest+=("$p")
+  done < <(_ssd_usb_port_collect_rest)
 
   while IFS= read -r line; do
     [[ -n "$line" ]] || continue
     ordered+=("${line#* }")
   done < <(
-    for p in "${raw[@]}"; do
+    for p in "${rest[@]+"${rest[@]}"}"; do
       f="$(ssd_usb_port_fail_get "$p" 2>/dev/null || echo 0)"
       [[ "$f" =~ ^[0-9]+$ ]] || f=0
       printf '%04d %s\n' "$f" "$p"
     done | sort -n | awk '{ $1=""; sub(/^ /,""); print }'
   )
 
-  if [[ "${SSD_USB_PORT_ROTATE:-true}" == "true" ]] && ((${#ordered[@]} > 1)); then
+  if [[ "$have_remembered" -eq 1 ]]; then
+    printf '%s\n' "$remembered"
+  elif [[ "${SSD_USB_PORT_ROTATE:-true}" == "true" ]] && ((${#ordered[@]} > 1)); then
     if [[ -f "$SSD_USB_PORT_CURSOR_FILE" ]]; then
       cursor="$(tr -d '[:space:]' <"$SSD_USB_PORT_CURSOR_FILE" 2>/dev/null || echo 0)"
       [[ "$cursor" =~ ^[0-9]+$ ]] || cursor=0
@@ -493,7 +519,7 @@ ssd_usb_port_candidates() {
     return 0
   fi
 
-  printf '%s\n' "${ordered[@]}"
+  printf '%s\n' "${ordered[@]+"${ordered[@]}"}"
 }
 
 ssd_usb_port_cycle_one() {
@@ -507,6 +533,7 @@ ssd_usb_port_cycle_one() {
   command -v udevadm >/dev/null 2>&1 && _ssd_alive_root udevadm settle --timeout=15 2>/dev/null || sleep 3
   if ssd_find_usb_sysfs >/dev/null 2>&1 || ssd_block_present; then
     ssd_usb_learn_live_port || true
+    ssd_usb_reset_clear
     return 0
   fi
   return 1
