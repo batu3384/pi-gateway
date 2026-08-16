@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "skill": "codebase-audit",
+  "date": "2026-08-16",
+  "root": "/Users/batuhanyuksel/Documents/raspberrypi",
+  "verdict": "CONCERNS",
+  "runtime": "static",
+  "findings": [
+    {"id": "CA-001", "severity": "Major", "category": "Functional correctness", "path": "scripts/pi/health-check.sh:30"},
+    {"id": "CA-002", "severity": "Major", "category": "Architecture", "path": "scripts/lib/notify.sh:204"},
+    {"id": "CA-003", "severity": "Major", "category": "Architecture", "path": "scripts/lib/ssd-alive.sh:509"},
+    {"id": "CA-004", "severity": "Major", "category": "Architecture", "path": "scripts/lib/ssd-alive.sh:356"},
+    {"id": "CA-005", "severity": "Major", "category": "Completeness", "path": "host/systemd/pi-ssd-health.timer"},
+    {"id": "CA-006", "severity": "Minor", "category": "Maintainability", "path": "scripts/lib/telegram-panels.py"},
+    {"id": "CA-007", "severity": "Info", "category": "Security architecture", "path": ".env.example"},
+    {"id": "CA-008", "severity": "Info", "category": "Tests", "path": "Makefile"}
+  ]
+}
