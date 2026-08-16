@@ -30,7 +30,10 @@ ok "API surface"
 [[ "$SSD_USB_AUTHORIZED_RESET" == "false" ]] || die "AUTHORIZED_RESET default false olmali"
 [[ "${SSD_USB_XHCI_REBIND:-}" == "false" ]] || die "XHCI_REBIND default false olmali"
 [[ "${SSD_USB_CYCLE_ON_HANG:-}" == "true" ]] || die "CYCLE_ON_HANG default true olmali"
-[[ "${SSD_USB_PORT_SCAN_MAX:-}" == "1" ]] || die "PORT_SCAN_MAX default 1 olmali"
+[[ "${SSD_USB_PORT_SCAN_MAX:-}" == "8" ]] || die "PORT_SCAN_MAX default 8 olmali"
+grep -q 'ssd_usb_discover_xhci_ports' "$SSD_ALIVE" || die "xhci platform port kesfi yok"
+grep -q "find /sys/devices/platform/scb" "$SSD_ALIVE" || die "xhci port find yok"
+grep -q "1-1-port" "$SSD_ALIVE" || die "USB2 hub port kesfi yok"
 grep -q 'ssd_usb_port_candidates' "$SSD_ALIVE" || die "port aday tarama yok"
 grep -q 'ssd_usb_remember_port' "$SSD_ALIVE" || die "port hatirla yok"
 grep -q 'ssd_usb_disable_lpm' "$SSD_ALIVE" || die "LPM disable yok"
@@ -64,15 +67,16 @@ fi
 rm -f "$tmp_state"
 ok "rate-limit Mac remount-only (sysfs yok)"
 
-# mkdir lock: ikinci cagri fail
+# mkdir lock: ikinci cagri fail (bekleme 0 — Mac test hizli)
 _lock_tmp="$(mktemp -d)"
 export SSD_USB_RESET_LOCK_DIR="$_lock_tmp/held"
+export SSD_USB_RESET_LOCK_WAIT_SEC=0
 mkdir "$SSD_USB_RESET_LOCK_DIR"
 if ssd_usb_soft_reset >/dev/null 2>&1; then
   die "lock varken soft_reset gecti"
 fi
 rmdir "$SSD_USB_RESET_LOCK_DIR"
-unset SSD_USB_RESET_LOCK_DIR
+unset SSD_USB_RESET_LOCK_DIR SSD_USB_RESET_LOCK_WAIT_SEC
 rmdir "$_lock_tmp"
 ok "soft-reset mkdir lock"
 
@@ -125,6 +129,7 @@ grep -q 'pi-ssd-health.timer' "$PROJECT_DIR/scripts/pi/bootstrap.sh" || die "ssd
 ok "udev jmicron"
 
 grep -q 'ssd-alive.sh' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" || die "priv ssd-alive yok"
+grep -q 'prune-sd-space.sh' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" || die "priv prune-sd yok"
 grep -q 'world-writable' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" || die "priv TOCTOU guard yok"
 ok "privileged install"
 

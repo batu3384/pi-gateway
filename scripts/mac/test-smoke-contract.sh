@@ -19,6 +19,7 @@ for needle in \
   'adguard-ui-ufw-no-lan' \
   'privileged-lib-sync' \
   'privileged-lib-hash' \
+  'ssd-health-timer' \
   'caddy-auth-configured' \
   'run_check'; do
   grep -q "$needle" "$SMOKE" || die "smoke eksik: $needle"

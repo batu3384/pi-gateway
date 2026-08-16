@@ -80,4 +80,15 @@ echo "$hp_deg" | grep -q 'recover_lock_acquire' || die "C39: degraded dalinda lo
 echo "$hp_deg" | grep -q 'recover_lock_release' || die "C39: degraded dalinda lock release yok"
 ok "C39 degraded hotplug lock"
 
+# C40: health-check SSD recover etmez (timer sahip)
+grep -q 'SSD_HEALTH_AUTO=false' "$ROOT/scripts/pi/health-check.sh" \
+  || die "C40: health-check SSD_HEALTH_AUTO=false yok"
+grep -q 'SSD_HEALTH_AUTO=false — aksiyon yok' "$ssd_health" \
+  || die "C40: ssd-health gozlem kisa-devre yok"
+grep -q 'note_fail "ssd-unhealthy"' "$ROOT/scripts/pi/health-check.sh" \
+  && die "C40: health-check hâlâ ssd-unhealthy fail"
+grep -q 'offsite/drill SLA atlandi' "$ROOT/scripts/pi/health-check.sh" \
+  || die "C40: degraded offsite SLA skip yok"
+ok "C40 health-check SSD gozlem-only"
+
 echo "[test-ssd-fsm] Tum kontroller gecti"
