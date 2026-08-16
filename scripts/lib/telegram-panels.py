@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Telegram panel URL + inline keyboard builder (LAN / IP / Tailscale)."""
+"""Telegram panel URL + inline keyboard builder (LAN / IP / Tailscale).
+
+CLI only — not imported. Callers: scripts/pi/telegram-bot.sh, telegram-menu.sh.
+"""
 from __future__ import annotations
 
 import html

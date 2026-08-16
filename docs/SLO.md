@@ -8,7 +8,7 @@ Operational targets for Path A (Güven). Verified by `health-check`, `export-gat
 |-----|--------|--------|-------|
 | **DNS availability** | 99.9% / 30d | `stack_dns_core_ok`, dig tests | health-check, Uptime Kuma Unbound |
 | **Storage healthy** | degraded < 0.1% uptime | `storage_degraded` flag, `ssd_mount_healthy` | PUSH `SLO Storage Healthy` |
-| **Offsite backup** | age ≤ 7 days | `/var/lib/pi-gateway/last-offsite-backup` | health `offsite-backup-*`, PUSH offsite |
+| **Offsite backup** | age ≤ 7 days | `/var/lib/pi-gateway/last-offsite-backup` | Telegram yedek SLA (health exit 0), PUSH offsite |
 | **Restore drill** | age ≤ 30 days | `last-backup-restore-drill` | health `backup-restore-drill-*`, PUSH drill |
 | **SSD restore time** | < 120s (manual) | hotplug + recover journal | runbook `docs/OPERATIONS.md` |
 | **Docker SSD consistency** | 100% when enabled | `docker_ssd_root_ok` | post-deploy-integration, smoke |

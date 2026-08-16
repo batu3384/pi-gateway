@@ -208,6 +208,25 @@ notify_health_systemd_fail() {
   notify_send_with_transition "health-systemd" "fail" "⚠️ Pi Gateway — Sağlık" "$body" "HTML"
 }
 
+notify_health_systemd_ok() {
+  notify_transition_peek "health-systemd" "ok" || return 0
+  notify_transition_commit "health-systemd" "ok"
+}
+
+notify_slo_backup() {
+  local host="$1"
+  local details="$2"
+  local body
+  body="$(printf '<b>%s</b> — offsite yedek / restore drill SLA (DNS etkilenmez).\n\n<code>%s</code>\n\nMac: <code>make backup-pull</code>' \
+    "$host" "$(notify_escape_html "$details")")"
+  notify_send_with_transition "health-slo-backup" "fail" "ℹ️ Pi Gateway — Yedek SLA" "$body" "HTML"
+}
+
+notify_slo_backup_ok() {
+  notify_transition_peek "health-slo-backup" "ok" || return 0
+  notify_transition_commit "health-slo-backup" "ok"
+}
+
 notify_disk_warn() {
   local mount="$1"
   local pct="$2"
@@ -269,7 +288,7 @@ notify_test() {
   local gateway
   gateway="$(panel_url gateway)"
   local body
-  body="$(printf 'Bildirimler aktif.\n\n<b>Ana panel:</b> %s\n<b>Menü:</b> Mac''te <code>make telegram-menu</code>\n\n<i>Bu bot yalnızca uyarı gönderir; mesajlarınıza cevap vermez.</i>' "$gateway")"
+  body="$(printf 'Bildirimler aktif.\n\n<b>Ana panel:</b> %s\n<b>Menü:</b> Pi bot <code>/menu</code> veya Mac <code>make telegram-menu</code>\n\n<i>Uyarılar bu bottan; panel linkleri ayrı servis (telegram-bot).</i>' "$gateway")"
   notify_telegram "✅ Pi Gateway" "$body" "test-once" "HTML"
 }
 

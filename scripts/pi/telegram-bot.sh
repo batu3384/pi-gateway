@@ -2,7 +2,7 @@
 # Telegram bot: /menu + kalici klavye + acilir panel linkleri
 set -euo pipefail
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
-STATE_DIR="${TELEGRAM_BOT_STATE_DIR:-${REMOTE_DIR}/data/.telegram-bot-state}"
+STATE_DIR="${TELEGRAM_BOT_STATE_DIR:-/var/lib/pi-gateway/telegram-bot-state}"
 OFFSET_FILE="${STATE_DIR}/offset"
 PANELS_PY="${REMOTE_DIR}/scripts/lib/telegram-panels.py"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -17,7 +17,10 @@ log() { echo "[telegram-bot] $*"; }
   exit 1
 }
 [[ -f "$PANELS_PY" ]] || { log "HATA: telegram-panels.py yok"; exit 1; }
-mkdir -p "$STATE_DIR"
+if ! mkdir -p "$STATE_DIR" 2>/dev/null; then
+  sudo mkdir -p "$STATE_DIR" 2>/dev/null || true
+  sudo chown "${USER}:${USER}" "$STATE_DIR" 2>/dev/null || true
+fi
 chmod 700 "$STATE_DIR" 2>/dev/null || true
 export LAN_DOMAIN PI_STATIC_IP PANEL_PROTOCOL ENABLE_TLS TAILSCALE_PANEL_URL
 resolve_tailscale_url() {

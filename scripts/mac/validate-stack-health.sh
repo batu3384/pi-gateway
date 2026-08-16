@@ -347,8 +347,10 @@ ok "sd native data fallback helper"
 
 grep -q 'notify_transition_peek' "$PROJECT_DIR/scripts/lib/notify.sh" \
   || die "notify transition peek yok"
-grep -q 'notify_send_with_transition' "$PROJECT_DIR/scripts/lib/notify.sh" \
-  || die "notify send-with-transition yok"
+grep -q 'notify_health_systemd_ok' "$PROJECT_DIR/scripts/lib/notify.sh" \
+  || die "notify health-systemd ok yok"
+grep -q 'notify_slo_backup' "$PROJECT_DIR/scripts/lib/notify.sh" \
+  || die "notify slo backup yok"
 grep -q 'health_is_dns_only_fail' "$PROJECT_DIR/scripts/pi/health-check.sh" \
   || die "health dns-only fail ayrimi yok"
 [[ -f "$PROJECT_DIR/scripts/pi/test-notify-transitions.sh" ]] \

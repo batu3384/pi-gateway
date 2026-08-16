@@ -128,78 +128,6 @@ print('1' if udp_ok and ptr_ok and ttl_ok else '0')
   fi
   rm -f "$COOKIE"
 fi
-# SSD varken DNS-only fail'leri ayır (cascade: container/gateway/ssd symlink)
-health_is_dns_only_fail() {
-  local f="$1"
-  case "$f" in
-    unbound:*|container\ unbound\ down|adguard-block-test|adguard-rewrite-*|adguard-dns-config-drift|adguard-filter-rules-low|adguard-rewrites-low)
-      return 0
-      ;;
-    *)
-      return 1
-      ;;
-  esac
-}
-if [[ "$fail" -eq 0 ]]; then
-  logger -t "$LOG_TAG" "OK dns stack healthy"
-  # shellcheck source=../lib/notify.sh
-  source "$SCRIPT_DIR/../lib/notify.sh"
-  notify_dns_recovered "$(hostname -s)" || true
-  notify_optional_recovered || true
-else
-  # shellcheck source=../lib/notify.sh
-  source "$SCRIPT_DIR/../lib/notify.sh"
-  host="$(hostname -s)"
-  details="${FAILURES[*]}"
-  has_ssd=0
-  has_core=0
-  has_optional=0
-  for f in "${FAILURES[@]}"; do
-    case "$f" in
-      ssd-unmounted|ssd-unhealthy|storage-degraded*|data-ssd-symlink*|data-native-missing)
-        has_ssd=1
-        ;;
-      optional-*)
-        has_optional=1
-        ;;
-      *)
-        has_core=1
-        ;;
-    esac
-  done
-  if [[ "$has_ssd" -eq 1 ]]; then
-    notify_ssd_degraded "$host" "$details"
-    dns_only=()
-    for f in "${FAILURES[@]}"; do
-      health_is_dns_only_fail "$f" && dns_only+=("$f")
-    done
-    if [[ ${#dns_only[@]} -gt 0 ]]; then
-      notify_dns_fail "$host" "${dns_only[*]}"
-    fi
-  elif [[ "$has_core" -eq 1 ]]; then
-    notify_dns_fail "$host" "$details"
-  elif [[ "$has_optional" -eq 1 ]]; then
-    # Opsiyonel panel; "DNS sağlığı" diye bağırma
-    notify_optional_warn "$host" "$details"
-  fi
-fi
-DISK_WARN_PCT="${DISK_WARN_PCT:-80}"
-DISK_PRUNE_PCT="${DISK_PRUNE_PCT:-65}"
-for mount in / /mnt/ssd; do
-  if [[ -d "$mount" ]]; then
-    usage="$(df "$mount" 2>/dev/null | awk 'NR==2 {gsub(/%/,""); print $5}')"
-    if [[ -n "${usage:-}" ]] && (( usage >= DISK_WARN_PCT )); then
-      # shellcheck source=../lib/notify.sh
-      source "$SCRIPT_DIR/../lib/notify.sh"
-      notify_disk_warn "$mount" "$usage"
-      logger -t "$LOG_TAG" "WARN disk ${mount} at ${usage}%"
-    fi
-    if [[ "$mount" == "/" ]] && [[ -n "${usage:-}" ]] && (( usage >= DISK_PRUNE_PCT )); then
-      REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/prune-sd-space.sh" || \
-        logger -t "$LOG_TAG" "WARN sd-prune failed"
-    fi
-  fi
-done
 # Offsite backup SLA (SSD restic alone ≠ 3-2-1). Marker: make backup-pull
 # Degraded: data disk yok — SLA fail systemd spam olmasin
 if storage_degraded; then
@@ -247,15 +175,30 @@ if [[ "$drill_max" != "0" ]] && [[ "${ENABLE_RESTIC:-true}" == "true" ]] && ! st
     fi
   fi
 fi
-if [[ -x "$SCRIPT_DIR/export-gateway-state.sh" ]]; then
-  REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/export-gateway-state.sh" >/dev/null 2>&1 \
-    || logger -t "$LOG_TAG" "WARN export-gateway-state failed"
-fi
-if [[ -x "$SCRIPT_DIR/push-slo-heartbeat.sh" ]]; then
-  REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/push-slo-heartbeat.sh" >/dev/null 2>&1 || true
-fi
-# Opsiyonel-only: journal'da FAIL kalsın; systemd "Failed" spam olmasın.
-# SD veya çekirdek/SSD fail → exit 1. Offsite SLA da fail-exit (WEAK_BACKUP_OK escape).
+# SSD varken DNS-only fail'leri ayır (cascade: container/gateway/ssd symlink)
+health_is_dns_only_fail() {
+  local f="$1"
+  case "$f" in
+    unbound:*|container\ unbound\ down|adguard-block-test|adguard-rewrite-*|adguard-dns-config-drift|adguard-filter-rules-low|adguard-rewrites-low)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+health_is_slo_fail() {
+  local f="$1"
+  case "$f" in
+    offsite-*|backup-restore-drill*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+# Opsiyonel + yedek SLA: journal FAIL; systemd Failed / OnFailure yok.
 exit_code=0
 if [[ "$sd_fail" -eq 1 ]]; then
   exit_code=1
@@ -263,11 +206,98 @@ elif [[ ${#FAILURES[@]} -gt 0 ]]; then
   exit_code=0
   for f in "${FAILURES[@]}"; do
     case "$f" in
-      optional-*) ;;
+      optional-*|offsite-*|backup-restore-drill*) ;;
       *) exit_code=1; break ;;
     esac
   done
 elif [[ "$fail" -ne 0 ]]; then
   exit_code=1
+fi
+# shellcheck source=../lib/notify.sh
+source "$SCRIPT_DIR/../lib/notify.sh"
+host="$(hostname -s)"
+if [[ "$sd_fail" -eq 1 ]]; then
+  logger -t "$LOG_TAG" "SD fail — notify check-sd-health"
+elif [[ ${#FAILURES[@]} -eq 0 ]]; then
+  logger -t "$LOG_TAG" "OK dns stack healthy"
+  notify_dns_recovered "$host" || true
+  notify_optional_recovered || true
+  notify_slo_backup_ok || true
+else
+  details="${FAILURES[*]}"
+  has_ssd=0
+  has_core=0
+  has_optional=0
+  has_slo=0
+  for f in "${FAILURES[@]}"; do
+    case "$f" in
+      ssd-unmounted|ssd-unhealthy|storage-degraded*|data-ssd-symlink*|data-native-missing)
+        has_ssd=1
+        ;;
+      optional-*)
+        has_optional=1
+        ;;
+      offsite-*|backup-restore-drill*)
+        has_slo=1
+        ;;
+      *)
+        has_core=1
+        ;;
+    esac
+  done
+  if [[ "$has_ssd" -eq 1 ]]; then
+    notify_ssd_degraded "$host" "$details"
+    dns_only=()
+    for f in "${FAILURES[@]}"; do
+      health_is_dns_only_fail "$f" && dns_only+=("$f")
+    done
+    if [[ ${#dns_only[@]} -gt 0 ]]; then
+      notify_dns_fail "$host" "${dns_only[*]}"
+    fi
+  elif [[ "$has_core" -eq 1 ]]; then
+    notify_dns_fail "$host" "$details"
+  elif [[ "$has_optional" -eq 1 ]]; then
+    notify_optional_warn "$host" "$details"
+  else
+    logger -t "$LOG_TAG" "OK dns stack healthy"
+    notify_dns_recovered "$host" || true
+    notify_optional_recovered || true
+  fi
+  if [[ "$has_slo" -eq 1 ]]; then
+    slo_details=()
+    for f in "${FAILURES[@]}"; do
+      health_is_slo_fail "$f" && slo_details+=("$f")
+    done
+    notify_slo_backup "$host" "${slo_details[*]}"
+  else
+    notify_slo_backup_ok || true
+  fi
+fi
+if [[ "$exit_code" -eq 0 ]]; then
+  notify_health_systemd_ok || true
+fi
+DISK_WARN_PCT="${DISK_WARN_PCT:-80}"
+DISK_PRUNE_PCT="${DISK_PRUNE_PCT:-65}"
+for mount in / /mnt/ssd; do
+  if [[ -d "$mount" ]]; then
+    usage="$(df "$mount" 2>/dev/null | awk 'NR==2 {gsub(/%/,""); print $5}')"
+    if [[ -n "${usage:-}" ]] && (( usage >= DISK_WARN_PCT )); then
+      # shellcheck source=../lib/notify.sh
+      source "$SCRIPT_DIR/../lib/notify.sh"
+      notify_disk_warn "$mount" "$usage"
+      logger -t "$LOG_TAG" "WARN disk ${mount} at ${usage}%"
+    fi
+    if [[ "$mount" == "/" ]] && [[ -n "${usage:-}" ]] && (( usage >= DISK_PRUNE_PCT )); then
+      REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/prune-sd-space.sh" || \
+        logger -t "$LOG_TAG" "WARN sd-prune failed"
+    fi
+  fi
+done
+if [[ -x "$SCRIPT_DIR/export-gateway-state.sh" ]]; then
+  REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/export-gateway-state.sh" >/dev/null 2>&1 \
+    || logger -t "$LOG_TAG" "WARN export-gateway-state failed"
+fi
+if [[ -x "$SCRIPT_DIR/push-slo-heartbeat.sh" ]]; then
+  REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/push-slo-heartbeat.sh" >/dev/null 2>&1 || true
 fi
 exit "$exit_code"

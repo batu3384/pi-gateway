@@ -241,14 +241,13 @@ grep -q 'LC_ALL=C' "$env_loader" \
   || die "C27: dotenv parser locale sabitlemiyor"
 ok "C27 dotenv locale stability"
 
-# W1: offsite missing/stale hard-fail (unless WEAK_BACKUP_OK)
+# W1: offsite missing/stale journal+Telegram; DNS birimi exit 0 (ADR-004 optional)
 grep -A25 'last-offsite-backup' "$health" | grep -q 'offsite-backup-missing' \
   || die "W1: offsite-backup-missing note_fail yok"
-# exit classifier: optional-* only (offsite must fall through to exit 1)
 exit_case="$(awk '/exit_code=0/,/^exit /' "$health")"
 echo "$exit_case" | grep -q 'optional-\*)' || die "W1: optional soft-exit yok"
-echo "$exit_case" | grep -q 'offsite-backup' && die "W1: offsite-backup soft-exit listesinde"
-ok "W1 offsite SLA hard-fail"
+echo "$exit_case" | grep -q 'offsite-\*' || die "W1: offsite SLA soft-exit yok"
+ok "W1 offsite SLA notify, no systemd fail"
 
 # W3: deploy remove-orphans
 grep -E 'up -d.*--remove-orphans|--remove-orphans.*up -d|up -d --remove-orphans' "$deploy" \
