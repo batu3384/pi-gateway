@@ -120,7 +120,10 @@ if ! do_backup; then
     }
   fi
 fi
-run_restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune
+if ! run_restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune; then
+  log "WARN: forget/prune basarisiz — snapshot alindi; bir sonraki turda repair dene"
+  run_restic repair index 2>/dev/null || true
+fi
 run_restic snapshots --last
 timeout "$RESTIC_CHOWN_TIMEOUT_SEC" sudo chown -R "${USER}:${USER}" "$REPO_HOST_PATH" 2>/dev/null \
   || log "WARN: chown timeout/atlandi ($RESTIC_CHOWN_TIMEOUT_SEC s)"

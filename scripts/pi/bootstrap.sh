@@ -126,6 +126,7 @@ install_systemd_unit() {
   local dst="/etc/systemd/system/$svc"
   [[ -f "$src" ]] || return 0
   sed -e "s|/home/PI_USER/pi-gateway|${REMOTE_DIR}|g" \
+      -e "s|/home/PI_USER|/home/${USER}|g" \
       -e "s|/opt/pi-gateway|${REMOTE_DIR}|g" \
       -e "s|User=PI_USER|User=${USER}|g" \
       -e "s|Group=PI_USER|Group=${USER}|g" \
