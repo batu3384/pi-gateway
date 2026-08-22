@@ -126,7 +126,8 @@ migrate_data() {
 }
 backup_legacy() {
   if [[ -d "$DOCKER_LEGACY" ]] && [[ ! -L "$DOCKER_LEGACY" ]]; then
-    local bak="${DOCKER_LEGACY}.sd-backup-$(date +%Y%m%d)"
+    local bak
+    bak="${DOCKER_LEGACY}.sd-backup-$(date +%Y%m%d)"
     if [[ ! -d "$bak" ]]; then
       log "Eski docker root yedek: $bak"
       sudo mv "$DOCKER_LEGACY" "$bak"
@@ -136,7 +137,8 @@ backup_legacy() {
 backup_legacy_containerd() {
   [[ "$CONTAINERD_ON_SSD" == "true" ]] || return 0
   if [[ -d "$CONTAINERD_LEGACY_ROOT" ]] && [[ ! -L "$CONTAINERD_LEGACY_ROOT" ]]; then
-    local bak="${CONTAINERD_LEGACY_ROOT}.sd-backup-$(date +%Y%m%d)"
+    local bak
+    bak="${CONTAINERD_LEGACY_ROOT}.sd-backup-$(date +%Y%m%d)"
     if [[ ! -d "$bak" ]]; then
       log "Eski containerd root yedek: $bak"
       sudo mv "$CONTAINERD_LEGACY_ROOT" "$bak"
