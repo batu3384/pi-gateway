@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # containerd data root helpers (Docker 29+ snapshotter store)
 CONTAINERD_CONFIG="${CONTAINERD_CONFIG:-/etc/containerd/config.toml}"
 CONTAINERD_LEGACY_ROOT="${CONTAINERD_LEGACY_ROOT:-/var/lib/containerd}"
