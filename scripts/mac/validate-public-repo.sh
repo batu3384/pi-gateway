@@ -34,7 +34,7 @@ fi
 
 # Kisisel LAN IP (ornek subnet dokumanlari haric)
 if git grep -E '192\.168\.1\.(10[0-9]|11[0-9]|112)' \
-  -- ':!docs/ADGUARD-DHCP.md' ':!docs/superpowers/**' ':!scripts/mac/validate-public-repo.sh' 2>/dev/null | head -1; then
+  -- ':!docs/ADGUARD-DHCP.md' ':!scripts/mac/validate-public-repo.sh' 2>/dev/null | head -1; then
   die "Kisisel LAN IP tracked dosyada"
 fi
 

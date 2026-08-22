@@ -21,6 +21,13 @@ if [[ -f "$REMOTE_DIR/.env" ]]; then
   grep -E '^[A-Z][A-Z0-9_]*=' "$REMOTE_DIR/.env" | cut -d= -f1 | sort > "$STAGING/env-keys.txt"
 fi
 mv "$STAGING" "$DEST"
+# Config snapshot retention (restic forget ayri)
+KEEP="${CONFIG_BACKUP_KEEP:-14}"
+if (( KEEP > 0 )); then
+  while IFS= read -r old; do
+    [[ -n "$old" && -d "$old" ]] && rm -rf "$old"
+  done < <(find "$REMOTE_DIR/backups" -maxdepth 1 -type d -name '20*' 2>/dev/null | sort | head -n "-$KEEP")
+fi
 echo "Backup saved: $DEST (secrets excluded; use restic for encrypted data)"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../lib/notify.sh
