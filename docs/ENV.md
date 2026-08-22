@@ -121,7 +121,7 @@ If `N8N_ENCRYPTION_KEY` is empty on Pi, `ensure-n8n-encryption-key.sh` generates
 |----------|---------|-------------|
 | `ENABLE_NETALERTX` | `true` | NetAlertX container + setup |
 | `NETALERTX_PORT` | `20211` | UI (loopback; Caddy `devices.home`) |
-| `NETALERTX_LISTEN_ADDR` | `172.17.0.1` | Host-network listen on docker0 (Caddy bridge proxy). Avoid `0.0.0.0`. |
+| `NETALERTX_LISTEN_ADDR` | `172.17.0.1` | Host-network docker0; Caddy `host.docker.internal` proxy. Avoid `0.0.0.0`. |
 | `NETALERTX_SCAN_SUBNETS` | (empty) | ARP scan; if empty, `LAN_SUBNET_CIDR` + `PI_INTERFACE` |
 | `NETALERTX_PASSWORD` | (empty → `AGH_ADMIN_PASSWORD`) | NetAlertX UI password |
 

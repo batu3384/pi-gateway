@@ -228,7 +228,11 @@ ok "compose image pin (no :latest)"
 
 grep -q 'NETALERTX_LISTEN_ADDR:-172.17.0.1' "$compose" \
   || die "NetAlertX listen default 172.17.0.1 degil"
-ok "NetAlertX docker0 listen"
+grep -q 'host.docker.internal:__NETALERTX_PORT__' "$PROJECT_DIR/config/caddy/Caddyfile.tls.template" \
+  || die "Caddy devices host.docker.internal yok"
+grep -q 'host.docker.internal:__ADGUARD_WEB_PORT__' "$PROJECT_DIR/config/caddy/Caddyfile.tls.template" \
+  || die "Caddy dns host.docker.internal yok"
+ok "NetAlertX host.docker.internal listen"
 
 grep -q 'OFFSITE_BACKUP_MAX_AGE_DAYS' "$PROJECT_DIR/.env.example" \
   || die "OFFSITE_BACKUP_MAX_AGE_DAYS .env.example yok"

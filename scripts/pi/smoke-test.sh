@@ -148,7 +148,7 @@ if [[ "${ENABLE_N8N:-true}" == "true" ]]; then
 fi
 if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
   run_check "netalertx" bash -c \
-    "for _ in 1 2 3 4 5 6; do curl -fsS -L \"http://${NETALERTX_LISTEN_ADDR:-172.17.0.1}:${NETALERTX_PORT}/\" >/dev/null && exit 0; sleep 5; done; exit 1"
+    "for _ in 1 2 3 4 5 6; do curl -fsS -L \"http://${NETALERTX_LISTEN_ADDR:-127.0.0.1}:${NETALERTX_PORT}/\" >/dev/null && exit 0; sleep 5; done; exit 1"
   case "${N8N_WEBHOOK_SECRET:-}" in
     ""|CHANGE_ME*) ;;
     *)

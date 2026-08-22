@@ -251,7 +251,7 @@ services:
       autoheal: "true"
     environment:
       PORT: ${NETALERTX_PORT:-20211}
-      # Host network; UI docker0 — Caddy devices.home proxy (LAN IP loopback'a ulasmaz)
+      # Host network; docker0 — Caddy host.docker.internal (172.17.0.1) proxy
       LISTEN_ADDR: ${NETALERTX_LISTEN_ADDR:-172.17.0.1}
       PUID: ${NETALERTX_UID:-20211}
       PGID: ${NETALERTX_GID:-20211}
