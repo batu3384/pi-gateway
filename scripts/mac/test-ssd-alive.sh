@@ -85,15 +85,21 @@ fi
 rm -f "$tmp_state"
 ok "rate-limit Mac remount-only (sysfs yok)"
 
-# mkdir lock: ikinci cagri fail (bekleme 0 — Mac test hizli)
+# mkdir lock: baska surec tutuyorsa fail (force-clear tek basina gecmez)
 _lock_tmp="$(mktemp -d)"
 export SSD_USB_RESET_LOCK_DIR="$_lock_tmp/held"
 export SSD_USB_RESET_LOCK_WAIT_SEC=0
 mkdir "$SSD_USB_RESET_LOCK_DIR"
+( cd "$SSD_USB_RESET_LOCK_DIR" && sleep 120 ) &
+_lock_holder=$!
 if ssd_usb_soft_reset >/dev/null 2>&1; then
+  kill "$_lock_holder" 2>/dev/null || true
+  wait "$_lock_holder" 2>/dev/null || true
   die "lock varken soft_reset gecti"
 fi
-rmdir "$SSD_USB_RESET_LOCK_DIR"
+kill "$_lock_holder" 2>/dev/null || true
+wait "$_lock_holder" 2>/dev/null || true
+rmdir "$SSD_USB_RESET_LOCK_DIR" 2>/dev/null || true
 unset SSD_USB_RESET_LOCK_DIR SSD_USB_RESET_LOCK_WAIT_SEC
 rmdir "$_lock_tmp"
 ok "soft-reset mkdir lock"
