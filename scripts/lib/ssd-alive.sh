@@ -35,6 +35,8 @@ SSD_USB_PORT_ON_SEC="${SSD_USB_PORT_ON_SEC:-10}"
 # Hatirlanan porttan sonra kac ekstra USB3 port (Pi4: platform usb2-port1..4)
 SSD_USB_PORT_SCAN_MAX="${SSD_USB_PORT_SCAN_MAX:-8}"
 SSD_USB_RESET_LOCK_WAIT_SEC="${SSD_USB_RESET_LOCK_WAIT_SEC:-45}"
+# Orphan lock (SIGTERM mid soft-reset) — must be < timer overlap window
+SSD_USB_RESET_LOCK_STALE_SEC="${SSD_USB_RESET_LOCK_STALE_SEC:-400}"
 # USB hala enumerate ama I/O olu: port cycle
 SSD_USB_CYCLE_ON_HANG="${SSD_USB_CYCLE_ON_HANG:-true}"
 # Port power'dan once usb-storage unbind/bind
@@ -56,6 +58,25 @@ _ssd_alive_root() {
     "$@"
   else
     sudo "$@"
+  fi
+}
+
+_ssd_path_mtime() {
+  local p="$1"
+  stat -c %Y "$p" 2>/dev/null || stat -f %m "$p" 2>/dev/null || echo 0
+}
+
+# SIGTERM mid soft-reset orphan lock — stale clear must run as root
+ssd_usb_reset_lock_stale_clear() {
+  local lockdir="${SSD_USB_RESET_LOCK_DIR:-/run/pi-gateway/ssd-usb-reset.lock}"
+  local stale="${SSD_USB_RESET_LOCK_STALE_SEC:-400}" mtime now
+  [[ -d "$lockdir" ]] || return 0
+  [[ "$stale" =~ ^[0-9]+$ ]] || stale=400
+  mtime="$(_ssd_path_mtime "$lockdir")"
+  now="$(date +%s)"
+  if [[ "$mtime" =~ ^[0-9]+$ ]] && (( now - mtime > stale )); then
+    echo "[ssd-alive] stale reset lock (${stale}s) — siliniyor" >&2
+    _ssd_alive_root rmdir "$lockdir" 2>/dev/null || true
   fi
 }
 
@@ -795,22 +816,27 @@ _ssd_usb_soft_reset_body() {
 # Merdiven: LPM off → umount hung → usb-storage rebind → USB3 port tarama → xhci opt-in
 ssd_usb_soft_reset() {
   local lockdir="${SSD_USB_RESET_LOCK_DIR:-/run/pi-gateway/ssd-usb-reset.lock}"
-  local lock_owned=0 rc mtime now parent waited=0
+  local lock_owned=0 rc mtime now parent waited=0 forced=0
   local max_wait="${SSD_USB_RESET_LOCK_WAIT_SEC:-45}"
+  local stale="${SSD_USB_RESET_LOCK_STALE_SEC:-400}"
   parent="$(dirname "$lockdir")"
   # sudo yok: Mac validate sudo prompt olmasin. Pi health root.
   if [[ "$(id -u)" -eq 0 ]]; then
     mkdir -p "$parent" 2>/dev/null || true
   fi
   [[ "$max_wait" =~ ^[0-9]+$ ]] || max_wait=45
+  [[ "$stale" =~ ^[0-9]+$ ]] || stale=400
+  ssd_usb_reset_lock_stale_clear
+  trap 'if [[ "${lock_owned:-0}" == "1" ]]; then rmdir "$lockdir" 2>/dev/null || _ssd_alive_root rmdir "$lockdir" 2>/dev/null || true; fi' EXIT
   if [[ -d "$parent" && -w "$parent" ]]; then
     while true; do
+      ssd_usb_reset_lock_stale_clear
       if [[ -d "$lockdir" ]]; then
-        mtime="$(stat -f %m "$lockdir" 2>/dev/null || stat -c %Y "$lockdir" 2>/dev/null || echo 0)"
+        mtime="$(_ssd_path_mtime "$lockdir")"
         now="$(date +%s)"
-        if [[ "$mtime" =~ ^[0-9]+$ ]] && (( now - mtime > 400 )); then
-          echo "[ssd-alive] stale reset lock — siliniyor" >&2
-          rmdir "$lockdir" 2>/dev/null || true
+        if [[ "$mtime" =~ ^[0-9]+$ ]] && (( now - mtime > stale )); then
+          echo "[ssd-alive] stale reset lock (${stale}s) — siliniyor" >&2
+          _ssd_alive_root rmdir "$lockdir" 2>/dev/null || true
         fi
       fi
       if mkdir "$lockdir" 2>/dev/null; then
@@ -819,7 +845,15 @@ ssd_usb_soft_reset() {
       fi
       if [[ -d "$lockdir" ]]; then
         if (( waited >= max_wait )); then
-          echo "[ssd-alive] soft-reset kilit bekleme doldu (${max_wait}s)" >&2
+          if [[ "$forced" -eq 0 ]]; then
+            echo "[ssd-alive] kilit bekleme doldu — zorla temizle" >&2
+            _ssd_alive_root rmdir "$lockdir" 2>/dev/null || true
+            forced=1
+            waited=0
+            continue
+          fi
+          echo "[ssd-alive] soft-reset kilit alinamadi (${max_wait}s)" >&2
+          trap - EXIT
           return 1
         fi
         sleep 1
@@ -832,8 +866,9 @@ ssd_usb_soft_reset() {
   _ssd_usb_soft_reset_body
   rc=$?
   if [[ "$lock_owned" == "1" ]]; then
-    rmdir "$lockdir" 2>/dev/null || true
+    rmdir "$lockdir" 2>/dev/null || _ssd_alive_root rmdir "$lockdir" 2>/dev/null || true
   fi
+  trap - EXIT
   return "$rc"
 }
 

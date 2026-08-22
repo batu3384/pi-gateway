@@ -48,8 +48,12 @@ grep -q 'ssd_usb_discover_usb2_hub_ports' "$SSD_ALIVE" || die "USB2 hub son-care
 grep -q 'Hatirlanan port her zaman ilk' "$SSD_ALIVE" || die "ogrenilen port oncelik yok"
 grep -q 'ssd_usb_port_fail_record' "$SSD_ALIVE" || die "port fail kayit yok"
 grep -q 'ssd_usb_learn_live_port' "$HOTPLUG" || die "hotplug port ogrenme yok"
-grep -q 'OnUnitInactiveSec' "$PROJECT_DIR/host/systemd/pi-ssd-health.timer" \
-  || die "ssd-health timer OnUnitInactiveSec yok"
+grep -q 'ssd_usb_reset_lock_stale_clear' "$SSD_ALIVE" || die "stale lock clear yok"
+grep -q 'SSD_USB_RESET_LOCK_STALE_SEC' "$SSD_ALIVE" || die "LOCK_STALE_SEC yok"
+grep -q 'stat -c %Y' "$SSD_ALIVE" || die "Linux stat -c mtime yok"
+grep -q 'trap.*EXIT' "$SSD_ALIVE" || die "soft-reset EXIT trap yok"
+grep -q 'OnUnitInactiveSec=90s' "$PROJECT_DIR/host/systemd/pi-ssd-health.timer" \
+  || die "ssd-health timer 90s degil"
 grep -q 'ssd_usb_disable_lpm' "$SSD_ALIVE" || die "LPM disable yok"
 grep -q 'ssd_usb_reset_record_once' "$SSD_ALIVE" || die "rate-limit session yok"
 grep -q 'ssd_usb_port_cycle_one' "$SSD_ALIVE" || die "tek port cycle yok"

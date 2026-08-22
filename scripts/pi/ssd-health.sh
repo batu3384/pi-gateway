@@ -15,6 +15,7 @@ PG_SCRIPT_NAME="$(basename "$0")"
 source "${_PG_ENV_LIB:?}"
 read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 source "$SCRIPT_DIR/../lib/stack-health.sh"
+ensure_runtime_dir 2>/dev/null || true
 if is_ssd_root_mode || ! needs_ssd_storage; then
   log "SSD data disk yok (ssd-root/native) — atlaniyor"
   exit 0

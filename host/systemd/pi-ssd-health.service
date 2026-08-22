@@ -6,5 +6,7 @@ After=local-fs.target
 Type=oneshot
 Nice=10
 Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
+ExecStartPre=/bin/mkdir -p /run/pi-gateway
 ExecStart=/usr/local/lib/pi-gateway/scripts/pi/ssd-health.sh
-TimeoutStartSec=360
+TimeoutStartSec=600
+KillMode=mixed
