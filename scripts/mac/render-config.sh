@@ -14,10 +14,15 @@ require_cmd envsubst python3
 if [[ -z "${PI_STATIC_IP:-}" || -z "${LAN_GATEWAY:-}" || -z "${LAN_SUBNET_CIDR:-}" ]]; then
   die "Missing network vars. Run: ./scripts/mac/discover-remote.sh"
 fi
+[[ -n "${PI_IPV6_ULA:-}" ]] || die "PI_IPV6_ULA gerekli (ornek: fd7b:7069:6777::53) — IPv6 DNS sabiti"
+# dhcpcd /64 host kismi
+PI_IPV6_ULA="${PI_IPV6_ULA%%/*}"
 
 export AGH_ADMIN_USER ADGUARD_WEB_PORT="${ADGUARD_WEB_PORT:-8080}" DOZZLE_PORT="${DOZZLE_PORT:-9999}"
+export ADGUARD_FILTER_PROFILE="${ADGUARD_FILTER_PROFILE:-balanced}"
 export NETALERTX_PORT="${NETALERTX_PORT:-20211}"
 export PI_STATIC_IP LAN_DOMAIN="${LAN_DOMAIN:-home}" PI_INTERFACE="${PI_INTERFACE:-eth0}"
+export PI_IPV6_ULA LAN_PREFIX="${LAN_PREFIX:-24}" LAN_GATEWAY
 export UPTIME_KUMA_STATUS_SLUG="${UPTIME_KUMA_STATUS_SLUG:-pi-gateway}"
 if [[ "${ENABLE_TLS:-true}" == "true" ]]; then
   export PANEL_PROTOCOL=https
@@ -35,6 +40,52 @@ envsubst '${AGH_ADMIN_USER} ${ADGUARD_WEB_PORT} ${PI_STATIC_IP} ${LAN_DOMAIN} ${
 
 sed -i.bak "s|__PASSWORD_HASH__|$HASH|" "$PROJECT_DIR/config/adguard/AdGuardHome.yaml"
 rm -f "$PROJECT_DIR/config/adguard/AdGuardHome.yaml.bak"
+
+python3 - "$PROJECT_DIR/config/adguard/AdGuardHome.yaml" \
+  "$PROJECT_DIR/config/adguard/filter-lists.json" \
+  "$PROJECT_DIR/config/adguard" \
+  "$ADGUARD_FILTER_PROFILE" <<'PY'
+import json, sys
+from pathlib import Path
+
+yaml_path = Path(sys.argv[1])
+manifest_path = Path(sys.argv[2])
+rules_dir = Path(sys.argv[3])
+profile = sys.argv[4]
+
+data = json.loads(manifest_path.read_text())
+profiles = data.get("profiles", {})
+if profile not in profiles:
+    sys.exit(f"filter-lists.json: bilinmeyen profil {profile!r}")
+
+filter_lines = []
+for idx, (name, url) in enumerate(profiles[profile], 1):
+    filter_lines.append("  - enabled: true")
+    filter_lines.append(f"    url: {url}")
+    filter_lines.append(f"    name: {name}")
+    filter_lines.append(f"    id: {idx}")
+filters_block = "\n".join(filter_lines)
+
+rules = []
+for fname in ("user-rules.txt", "user-rules.local.txt"):
+    path = rules_dir / fname
+    if not path.is_file():
+        continue
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            rules.append("  - " + json.dumps(line))
+rules_block = "\n".join(rules) if rules else "  []"
+
+text = yaml_path.read_text()
+if "__FILTER_LISTS_YAML__" not in text:
+    sys.exit("AdGuardHome.yaml missing __FILTER_LISTS_YAML__ marker")
+if "__USER_RULES_YAML__" not in text:
+    sys.exit("AdGuardHome.yaml missing __USER_RULES_YAML__ marker")
+text = text.replace("__FILTER_LISTS_YAML__", filters_block)
+text = text.replace("__USER_RULES_YAML__", rules_block)
+yaml_path.write_text(text)
+PY
 
 if [[ "${NETWORK_MODE:-router-dns}" == "adguard-dhcp" ]]; then
   [[ -n "${DHCP_RANGE_START:-}" && -n "${DHCP_RANGE_END:-}" && -n "${LAN_SUBNET_MASK:-}" ]] \
@@ -123,7 +174,7 @@ Path(dst).write_text(text)
 PY
 fi
 
-envsubst '${PI_STATIC_IP} ${LAN_PREFIX} ${LAN_GATEWAY} ${PI_INTERFACE}' \
+envsubst '${PI_STATIC_IP} ${LAN_PREFIX} ${LAN_GATEWAY} ${PI_INTERFACE} ${PI_IPV6_ULA}' \
   < "$PROJECT_DIR/host/dhcpcd/pi-gateway.conf.template" \
   > "$PROJECT_DIR/host/dhcpcd/pi-gateway.conf"
 

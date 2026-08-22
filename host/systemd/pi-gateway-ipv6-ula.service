@@ -1,0 +1,15 @@
+[Unit]
+Description=Pi Gateway stable IPv6 ULA for DNS
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Placeholders filled by ensure-ipv6-ula.sh
+ExecStart=/sbin/ip -6 addr add __ULA_CIDR__ dev __PI_IFACE__
+# Already-present address is OK
+SuccessExitStatus=0 2
+
+[Install]
+WantedBy=multi-user.target

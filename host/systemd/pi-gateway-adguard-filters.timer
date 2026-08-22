@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily AdGuard filter list refresh
+
+[Timer]
+OnBootSec=20min
+OnCalendar=*-*-* 04:15:00
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -135,6 +135,9 @@ elif [[ "$STORAGE_TYPE" == "ssd-root" || "$STORAGE_TYPE" == "ssd" ]]; then
   run_step_critical "ssd-root harden" env REMOTE_DIR="$REMOTE_DIR" CONFIRM_NEUTRALIZE="${CONFIRM_NEUTRALIZE:-}" CONFIRM_EEPROM_FIX="${CONFIRM_EEPROM_FIX:-}" "$SCRIPT_DIR/ssd-root-harden.sh"
 fi
 run_step_critical "AdGuard yapilandirma" "$SCRIPT_DIR/configure-adguard.sh"
+run_step_optional "AdGuard filter timer" "$SCRIPT_DIR/setup-adguard-timers.sh"
+run_step_optional "IPv6 ULA DNS" "$SCRIPT_DIR/ensure-ipv6-ula.sh"
+run_step_optional "IPv6 RDNSS RA" "$SCRIPT_DIR/setup-rdnss-ra.sh"
 # shellcheck source=../lib/unified-login.sh
 source "$SCRIPT_DIR/../lib/unified-login.sh"
 apply_unified_login

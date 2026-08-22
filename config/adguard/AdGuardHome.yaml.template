@@ -12,6 +12,7 @@ users:
 dns:
   bind_hosts:
     - 0.0.0.0
+    - "::"
   port: 53
   upstream_dns:
     - udp://127.0.0.1:5335
@@ -57,63 +58,10 @@ dns:
 
 # DNS-only stack (telefon AdGuard HTTPS/CSS degil). OISD Pro++ icinde — tekrar yok.
 filters:
-  - enabled: true
-    url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_51.txt
-    name: HaGeZi Pro++
-    id: 1
-  - enabled: true
-    url: https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/tif.medium.txt
-    name: HaGeZi TIF Medium
-    id: 2
-  - enabled: true
-    url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_59.txt
-    name: AdGuard DNS Popup Hosts
-    id: 3
-  - enabled: true
-    url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_67.txt
-    name: HaGeZi Apple Tracker
-    id: 4
-  - enabled: true
-    url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_63.txt
-    name: HaGeZi Windows/Office Tracker
-    id: 5
-  - enabled: true
-    url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_61.txt
-    name: HaGeZi Samsung Tracker
-    id: 6
+__FILTER_LISTS_YAML__
 
 user_rules:
-  - "||pagead.l.doubleclick.net^$important"
-  - "||pagead2.googlesyndication.com^$important"
-  - "||googleads.g.doubleclick.net^$important"
-  - "||securepubads.g.doubleclick.net^$important"
-  - "||adservice.google.com^$important"
-  - "||adservice.google.com.tr^$important"
-  - "||ad.doubleclick.net^$important"
-  - "||static.doubleclick.net^$important"
-  - "||googletagmanager.com^$important"
-  - "||www.googletagmanager.com^$important"
-  - "||googletagservices.com^$important"
-  - "||ads.reddit.com^$important"
-  - "||ads.twitter.com^$important"
-  - "||ads-api.twitter.com^$important"
-  - "||an.facebook.com^$important"
-  - "||ads.linkedin.com^$important"
-  - "||amazon-adsystem.com^$important"
-  - "||aax.amazon-adsystem.com^$important"
-  - "||adnxs.com^$important"
-  - "||adsrvr.org^$important"
-  - "||pubmatic.com^$important"
-  - "||rubiconproject.com^$important"
-  - "||criteo.com^$important"
-  - "||criteo.net^$important"
-  - "||taboola.com^$important"
-  - "||outbrain.com^$important"
-  - "||moatads.com^$important"
-  - "||scorecardresearch.com^$important"
-  - "||adform.net^$important"
-  - "||gemius.pl^$important"
-  - "||hit.gemius.pl^$important"
+__USER_RULES_YAML__
 
 querylog:
   enabled: true

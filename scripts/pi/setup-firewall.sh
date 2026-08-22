@@ -75,6 +75,34 @@ setup_ufw() {
   sudo ufw allow from "$LAN_SUBNET" to any port 22 proto tcp comment 'pi-gateway ssh'
   sudo ufw allow from "$LAN_SUBNET" to any port 53 proto tcp comment 'pi-gateway dns'
   sudo ufw allow from "$LAN_SUBNET" to any port 53 proto udp comment 'pi-gateway dns'
+  # IPv6 DNS (ULA + istege bagli GUA LAN prefix)
+  delete_ufw_rules_matching 'pi-gateway dns6'
+  if [[ -n "${PI_IPV6_ULA:-}" ]]; then
+    ula_net="$(python3 -c "import ipaddress,sys; a=ipaddress.ip_interface(sys.argv[1] if '/' in sys.argv[1] else sys.argv[1]+'/64'); print(a.network)" "${PI_IPV6_ULA}" 2>/dev/null || true)"
+    if [[ -n "$ula_net" ]]; then
+      sudo ufw allow from "$ula_net" to any port 53 proto tcp comment 'pi-gateway dns6'
+      sudo ufw allow from "$ula_net" to any port 53 proto udp comment 'pi-gateway dns6'
+      log "IPv6 DNS ULA: $ula_net"
+    fi
+  fi
+  if [[ -n "${LAN_IPV6_CIDR:-}" ]]; then
+    sudo ufw allow from "$LAN_IPV6_CIDR" to any port 53 proto tcp comment 'pi-gateway dns6'
+    sudo ufw allow from "$LAN_IPV6_CIDR" to any port 53 proto udp comment 'pi-gateway dns6'
+    log "IPv6 DNS LAN: $LAN_IPV6_CIDR"
+  else
+    # eth0 global GUA /64 (SLAAC LAN) — otomatik
+    gua_net="$(ip -6 route show dev "${PI_INTERFACE:-eth0}" proto ra 2>/dev/null | awk '/\/64/{print $1; exit}')"
+    if [[ -z "$gua_net" ]]; then
+      gua_net="$(ip -6 addr show dev "${PI_INTERFACE:-eth0}" scope global 2>/dev/null | awk '/inet6/{print $2; exit}' | python3 -c "import sys,ipaddress; print(ipaddress.ip_interface(sys.stdin.read().strip()).network)" 2>/dev/null || true)"
+    fi
+    if [[ -n "$gua_net" && "$gua_net" != fe80:* ]]; then
+      sudo ufw allow from "$gua_net" to any port 53 proto tcp comment 'pi-gateway dns6'
+      sudo ufw allow from "$gua_net" to any port 53 proto udp comment 'pi-gateway dns6'
+      log "IPv6 DNS GUA LAN: $gua_net"
+    fi
+  fi
+  sudo ufw allow from fe80::/10 to any port 53 proto udp comment 'pi-gateway dns6'
+  sudo ufw allow from fe80::/10 to any port 53 proto tcp comment 'pi-gateway dns6'
   if [[ "$UFW_ADMIN_EXPOSURE" == "caddy-only" ]]; then
     log "Admin modu: caddy-only (paneller yalnizca *.home / Tailscale uzerinden 80/443)"
     for port in 80 443; do

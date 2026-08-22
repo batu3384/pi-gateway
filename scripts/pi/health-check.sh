@@ -94,6 +94,18 @@ fi
 if ! dig +time=2 +tries=1 @127.0.0.1 -p "${UNBOUND_PORT}" cloudflare.com A >/dev/null 2>&1; then
   note_fail "unbound:${UNBOUND_PORT}"
 fi
+adguard_dns_ok() {
+  dig +time=2 +tries=1 @"${PI_STATIC_IP}" cloudflare.com A >/dev/null 2>&1 \
+    && dig +time=2 +tries=1 @"${PI_STATIC_IP}" doubleclick.net A 2>/dev/null | grep -Eq '0\.0\.0\.0|127\.0\.0\.0|NXDOMAIN'
+}
+if ! adguard_dns_ok; then
+  if [[ "${ADGUARD_AUTO_HEAL:-true}" == "true" ]]; then
+    logger -t "$LOG_TAG" "adguard drift — auto-heal (light)"
+    if ! REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/ensure-adguard-blocking.sh" --fix-light; then
+      logger -t "$LOG_TAG" "WARN adguard auto-heal (light) basarisiz"
+    fi
+  fi
+fi
 if ! dig +time=2 +tries=1 @"${PI_STATIC_IP}" cloudflare.com A >/dev/null 2>&1; then
   note_fail "adguard:53"
 fi
@@ -125,9 +137,39 @@ ptr_ok = d.get('use_private_ptr_resolvers') is False
 ttl_ok = d.get('blocked_response_ttl') == int('${ADGUARD_BLOCKED_TTL:-60}')
 print('1' if udp_ok and ptr_ok and ttl_ok else '0')
 " 2>/dev/null || echo 0)"
-    [[ "${rules:-0}" -ge "${ADGUARD_MIN_FILTER_RULES:-100000}" ]] || note_fail "adguard-filter-rules-low(${rules:-0})"
+    [[ "${rules:-0}" -ge "${ADGUARD_MIN_FILTER_RULES:-100000}" ]] || {
+      if [[ "${ADGUARD_AUTO_HEAL:-true}" == "true" ]]; then
+        logger -t "$LOG_TAG" "adguard-filter-rules-low — auto-heal (filters)"
+        if ! REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/apply-adguard-filters.sh"; then
+          logger -t "$LOG_TAG" "WARN adguard filter auto-heal basarisiz"
+        fi
+        rules="$(curl -fsS -b "$COOKIE" "${BASE}/control/filtering/status" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print(sum((f.get('rules_count') or 0) for f in d.get('filters',[])))
+" 2>/dev/null || echo 0)"
+      fi
+      [[ "${rules:-0}" -ge "${ADGUARD_MIN_FILTER_RULES:-100000}" ]] || note_fail "adguard-filter-rules-low(${rules:-0})"
+    }
     [[ "${rewrites:-0}" -ge "${ADGUARD_MIN_REWRITES:-7}" ]] || note_fail "adguard-rewrites-low(${rewrites:-0})"
-    [[ "$dns_ok" == "1" ]] || note_fail "adguard-dns-config-drift"
+    [[ "$dns_ok" == "1" ]] || {
+      if [[ "${ADGUARD_AUTO_HEAL:-true}" == "true" ]]; then
+        logger -t "$LOG_TAG" "adguard-dns-config-drift — auto-heal"
+        if ! REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/apply-adguard-dns.sh"; then
+          logger -t "$LOG_TAG" "WARN adguard dns auto-heal basarisiz"
+        fi
+        dns_ok="$(agh_dns_info "$BASE" "$COOKIE" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+upstream = d.get('upstream_dns') or []
+udp_ok = any(u.startswith('udp://127.0.0.1:') for u in upstream)
+ptr_ok = d.get('use_private_ptr_resolvers') is False
+ttl_ok = d.get('blocked_response_ttl') == int('${ADGUARD_BLOCKED_TTL:-60}')
+print('1' if udp_ok and ptr_ok and ttl_ok else '0')
+" 2>/dev/null || echo 0)"
+      fi
+      [[ "$dns_ok" == "1" ]] || note_fail "adguard-dns-config-drift"
+    }
   else
     note_fail "adguard-api-login"
   fi

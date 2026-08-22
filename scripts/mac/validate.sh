@@ -63,6 +63,10 @@ chmod +x "$SCRIPT_DIR/test-smoke-contract.sh" 2>/dev/null || true
 if [[ -f "$SCRIPT_DIR/test-smoke-contract.sh" ]]; then
   "$SCRIPT_DIR/test-smoke-contract.sh"
 fi
+chmod +x "$SCRIPT_DIR/test-dns-blocking-contract.sh" 2>/dev/null || true
+if [[ -f "$SCRIPT_DIR/test-dns-blocking-contract.sh" ]]; then
+  "$SCRIPT_DIR/test-dns-blocking-contract.sh"
+fi
 chmod +x "$SCRIPT_DIR/test-adversarial-fixes.sh" 2>/dev/null || true
 if [[ -f "$SCRIPT_DIR/test-adversarial-fixes.sh" ]]; then
   "$SCRIPT_DIR/test-adversarial-fixes.sh"
@@ -105,8 +109,18 @@ log "docker-compose validation: OK"
 
 for f in \
   "$PROJECT_DIR/config/adguard/AdGuardHome.yaml" \
+  "$PROJECT_DIR/config/adguard/user-rules.txt" \
+  "$PROJECT_DIR/config/adguard/filter-lists.json" \
   "$PROJECT_DIR/config/unbound/unbound.conf"; do
   [[ -f "$f" ]] || die "Missing rendered file: $f"
 done
+grep -q '__FILTER_LISTS_YAML__' "$PROJECT_DIR/config/adguard/AdGuardHome.yaml.template" \
+  || die "AdGuard template __FILTER_LISTS_YAML__ marker yok"
+grep -q '__FILTER_LISTS_YAML__' "$PROJECT_DIR/config/adguard/AdGuardHome.yaml" \
+  && die "Rendered AdGuardHome.yaml filtre placeholder kaldi — make render"
+grep -q '\-\-fix-light' "$PROJECT_DIR/scripts/pi/ensure-adguard-blocking.sh" \
+  || die "ensure-adguard-blocking --fix-light yok"
+grep -q '\-\-fix-light' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check adguard light heal yok"
 
 log "Validation passed"

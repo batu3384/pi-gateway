@@ -1,0 +1,55 @@
+# AdGuard user rules — SSOT (render + apply-adguard-filters.sh)
+# Google Ads / DoubleClick
+||pagead.l.doubleclick.net^$important
+||pagead2.googlesyndication.com^$important
+||googleads.g.doubleclick.net^$important
+||securepubads.g.doubleclick.net^$important
+||adservice.google.com^$important
+||adservice.google.com.tr^$important
+||ad.doubleclick.net^$important
+||static.doubleclick.net^$important
+||googletagservices.com^$important
+# Social / programatik
+||ads.reddit.com^$important
+||ads.twitter.com^$important
+||ads-api.twitter.com^$important
+||ads-twitter.com^$important
+||an.facebook.com^$important
+||ads.linkedin.com^$important
+||amazon-adsystem.com^$important
+||aax.amazon-adsystem.com^$important
+||adnxs.com^$important
+||adsrvr.org^$important
+||pubmatic.com^$important
+||rubiconproject.com^$important
+||criteo.com^$important
+||criteo.net^$important
+||taboola.com^$important
+||outbrain.com^$important
+||moatads.com^$important
+||scorecardresearch.com^$important
+||adform.net^$important
+# Mobile ad SDK
+||unityads.unity3d.com^$important
+||applovin.com^$important
+||bid.applovin.com^$important
+||chartboost.com^$important
+||mopub.com^$important
+||ads.yieldmo.com^$important
+||ironsrc.mobi^$important
+||supersonicads.com^$important
+||vungle.com^$important
+||inmobi.com^$important
+# Smart TV / CTV
+||samsungads.com^$important
+||ads.samsung.com^$important
+||config.samsungads.com^$important
+||ads.roku.com^$important
+||smartclip.net^$important
+||springserve.com^$important
+||lgads.tv^$important
+# TR / bölgesel
+||gemius.pl^$important
+||hit.gemius.pl^$important
+||mc.yandex.ru^$important
+||an.yandex.ru^$important
