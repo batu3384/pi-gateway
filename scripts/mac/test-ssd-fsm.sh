@@ -19,6 +19,11 @@ grep -q 'SKIP_COMPOSE_UP' "$docker_ssd" || die "C31: SKIP_COMPOSE_UP yok"
 grep -A12 'backup_legacy' "$docker_ssd" | grep -q 'SKIP_COMPOSE_UP' \
   || die "C31: SKIP_COMPOSE_UP bring_up_stack gate yok"
 ok "C31 setup-docker-ssd SKIP_COMPOSE_UP"
+grep -q 'CONTAINERD_SSD_ROOT' "$docker_ssd" || die "C31b: CONTAINERD_SSD_ROOT yok"
+grep -q 'containerd-root.sh' "$docker_ssd" || die "C31b: containerd helper yok"
+grep -q 'containerd-root.sh' "$ROOT/scripts/pi/setup-docker-fallback.sh" \
+  || die "C31b: fallback containerd helper yok"
+ok "C31b containerd SSD migrate"
 
 # C32: recover-ro docker SSD fail-closed (no warn-only)
 grep -A12 'setup-docker-ssd.sh' "$recover" | grep -q 'SKIP_COMPOSE_UP=true' \

@@ -21,9 +21,16 @@ prune_safe() {
     log "degraded — docker image prune atlandi"
     return 0
   fi
-  local docker_root
+  local docker_root containerd_root
   docker_root="$(docker info 2>/dev/null | awk -F': ' '/Docker Root Dir/{print $2; exit}')" || true
-  if [[ "${ENABLE_DOCKER_SSD:-false}" == "true" && -n "$docker_root" && "$docker_root" != "/var/lib/docker" ]]; then
+  containerd_root="$(grep -E '^root\s*=' /etc/containerd/config.toml 2>/dev/null | head -1 | sed -n 's/.*"\([^"]*\)".*/\1/p' || true)"
+  if [[ "${ENABLE_DOCKER_SSD:-false}" == "true" ]]; then
+    if [[ -n "$docker_root" && "$docker_root" != "/var/lib/docker" ]] \
+      || [[ -n "$containerd_root" && "$containerd_root" != "/var/lib/containerd" ]]; then
+      log "docker/containerd SSD'de (${docker_root:-?} / ${containerd_root:-?}) — image prune atlandi"
+      return 0
+    fi
+  elif [[ -n "$docker_root" && "$docker_root" != "/var/lib/docker" ]]; then
     log "docker data-root SD degil (${docker_root}) — image prune atlandi"
     return 0
   fi

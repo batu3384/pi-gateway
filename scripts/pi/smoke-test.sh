@@ -62,6 +62,10 @@ elif [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
   if [[ -f /mnt/ssd/.docker-data-root ]]; then
     run_check "docker-ssd-root" bash -c \
       "docker info 2>/dev/null | grep -q 'Docker Root Dir: ${DOCKER_SSD_ROOT:-/mnt/ssd/docker}'"
+    if [[ "${CONTAINERD_ON_SSD:-false}" == "true" ]]; then
+      run_check "containerd-ssd-root" bash -c \
+        "grep -E '^root\\s*=' /etc/containerd/config.toml | grep -q '${CONTAINERD_SSD_ROOT:-/mnt/ssd/containerd}'"
+    fi
   fi
   run_check "root-rw" bash -c '! findmnt -n -o OPTIONS / | tr "," "\n" | grep -qx ro'
   run_check "ssd-fstab" bash -c 'grep -qE "[[:space:]]/mnt/ssd[[:space:]]" /etc/fstab'

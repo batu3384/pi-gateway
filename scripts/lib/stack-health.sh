@@ -107,7 +107,13 @@ docker_ssd_root_ok() {
   local expected="${DOCKER_SSD_ROOT:-/mnt/ssd/docker}"
   local actual
   actual="$(docker_data_root)"
-  [[ -n "$actual" && "$actual" == "$expected" ]]
+  [[ -n "$actual" && "$actual" == "$expected" ]] || return 1
+  if [[ "${CONTAINERD_ON_SSD:-false}" == "true" ]] && [[ -f /etc/containerd/config.toml ]]; then
+    local croot
+    croot="$(grep -E '^root\s*=' /etc/containerd/config.toml 2>/dev/null | head -1 | sed -n 's/.*"\([^"]*\)".*/\1/p')"
+    [[ "$croot" == "${CONTAINERD_SSD_ROOT:-/mnt/ssd/containerd}" ]] || return 1
+  fi
+  return 0
 }
 recover_lock_acquire() {
   [[ "${SKIP_RECOVER_LOCK:-false}" == "true" ]] && return 0

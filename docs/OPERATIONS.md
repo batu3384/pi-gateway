@@ -11,6 +11,7 @@ findmnt -n -o SOURCE /          # mmcblk0p2 (SD root)
 findmnt -n -o SOURCE /mnt/ssd    # /dev/sda1
 readlink -f ~/pi-gateway/data    # /mnt/ssd/pi-gateway-data
 docker info | grep "Docker Root Dir"   # /var/lib/docker (default) or /mnt/ssd/docker (ENABLE_DOCKER_SSD=true)
+grep '^root' /etc/containerd/config.toml   # /var/lib/containerd (default); CONTAINERD_ON_SSD=true → /mnt/ssd/containerd
 cat /var/lib/pi-gateway/state.json     # export-gateway-state (health timer)
 ```
 
@@ -126,7 +127,7 @@ ssh pi 'REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/setup-firewall.sh'
 
 ## Disk full
 
-In hybrid mode: **SD** = OS (+ Docker if `ENABLE_DOCKER_SSD=false`); **SSD** = app data (+ Docker if `ENABLE_DOCKER_SSD=true`).
+In hybrid mode: **SD** = OS + containerd image store (Docker 29+); **SSD** = app data + Docker `data-root` when `ENABLE_DOCKER_SSD=true`. Do not set `CONTAINERD_ON_SSD=true` on JMicron USB — overlay segfault risk (homepage).
 
 ```bash
 df -h / /mnt/ssd

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SSD yokken Docker data-root'u SD'ye dusurur (degraded DNS modu)
+# SSD yokken Docker + containerd data-root'u SD'ye dusurur (degraded DNS modu)
 set -euo pipefail
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 DOCKER_SSD_ROOT="${DOCKER_SSD_ROOT:-/mnt/ssd/docker}"
@@ -24,6 +24,8 @@ _FALLBACK_REMOTE_DIR="$REMOTE_DIR"
 REMOTE_DIR="$_FALLBACK_REMOTE_DIR"
 # shellcheck source=../lib/stack-health.sh
 source "$SCRIPT_DIR/../lib/stack-health.sh"
+# shellcheck source=../lib/containerd-root.sh
+source "$SCRIPT_DIR/../lib/containerd-root.sh"
 if is_ssd_root_mode; then
   log "ssd-root: Docker SD fallback devre disi"
   exit 0
@@ -32,7 +34,21 @@ if ssd_mount_healthy; then
   log "SSD mount/probe saglikli — fallback gerekmedi"
   exit 0
 fi
-log "SSD yok veya stale — Docker SD fallback (/var/lib/docker)"
+log "SSD yok veya stale — Docker+containerd SD fallback"
+restore_containerd_sd_backup() {
+  local bak
+  if [[ -d "${CONTAINERD_LEGACY_ROOT}/io.containerd.content.v1.content" ]]; then
+    return 0
+  fi
+  bak="$(ls -1d "${CONTAINERD_LEGACY_ROOT}.sd-backup-"* 2>/dev/null | sort | tail -1 || true)"
+  if [[ -z "$bak" ]]; then
+    log "WARN: containerd SD yedek yok — degraded'de imajlar yeniden cekilebilir"
+    return 0
+  fi
+  log "containerd SD yedekten restore: $bak"
+  run_root mkdir -p "$CONTAINERD_LEGACY_ROOT"
+  run_root rsync -aHAX "${bak}/" "${CONTAINERD_LEGACY_ROOT}/"
+}
 run_root mkdir -p "$DOCKER_LEGACY"
 run_root python3 - "$DAEMON_JSON" "$DOCKER_LEGACY" <<'PY'
 import json, sys
@@ -47,6 +63,8 @@ if path.exists():
 cfg["data-root"] = root
 path.write_text(json.dumps(cfg, indent=2) + "\n")
 PY
+set_containerd_root "$CONTAINERD_LEGACY_ROOT"
+restore_containerd_sd_backup
 run_root mkdir -p "$DROPIN_DIR"
 run_root tee "$DROPIN_FILE" >/dev/null <<'EOF'
 [Unit]
@@ -56,7 +74,9 @@ EOF
 run_root systemctl daemon-reload
 mkdir -p "$(dirname "$STORAGE_DEGRADED_FLAG")" 2>/dev/null || true
 touch "$STORAGE_DEGRADED_FLAG" 2>/dev/null || true
-if systemctl is-active --quiet docker 2>/dev/null; then
-  run_root systemctl restart docker || log "WARN: docker restart basarisiz"
+if systemctl is-active --quiet docker 2>/dev/null || systemctl is-active --quiet containerd 2>/dev/null; then
+  run_root systemctl stop docker docker.socket 2>/dev/null || true
+  run_root systemctl start containerd || log "WARN: containerd start basarisiz"
+  run_root systemctl start docker || log "WARN: docker restart basarisiz"
 fi
-log "OK: Docker SD fallback aktif"
+log "OK: Docker+containerd SD fallback aktif"
