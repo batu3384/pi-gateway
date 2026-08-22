@@ -138,10 +138,12 @@ case "$COMPOSE_MODE" in
     ;;
 esac
 if [[ "$COMPOSE_MODE" == "core-dns" ]]; then
-  log "SSD yok/degraded — compose core-dns (unbound+adguard+caddy/homepage)"
+  log "SSD yok/degraded — compose core-dns (unbound+adguard; caddy opsiyonel)"
+  core_pull=(unbound adguard)
+  [[ "${ENABLE_CADDY:-true}" == "true" ]] && core_pull+=(homepage caddy)
   if [[ "${DEPLOY_SKIP_PULL:-false}" != "true" ]]; then
     ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" \
-      "cd '$REMOTE_DIR/compose' && docker compose --env-file ../.env --profile caddy pull unbound adguard homepage caddy" \
+      "cd '$REMOTE_DIR/compose' && docker compose --env-file ../.env --profile caddy pull ${core_pull[*]}" \
       || log "WARN: core-dns pull kismi"
   fi
   ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" \

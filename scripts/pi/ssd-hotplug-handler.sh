@@ -106,7 +106,9 @@ if ssd_mount_healthy; then
   # Recover success gate (full stack) — flag clear recover icinde; burada dogrula
   if storage_degraded; then
     log "WARN: recover bitti ama degraded flag duruyor — clear deneniyor"
-    if stack_dns_core_ok && container_health_ok caddy && stack_gateway_ok && docker_ssd_root_ok; then
+    if stack_dns_core_ok && { [[ "${ENABLE_CADDY:-true}" != "true" ]] || container_health_ok caddy; } \
+      && { [[ "${ENABLE_CADDY:-true}" != "true" ]] || stack_gateway_ok; } \
+      && docker_ssd_root_ok; then
       clear_storage_degraded || log "WARN: degraded flag temizlenemedi"
     else
       recover_lock_release
@@ -146,14 +148,7 @@ if ! recover_lock_acquire; then
   log "HATA: kurtarma kilidi alinamadi (timeout)"
   exit 1
 fi
-if [[ -d "$REMOTE_DIR/compose" ]]; then
-  cd "$REMOTE_DIR/compose"
-  # shellcheck source=../lib/compose-profiles.sh
-  source "$SCRIPT_DIR/../lib/compose-profiles.sh" 2>/dev/null || true
-  docker compose --env-file "$REMOTE_DIR/.env" stop \
-    n8n forgejo syncthing uptime-kuma crowdsec redis dozzle netalertx \
-    prometheus grafana node-exporter 2>/dev/null || true
-fi
+degraded_stop_optional_apps "$REMOTE_DIR"
 set_storage_degraded
 if ! REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/ensure-data-symlink.sh" repair --fallback-sd; then
   log "HATA: SD fallback data symlink onarimi basarisiz"

@@ -118,14 +118,7 @@ enter_degraded_mode() {
   log "SSD yok — degraded mod (core-dns: Unbound+AdGuard SD)"
   ensure_runtime_dir
   set_storage_degraded
-  # Optional app'ler kirik volume'da restart storm yapmasin
-  if [[ -d "$REMOTE_DIR/compose" ]]; then
-    (
-      cd "$REMOTE_DIR/compose"
-      docker compose --env-file "$REMOTE_DIR/.env" stop \
-        n8n forgejo syncthing uptime-kuma crowdsec redis dozzle netalertx 2>/dev/null || true
-    )
-  fi
+  degraded_stop_optional_apps "$REMOTE_DIR"
   REMOTE_DIR="$REMOTE_DIR" STORAGE_TYPE="$STORAGE_TYPE" \
     bash "$SCRIPT_DIR/ensure-data-symlink.sh" repair --fallback-sd || true
   if [[ -x "$SCRIPT_DIR/setup-docker-fallback.sh" ]]; then
@@ -222,8 +215,8 @@ main() {
     && (! needs_ssd || { declare -F ssd_mount_healthy >/dev/null 2>&1 && ssd_mount_healthy; }) \
     && docker_ssd_root_ok \
     && stack_dns_core_ok \
-    && container_health_ok caddy \
-    && stack_gateway_ok \
+    && { [[ "${ENABLE_CADDY:-true}" != "true" ]] || container_health_ok caddy; } \
+    && { [[ "${ENABLE_CADDY:-true}" != "true" ]] || stack_gateway_ok; } \
     && (! needs_ssd || [[ "$(readlink -f "$REMOTE_DIR/data" 2>/dev/null)" == "/mnt/ssd/pi-gateway-data" ]]); then
     clear_storage_degraded || log "WARN: degraded flag temizlenemedi"
     log "OK stack ayakta (adguard, unbound, caddy, gateway)"

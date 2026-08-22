@@ -80,8 +80,10 @@ run_check "dns-rewrite-logs" bash -c \
   "dig +time=3 +tries=1 @${PI_STATIC_IP} logs.${LAN_DOMAIN} A +short | grep -qx '${PI_STATIC_IP}'"
 run_check "dns-rewrite-devices" bash -c \
   "dig +time=3 +tries=1 @${PI_STATIC_IP} devices.${LAN_DOMAIN} A +short | grep -qx '${PI_STATIC_IP}'"
-run_check "dns-rewrite-grafana" bash -c \
-  "dig +time=3 +tries=1 @${PI_STATIC_IP} grafana.${LAN_DOMAIN} A +short | grep -qx '${PI_STATIC_IP}'"
+if [[ "${ENABLE_MONITORING:-true}" == "true" ]]; then
+  run_check "dns-rewrite-grafana" bash -c \
+    "dig +time=3 +tries=1 @${PI_STATIC_IP} grafana.${LAN_DOMAIN} A +short | grep -qx '${PI_STATIC_IP}'"
+fi
 # Degraded: sadece DNS (+ opsiyonel caddy/homepage). App panel smoke yok.
 if [[ "$DEGRADED" -eq 1 ]]; then
   run_check "adguard-ui" curl -fsS "http://127.0.0.1:${ADGUARD_WEB_PORT}/"

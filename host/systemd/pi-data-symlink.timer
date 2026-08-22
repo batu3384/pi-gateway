@@ -3,7 +3,7 @@ Description=Pi Gateway data symlink repair (boot window)
 
 [Timer]
 OnBootSec=1min
-OnUnitActiveSec=1min
+OnUnitActiveSec=5min
 AccuracySec=30s
 Unit=pi-data-symlink-repair.service
 

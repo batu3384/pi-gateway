@@ -52,7 +52,15 @@ if storage_degraded; then
       log "SSD geri — hotplug restore"
       ssd_usb_reset_clear
       run_hotplug
-      exit 0
+      hp_rc=$?
+      if [[ "$hp_rc" -eq 0 ]]; then
+        exit 0
+      fi
+      if stack_dns_core_ok 2>/dev/null; then
+        log "WARN: hotplug exit $hp_rc — DNS core ayakta"
+        exit 0
+      fi
+      exit "$hp_rc"
     fi
   fi
   if ssd_usb_bus_dropout; then

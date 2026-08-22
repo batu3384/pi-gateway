@@ -77,18 +77,23 @@ grep -q 'dns_degraded_on_ssd_loss' "$STACK_HEALTH" || die "stack-health dns_degr
 grep -q 'DNS_DEGRADED_ON_SSD_LOSS' "$HOTPLUG" || die "hotplug DNS_DEGRADED_ON_SSD_LOSS yok"
 grep -q 'dns_degraded_on_ssd_loss' "$HOTPLUG" || die "hotplug dns_degraded_on_ssd_loss cagrisi yok"
 grep -q 'fail-closed' "$HOTPLUG" || die "hotplug fail-closed guard yok"
-grep -q 'prometheus grafana node-exporter' "$PROJECT_DIR/scripts/pi/ssd-hotplug-handler.sh" \
-  || die "hotplug degraded monitoring stop yok"
-ok "hotplug monitoring stop"
+grep -q 'degraded_stop_optional_apps' "$HOTPLUG" \
+  || die "hotplug degraded_stop_optional_apps yok"
+grep -q 'degraded_stop_optional_apps' "$STACK_HEALTH" \
+  || die "stack-health degraded_stop_optional_apps yok"
+ok "hotplug/recover degraded monitoring stop (shared helper)"
 ok "ssd-hotplug DNS degraded"
 
 grep -q 'dns_degraded_on_ssd_loss' "$RECOVER" || die "recover dns_degraded_on_ssd_loss yok"
 grep -q 'enter_degraded_mode' "$RECOVER" || die "recover enter_degraded_mode yok"
+grep -q 'degraded_stop_optional_apps' "$RECOVER" \
+  || die "recover enter_degraded monitoring stop yok"
 grep -q 'core-dns' "$RECOVER" || die "recover core-dns yok"
 ok "recover-readonly-root DNS degraded"
 
 grep -q 'COMPOSE_RECOVER_MODE=core-dns' "$COMPOSE_UP" || die "recover-compose core-dns yok"
 grep -q 'SSD yok' "$COMPOSE_UP" || die "recover-compose SSD guard yok"
+grep -q 'ENABLE_CADDY' "$COMPOSE_UP" || die "recover-compose ENABLE_CADDY gate yok"
 ok "recover-compose-up storm guard"
 
 grep -q 'COMPOSE_RECOVER_MODE=' "$STACK_HEALTH" || die "stack-health COMPOSE_RECOVER_MODE forward yok"

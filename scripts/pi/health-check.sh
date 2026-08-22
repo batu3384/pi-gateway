@@ -52,11 +52,13 @@ if storage_degraded; then
   logger -t "$LOG_TAG" "storage-degraded: core DNS modu (caddy/panel opsiyonel)"
   [[ -d "${REMOTE_DIR}/data" && ! -L "${REMOTE_DIR}/data" ]] || note_fail "storage-degraded-data-missing"
 else
-  if ! docker ps --format '{{.Names}}' | grep -q '^caddy$'; then
-    note_fail "container caddy down"
-  fi
-  if ! stack_gateway_ok; then
-    note_fail "gateway-http"
+  if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
+    if ! docker ps --format '{{.Names}}' | grep -q '^caddy$'; then
+      note_fail "container caddy down"
+    fi
+    if ! stack_gateway_ok; then
+      note_fail "gateway-http"
+    fi
   fi
   if is_ssd_root_mode; then
     root_on_ssd || note_fail "root-still-on-sd-mmcblk"
@@ -85,6 +87,9 @@ else
   [[ "${ENABLE_SYNCTHING:-true}" == "true" ]] && optional_down syncthing
   [[ "${ENABLE_REDIS:-false}" == "true" ]] && optional_down redis
   [[ "${ENABLE_DOZZLE:-true}" == "true" ]] && optional_down dozzle
+  [[ "${ENABLE_MONITORING:-true}" == "true" ]] && optional_down prometheus
+  [[ "${ENABLE_MONITORING:-true}" == "true" ]] && optional_down grafana
+  [[ "${ENABLE_MONITORING:-true}" == "true" ]] && optional_down node-exporter
 fi
 if ! dig +time=2 +tries=1 @127.0.0.1 -p "${UNBOUND_PORT}" cloudflare.com A >/dev/null 2>&1; then
   note_fail "unbound:${UNBOUND_PORT}"

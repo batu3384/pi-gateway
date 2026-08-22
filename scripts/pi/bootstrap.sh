@@ -140,17 +140,23 @@ for svc in pi-gateway-health.service pi-gateway-backup.service pi-gateway-adguar
   install_systemd_unit "$svc"
 done
 sudo systemctl daemon-reload
-sudo systemctl enable pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-adguard-config.service pi-gateway-morning.timer pi-gateway-recover-ro.service pi-gateway-stack-watchdog.timer pi-gateway-netalertx-names.timer 2>/dev/null || true
+sudo systemctl enable pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-adguard-config.service pi-gateway-morning.timer pi-gateway-recover-ro.service pi-gateway-stack-watchdog.timer 2>/dev/null || true
+if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
+  sudo systemctl enable pi-gateway-netalertx-names.timer 2>/dev/null || true
+fi
 if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
-  sudo systemctl enable pi-data-symlink.service pi-gateway-ensure-fstab.service pi-data-symlink.timer pi-ssd-watch.path pi-ssd-data.service pi-ssd-health.timer 2>/dev/null || true
+  sudo systemctl enable pi-data-symlink.service pi-gateway-ensure-fstab.service pi-data-symlink.timer pi-ssd-watch.path pi-ssd-data.service pi-ssd-health.timer pi-gateway-ssd-smart.timer 2>/dev/null || true
 fi
 if [[ "${ENABLE_CROWDSEC:-true}" == "true" ]]; then
   sudo systemctl enable --now pi-gateway-crowdsec-ufw.timer 2>/dev/null || true
 fi
-sudo systemctl start pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-morning.timer pi-gateway-stack-watchdog.timer pi-gateway-netalertx-names.timer 2>/dev/null || true
+sudo systemctl start pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-morning.timer pi-gateway-stack-watchdog.timer 2>/dev/null || true
+if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
+  sudo systemctl start pi-gateway-netalertx-names.timer 2>/dev/null || true
+fi
 if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
   sudo systemctl reset-failed pi-ssd-health.service 2>/dev/null || true
-  sudo systemctl enable --now pi-ssd-health.timer 2>/dev/null || true
+  sudo systemctl enable --now pi-ssd-health.timer pi-gateway-ssd-smart.timer 2>/dev/null || true
   sudo systemctl start pi-ssd-health.timer 2>/dev/null || true
 fi
 if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then

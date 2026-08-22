@@ -30,8 +30,12 @@ if needs_ssd_storage && [[ "$ssd_ok" -ne 1 ]]; then
 fi
 compose_up() {
   if [[ "${COMPOSE_RECOVER_MODE:-}" == "core-dns" ]]; then
-    echo "[recover-compose] mode=core-dns (unbound+adguard; homepage/caddy best-effort)" >&2
-    docker compose --env-file ../.env --profile caddy up -d unbound adguard homepage caddy
+    local -a core_svc=(unbound adguard)
+    if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
+      core_svc+=(homepage caddy)
+    fi
+    echo "[recover-compose] mode=core-dns (${core_svc[*]})" >&2
+    docker compose --env-file ../.env --profile caddy up -d "${core_svc[@]}"
   else
     docker compose --env-file ../.env "${profiles[@]}" up -d "$@"
   fi
@@ -62,8 +66,10 @@ fi
 echo "[recover-compose] WARN: ikinci deneme basarisiz — son care" >&2
 # Son care: force-recreate — core-dns'de sadece DNS seti (full stack degil)
 if [[ "${COMPOSE_RECOVER_MODE:-}" == "core-dns" ]]; then
+  core_recreate=(unbound adguard)
+  [[ "${ENABLE_CADDY:-true}" == "true" ]] && core_recreate+=(homepage caddy)
   if docker compose --env-file ../.env --profile caddy up -d --force-recreate --remove-orphans \
-    unbound adguard homepage caddy; then
+    "${core_recreate[@]}"; then
     finish_ok
   fi
 else

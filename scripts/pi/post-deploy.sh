@@ -53,7 +53,6 @@ fi
 if [[ "$DEPLOY_DEGRADED" -eq 1 ]]; then
   log "WARN: storage degraded — yalnizca DNS/firewall post-deploy (app setup atlanir)"
 fi
-# Placeholder sifreleri fail-closed
 for key in AGH_ADMIN_PASSWORD DOZZLE_ADMIN_PASSWORD RESTIC_PASSWORD FORGEJO_ADMIN_PASSWORD N8N_WEBHOOK_SECRET UPTIME_KUMA_ADMIN_PASSWORD SYNCTHING_GUI_PASSWORD REDIS_PASSWORD; do
   val="${!key:-}"
   case "$val" in
@@ -120,6 +119,7 @@ if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
   fi
   if [[ "$DEPLOY_DEGRADED" -eq 1 ]]; then
     log "WARN: storage degraded — yalnizca DNS/firewall post-deploy (app setup atlanir)"
+    run_step_critical "Docker SD fallback (degraded)" "$SCRIPT_DIR/setup-docker-fallback.sh"
   fi
 elif [[ "$STORAGE_TYPE" == "ssd-root" || "$STORAGE_TYPE" == "ssd" ]]; then
   log ">> Native data dizini (ssd-root)"

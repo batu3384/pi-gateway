@@ -142,6 +142,17 @@ clear_storage_degraded() {
   echo "[stack-health] HATA: degraded flag silinemedi: $STORAGE_DEGRADED_FLAG" >&2
   return 1
 }
+# SSD kopunca optional app + monitoring durdur (hotplug/recover-ro tek kaynak)
+degraded_stop_optional_apps() {
+  local remote_dir="${1:-${REMOTE_DIR:-}}"
+  [[ -n "$remote_dir" && -d "${remote_dir}/compose" ]] || return 0
+  (
+    cd "${remote_dir}/compose"
+    docker compose --env-file "${remote_dir}/.env" stop \
+      n8n forgejo syncthing uptime-kuma crowdsec redis dozzle netalertx \
+      prometheus grafana node-exporter 2>/dev/null || true
+  )
+}
 mark_stack_recover_cooldown() {
   ensure_runtime_dir
   runtime_write "$STACK_RECOVER_COOLDOWN_FILE" "$(date +%s)" || {
@@ -204,7 +215,9 @@ stack_core_ok() {
   if storage_degraded; then
     return 0
   fi
-  container_health_ok 'caddy' || return 1
+  if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
+    container_health_ok 'caddy' || return 1
+  fi
   return 0
 }
 stack_gateway_ok() {
@@ -223,11 +236,14 @@ stack_gateway_ok() {
 }
 stack_fully_healthy() {
   stack_core_ok || return 1
-  # SSD degraded: Unbound+AdGuard yeterli (panel/Caddy best-effort)
   if storage_degraded; then
     return 0
   fi
-  stack_gateway_ok
+  if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
+    stack_gateway_ok
+  else
+    return 0
+  fi
 }
 recover_service_running() {
   local state
