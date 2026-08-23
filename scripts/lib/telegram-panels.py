@@ -15,13 +15,14 @@ from typing import Any
 # host = Caddy vhost; path_remote = Tailscale/IP path prefix
 PANELS: list[tuple[str, str, str, str, str]] = [
     ("gateway", "Ana Panel", "gateway", "", ""),
-    ("status", "Uptime Kuma", "status", "", "/p/status"),
+    ("status", "Uptime", "status", "", "/p/status"),
     ("logs", "Loglar", "logs", "", "/p/logs"),
-    ("dns", "AdGuard DNS", "dns", "", "/p/dns"),
+    ("dns", "AdGuard", "dns", "", "/p/dns"),
     ("devices", "Cihazlar", "devices", "", "/p/devices"),
     ("git", "Forgejo", "git", "", "/p/git"),
     ("n8n", "n8n", "n8n", "", "/p/n8n"),
     ("sync", "Syncthing", "sync", "", "/p/sync"),
+    ("grafana", "Grafana", "grafana", "", "/p/grafana"),
 ]
 
 EMOJI = {
@@ -33,11 +34,19 @@ EMOJI = {
     "git": "🐙",
     "n8n": "⚙️",
     "sync": "🔄",
+    "grafana": "📈",
 }
 
 
 def env_bool(name: str, default: bool = False) -> bool:
-    return os.environ.get(name, str(default)).lower() in ("1", "true", "yes")
+    raw = os.environ.get(name)
+    if raw is None or raw == "":
+        return default
+    return raw.lower() in ("1", "true", "yes")
+
+
+def hermes_owns_inbox() -> bool:
+    return env_bool("HERMES_TELEGRAM_GATEWAY", False)
 
 
 def _run(cmd: list[str]) -> str:
@@ -91,12 +100,10 @@ def tailscale_serve_active() -> bool:
 def remote_access_base() -> tuple[str, str]:
     """(base_url, mode) mode: serve|ts-http|none
 
-    Telefon icin once Tailscale IP HTTP (MagicDNS gerekmez).
-    Serve HTTPS yedek — MagicDNS + Override DNS ister.
+    Telefon: once Tailscale IP HTTP (MagicDNS gerekmez).
     """
     ts_ip = tailscale_ip()
     if ts_ip:
-        # iPhone'da MagicDNS/DNS override sik kapali; 100.x her zaman cozulur
         return f"http://{ts_ip}", "ts-http"
     if tailscale_serve_active():
         dns = tailscale_dns()
@@ -107,21 +114,18 @@ def remote_access_base() -> tuple[str, str]:
 
 def panel_urls() -> list[dict[str, Any]]:
     domain = os.environ.get("LAN_DOMAIN", "home")
-    proto = os.environ.get("PANEL_PROTOCOL", "http")
+    proto = os.environ.get("PANEL_PROTOCOL", "").strip()
     if not proto:
-        proto = "https" if env_bool("ENABLE_TLS") else "http"
+        proto = "https" if env_bool("ENABLE_TLS", True) else "http"
     pi_ip = os.environ.get("PI_STATIC_IP", "").strip()
     remote_base, remote_mode = remote_access_base()
 
-    # Caddy /p/* only — dogrudan :8080/:20211 Tailscale UFW kapali (auth gap)
     out: list[dict[str, Any]] = []
     for pid, label, host, _home_suffix, remote_suffix in PANELS:
         home_url = f"{proto}://{host}.{domain}"
         ip_url = f"http://{pi_ip}{remote_suffix}" if pi_ip else ""
         remote_url = f"{remote_base}{remote_suffix}" if remote_base else ""
-        if remote_mode == "serve":
-            button = remote_url or ip_url or home_url
-        elif remote_mode == "ts-http":
+        if remote_mode in ("serve", "ts-http"):
             button = remote_url or ip_url or home_url
         else:
             button = ip_url or home_url
@@ -141,9 +145,10 @@ def panel_urls() -> list[dict[str, Any]]:
 
 
 def inline_keyboard(panels: list[dict[str, Any]], mode: str = "all") -> dict[str, Any]:
+    """2-column URL buttons — cleaner on phone."""
     rows: list[list[dict[str, str]]] = []
+    row: list[dict[str, str]] = []
     for p in panels:
-        url = ""
         if mode == "remote":
             url = p["remote"] or p["ip"]
         elif mode == "home":
@@ -154,16 +159,21 @@ def inline_keyboard(panels: list[dict[str, Any]], mode: str = "all") -> dict[str
             url = p["button"]
         if not url:
             continue
-        rows.append([{"text": f"{p['emoji']} {p['label']}", "url": url}])
+        row.append({"text": f"{p['emoji']} {p['label']}", "url": url})
+        if len(row) == 2:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
     return {"inline_keyboard": rows}
 
 
 def reply_keyboard() -> dict[str, Any]:
+    """Only when panel poller owns inbox (not Hermes)."""
     return {
         "keyboard": [
-            [{"text": "📋 Tüm paneller"}],
-            [{"text": "🌐 Uzaktan (Tailscale)"}, {"text": "🏠 Ev ağı"}],
-            [{"text": "📍 IP yedek"}],
+            [{"text": "📋 Paneller"}],
+            [{"text": "🌐 Uzaktan"}, {"text": "🏠 Ev"}],
         ],
         "resize_keyboard": True,
         "is_persistent": True,
@@ -186,70 +196,57 @@ def html_links(panels: list[dict[str, Any]], mode: str = "button") -> str:
             continue
         safe_url = html.escape(url, quote=True)
         safe_label = html.escape(p["label"])
-        lines.append(f"• <a href=\"{safe_url}\">{p['emoji']} {safe_label}</a>")
+        lines.append(f'• <a href="{safe_url}">{p["emoji"]} {safe_label}</a>')
     return "\n".join(lines)
 
 
 def menu_text(panels: list[dict[str, Any]], mode: str = "all") -> str:
+    """Short professional copy — buttons carry the links."""
     domain = os.environ.get("LAN_DOMAIN", "home")
     pi_ip = os.environ.get("PI_STATIC_IP", "").strip()
     remote_base, remote_mode = remote_access_base()
     ts_ip = tailscale_ip()
 
-    lines = [
-        "<b>Pi Gateway — Paneller</b>",
-        "",
-        "Butona dokun = tarayıcıda açılır.",
-    ]
-    if remote_mode == "serve":
-        lines.append(f"<b>Uzaktan:</b> <code>{html.escape(remote_base)}</code> (Serve HTTPS)")
-    elif remote_mode == "ts-http" and ts_ip:
-        lines.append(
-            f"<b>Uzaktan (kullan bunu):</b> <code>http://{html.escape(ts_ip)}</code>"
-        )
-        serve_dns = tailscale_dns()
-        if serve_dns and tailscale_serve_active():
-            lines.append(
-                f"<i>HTTPS yedek (MagicDNS acikken): https://{html.escape(serve_dns)}</i>"
-            )
-        lines.append(
-            "<i>iPhone: Tailscale Connected + butona bas. "
-            "Telegram ici acmazsa ⋯ → Safari’de Aç.</i>"
-        )
-    if pi_ip:
-        lines.append(f"<b>Ev LAN:</b> <code>http://{html.escape(pi_ip)}/p/…</code>")
-    lines.append(f"<b>Ev DNS:</b> *.{domain} (Pi DNS gerekli)")
-    lines.append("")
-    if mode == "remote":
-        lines.append("<b>Uzaktan (Tailscale)</b>")
-    elif mode == "home":
-        lines.append("<b>Ev ağı (*.home)</b>")
-    elif mode == "ip":
-        lines.append("<b>IP yedek</b>")
-    else:
-        lines.append("<b>Linkler</b>")
-    lines.append(html_links(panels, mode if mode != "all" else "button"))
-    lines.append("")
-    tip = (
-        "<i>⚠️ Telegram içi tarayıcıda Basic Auth çalışmaz. "
-        "Butona bas → ⋯ → Safari’de Aç. Tailscale açık olsun.</i>"
+    user = os.environ.get("AGH_ADMIN_USER") or os.environ.get("CADDY_AUTH_USER") or "admin"
+    fj = (
+        os.environ.get("FORGEJO_ADMIN_USER")
+        or os.environ.get("FORGEJO_LOGIN_USER")
+        or "gitadmin"
     )
-    if remote_mode == "ts-http" and tailscale_serve_active():
-        tip = (
-            "<i>⚠️ Telegram içi Basic Auth kırık — Safari’de Aç. "
-            "Butonlar http://100.x (ACL). HTTPS yedek: Serve MagicDNS.</i>"
-        )
-    elif remote_mode == "serve":
-        tip = (
-            "<i>⚠️ Telegram içi Basic Auth kırık — Safari’de Aç. "
-            "Serve HTTPS aktif.</i>"
-        )
-    elif remote_mode == "none":
-        tip = (
-            "<i>⚠️ Tailscale yok. Ev ağı / IP kullan veya "
-            "<code>setup-tailscale-serve.sh</code>.</i>"
-        )
-    lines.append(tip)
+    u = html.escape(user)
+    fju = html.escape(fj)
+
+    lines = [
+        "<b>Pi Gateway</b>",
+        f"Giriş <code>{u}</code>"
+        + (f" · Forgejo <code>{fju}</code>" if fju != u else "")
+        + " · aynı şifre",
+    ]
+
+    if mode == "remote":
+        lines.append("<b>Uzaktan</b>")
+    elif mode == "home":
+        lines.append(f"<b>Ev DNS</b> — *.{html.escape(domain)}")
+    elif mode == "ip":
+        lines.append("<b>LAN IP</b>")
+    elif remote_mode == "ts-http" and ts_ip:
+        lines.append(f"Uzaktan <code>http://{html.escape(ts_ip)}</code>")
+    elif remote_mode == "serve" and remote_base:
+        lines.append(f"Uzaktan <code>{html.escape(remote_base)}</code>")
+    elif pi_ip:
+        lines.append(f"LAN <code>http://{html.escape(pi_ip)}</code>")
+
+    # Buttons only for default view — no duplicate link dump
+    if mode != "all":
+        lines.append("")
+        lines.append(html_links(panels, mode))
+
+    lines.append("")
+    if remote_mode == "none":
+        tip = "Tailscale kapalı — ev ağı / IP kullan."
+    else:
+        tip = "Buton → ⋯ → Safari’de Aç (Telegram içi Basic Auth yok)."
+    lines.append(f"<i>{tip}</i>")
     return "\n".join(lines)
 
 
@@ -264,6 +261,10 @@ def self_check() -> int:
         btn = p.get("button") or ""
         if p["id"] != "gateway" and "100." in btn and "/p/" not in btn:
             bad.append(f"{p['id']}.button missing /p/ → {btn}")
+    kb = inline_keyboard(panel_urls(), "all")
+    for row in kb["inline_keyboard"]:
+        if len(row) > 2:
+            bad.append(f"keyboard row too wide: {len(row)}")
     if bad:
         print("FAIL:", "; ".join(bad), file=sys.stderr)
         return 1
@@ -292,6 +293,9 @@ def main() -> None:
         print(json.dumps(panels, ensure_ascii=False))
     elif mode == "remote_mode":
         print(remote_access_base()[1])
+    elif mode == "use_reply_keyboard":
+        # Hermes owns inbox → reply keys become AI chat noise
+        print("0" if hermes_owns_inbox() else "1")
     else:
         raise SystemExit(f"unknown mode: {mode}")
 

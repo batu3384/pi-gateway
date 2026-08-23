@@ -54,6 +54,7 @@ def panel_block(ip: str, with_auth: bool, auth: str) -> str:
         path_proxy("p/sync", "syncthing:8384"),
         path_proxy("p/n8n", "n8n:5678"),
         path_proxy("p/devices", f"{upstream}:{nax_port}"),
+        path_proxy("p/grafana", "grafana:3000"),
         "\thandle {",
         "\t\treverse_proxy homepage:3000",
         "\t}",

@@ -20,3 +20,6 @@ legacy/
 *.pfx
 secrets/
 credentials/
+__pycache__/
+*.py[cod]
+*.pyc

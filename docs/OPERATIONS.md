@@ -49,7 +49,9 @@ With `ENABLE_TLS=true` (default), all panels use **HTTPS** (`https://*.home`). H
 
 ### Unified login (`UNIFIED_LOGIN=true`, default)
 
-`AGH_ADMIN_USER` + `AGH_ADMIN_PASSWORD` = **tek sifre** Caddy ve servis GUI'leri icin. Deploy `sync-service-passwords` ile Dozzle, Uptime Kuma, Forgejo, Syncthing ve NetAlertX sifrelerini esitler.
+`AGH_ADMIN_USER` + `AGH_ADMIN_PASSWORD` = **tek sifre** Caddy ve servis GUI'leri icin. Deploy `sync-service-passwords` ile Dozzle, Uptime Kuma, Forgejo, Syncthing, NetAlertX ve Grafana sifrelerini esitler.
+
+**Not:** Forgejo kullanici adi `admin` **reserved** — uygulama girisi `FORGEJO_ADMIN_USER` (ornegin `gitadmin`); sifre yine `AGH_ADMIN_PASSWORD`. Caddy basic_auth her yerde `AGH_ADMIN_USER`.
 
 | URL | Service | Caddy | App (unified) |
 |-----|---------|-------|---------------|
@@ -61,6 +63,7 @@ With `ENABLE_TLS=true` (default), all panels use **HTTPS** (`https://*.home`). H
 | https://git.home | Forgejo | same | same |
 | https://sync.home | Syncthing | same | same |
 | https://n8n.home | n8n | same | Owner (ilk kurulum; Caddy auth yeterli) |
+| https://grafana.home | Grafana | same | `AGH_ADMIN_*` |
 | https://devices.home | NetAlertX | — (API dongusu) | `AGH_ADMIN_*` |
 
 Homepage **Gateway durumu** widget: `state.json` (SSD, yedek, drill metrikleri).
@@ -176,24 +179,40 @@ SLO PUSH heartbeats → Uptime Kuma (`docs/SLO.md`).
 
 Bot sends notifications only; it does not reply to incoming messages.
 
+### Hermes Agent (Telegram inbox)
+
+When `HERMES_TELEGRAM_GATEWAY=true` in Pi `.env`:
+
+- **Inbox:** `hermes-gateway.service` (Nous Hermes) owns `getUpdates` — chat + commands.
+- **Outbox:** `notify.sh` / Watchtower keep using the same `TELEGRAM_BOT_TOKEN` via `sendMessage`.
+- **Panel poller** `pi-gateway-telegram-bot.service` stays **disabled**; `setup-telegram-bot.sh` is a no-op.
+- Secrets: `GLM_API_KEY` + Telegram token live in `~/.hermes/.env` (chmod 600). Coding Plan base URL: `https://api.z.ai/api/coding/paas/v4`. Default model: **`glm-5.3`** (`provider: zai` in `~/.hermes/config.yaml`).
+- Browser (Pi aarch64): system Chromium (`apt install chromium`) + `agent-browser`; set `AGENT_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium` (Chrome-for-Testing ARM64 yok).
+- Allowlist: `TELEGRAM_ALLOWED_USERS` = numeric **user** id (not group chat id). Notify still uses `TELEGRAM_CHAT_ID`.
+
+| Command | Description |
+|---------|-------------|
+| `sudo systemctl status hermes-gateway` | Gateway health |
+| `hermes update && REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/patch-hermes-telegram-pi.sh && sudo systemctl restart hermes-gateway` | Update agent + re-apply Pi Telegram patch |
+| `REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/setup-hermes-gateway.sh` | Reinstall unit + patch + drop-in |
+
+**Pi Telegram patch:** `scripts/pi/patch-hermes-telegram-pi.sh` — cold-start `require_progress=False`, stepped `initialize`, `/etc/hosts` IPv4 pin for `api.telegram.org`, systemd drop-in (`HTTP_POOL_SIZE=8`). Needed because upstream `_await_with_thread_deadline` can wedge on long-poll here. Re-run after every `hermes update`.
+
+**Rollback:** set `HERMES_TELEGRAM_GATEWAY=false` (or remove) in Pi `.env` → redeploy/`setup-hermes-gateway.sh` + `setup-telegram-bot.sh` (Hermes `disable --now`, poller back on). Manual: `sudo systemctl disable --now hermes-gateway` → `sudo systemctl enable --now pi-gateway-telegram-bot`.
+
+**Token rotate:** update both `~/pi-gateway/.env` and `~/.hermes/.env`, then `systemctl restart hermes-gateway` (and Watchtower URL if set).
+
+**DM test:** Telegram’da `@RaspberryPi3384_bot` → allowlist user id ile mesaj. Outbox: `make telegram-test`.
+
+| Command | Description |
+|---------|-------------|
+| `make telegram-test` | Test message |
+| `make telegram-menu` | Panel link buttons (Mac/outbox; Hermes `/menu` skill on Pi when gateway active) |
+| `make morning-test` | Send morning summary now |
+
+Bot outbox: notifications. Hermes inbox: conversational replies when gateway is active.
+
 ## Passwords
-
-All passwords live in `.env` on the Mac. Services:
-
-| Variable | Service |
-|----------|---------|
-| `AGH_ADMIN_PASSWORD` | AdGuard |
-| `DOZZLE_ADMIN_PASSWORD` | Dozzle |
-| `UPTIME_KUMA_ADMIN_PASSWORD` | Uptime Kuma |
-| `SYNCTHING_GUI_PASSWORD` | Syncthing |
-| `FORGEJO_ADMIN_PASSWORD` | Forgejo |
-| `RESTIC_PASSWORD` | Backup |
-
-Generate new password: `openssl rand -base64 18 | tr -d '/+=' | head -c 20`
-
-Post-deploy scripts apply passwords after deploy.
-
-## Backup (3-2-1)
 
 1. **Pi SSD (encrypted data):** Restic via Docker (`pi-gateway-backup.timer` → `backup.sh` → `restic-backup.sh`). Runs as `PI_USER` with `REMOTE_DIR=~/pi-gateway` — never as root (`/home/root/...` is wrong).
 2. **Config snapshot:** same timer writes `~/pi-gateway/backups/<stamp>/` (compose + config + env key names; no plaintext secrets).

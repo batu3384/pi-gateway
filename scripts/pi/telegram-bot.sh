@@ -12,6 +12,7 @@ PG_SCRIPT_NAME="$(basename "$0")"
 source "${_PG_ENV_LIB:?}"
 read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 log() { echo "[telegram-bot] $*"; }
+load_telegram_from_hermes || true
 [[ -n "${TELEGRAM_BOT_TOKEN:-}" && -n "${TELEGRAM_CHAT_ID:-}" ]] || {
   log "TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID eksik"
   exit 1
@@ -23,6 +24,8 @@ if ! mkdir -p "$STATE_DIR" 2>/dev/null; then
 fi
 chmod 700 "$STATE_DIR" 2>/dev/null || true
 export LAN_DOMAIN PI_STATIC_IP PANEL_PROTOCOL ENABLE_TLS TAILSCALE_PANEL_URL
+export AGH_ADMIN_USER CADDY_AUTH_USER FORGEJO_ADMIN_USER FORGEJO_LOGIN_USER
+export HERMES_TELEGRAM_GATEWAY
 resolve_tailscale_url() {
   if [[ -n "${TAILSCALE_PANEL_URL:-}" ]]; then
     return 0
@@ -69,10 +72,19 @@ tg_send_reply_keyboard() {
   local reply="$2"
   tg_api sendMessage \
     -d "chat_id=${chat_id}" \
-    --data-urlencode "text=⌨️ <b>Hizli erisim</b> — alttaki butonlar kalici. /menu = yenile." \
+    --data-urlencode "text=Hızlı erişim — /menu yeniler." \
     -d "parse_mode=HTML" \
     -d "disable_web_page_preview=true" \
     --data-urlencode "reply_markup=${reply}"
+}
+tg_remove_reply_keyboard() {
+  local chat_id="$1"
+  tg_api sendMessage \
+    -d "chat_id=${chat_id}" \
+    --data-urlencode "text=Hermes açık — panel için üstteki butonlar." \
+    -d "parse_mode=HTML" \
+    -d "disable_web_page_preview=true" \
+    --data-urlencode 'reply_markup={"remove_keyboard":true}'
 }
 tg_send_text() {
   local chat_id="$1"
@@ -86,19 +98,24 @@ tg_send_text() {
 send_panel_menu() {
   local chat_id="$1"
   local sub="${2:-all}"
-  local inline reply text
+  local inline reply text use_reply
   inline="$(python3 "$PANELS_PY" keyboard "$sub")"
-  reply="$(python3 "$PANELS_PY" reply_keyboard)"
   text="$(python3 "$PANELS_PY" text "$sub")"
   tg_send_inline "$chat_id" "$text" "$inline"
-  tg_send_reply_keyboard "$chat_id" "$reply"
+  use_reply="$(python3 "$PANELS_PY" use_reply_keyboard 2>/dev/null || echo 1)"
+  if [[ "$use_reply" == "1" ]]; then
+    reply="$(python3 "$PANELS_PY" reply_keyboard)"
+    tg_send_reply_keyboard "$chat_id" "$reply"
+  else
+    tg_remove_reply_keyboard "$chat_id"
+  fi
 }
 register_bot_ui() {
   tg_api setMyCommands \
-    -d 'commands=[{"command":"menu","description":"Tum panel linkleri"},{"command":"paneller","description":"Panel menusu"},{"command":"uzak","description":"Tailscale HTTPS linkler"},{"command":"ev","description":"Ev agi linkler"},{"command":"ip","description":"IP yedek linkler"}]' \
+    -d 'commands=[{"command":"menu","description":"Panel linkleri"},{"command":"uzak","description":"Uzaktan linkler"},{"command":"ev","description":"Ev ağı linkleri"}]' \
     >/dev/null 2>&1 || true
   tg_api setMyDescription \
-    --data-urlencode "description=Pi Gateway panel botu. /menu veya 📋 Tüm paneller — linkler altta kalici." \
+    --data-urlencode "description=Pi Gateway — /menu ile paneller." \
     >/dev/null 2>&1 || true
   tg_api setChatMenuButton \
     -d "chat_id=${TELEGRAM_CHAT_ID}" \
@@ -109,27 +126,25 @@ handle_message() {
   local chat_id="$1"
   local text="$2"
   case "$text" in
-    /start|/menu|/paneller|/linkler|"📋 Tüm paneller"|menu|paneller|linkler)
+    /start|/menu|/paneller|/linkler|"📋 Paneller"|"📋 Tüm paneller"|menu|paneller|linkler)
       send_panel_menu "$chat_id" all
       ;;
-    /uzak|/remote|"🌐 Uzaktan (Tailscale)"|"🌐 Uzaktan (HTTPS)"|uzak)
+    /uzak|/remote|"🌐 Uzaktan"|"🌐 Uzaktan (Tailscale)"|"🌐 Uzaktan (HTTPS)"|uzak)
       mode="$(python3 "$PANELS_PY" remote_mode 2>/dev/null || echo none)"
-      if [[ "$mode" == "serve" ]]; then
-        send_panel_menu "$chat_id" remote
-      elif [[ -n "$(tailscale ip -4 2>/dev/null | head -1)" ]]; then
+      if [[ "$mode" == "serve" ]] || [[ -n "$(tailscale ip -4 2>/dev/null | head -1)" ]]; then
         send_panel_menu "$chat_id" remote
       else
-        tg_send_text "$chat_id" "⚠️ Tailscale yok.\n\n<code>bash scripts/pi/setup-tailscale-serve.sh</code>"
+        tg_send_text "$chat_id" "Tailscale yok.\n<code>bash scripts/pi/setup-tailscale-serve.sh</code>"
       fi
       ;;
-    /ev|/home|"🏠 Ev ağı"|ev)
+    /ev|/home|"🏠 Ev"|"🏠 Ev ağı"|ev)
       send_panel_menu "$chat_id" home
       ;;
     /ip|"📍 IP yedek"|ip)
       send_panel_menu "$chat_id" ip
       ;;
     /help|help)
-      tg_send_text "$chat_id" "Komutlar: /menu /uzak /ev /ip\nveya alttaki kalici butonlar."
+      tg_send_text "$chat_id" "Komutlar: /menu /uzak /ev"
       ;;
     *)
       log "yok sayilan metin (${#text} char)"

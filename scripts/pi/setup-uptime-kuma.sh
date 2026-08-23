@@ -76,14 +76,26 @@ ensure_kuma_database() {
   wait_for_kuma_http
 }
 sync_password_sqlite() {
-  local hash
+  local hash existing
   hash="$(docker exec uptime-kuma node -e "const b=require('bcryptjs'); console.log(b.hashSync(process.argv[1], 10));" "$KUMA_PASS")"
-  if docker exec uptime-kuma sqlite3 /app/data/kuma.db \
-    "SELECT COUNT(*) FROM user WHERE username='${KUMA_USER}';" 2>/dev/null | grep -q '^1$'; then
-    docker exec uptime-kuma sqlite3 /app/data/kuma.db \
-      "UPDATE user SET password='${hash}' WHERE username='${KUMA_USER}';"
-    log "Kullanici sifresi guncellendi (sqlite): ${KUMA_USER}"
+  [[ -n "$hash" && "$hash" == '$2'* ]] || { log "HATA: bcrypt hash uretilemedi"; return 1; }
+  # Tek kullanici + isim uyusmazligi (eski user vs UNIFIED AGH user): sifre+rename
+  existing="$(docker exec uptime-kuma sqlite3 /app/data/kuma.db \
+    "SELECT username FROM user LIMIT 1;" 2>/dev/null || true)"
+  [[ -n "$existing" ]] || { log "HATA: Kuma user tablosu bos"; return 1; }
+  if [[ "$existing" != "$KUMA_USER" ]]; then
+    if docker exec uptime-kuma sqlite3 /app/data/kuma.db \
+      "SELECT COUNT(*) FROM user WHERE username='${KUMA_USER}';" 2>/dev/null | grep -q '^0$'; then
+      docker exec uptime-kuma sqlite3 /app/data/kuma.db \
+        "UPDATE user SET username='${KUMA_USER}' WHERE username='${existing}';"
+      log "Kuma kullanici rename: ${existing} -> ${KUMA_USER}"
+    fi
   fi
+  docker exec uptime-kuma sqlite3 /app/data/kuma.db \
+    "UPDATE user SET password='${hash}';"
+  log "Kuma sifre(ler) guncellendi (sqlite)"
+  docker restart uptime-kuma >/dev/null
+  wait_for_kuma_http
 }
 ensure_kuma_admin() {
   docker run --rm --network host \
@@ -112,20 +124,25 @@ finally:
 PY
     ' || {
     log "API login/setup basarisiz — sqlite sifre senkronu deneniyor"
-    sync_password_sqlite
-    docker run --rm --network host \
+    sync_password_sqlite || return 1
+    sleep 8
+    if docker run --rm --network host \
       -e KUMA_URL -e KUMA_USER -e KUMA_PASS \
       python:3.12-alpine sh -c '
         pip install -q uptime-kuma-api2
         python - <<'"'"'PY'"'"'
 import os
 from uptime_kuma_api import UptimeKumaApi
-api = UptimeKumaApi(os.environ["KUMA_URL"], timeout=60)
+api = UptimeKumaApi(os.environ["KUMA_URL"], timeout=90)
 api.login(os.environ["KUMA_USER"], os.environ["KUMA_PASS"])
 print("admin-login-ok-retry")
 api.disconnect()
 PY
-      '
+      '; then
+      :
+    else
+      log "WARN: API login timeout — sqlite sifre yazildi (UI: ${KUMA_USER})"
+    fi
   }
 }
 wait_for_kuma_http

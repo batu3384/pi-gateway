@@ -85,6 +85,12 @@ block = f"""{start}
 \t\t\theader_down Location / /p/devices/
 \t\t}}
 \t}}
+\thandle /p/grafana* {{
+\t\turi strip_prefix /p/grafana
+\t\treverse_proxy grafana:3000 {{
+\t\t\theader_down Location / /p/grafana/
+\t\t}}
+\t}}
 \thandle {{
 \t\treverse_proxy homepage:3000
 \t}}

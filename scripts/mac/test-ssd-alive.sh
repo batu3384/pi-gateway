@@ -58,6 +58,13 @@ grep -q 'OnUnitInactiveSec=90s' "$PROJECT_DIR/host/systemd/pi-ssd-health.timer" 
   || die "ssd-health timer 90s degil"
 grep -q 'ssd_usb_disable_lpm' "$SSD_ALIVE" || die "LPM disable yok"
 grep -q 'ssd_usb_reset_record_once' "$SSD_ALIVE" || die "rate-limit session yok"
+grep -q 'bus-wide cycle basarisiz — rate-limit yakilmiyor' "$SSD_ALIVE" \
+  || die "dropout fail rate-limit yakmama yok"
+grep -q 'SSD_USB_DROPOUT_PORT_OFF_SEC' "$SSD_ALIVE" || die "dropout OFF sec yok"
+grep -q 'ssd_usb_port_bus_wide_cycle' "$SSD_ALIVE" || die "bus-wide cycle yok"
+grep -q 'SSD_USB_BUS_WIDE_CYCLE' "$SSD_ALIVE" || die "BUS_WIDE_CYCLE env yok"
+grep -q 'xhci zaten unbound' "$SSD_ALIVE" || die "xhci unbound bind yolu yok"
+grep -q 'bus dropout + port kota dolu' "$SSD_ALIVE" || die "stuck kota clear yok"
 grep -q 'ssd_usb_port_cycle_one' "$SSD_ALIVE" || die "tek port cycle yok"
 grep -q 'ssd_usb_storage_rebind' "$SSD_ALIVE" || die "usb-storage rebind yok"
 grep -q 'SSD_USB_CYCLE_ON_HANG' "$SSD_ALIVE" || die "CYCLE_ON_HANG yok"
@@ -157,8 +164,64 @@ ok "udev jmicron"
 grep -q 'ssd-alive.sh' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" || die "priv ssd-alive yok"
 grep -q 'telegram-bot.sh' "$PROJECT_DIR/scripts/lib/telegram-panels.py" \
   || die "telegram-panels CLI caller dokuman yok"
+grep -q 'grafana' "$PROJECT_DIR/scripts/lib/telegram-panels.py" \
+  || die "telegram-panels grafana yok"
+PANEL_PROTOCOL='' ENABLE_TLS=true LAN_DOMAIN=home PI_STATIC_IP=192.168.1.50 \
+  python3 "$PROJECT_DIR/scripts/lib/telegram-panels.py" panels_json \
+  | grep -q 'https://gateway.home' \
+  || die "telegram-panels home URL https olmali (ENABLE_TLS)"
+PANEL_PROTOCOL='' ENABLE_TLS=true LAN_DOMAIN=home PI_STATIC_IP=192.168.1.50 \
+  python3 "$PROJECT_DIR/scripts/lib/telegram-panels.py" self_check \
+  || die "telegram-panels self_check fail"
+grep -q 'p/grafana' "$PROJECT_DIR/scripts/pi/setup-caddy-lan-ip.sh" \
+  || die "caddy-lan-ip grafana path yok"
+grep -q 'p/grafana' "$PROJECT_DIR/scripts/pi/setup-tailscale-serve.sh" \
+  || die "tailscale-serve grafana path yok"
 grep -q '/var/lib/pi-gateway/telegram-bot-state' "$PROJECT_DIR/scripts/pi/telegram-bot.sh" \
   || die "telegram-bot offset var/lib degil"
+grep -q 'HERMES_TELEGRAM_GATEWAY' "$PROJECT_DIR/scripts/pi/setup-telegram-bot.sh" \
+  || die "telegram setup Hermes guard yok"
+grep -q 'is-active' "$PROJECT_DIR/scripts/pi/setup-telegram-bot.sh" \
+  || die "telegram setup hermes-gateway is-active guard yok"
+grep -q 'load_telegram_from_hermes' "$PROJECT_DIR/scripts/lib/env-file.sh" \
+  || die "load_telegram_from_hermes yok"
+grep -q 'Connected to Telegram' "$PROJECT_DIR/scripts/pi/setup-hermes-gateway.sh" \
+  || die "hermes setup Connected check yok"
+# Hermes cutover block must exit before poller "Telegram eksik — atlandi"
+_tg="$PROJECT_DIR/scripts/pi/setup-telegram-bot.sh"
+_hermes_line="$(grep -n 'HERMES_TELEGRAM_GATEWAY' "$_tg" | head -1 | cut -d: -f1)"
+_skip_line="$(grep -n 'Telegram eksik' "$_tg" | head -1 | cut -d: -f1)"
+[[ -n "$_hermes_line" && -n "$_skip_line" && "$_hermes_line" -lt "$_skip_line" ]] \
+  || die "Hermes guard poller token early-exit'ten once olmali"
+grep -q 'disable --now' "$PROJECT_DIR/scripts/pi/setup-hermes-gateway.sh" \
+  || die "hermes setup rollback disable yok"
+grep -q 'systemctl restart' "$PROJECT_DIR/scripts/pi/setup-hermes-gateway.sh" \
+  || die "hermes setup restart yok"
+grep -q 'patch basarisiz' "$PROJECT_DIR/scripts/pi/setup-hermes-gateway.sh" \
+  || die "hermes setup patch fail-closed yok"
+grep -q 'TELEGRAM_ALLOWED_USERS' "$PROJECT_DIR/scripts/pi/setup-hermes-gateway.sh" \
+  || die "hermes setup allowlist preflight yok"
+grep -q 'hermes gateway run' "$PROJECT_DIR/host/systemd/hermes-gateway.service" \
+  || die "hermes-gateway unit yok"
+grep -q 'setup-hermes-gateway.sh' "$PROJECT_DIR/scripts/pi/post-deploy.sh" \
+  || die "post-deploy hermes setup yok"
+# Hermes before telegram (cutover order)
+_pd="$PROJECT_DIR/scripts/pi/post-deploy.sh"
+_h_line="$(grep -n 'setup-hermes-gateway.sh' "$_pd" | head -1 | cut -d: -f1)"
+_t_line="$(grep -n 'setup-telegram-bot.sh' "$_pd" | head -1 | cut -d: -f1)"
+[[ -n "$_h_line" && -n "$_t_line" && "$_h_line" -lt "$_t_line" ]] \
+  || die "post-deploy: hermes setup telegram'dan once olmali"
+grep -q 'patch-hermes-telegram-pi.sh' "$PROJECT_DIR/scripts/pi/setup-hermes-gateway.sh" \
+  || die "hermes setup Pi telegram patch cagirmiyor"
+grep -q 'require_progress=False' "$PROJECT_DIR/scripts/pi/patch-hermes-telegram-pi.sh" \
+  || die "hermes telegram Pi patch yok"
+grep -q 'VERIFY_FAIL\|verified' "$PROJECT_DIR/scripts/pi/patch-hermes-telegram-pi.sh" \
+  || die "hermes patch verify yok"
+grep -q 'HERMES_TELEGRAM_GATEWAY' "$PROJECT_DIR/.env.example" \
+  || die ".env.example Hermes flag yok"
+# ENV.md: single TELEGRAM_CHAT_ID row
+[[ "$(grep -c 'TELEGRAM_CHAT_ID' "$PROJECT_DIR/docs/ENV.md" || true)" -eq 1 ]] \
+  || die "ENV.md TELEGRAM_CHAT_ID tek satir olmali"
 grep -q 'prune-sd-space.sh' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" || die "priv prune-sd yok"
 grep -q 'world-writable' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" || die "priv TOCTOU guard yok"
 ok "privileged install"
