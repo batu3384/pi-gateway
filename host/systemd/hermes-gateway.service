@@ -1,0 +1,24 @@
+[Unit]
+Description=Hermes Agent messaging gateway (Telegram inbox)
+Documentation=https://hermes-agent.nousresearch.com/docs/user-guide/messaging/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=PI_USER
+Group=PI_USER
+WorkingDirectory=/home/PI_USER
+Environment=HOME=/home/PI_USER
+Environment=PATH=/home/PI_USER/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/PI_USER/.local/bin/hermes gateway run --replace
+Restart=always
+RestartSec=5
+# Pi4: agent + gateway; tune after live RSS
+MemoryMax=768M
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hermes-gateway
+
+[Install]
+WantedBy=multi-user.target

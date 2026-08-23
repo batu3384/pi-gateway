@@ -27,8 +27,9 @@
 | `ENABLE_MONITORING` | `true`: Prometheus + Grafana + node-exporter (`grafana.home`) |
 | `ENABLE_CANARY_COMPOSE_UPDATE` | `true`: deploy DNS-once, wait, then edge + apps |
 | `UFW_ADMIN_EXPOSURE` | `full` or `caddy-only` |
-| `TELEGRAM_BOT_TOKEN` | @BotFather token |
-| `TELEGRAM_CHAT_ID` | Notification channel |
+| `TELEGRAM_BOT_TOKEN` | @BotFather token (notify outbox + panel; Hermes also keeps copy in `~/.hermes/.env`) |
+| `TELEGRAM_CHAT_ID` | Notify / panel hedef chat veya numeric user id |
+| `HERMES_TELEGRAM_GATEWAY` | `true` = Hermes owns Telegram inbox (`getUpdates`); panel poller off. Allowlist: `TELEGRAM_ALLOWED_USERS` in `~/.hermes/.env` |
 | `CROWDSEC_BOUNCER_KEY` | Written automatically on first setup |
 
 ## Syncthing

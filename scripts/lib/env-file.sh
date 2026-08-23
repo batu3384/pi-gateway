@@ -37,13 +37,20 @@ read_dotenv_strict() {
 read_remote_dotenv() {
   local remote="${REMOTE_DIR:-}"
   [[ -n "$remote" && -f "$remote/.env" ]] || return 0
-  read_dotenv_strict "$remote/.env"
+  read_dotenv_strict "$remote/.env" || return 1
+  # UNIFIED_LOGIN: force AGH_* onto service GUI vars after dotenv load
+  # shellcheck source=unified-login.sh
+  source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/unified-login.sh"
+  apply_unified_login
 }
 
 read_project_dotenv() {
   local project="${PROJECT_DIR:-}"
   [[ -n "$project" && -f "$project/.env" ]] || return 0
-  read_dotenv_strict "$project/.env"
+  read_dotenv_strict "$project/.env" || return 1
+  # shellcheck source=unified-login.sh
+  source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/unified-login.sh"
+  apply_unified_login
 }
 
 read_project_or_example_dotenv() {
@@ -53,4 +60,31 @@ read_project_or_example_dotenv() {
   elif [[ -n "$project" && -f "$project/.env.example" ]]; then
     read_dotenv_strict "$project/.env.example"
   fi
+}
+
+# Hermes cutover: panel poller token may live only in ~/.hermes/.env
+load_telegram_from_hermes() {
+  local hermes_env="${HERMES_HOME:-$HOME/.hermes}/.env"
+  local line k v
+  [[ -f "$hermes_env" ]] || return 1
+  [[ -n "${TELEGRAM_BOT_TOKEN:-}" && -n "${TELEGRAM_CHAT_ID:-}" ]] && return 0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"
+    [[ -z "${line//[[:space:]]/}" || "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ "$line" == *=* ]] || continue
+    k="${line%%=*}"
+    v="${line#*=}"
+    case "$k" in
+      TELEGRAM_BOT_TOKEN) [[ -z "${TELEGRAM_BOT_TOKEN:-}" ]] && TELEGRAM_BOT_TOKEN="$v" ;;
+      TELEGRAM_CHAT_ID) [[ -z "${TELEGRAM_CHAT_ID:-}" ]] && TELEGRAM_CHAT_ID="$v" ;;
+      TELEGRAM_ALLOWED_USERS)
+        if [[ -z "${TELEGRAM_CHAT_ID:-}" && -n "$v" ]]; then
+          TELEGRAM_CHAT_ID="${v%%,*}"
+          TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID// /}"
+        fi
+        ;;
+    esac
+  done <"$hermes_env"
+  export TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID
+  [[ -n "${TELEGRAM_BOT_TOKEN:-}" && -n "${TELEGRAM_CHAT_ID:-}" ]]
 }

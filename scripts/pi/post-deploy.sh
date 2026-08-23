@@ -192,6 +192,7 @@ fi
 if [[ -n "${PI_STATIC_IP:-}" && -f "${REMOTE_DIR}/config/caddy/Caddyfile" ]]; then
   run_step_optional "LAN IP panel yollari" "$SCRIPT_DIR/setup-caddy-lan-ip.sh"
 fi
+run_step_soft "Hermes gateway" "$SCRIPT_DIR/setup-hermes-gateway.sh"
 run_step_soft "Telegram panel bot" "$SCRIPT_DIR/setup-telegram-bot.sh"
 if [[ "${ENABLE_CROWDSEC:-true}" == "true" ]]; then
   run_step_optional "CrowdSec" "$SCRIPT_DIR/setup-crowdsec.sh"
