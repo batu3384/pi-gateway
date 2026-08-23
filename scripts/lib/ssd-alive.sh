@@ -31,7 +31,12 @@ SSD_USB_PORT_CURSOR_FILE="${SSD_USB_PORT_CURSOR_FILE:-/var/lib/pi-gateway/ssd-us
 SSD_USB_PORT_FORGET_FAILS="${SSD_USB_PORT_FORGET_FAILS:-2}"
 SSD_USB_PORT_ROTATE="${SSD_USB_PORT_ROTATE:-true}"
 SSD_USB_PORT_OFF_SEC="${SSD_USB_PORT_OFF_SEC:-5}"
+# Bus dropout: Pi4 PPPS yok; tek port disable VBUS kesmez. Tum portlar + uzun OFF
+# (canli: 15s bus-wide + xhci → JMicron 2-2 geri geldi). Sirali tarama yetmez.
+SSD_USB_DROPOUT_PORT_OFF_SEC="${SSD_USB_DROPOUT_PORT_OFF_SEC:-15}"
 SSD_USB_PORT_ON_SEC="${SSD_USB_PORT_ON_SEC:-10}"
+# Bus dropout: sirali yerine tum aday portlari ayni anda disable
+SSD_USB_BUS_WIDE_CYCLE="${SSD_USB_BUS_WIDE_CYCLE:-true}"
 # Hatirlanan porttan sonra kac ekstra USB3 port (Pi4: platform usb2-port1..4)
 SSD_USB_PORT_SCAN_MAX="${SSD_USB_PORT_SCAN_MAX:-8}"
 SSD_USB_RESET_LOCK_WAIT_SEC="${SSD_USB_RESET_LOCK_WAIT_SEC:-45}"
@@ -630,10 +635,13 @@ ssd_usb_port_candidates() {
 
 ssd_usb_port_cycle_one() {
   local port_sys="$1"
+  local off_sec
   ssd_usb_port_path_ok "$port_sys" || return 1
-  echo "[ssd-alive] USB port disable cycle: $port_sys" >&2
+  off_sec="${SSD_USB_PORT_OFF_SEC:-5}"
+  [[ "$off_sec" =~ ^[0-9]+$ ]] || off_sec=5
+  echo "[ssd-alive] USB port disable cycle: $port_sys (off=${off_sec}s)" >&2
   ssd_sysfs_write "${port_sys}/disable" 1 || return 1
-  sleep "${SSD_USB_PORT_OFF_SEC:-5}"
+  sleep "$off_sec"
   ssd_sysfs_write "${port_sys}/disable" 0 || true
   sleep "${SSD_USB_PORT_ON_SEC:-10}"
   command -v udevadm >/dev/null 2>&1 && _ssd_alive_root udevadm settle --timeout=15 2>/dev/null || sleep 3
@@ -645,12 +653,57 @@ ssd_usb_port_cycle_one() {
   return 1
 }
 
+# Bus dropout: USB2+USB3 dual port — tek disable VBUS kesmez. Tum adaylari ayni anda kapat.
+ssd_usb_port_bus_wide_cycle() {
+  ssd_usb_port_cycle_allowed || return 1
+  [[ "${SSD_USB_BUS_WIDE_CYCLE:-true}" == "true" ]] || return 1
+  local port_sys off_sec on_sec
+  local -a ports=()
+  off_sec="${SSD_USB_DROPOUT_PORT_OFF_SEC:-15}"
+  on_sec="${SSD_USB_PORT_ON_SEC:-10}"
+  [[ "$off_sec" =~ ^[0-9]+$ ]] || off_sec=15
+  [[ "$on_sec" =~ ^[0-9]+$ ]] || on_sec=10
+  while IFS= read -r port_sys; do
+    [[ -n "$port_sys" ]] || continue
+    ssd_usb_port_path_ok "$port_sys" || continue
+    ports+=("$port_sys")
+  done < <(ssd_usb_port_candidates)
+  ((${#ports[@]} > 0)) || return 1
+  echo "[ssd-alive] bus-wide port cycle: ${#ports[@]} port off=${off_sec}s (fiziksel unplug yaklasimi)" >&2
+  for port_sys in "${ports[@]}"; do
+    ssd_sysfs_write "${port_sys}/disable" 1 || true
+  done
+  sleep "$off_sec"
+  for port_sys in "${ports[@]}"; do
+    ssd_sysfs_write "${port_sys}/disable" 0 || true
+  done
+  sleep "$on_sec"
+  command -v udevadm >/dev/null 2>&1 && _ssd_alive_root udevadm settle --timeout=15 2>/dev/null || sleep 3
+  if ssd_find_usb_sysfs >/dev/null 2>&1 || ssd_block_present; then
+    ssd_usb_learn_live_port || true
+    ssd_usb_reset_clear
+    return 0
+  fi
+  echo "[ssd-alive] bus-wide cycle basarisiz — rate-limit yakilmiyor" >&2
+  return 1
+}
+
 ssd_usb_port_disable_cycle() {
   ssd_usb_port_cycle_allowed || return 1
   if ssd_usb_port_reset_rate_limited; then
     echo "[ssd-alive] port disable rate-limit (${SSD_USB_RESET_MAX}/${SSD_USB_RESET_WINDOW_SEC}s)" >&2
     return 1
   fi
+
+  # Dropout: sirali tarama JMicron'u uyandirmiyor (canli dogrulandi). Bus-wide once.
+  if ssd_usb_bus_dropout; then
+    if ssd_usb_port_bus_wide_cycle; then
+      ssd_usb_reset_record_once
+      return 0
+    fi
+    return 1
+  fi
+
   local port_sys tried=0 max_extra i
   max_extra="${SSD_USB_PORT_SCAN_MAX:-8}"
   [[ "$max_extra" =~ ^[0-9]+$ ]] || max_extra=8
@@ -709,16 +762,27 @@ ssd_xhci_rebind() {
     return 1
   fi
   local dev="${SSD_USB_XHCI_PCI:-0000:01:00.0}"
+  local pci="/sys/bus/pci/devices/${dev}"
   ssd_pci_id_ok "$dev" || {
     echo "[ssd-alive] HATA: SSD_USB_XHCI_PCI gecersiz: $dev" >&2
     return 1
   }
-  [[ -e "/sys/bus/pci/drivers/xhci_hcd/${dev}" ]] || return 1
-  ssd_usb_xhci_reset_record
+  [[ -d "$pci" ]] || {
+    echo "[ssd-alive] xhci PCI cihaz yok: $dev" >&2
+    return 1
+  }
   echo "[ssd-alive] xhci rebind: $dev" >&2
-  ssd_sysfs_write "/sys/bus/pci/drivers/xhci_hcd/unbind" "$dev" || return 1
-  sleep "${SSD_USB_XHCI_UNBIND_SEC:-5}"
-  ssd_sysfs_write "/sys/bus/pci/drivers/xhci_hcd/bind" "$dev" || return 1
+  if [[ -e "/sys/bus/pci/drivers/xhci_hcd/${dev}" ]]; then
+    ssd_sysfs_write "/sys/bus/pci/drivers/xhci_hcd/unbind" "$dev" || return 1
+    sleep "${SSD_USB_XHCI_UNBIND_SEC:-5}"
+  else
+    echo "[ssd-alive] xhci zaten unbound — bind denenecek" >&2
+  fi
+  if [[ ! -e "/sys/bus/pci/drivers/xhci_hcd/${dev}" ]]; then
+    ssd_sysfs_write "/sys/bus/pci/drivers/xhci_hcd/bind" "$dev" || return 1
+  fi
+  # Kota yalniz bind basarili olduktan sonra (unbind/bind fail kotayi yakmaz)
+  ssd_usb_xhci_reset_record
   sleep "${SSD_USB_XHCI_BIND_SEC:-12}"
   command -v udevadm >/dev/null 2>&1 && _ssd_alive_root udevadm settle --timeout=20 2>/dev/null || sleep 5
   ssd_find_usb_sysfs >/dev/null 2>&1 || ssd_block_present
@@ -750,6 +814,12 @@ _ssd_usb_soft_reset_body() {
   SSD_USB_RESET_COUNTED=0
 
   ssd_usb_disable_autosuspend
+
+  # Onceki fail-first kota: bus dropout'ta 15dk susma. Disk yokken sifirla, recovery devam.
+  if ssd_usb_bus_dropout && ssd_usb_port_reset_rate_limited; then
+    echo "[ssd-alive] bus dropout + port kota dolu — sifirla (yazilim recovery devam)" >&2
+    ssd_usb_reset_clear
+  fi
 
   if mountpoint -q "$SSD_MOUNT" 2>/dev/null && ! ssd_mount_healthy; then
     echo "[ssd-alive] hung mount — umount -l $SSD_MOUNT" >&2
@@ -813,7 +883,7 @@ _ssd_usb_soft_reset_body() {
   return 1
 }
 
-# Merdiven: LPM off → umount hung → usb-storage rebind → USB3 port tarama → xhci opt-in
+# Merdiven: LPM off → umount hung → usb-storage rebind → dropout:bus-wide / hang:port tarama → xhci
 ssd_usb_soft_reset() {
   local lockdir="${SSD_USB_RESET_LOCK_DIR:-/run/pi-gateway/ssd-usb-reset.lock}"
   local lock_owned=0 rc mtime now parent waited=0 forced=0
