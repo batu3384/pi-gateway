@@ -268,11 +268,32 @@ notify_backup_fail() {
 
 notify_health_systemd_fail() {
   local host="$1"
-  local body
+  local details="${2:-}"
+  local human action body
+
+  if [[ -z "$details" ]]; then
+    details="$(
+      journalctl -t pi-gateway-health -n 30 --no-pager 2>/dev/null \
+        | grep -E ' FAIL ' \
+        | tail -5 \
+        | sed -E 's/^[^ ]+ [^ ]+ [^ ]+ [^ ]+ //; s/^pi-gateway-health\[[0-9]+\]: FAIL //' \
+        | tr '\n' '; ' \
+        | sed 's/; $//' || true
+    )"
+  fi
+
+  human="$(notify_escape_html "$details")"
+  human="${human//failures=/Sorunlar: }"
+  human="${human//exit_code=1/Kontrol basarisiz}"
+  human="${human//; /$'\n'• }"
+  [[ "$human" == •* ]] || human="• ${human}"
+
+  action="• Pi: journalctl -t pi-gateway-health -n 30
+• Stack: docker ps —filter status=exited"
   body="$(notify_html_alert "$host" \
-    "Zamanlanmış sağlık kontrolü (systemd) başarısız çıktı." \
-    "journalctl -t pi-gateway-health -n 20" \
-    "Pi üzerinde yukarıdaki komutla ayrıntıya bakın." \
+    "Sağlık kontrolü başarısız — DNS / çekirdek stack." \
+    "$human" \
+    "$action" \
     "Saatte en fazla bir hatırlatma.")"
   notify_send_with_transition "health-systemd" "fail" "⚠️ Pi Gateway · Sağlık" "$body" "HTML"
 }

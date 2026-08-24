@@ -245,10 +245,11 @@ health_is_slo_fail() {
       ;;
   esac
 }
-# Opsiyonel + yedek SLA: journal FAIL; systemd Failed / OnFailure yok.
+# Opsiyonel + yedek SLA: journal FAIL; systemd Failed / OnFailure yalnizca cekirdek fail.
 exit_code=0
 if [[ "$sd_fail" -eq 1 ]]; then
-  exit_code=1
+  # check-sd-health.sh notify_* gonderdi — OnFailure ile tekrar spam etme
+  logger -t "$LOG_TAG" "SD fail — check-sd-health bildirdi (systemd OnFailure atlanir)"
 elif [[ ${#FAILURES[@]} -gt 0 ]]; then
   exit_code=0
   for f in "${FAILURES[@]}"; do
@@ -346,5 +347,13 @@ if [[ -x "$SCRIPT_DIR/export-gateway-state.sh" ]]; then
 fi
 if [[ -x "$SCRIPT_DIR/push-slo-heartbeat.sh" ]]; then
   REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/push-slo-heartbeat.sh" >/dev/null 2>&1 || true
+fi
+if (( exit_code != 0 )); then
+  mkdir -p /run/pi-gateway 2>/dev/null || true
+  {
+    printf 'exit_code=%s\n' "$exit_code"
+    (( sd_fail )) && printf 'sd_fail=1\n'
+    ((${#FAILURES[@]})) && printf 'failures=%s\n' "${FAILURES[*]}"
+  } > /run/pi-gateway/health-last-exit.txt 2>/dev/null || true
 fi
 exit "$exit_code"
