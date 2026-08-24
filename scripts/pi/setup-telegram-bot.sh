@@ -30,10 +30,11 @@ _enable_poller_fallback() {
 }
 
 # Hermes owns getUpdates — guard BEFORE token early-exit
-if [[ "${HERMES_TELEGRAM_GATEWAY:-}" == "true" ]]; then
-  if ! systemctl is-active "$hermes_unit" &>/dev/null; then
-    log "HATA: HERMES_TELEGRAM_GATEWAY=true ama $hermes_unit active degil — once setup-hermes-gateway.sh"
-    _enable_poller_fallback || log "WARN: fallback poller da yok (token hermes/.env veya pi .env gerekli)"
+if [[ "${HERMES_TELEGRAM_GATEWAY:-}" == "true" ]] \
+  || systemctl is-active --quiet "$hermes_unit" 2>/dev/null \
+  || systemctl is-enabled --quiet "$hermes_unit" 2>/dev/null; then
+  if ! systemctl is-active --quiet "$hermes_unit" 2>/dev/null; then
+    log "HATA: Hermes unit var ama active degil — once setup-hermes-gateway.sh"
     exit 1
   fi
   if systemctl list-unit-files "$unit" 2>/dev/null | grep -q "$unit"; then

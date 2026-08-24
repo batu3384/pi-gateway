@@ -12,6 +12,11 @@ PG_SCRIPT_NAME="$(basename "$0")"
 source "${_PG_ENV_LIB:?}"
 read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 log() { echo "[telegram-bot] $*"; }
+if [[ "${HERMES_TELEGRAM_GATEWAY:-}" == "true" ]] \
+  || systemctl is-active --quiet hermes-gateway 2>/dev/null; then
+  log "Hermes gateway aktif — panel poller calismaz (getUpdates tek sahip)"
+  exit 0
+fi
 load_telegram_from_hermes || true
 [[ -n "${TELEGRAM_BOT_TOKEN:-}" && -n "${TELEGRAM_CHAT_ID:-}" ]] || {
   log "TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID eksik"
