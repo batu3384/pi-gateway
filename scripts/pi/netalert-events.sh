@@ -40,8 +40,9 @@ print("" if v is None else v)
 PY
 }
 
-[[ -f "$DB" ]] || die_silent "NetAlertX DB yok."
+[[ -d "$(dirname "$DB")" ]] || die_silent "NetAlertX DB dizini yok."
 _ensure_db_access
+[[ -f "$DB" ]] || die_silent "NetAlertX DB yok."
 [[ -f "$LIB" ]] || fail "netalert-devices.py yok."
 
 _ensure_state_dir() {
