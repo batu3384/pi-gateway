@@ -27,9 +27,30 @@ if [[ -z "$details" ]]; then
   )"
 fi
 
-# SLA yalniz — health-check zaten notify_slo_backup gonderdi
-if [[ "$details" == failures=offsite-* ]]; then
+# SLA / SD yalniz — health-check veya check-sd-health zaten bildirdi
+notify_failure_skip_sla_only() {
+  local d="$1" line
+  [[ -z "$d" ]] && return 1
+  [[ "$d" == failures=offsite-* ]] && return 0
+  [[ "$d" == *sd_fail=1* ]] && return 0
+  while IFS= read -r line; do
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line#FAIL }"
+    [[ -z "$line" ]] && continue
+    case "$line" in
+      offsite-*|optional-*|backup-restore-drill*|exit_code=0) ;;
+      *) return 1 ;;
+    esac
+  done < <(printf '%s' "$d" | tr ';' '\n' | sort -u)
+  return 0
+}
+
+if notify_failure_skip_sla_only "$details"; then
   exit 0
+fi
+# Journal tekrarlarini tekillestir
+if [[ "$details" == *';'* ]]; then
+  details="$(printf '%s' "$details" | tr ';' '\n' | sed 's/^[[:space:]]*//' | sort -u | paste -sd '; ' -)"
 fi
 if [[ -z "$details" ]]; then
   details="Cekirdek kontrol basarisiz (ayrinti journal'da)."
