@@ -400,7 +400,7 @@ def format_new_plain(devices: list[dict[str, Any]]) -> str:
         lines = [
             f"{prefix}Cihaz: {d['name']}",
             f"IP: {d['ip']}",
-            f"MAC: {d['mac']}",
+            f"MAC: `{d['mac']}`",
         ]
         if d.get("type") and d["type"] != "?":
             lines.append(f"Tür: {d['type']}")
@@ -432,7 +432,7 @@ def format_offline_plain(devices: list[dict[str, Any]]) -> str:
         lines = [
             f"{prefix}{d['name']}",
             f"Son IP: {d['ip']}",
-            f"MAC: {d['mac']}",
+            f"MAC: `{d['mac']}`",
         ]
         last_seen = d.get("last_seen") or "?"
         if last_seen != "?":
@@ -570,6 +570,7 @@ def _self_check() -> None:
         con.close()
         env = build_envelope(db, state, "new_device")
         assert env["count"] == 1, env
+        assert "`dd:ee:ff:00:11:04`" in env["plain"], env["plain"]
         commit_rowid(state, "new_device", env["max_rowid"])
         env2 = build_envelope(db, state, "new_device")
         assert env2["count"] == 0

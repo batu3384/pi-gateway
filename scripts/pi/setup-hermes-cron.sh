@@ -32,4 +32,9 @@ python3 "$MERGE" \
   --remote-dir "$REMOTE_DIR" \
   --pi-user "${USER}"
 
+# 07:00 pano merge sonrasi 08:00 leftover timer kapat
+if [[ -x "$SCRIPT_DIR/setup-morning-timer.sh" ]]; then
+  bash "$SCRIPT_DIR/setup-morning-timer.sh" || log "WARN: sabah timer kesisti atlandi"
+fi
+
 log "Tamamlandi — $LIVE"

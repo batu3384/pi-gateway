@@ -199,6 +199,8 @@ run_step_soft "Hermes env" "$SCRIPT_DIR/ensure-hermes-env.sh"
 run_step_soft "Hermes config" "$SCRIPT_DIR/patch-hermes-config-pi.sh"
 run_step_soft "Hermes cron" "$SCRIPT_DIR/setup-hermes-cron.sh"
 run_step_soft "Hermes menu skill" "$SCRIPT_DIR/setup-hermes-menu-skill.sh"
+# Hermes 07:00 sonrasi: leftover 08:00 timer (ENABLE_N8N=false / onceki deploy)
+run_step_soft "Sabah timer Hermes kesisimi" "$SCRIPT_DIR/setup-morning-timer.sh"
 run_step_soft "Telegram panel bot" "$SCRIPT_DIR/setup-telegram-bot.sh"
 run_step_soft "Gateway systemd cleanup" "$SCRIPT_DIR/../lib/reset-gateway-units.sh"
 run_step_soft "Restic repair" "$SCRIPT_DIR/restic-repair.sh"

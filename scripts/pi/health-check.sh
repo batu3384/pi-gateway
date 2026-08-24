@@ -228,6 +228,13 @@ if [[ "$drill_max" != "0" ]] && [[ "${ENABLE_RESTIC:-true}" == "true" ]] && ! st
     fi
   fi
 fi
+# Hermes bülten SLO (07/19/23 last_run > 26h) — journal SLO, systemd FAIL değil
+_jobs_json="${HERMES_HOME:-$HOME/.hermes}/cron/jobs.json"
+if [[ -f "$_jobs_json" ]]; then
+  while IFS= read -r line; do
+    [[ -n "$line" ]] && slo_note "$line"
+  done < <(python3 "$SCRIPT_DIR/../lib/bulletin-slo.py" "$_jobs_json" 2>/dev/null || true)
+fi
 # SSD varken DNS-only fail'leri ayır (cascade: container/gateway/ssd symlink)
 health_is_dns_only_fail() {
   local f="$1"
@@ -260,7 +267,7 @@ elif [[ ${#FAILURES[@]} -gt 0 ]]; then
   exit_code=0
   for f in "${FAILURES[@]}"; do
     case "$f" in
-      optional-*|offsite-*|backup-restore-drill*) ;;
+      optional-*|offsite-*|backup-restore-drill*|bulletin-*) ;;
       *) exit_code=1; break ;;
     esac
   done
@@ -293,6 +300,8 @@ else
         ;;
       offsite-*|backup-restore-drill*)
         has_slo=1
+        ;;
+      bulletin-*)
         ;;
       *)
         has_core=1

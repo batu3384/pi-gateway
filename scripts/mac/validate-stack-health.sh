@@ -321,6 +321,10 @@ grep -q 'setup-hermes-cron.sh' "$PROJECT_DIR/scripts/pi/post-deploy.sh" \
   || die "setup-hermes-cron-scripts yok"
 grep -q 'pi-netalert-newdev.sh' "$PROJECT_DIR/config/hermes/cron-jobs.template.json" \
   || die "hermes cron template relative script yok"
+grep -q 'HERMES_API_CALL_STALE_TIMEOUT' "$PROJECT_DIR/host/systemd/hermes-gateway.service" \
+  || die "hermes-gateway stale timeout yok"
+grep -q 'pi-fx-quote.sh' "$PROJECT_DIR/config/hermes/cron-jobs.template.json" \
+  || die "akşam bülten pi-fx-quote yok"
 grep -q 'NETALERT_NOTIFY_VIA' "$PROJECT_DIR/scripts/pi/setup-netalertx.sh" \
   || die "setup-netalertx NOTIFY_VIA yok"
 ok "netalertx host network + events pipeline + hermes kanal"

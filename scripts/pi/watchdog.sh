@@ -31,7 +31,7 @@ fi
 
 ram_avail_mb="$(free -m | awk 'NR==2{print $7}')"
 if [[ -n "${ram_avail_mb:-}" ]] && (( ram_avail_mb < RAM_AVAIL_MIN_MB )); then
-  ALERTS+=("Available RAM ${ram_avail_mb}MB (min ${RAM_AVAIL_MIN_MB}MB)")
+  ALERTS+=("Kullanılabilir RAM ${ram_avail_mb}MB (min ${RAM_AVAIL_MIN_MB}MB)")
 fi
 
 failed=""
@@ -45,7 +45,7 @@ while IFS= read -r unit; do
 done < <(systemctl list-units --state=failed --no-legend --plain 2>/dev/null | awk '{print $1}' | grep -v '^$' | head -5)
 failed="${failed%" "}"
 if [[ -n "${failed}" ]]; then
-  ALERTS+=("Failed systemd: ${failed}")
+  ALERTS+=("Başarısız systemd: ${failed}")
 fi
 
 exited="$(docker ps -a --filter "status=exited" --filter "status=dead" --filter "status=restarting" \
@@ -56,7 +56,7 @@ fi
 
 unhealthy="$(docker ps --filter "health=unhealthy" --format "{{.Names}}" 2>/dev/null | head -5 | tr '\n' ' ')"
 if [[ -n "${unhealthy}" ]]; then
-  ALERTS+=("Unhealthy container: ${unhealthy}")
+  ALERTS+=("Sağlıksız container: ${unhealthy}")
 fi
 
 swap_used_mb="$(free -m | awk 'NR==3{print $3}')"
@@ -79,7 +79,7 @@ if ((${#ALERTS[@]})); then
     alert_text+="- ${a}"$'\n'
   done
   action_hint="• Sıcaklık: vcgencmd measure_temp — fan/soğutma kontrol edin"
-  if [[ "$alert_text" == *"Failed systemd"* ]]; then
+  if [[ "$alert_text" == *"Başarısız systemd"* ]]; then
     action_hint="• Geçici deploy hatası: sudo systemctl reset-failed pi-gateway-health pi-gateway-stack-watchdog
 • Kalıcı: journalctl -u <unit> -n 20 --no-pager"
   fi
@@ -102,8 +102,10 @@ if ((${#ALERTS[@]})); then
       "Saatte en fazla bir hatırlatma.")"
     notify_send_with_transition "watchdog-metrics" "fail" "📋 Pi Gateway · Sistem" "$body" "HTML" || true
   fi
-  printf '📋 Pi Gateway · Sistem\n%s\n\nSistem gözcüsü metrik eşiği aşıldı.\n\n%sNe yapmalı?\n%s\n\nSaatte en fazla bir hatırlatma.\n' \
-    "$(date '+%d.%m.%Y %H:%M')" "$alert_text" "$action_hint"
+  {
+    printf '📋 Pi Gateway · Sistem\n%s\n\nSistem gözcüsü metrik eşiği aşıldı.\n\n%sNe yapmalı?\n%s\n\nSaatte en fazla bir hatırlatma.\n' \
+      "$(date '+%d.%m.%Y %H:%M')" "$alert_text" "$action_hint"
+  } | bash "${SCRIPT_DIR}/../lib/archive-bulletin.sh" watchdog
   mkdir -p "$(dirname "$STAMP")" 2>/dev/null || true
   echo "$now" >"$STAMP" 2>/dev/null || true
   exit 0

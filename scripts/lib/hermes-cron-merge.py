@@ -126,6 +126,22 @@ def merge(
     return live_doc, changed
 
 
+_TIMEOUT_90 = ("timed out after 90", "timeout after 90s")
+
+
+def reset_legacy_timeout_streaks(doc: dict[str, Any]) -> int:
+    """90s stale timeout leftover — streak sıfırla; 300s hatasına dokunma."""
+    n = 0
+    for job in doc.get("jobs") or []:
+        err = str(job.get("last_error") or "").lower()
+        if not any(needle in err for needle in _TIMEOUT_90):
+            continue
+        job["failure_streak"] = 0
+        job["last_error"] = None
+        n += 1
+    return n
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--template", required=True)
@@ -142,9 +158,10 @@ def main() -> int:
     with open(lock_path, "w", encoding="utf-8") as lockf:
         fcntl.flock(lockf, fcntl.LOCK_EX)
         merged, n = merge(template, live_path, args.remote_dir, args.pi_user)
+        reset_n = reset_legacy_timeout_streaks(merged)
 
         if args.dry_run:
-            print(f"would_update={n}")
+            print(f"would_update={n} timeout_streak_reset={reset_n}")
             return 0
 
         backup = live_path.with_suffix(".json.bak")
@@ -153,7 +170,7 @@ def main() -> int:
         tmp = live_path.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(merged, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         tmp.replace(live_path)
-        print(f"[hermes-cron] guncellenen job: {n}")
+        print(f"[hermes-cron] guncellenen job: {n} timeout_streak_reset={reset_n}")
     return 0
 
 
@@ -186,6 +203,24 @@ def _self_check() -> None:
         merged_empty, n_empty = merge(template, empty, "/home/pi/pi-gateway", "pi")
         assert len(merged_empty["jobs"]) == 1, merged_empty
         assert n_empty == 1
+    stale = {
+        "jobs": [
+            {
+                "name": "Akşam 7",
+                "last_error": "RuntimeError: Non-streaming API call timed out after 90s",
+                "failure_streak": 1,
+            },
+            {
+                "name": "ok",
+                "last_error": "timed out after 300s",
+                "failure_streak": 2,
+            },
+        ]
+    }
+    assert reset_legacy_timeout_streaks(stale) == 1
+    assert stale["jobs"][0]["failure_streak"] == 0
+    assert stale["jobs"][0]["last_error"] is None
+    assert stale["jobs"][1]["failure_streak"] == 2
     print("[hermes-cron-merge] self-check OK")
 
 

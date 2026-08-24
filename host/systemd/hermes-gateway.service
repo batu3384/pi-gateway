@@ -11,6 +11,9 @@ Group=PI_USER
 WorkingDirectory=/home/PI_USER
 Environment=HOME=/home/PI_USER
 Environment=PATH=/home/PI_USER/.local/bin:/usr/local/bin:/usr/bin:/bin
+# Cron bülten: non-stream stale default 90s — GLM düşünme süresini keser
+Environment=HERMES_API_CALL_STALE_TIMEOUT=300
+Environment=HERMES_STREAM_STALE_TIMEOUT=180
 ExecStart=/home/PI_USER/.local/bin/hermes gateway run --replace
 Restart=always
 RestartSec=5

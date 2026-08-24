@@ -7,21 +7,45 @@ import sys
 
 _FAILURE_END = '    return f"⚠️ Cron \'{job_name}\' failed: {cleaned}"'
 
-_FAILURE_V3 = '''    # pi-gateway: cron failure v3
-    if "potentially unsafe" in lower or "sensitive content" in lower:
-        return (
-            "📋 Pi Gateway · Bülten\\n\\n"
-            f"Görev: {job_name}\\n"
-            "Sorun: Model sağlayıcı güvenlik filtresi (HTTP 400) — "
-            "araştırma veya üretim engellendi.\\n"
-            "Ne yapmalı? Sonraki tur otomatik dener; sürerse farklı kaynak/model."
-        )
-    if "http 429" in lower or "rate limit" in lower:
-        return (
-            "📋 Pi Gateway · Bülten\\n\\n"
-            f"Görev: {job_name}\\n"
-            "Sorun: API hız limiti (HTTP 429)."
-        )
+_FAILURE_V6 = '''    # pi-gateway: cron failure v6
+    if not job.get("no_agent"):
+        if "timed out after" in lower or "non-streaming api" in lower or (
+            "stale" in lower and "timeout" in lower
+        ):
+            return (
+                "📋 Pi Gateway · Bülten\\n\\n"
+                f"Görev: {job_name}\\n"
+                "Sorun: Model yanıtı zaman aşımı.\\n"
+                "Bülten bu tur üretilemedi. Sonraki planlı tur otomatik dener.\\n"
+                "Piyasa 18:55 ayrı kanaldan gider."
+            )
+        if "firecrawl" in lower and ("403" in lower or "forbidden" in lower):
+            return (
+                "📋 Pi Gateway · Bülten\\n\\n"
+                f"Görev: {job_name}\\n"
+                "Sorun: Web arama (Firecrawl 403).\\n"
+                "Bülten bu tur üretilemedi. Sonraki tur otomatik dener.\\n"
+                "Çözüm: patch-hermes-config-pi.sh — web.search_backend=ddgs."
+            )
+        if (
+            "http 400" in lower
+            or "potentially unsafe" in lower
+            or "sensitive content" in lower
+        ):
+            return (
+                "📋 Pi Gateway · Bülten\\n\\n"
+                f"Görev: {job_name}\\n"
+                "Sorun: Model sağlayıcı güvenlik filtresi (HTTP 400).\\n"
+                "Bülten bu tur üretilemedi. Sonraki planlı tur otomatik dener.\\n"
+                "Piyasa 18:55 ayrı kanaldan gider."
+            )
+        if "http 429" in lower or "rate limit" in lower:
+            return (
+                "📋 Pi Gateway · Bülten\\n\\n"
+                f"Görev: {job_name}\\n"
+                "Sorun: API hız limiti (HTTP 429).\\n"
+                "Bülten bu tur üretilemedi. Sonraki tur otomatik dener."
+            )
     if job.get("no_agent"):
         if "script path resolves outside" in lower or "blocked: script path" in lower:
             return (
@@ -79,24 +103,28 @@ _FAILURE_V3 = '''    # pi-gateway: cron failure v3
         return (
             f"📋 Pi Gateway · {kind}\\n\\n"
             f"Görev: {job_name}\\n"
-            f"Sorun: {cleaned[:280]}"
+            f"Sorun: {cleaned[:280]}\\n"
+            "Bu tur tamamlanamadı. Sonraki planlı tur otomatik dener."
         )
     return f"⚠️ Cron '{job_name}' failed: {cleaned}"'''
 
 
 def patch_failure_summary(text: str) -> str:
-    marker_v3 = "# pi-gateway: cron failure v3"
-    if marker_v3 in text:
+    marker_v6 = "# pi-gateway: cron failure v6"
+    if marker_v6 in text:
         return text
 
     for start_marker in (
+        "    # pi-gateway: cron failure v5",
+        "    # pi-gateway: cron failure v4",
+        "    # pi-gateway: cron failure v3",
         "    # pi-gateway: no_agent failure v2",
         "    # pi-gateway: no_agent cron failure summary",
     ):
         if start_marker in text:
             start = text.index(start_marker)
             end = text.index(_FAILURE_END, start) + len(_FAILURE_END)
-            return text[:start] + _FAILURE_V3 + text[end:]
+            return text[:start] + _FAILURE_V6 + text[end:]
 
     raise SystemExit("VERIFY_FAIL: failure block missing")
 

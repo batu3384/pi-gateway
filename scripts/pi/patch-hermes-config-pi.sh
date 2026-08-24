@@ -29,9 +29,34 @@ set_cfg() {
 set_cfg "providers.zai.models.glm-5.3.stale_timeout_seconds" "${HERMES_STALE_TIMEOUT_SEC:-600}"
 set_cfg "cron.bot_chat_delivery_timeout_seconds" "${HERMES_CRON_DELIVERY_TIMEOUT_SEC:-900}"
 set_cfg "model.inactivity_timeout" "${HERMES_MODEL_INACTIVITY_TIMEOUT:-300}"
-set_cfg "model.timeout" "${HERMES_MODEL_TIMEOUT:-180}"
+set_cfg "model.timeout" "${HERMES_MODEL_TIMEOUT:-300}"
 set_cfg "code_execution.max_tool_calls" "${HERMES_MAX_TOOL_CALLS:-45}"
 set_cfg "streaming.enabled" "${HERMES_STREAMING:-true}"
 set_cfg "cron.wrap_response" "false"
+
+hermes_py="${HOME}/.hermes/hermes-agent/venv/bin/python"
+ddgs_ok=0
+if [[ -x "$hermes_py" ]]; then
+  if "$hermes_py" -c "import ddgs" >/dev/null 2>&1; then
+    ddgs_ok=1
+    log "OK ddgs zaten var"
+  else
+    log "ddgs kuruluyor (Firecrawl keyless 403 yerine)"
+    if "$hermes_py" -m pip install -q "ddgs>=9.0,<10" \
+      && "$hermes_py" -c "import ddgs" >/dev/null 2>&1; then
+      ddgs_ok=1
+      log "OK ddgs"
+    else
+      log "WARN: ddgs pip/import basarisiz — search_backend degistirilmedi"
+    fi
+  fi
+else
+  log "WARN: hermes venv python yok — ddgs atlandi"
+fi
+if [[ "$ddgs_ok" -eq 1 ]]; then
+  set_cfg "web.search_backend" "ddgs"
+else
+  log "WARN: web.search_backend=ddgs yazilmadi (paket yok)"
+fi
 
 log "Tamamlandi"

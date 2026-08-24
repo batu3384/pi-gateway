@@ -26,5 +26,6 @@ mkdir -p "$HERMES_SCRIPTS"
 _install pi-watchdog.sh watchdog.sh
 _install pi-netalert-newdev.sh netalert-newdev.sh
 _install pi-netalert-offline.sh netalert-offline.sh
+_install pi-fx-quote.sh fx-quote.sh
 
 log "Tamamlandi — ${HERMES_SCRIPTS}"

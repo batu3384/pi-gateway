@@ -114,4 +114,4 @@ fi
 
 python3 "$LIB" --db "$DB" --state "$STATE" --stream "$STREAM" --commit-rowid "$max_rowid" \
   || fail "cursor commit basarisiz (pre-output)"
-printf '%s\n' "$plain"
+printf '%s\n' "$plain" | bash "${SCRIPT_DIR}/../lib/archive-bulletin.sh" "netalert-${STREAM}"
