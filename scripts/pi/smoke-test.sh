@@ -111,8 +111,11 @@ if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
         run_caddy_auth_checks "n8n"
       fi
       if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
-        run_check "devices-no-caddy-basic-auth" bash -c \
-          'code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 --resolve "devices.'"${LAN_DOMAIN}"':443:'"${PI_STATIC_IP}"'" "https://devices.'"${LAN_DOMAIN}"'/devices.php"); [[ "$code" == "200" || "$code" == "302" ]] && ! curl -skI --max-time 5 --resolve "devices.'"${LAN_DOMAIN}"':443:'"${PI_STATIC_IP}"'" "https://devices.'"${LAN_DOMAIN}"'/js/api.js" | grep -qi "www-authenticate: Basic"'
+        run_check "netalertx-caddy-no-basic-auth" bash -c \
+          'base="https://devices.'"${LAN_DOMAIN}"'"; resolve="--resolve devices.'"${LAN_DOMAIN}"':443:'"${PI_STATIC_IP}"'"; \
+          code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 $resolve "$base/"); \
+          [[ "$code" == "200" || "$code" == "302" ]] && \
+          ! curl -skI --max-time 5 $resolve "$base/" | grep -qi "www-authenticate: Basic"'
       fi
       ;;
   esac
@@ -155,17 +158,25 @@ fi
 if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
   run_check "netalertx" bash -c \
     "for _ in 1 2 3 4 5 6; do curl -fsS -L \"http://${NETALERTX_LISTEN_ADDR:-127.0.0.1}:${NETALERTX_PORT}/\" >/dev/null && exit 0; sleep 5; done; exit 1"
-  case "${N8N_WEBHOOK_SECRET:-}" in
-    ""|CHANGE_ME*) ;;
-    *)
-      if [[ "${ENABLE_N8N:-true}" == "true" ]]; then
-        run_check "n8n-netalert-webhook" bash -c \
-          'code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 -X POST \
-            "http://127.0.0.1:'"${N8N_PORT}"'/webhook/netalert-device-alert-'"${N8N_WEBHOOK_SECRET}"'" \
-            -H "Content-Type: application/json" \
-            -d "{\"body\":{\"attachments\":[{\"text\":{\"new_devices\":[{\"MAC\":\"aa:bb:cc:dd:ee:ff\",\"IP\":\"192.168.1.99\",\"Device name\":\"Smoke Test\"}]}}]}}"); \
-            [[ "$code" == "200" ]]'
-      fi
+  case "${NETALERT_NOTIFY_VIA:-hermes}" in
+    hermes)
+      run_check "netalert-hermes-poll" bash -c \
+        'REMOTE_DIR="'"${REMOTE_DIR}"'" bash "'"${REMOTE_DIR}"'/scripts/pi/netalert-events.sh" offline 2>&1 | grep -qE "^\[SILENT\]"'
+      ;;
+    n8n)
+      case "${N8N_WEBHOOK_SECRET:-}" in
+        ""|CHANGE_ME*) ;;
+        *)
+          if [[ "${ENABLE_N8N:-true}" == "true" ]]; then
+            run_check "n8n-netalert-webhook" bash -c \
+              'code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 -X POST \
+                "http://127.0.0.1:'"${N8N_PORT}"'/webhook/netalert-device-alert-'"${N8N_WEBHOOK_SECRET}"'" \
+                -H "Content-Type: application/json" \
+                -d "{\"body\":{\"attachments\":[{\"text\":{\"new_devices\":[{\"MAC\":\"aa:bb:cc:dd:ee:ff\",\"IP\":\"192.168.1.99\",\"Device name\":\"Smoke Test\"}]}}]}}"); \
+                [[ "$code" == "200" ]]'
+          fi
+          ;;
+      esac
       ;;
   esac
 fi

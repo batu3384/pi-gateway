@@ -22,8 +22,7 @@ log "WARN: :PORT erisim Caddy basic_auth bypass — tailnet ACL siki olmali (doc
 
 TS_IP=""
 wait_ts() {
-  local i
-  for i in $(seq 1 30); do
+  for _ in $(seq 1 30); do
     if command -v tailscale >/dev/null 2>&1; then
       TS_IP="$(tailscale ip -4 2>/dev/null | head -1 || true)"
       [[ "$TS_IP" == 100.* ]] && return 0

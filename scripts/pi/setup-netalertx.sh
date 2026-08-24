@@ -91,22 +91,18 @@ wait_http() {
   return 1
 }
 mkdir -p "${DATA_DIR}/config" "${DATA_DIR}/db"
-chown -R 20211:20211 "${DATA_DIR}" 2>/dev/null || sudo chown -R 20211:20211 "${DATA_DIR}" 2>/dev/null || true
+chown -R "20211:$(id -gn)" "${DATA_DIR}" 2>/dev/null || sudo chown -R "20211:$(id -gn)" "${DATA_DIR}" 2>/dev/null || true
 wait_http
 export CONF_FILE SCAN_SUBNET MARKER PANEL_PROTOCOL LAN_DOMAIN NETALERTX_PASSWORD
-export AGH_ADMIN_USER AGH_ADMIN_PASSWORD ADGUARD_WEB_PORT
+export AGH_ADMIN_USER AGH_ADMIN_PASSWORD ADGUARD_WEB_PORT NETALERT_NOTIFY_VIA
 SCAN_SUBNET="$(scan_subnet)"
 WEBHOOK_URL="$(webhook_url)"
-NETALERT_WEBHOOK_RUN="'on_notification'"
-NETALERT_WEBHOOK_URL="'${WEBHOOK_URL}'"
+export NETALERT_WEBHOOK_RAW="$WEBHOOK_URL"
 if [[ "${NETALERT_NOTIFY_VIA}" == "hermes" ]]; then
-  NETALERT_WEBHOOK_RUN=''"'"'off'"'"''  # python: 'off'
-  NETALERT_WEBHOOK_URL=''"'"''"'"''      # python: ''
   log "NetAlertX webhook kapali (NETALERT_NOTIFY_VIA=hermes)"
 fi
-PLUGINS='["ARPSCAN","DIGSCAN","NSLOOKUP","ICMP","WEBHOOK","NEWDEV","NTFPRCS","DBCLNP","CUSTPROP","SETPWD","SYNC","UI","MAINT","VNDRPDT","ADGUARDIMP","AVAHISCAN"]'
-# shellcheck disable=SC2089,SC2090
-export SCAN_SUBNET NETALERT_WEBHOOK_URL NETALERT_WEBHOOK_RUN PLUGINS
+export NETALERTX_PLUGINS='["ARPSCAN","DIGSCAN","NSLOOKUP","ICMP","WEBHOOK","NEWDEV","NTFPRCS","DBCLNP","CUSTPROP","SETPWD","SYNC","UI","MAINT","VNDRPDT","ADGUARDIMP","AVAHISCAN"]'
+export SCAN_SUBNET
 python3 <<'PY'
 import os
 import re
@@ -115,14 +111,20 @@ from pathlib import Path
 conf = Path(os.environ["CONF_FILE"])
 marker = Path(os.environ["MARKER"])
 subnet = os.environ["SCAN_SUBNET"]
-webhook = os.environ["NETALERT_WEBHOOK_URL"]
-webhook_run = os.environ["NETALERT_WEBHOOK_RUN"]
+notify_via = os.environ.get("NETALERT_NOTIFY_VIA", "hermes")
+if notify_via == "hermes":
+    webhook = "''"
+    webhook_run = "'off'"
+else:
+    raw = os.environ.get("NETALERT_WEBHOOK_RAW", "")
+    webhook = f"'{raw}'" if raw else "''"
+    webhook_run = "'on_notification'"
 password = os.environ["NETALERTX_PASSWORD"]
 password_hash = __import__("hashlib").sha256(password.encode()).hexdigest()
 agh_user = os.environ.get("AGH_ADMIN_USER", "admin")
 agh_pass = os.environ["AGH_ADMIN_PASSWORD"]
 agh_port = os.environ.get("ADGUARD_WEB_PORT", "8080")
-plugins = os.environ.get("PLUGINS", "[]")
+plugins = os.environ.get("NETALERTX_PLUGINS", "[]")
 lan = os.environ.get("LAN_DOMAIN", "home")
 proto = os.environ.get("PANEL_PROTOCOL", "https")
 dashboard = f"{proto}://devices.{lan}"
