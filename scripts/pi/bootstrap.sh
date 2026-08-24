@@ -130,6 +130,8 @@ install_systemd_unit() {
       -e "s|/opt/pi-gateway|${REMOTE_DIR}|g" \
       -e "s|User=PI_USER|User=${USER}|g" \
       -e "s|Group=PI_USER|Group=${USER}|g" \
+      -e "s|Environment=PI_USER=PI_USER|Environment=PI_USER=${USER}|g" \
+      -e "s|Environment=NOTIFY_OWNER=PI_USER|Environment=NOTIFY_OWNER=${USER}|g" \
       "$src" | sudo tee "$dst" >/dev/null
 }
 if [[ -x "$REMOTE_DIR/scripts/pi/install-privileged-scripts.sh" ]]; then

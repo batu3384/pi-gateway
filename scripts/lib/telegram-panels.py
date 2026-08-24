@@ -1,7 +1,14 @@
 #!/usr/bin/env python3
-"""Telegram panel URL + inline keyboard builder (LAN / IP / Tailscale).
+"""Telegram panel menu — URL builder + keyboard (CLI only).
 
-CLI only — not imported. Callers: scripts/pi/telegram-bot.sh, telegram-menu.sh.
+Callers: telegram-bot.sh, telegram-menu.sh
+
+Remote (telefon, MagicDNS yok):
+  http://100.x:PORT  — dogrudan servis (asset /p/ 404 yok)
+  setup-tailscale-panel-ports.sh DNAT + UFW
+
+LAN Wi‑Fi: http://PI_STATIC_IP/p/... (Caddy path + basic_auth)
+Ev DNS: https://name.home
 """
 from __future__ import annotations
 
@@ -12,30 +19,18 @@ import subprocess
 import sys
 from typing import Any
 
-# host = Caddy vhost; path_remote = Tailscale/IP path prefix
-PANELS: list[tuple[str, str, str, str, str]] = [
-    ("gateway", "Ana Panel", "gateway", "", ""),
-    ("status", "Uptime", "status", "", "/p/status"),
-    ("logs", "Loglar", "logs", "", "/p/logs"),
-    ("dns", "AdGuard", "dns", "", "/p/dns"),
-    ("devices", "Cihazlar", "devices", "", "/p/devices"),
-    ("git", "Forgejo", "git", "", "/p/git"),
-    ("n8n", "n8n", "n8n", "", "/p/n8n"),
-    ("sync", "Syncthing", "sync", "", "/p/sync"),
-    ("grafana", "Grafana", "grafana", "", "/p/grafana"),
+# id, label, home host, LAN path, TS port (0 = Caddy :80 root)
+PANELS: list[tuple[str, str, str, str, int]] = [
+    ("gateway", "Ana Panel", "gateway", "", 0),
+    ("status", "Uptime", "status", "/p/status/", 3001),
+    ("logs", "Loglar", "logs", "/p/logs/", int(os.environ.get("DOZZLE_PORT", "9999") or "9999")),
+    ("dns", "AdGuard", "dns", "/p/dns/", int(os.environ.get("ADGUARD_WEB_PORT", "8080") or "8080")),
+    ("devices", "Cihazlar", "devices", "/p/devices/", int(os.environ.get("NETALERTX_PORT", "20211") or "20211")),
+    ("git", "Forgejo", "git", "/p/git/", int(os.environ.get("FORGEJO_PORT", "3002") or "3002")),
+    ("n8n", "n8n", "n8n", "/p/n8n/", int(os.environ.get("N8N_PORT", "5678") or "5678")),
+    ("sync", "Syncthing", "sync", "/p/sync/", int(os.environ.get("SYNCTHING_PORT", "8384") or "8384")),
+    ("grafana", "Grafana", "grafana", "/p/grafana/", int(os.environ.get("GRAFANA_PORT", "3030") or "3030")),
 ]
-
-EMOJI = {
-    "gateway": "🏠",
-    "status": "📊",
-    "logs": "📜",
-    "dns": "🛡️",
-    "devices": "📱",
-    "git": "🐙",
-    "n8n": "⚙️",
-    "sync": "🔄",
-    "grafana": "📈",
-}
 
 
 def env_bool(name: str, default: bool = False) -> bool:
@@ -61,54 +56,14 @@ def tailscale_ip() -> str:
     return ip[0].strip() if ip else os.environ.get("TAILSCALE_IP", "").strip()
 
 
-def tailscale_dns() -> str:
-    cached = os.environ.get("TAILSCALE_PANEL_URL", "").strip().rstrip("/")
-    if cached.startswith("https://"):
-        return cached.replace("https://", "", 1)
-    if cached.startswith("http://"):
-        return cached.replace("http://", "", 1)
-    path = "/var/lib/pi-gateway/tailscale-panel-url"
-    if os.path.isfile(path):
-        raw = path_read(path)
-        if raw.startswith("https://"):
-            return raw.replace("https://", "", 1).rstrip("/")
-    out = _run(["tailscale", "status", "--json"])
-    if not out:
-        return ""
-    try:
-        data = json.loads(out)
-        return (data.get("Self", {}).get("DNSName") or "").rstrip(".")
-    except json.JSONDecodeError:
-        return ""
-
-
-def path_read(path: str) -> str:
-    try:
-        with open(path, encoding="utf-8") as fh:
-            return fh.read().strip()
-    except OSError:
-        return ""
-
-
-def tailscale_serve_active() -> bool:
-    out = _run(["tailscale", "serve", "status"])
-    if not out or "No serve config" in out or "not enabled" in out.lower():
-        return False
-    return "://" in out or "proxy" in out.lower() or "443" in out
-
-
 def remote_access_base() -> tuple[str, str]:
-    """(base_url, mode) mode: serve|ts-http|none
-
-    Telefon: once Tailscale IP HTTP (MagicDNS gerekmez).
-    """
+    """(base_url without path, mode) mode: ts-http|lan|none"""
     ts_ip = tailscale_ip()
     if ts_ip:
         return f"http://{ts_ip}", "ts-http"
-    if tailscale_serve_active():
-        dns = tailscale_dns()
-        if dns:
-            return f"https://{dns}", "serve"
+    pi_ip = os.environ.get("PI_STATIC_IP", "").strip()
+    if pi_ip:
+        return f"http://{pi_ip}", "lan"
     return "", "none"
 
 
@@ -121,33 +76,42 @@ def panel_urls() -> list[dict[str, Any]]:
     remote_base, remote_mode = remote_access_base()
 
     out: list[dict[str, Any]] = []
-    for pid, label, host, _home_suffix, remote_suffix in PANELS:
+    for pid, label, host, lan_path, ts_port in PANELS:
         home_url = f"{proto}://{host}.{domain}"
-        ip_url = f"http://{pi_ip}{remote_suffix}" if pi_ip else ""
-        remote_url = f"{remote_base}{remote_suffix}" if remote_base else ""
-        if remote_mode in ("serve", "ts-http"):
-            button = remote_url or ip_url or home_url
+        if pi_ip:
+            ip_url = f"http://{pi_ip}{lan_path}" if lan_path else f"http://{pi_ip}/"
         else:
+            ip_url = ""
+        if remote_mode == "ts-http" and remote_base:
+            if ts_port:
+                remote_url = f"{remote_base}:{ts_port}/"
+            else:
+                remote_url = f"{remote_base}/"
+            button = remote_url
+        elif remote_mode == "lan":
             button = ip_url or home_url
+            remote_url = ip_url
+        else:
+            button = home_url
+            remote_url = ""
         out.append(
             {
                 "id": pid,
                 "label": label,
-                "emoji": EMOJI.get(pid, "🔗"),
                 "home": home_url,
                 "ip": ip_url,
                 "remote": remote_url,
                 "button": button,
                 "remote_mode": remote_mode,
+                "ts_port": ts_port,
             }
         )
     return out
 
 
 def inline_keyboard(panels: list[dict[str, Any]], mode: str = "all") -> dict[str, Any]:
-    """2-column URL buttons — cleaner on phone."""
+    """One button per row — clearer phone taps (44pt+ effective)."""
     rows: list[list[dict[str, str]]] = []
-    row: list[dict[str, str]] = []
     for p in panels:
         if mode == "remote":
             url = p["remote"] or p["ip"]
@@ -159,22 +123,13 @@ def inline_keyboard(panels: list[dict[str, Any]], mode: str = "all") -> dict[str
             url = p["button"]
         if not url:
             continue
-        row.append({"text": f"{p['emoji']} {p['label']}", "url": url})
-        if len(row) == 2:
-            rows.append(row)
-            row = []
-    if row:
-        rows.append(row)
+        rows.append([{"text": p["label"], "url": url}])
     return {"inline_keyboard": rows}
 
 
 def reply_keyboard() -> dict[str, Any]:
-    """Only when panel poller owns inbox (not Hermes)."""
     return {
-        "keyboard": [
-            [{"text": "📋 Paneller"}],
-            [{"text": "🌐 Uzaktan"}, {"text": "🏠 Ev"}],
-        ],
+        "keyboard": [[{"text": "Paneller"}]],
         "resize_keyboard": True,
         "is_persistent": True,
         "one_time_keyboard": False,
@@ -194,19 +149,15 @@ def html_links(panels: list[dict[str, Any]], mode: str = "button") -> str:
             url = p["button"]
         if not url:
             continue
-        safe_url = html.escape(url, quote=True)
-        safe_label = html.escape(p["label"])
-        lines.append(f'• <a href="{safe_url}">{p["emoji"]} {safe_label}</a>')
+        lines.append(
+            f'• <a href="{html.escape(url, quote=True)}">{html.escape(p["label"])}</a>'
+        )
     return "\n".join(lines)
 
 
 def menu_text(panels: list[dict[str, Any]], mode: str = "all") -> str:
-    """Short professional copy — buttons carry the links."""
-    domain = os.environ.get("LAN_DOMAIN", "home")
-    pi_ip = os.environ.get("PI_STATIC_IP", "").strip()
+    """Minimal professional copy — buttons carry destinations."""
     remote_base, remote_mode = remote_access_base()
-    ts_ip = tailscale_ip()
-
     user = os.environ.get("AGH_ADMIN_USER") or os.environ.get("CADDY_AUTH_USER") or "admin"
     fj = (
         os.environ.get("FORGEJO_ADMIN_USER")
@@ -219,68 +170,61 @@ def menu_text(panels: list[dict[str, Any]], mode: str = "all") -> str:
     lines = [
         "<b>Pi Gateway</b>",
         f"Giriş <code>{u}</code>"
-        + (f" · Forgejo <code>{fju}</code>" if fju != u else "")
-        + " · aynı şifre",
+        + (f" · Forgejo <code>{fju}</code>" if fju != u else ""),
     ]
+    if remote_mode == "ts-http" and remote_base:
+        lines.append(f"<code>{html.escape(remote_base)}</code> · Tailscale Connected")
+    elif remote_mode == "lan":
+        pi_ip = os.environ.get("PI_STATIC_IP", "").strip()
+        if pi_ip:
+            lines.append(f"Ev Wi‑Fi <code>{html.escape(pi_ip)}</code>")
 
-    if mode == "remote":
-        lines.append("<b>Uzaktan</b>")
-    elif mode == "home":
-        lines.append(f"<b>Ev DNS</b> — *.{html.escape(domain)}")
-    elif mode == "ip":
-        lines.append("<b>LAN IP</b>")
-    elif remote_mode == "ts-http" and ts_ip:
-        lines.append(f"Uzaktan <code>http://{html.escape(ts_ip)}</code>")
-    elif remote_mode == "serve" and remote_base:
-        lines.append(f"Uzaktan <code>{html.escape(remote_base)}</code>")
-    elif pi_ip:
-        lines.append(f"LAN <code>http://{html.escape(pi_ip)}</code>")
-
-    # Buttons only for default view — no duplicate link dump
     if mode != "all":
         lines.append("")
         lines.append(html_links(panels, mode))
 
     lines.append("")
-    if remote_mode == "none":
-        tip = "Tailscale kapalı — ev ağı / IP kullan."
-    else:
-        tip = "Buton → ⋯ → Safari’de Aç (Telegram içi Basic Auth yok)."
-    lines.append(f"<i>{tip}</i>")
+    lines.append("<i>Buton → Safari’de Aç (Telegram içi auth kırık). Sabitli menü.</i>")
     return "\n".join(lines)
 
 
 def self_check() -> int:
-    """Assert: no direct AdGuard/NetAlertX ports in panel URLs."""
     bad: list[str] = []
-    for p in panel_urls():
-        for key in ("button", "remote", "ip", "home"):
-            url = p.get(key) or ""
-            if ":8080" in url or ":20211" in url:
-                bad.append(f"{p['id']}.{key}={url}")
+    panels = panel_urls()
+    mode = panels[0]["remote_mode"] if panels else "none"
+    for p in panels:
         btn = p.get("button") or ""
-        if p["id"] != "gateway" and "100." in btn and "/p/" not in btn:
-            bad.append(f"{p['id']}.button missing /p/ → {btn}")
-    kb = inline_keyboard(panel_urls(), "all")
-    for row in kb["inline_keyboard"]:
-        if len(row) > 2:
-            bad.append(f"keyboard row too wide: {len(row)}")
+        if ".ts.net" in btn:
+            bad.append(f"{p['id']} MagicDNS → {btn}")
+        if mode == "ts-http":
+            path = btn.split("://", 1)[-1]
+            if p["id"] != "gateway" and "/p/" in path:
+                bad.append(f"{p['id']} still path-proxy → {btn}")
+            if p["id"] != "gateway" and p.get("ts_port") and f":{p['ts_port']}" not in btn:
+                bad.append(f"{p['id']} missing TS port → {btn}")
+        if mode != "ts-http":
+            for key in ("button", "remote", "ip"):
+                url = p.get(key) or ""
+                if ":8080" in url or ":20211" in url:
+                    # LAN /p/ must not expose raw admin ports
+                    if "/p/" not in url:
+                        bad.append(f"{p['id']}.{key} raw admin port → {url}")
+    kb = inline_keyboard(panels, "all")
+    if any(len(row) != 1 for row in kb["inline_keyboard"]):
+        bad.append("keyboard not single-column")
     if bad:
         print("FAIL:", "; ".join(bad), file=sys.stderr)
         return 1
-    print("OK: panels avoid :8080/:20211; Tailscale buttons use /p/")
+    print("OK: ts-http uses host:port; no MagicDNS; single-column menu")
     return 0
 
 
 def main() -> None:
     mode = sys.argv[1] if len(sys.argv) > 1 else "keyboard"
     sub = sys.argv[2] if len(sys.argv) > 2 else "all"
-
     if mode == "self_check":
         raise SystemExit(self_check())
-
     panels = panel_urls()
-
     if mode == "keyboard":
         print(json.dumps(inline_keyboard(panels, sub), ensure_ascii=False))
     elif mode == "reply_keyboard":
@@ -293,9 +237,16 @@ def main() -> None:
         print(json.dumps(panels, ensure_ascii=False))
     elif mode == "remote_mode":
         print(remote_access_base()[1])
+    elif mode == "panel_url":
+        pid = sub if sub != "all" else "gateway"
+        match = next((p for p in panels if p["id"] == pid), panels[0] if panels else None)
+        if not match:
+            raise SystemExit(f"unknown panel: {pid}")
+        print(match.get("button") or match.get("remote") or match.get("home") or "")
     elif mode == "use_reply_keyboard":
-        # Hermes owns inbox → reply keys become AI chat noise
         print("0" if hermes_owns_inbox() else "1")
+    elif mode == "menu_webapp_url":
+        print("")
     else:
         raise SystemExit(f"unknown mode: {mode}")
 

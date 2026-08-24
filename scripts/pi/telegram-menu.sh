@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Telegram: panel link menüsü (inline butonlar)
+# Telegram: temiz panel menüsü (pin + tek sütun URL butonlari)
 set -euo pipefail
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -14,44 +14,57 @@ source "$SCRIPT_DIR/../lib/notify.sh"
 log() { echo "[telegram-menu] $*"; }
 notify_enabled || { log "TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID eksik"; exit 1; }
 [[ -f "$PANELS_PY" ]] || { log "HATA: telegram-panels.py yok"; exit 1; }
-if [[ -z "${TAILSCALE_PANEL_URL:-}" ]] && [[ -f /var/lib/pi-gateway/tailscale-panel-url ]]; then
-  TAILSCALE_PANEL_URL="$(cat /var/lib/pi-gateway/tailscale-panel-url 2>/dev/null || true)"
+
+# Ensure TS :PORT DNAT before advertising links
+if [[ -x "$REMOTE_DIR/scripts/pi/setup-tailscale-panel-ports.sh" ]]; then
+  bash "$REMOTE_DIR/scripts/pi/setup-tailscale-panel-ports.sh" || log "WARN: ts-panel-ports"
 fi
-if [[ -z "${TAILSCALE_PANEL_URL:-}" ]] && command -v tailscale >/dev/null 2>&1; then
-  TAILSCALE_PANEL_URL="$(tailscale status --json 2>/dev/null | python3 -c "
-import json,sys
-d=json.load(sys.stdin).get('Self',{}).get('DNSName','').rstrip('.')
-print(f'https://{d}' if d else '')
-" 2>/dev/null || true)"
-fi
-export TAILSCALE_PANEL_URL LAN_DOMAIN PI_STATIC_IP PANEL_PROTOCOL ENABLE_TLS
+
+export LAN_DOMAIN PI_STATIC_IP PANEL_PROTOCOL ENABLE_TLS
 export AGH_ADMIN_USER CADDY_AUTH_USER FORGEJO_ADMIN_USER FORGEJO_LOGIN_USER
 export HERMES_TELEGRAM_GATEWAY
+export DOZZLE_PORT ADGUARD_WEB_PORT FORGEJO_PORT N8N_PORT SYNCTHING_PORT GRAFANA_PORT NETALERTX_PORT
+
+API="https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}"
 MARKUP="$(python3 "$PANELS_PY" keyboard all)"
 TEXT="$(python3 "$PANELS_PY" text all)"
-curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+
+resp="$(curl -fsS -X POST "${API}/sendMessage" \
   -d "chat_id=${TELEGRAM_CHAT_ID}" \
   -d "parse_mode=HTML" \
   --data-urlencode "text=${TEXT}" \
   --data-urlencode "reply_markup=${MARKUP}" \
-  -d "disable_web_page_preview=true" >/dev/null
+  -d "disable_web_page_preview=true")"
 
-# Hermes inbox: reply keyboard → AI'ya metin gider, karisiklik. Kaldir / gonderma.
-use_reply="$(python3 "$PANELS_PY" use_reply_keyboard 2>/dev/null || echo 1)"
-if [[ "$use_reply" == "1" ]]; then
+msg_id="$(printf '%s' "$resp" | python3 -c "import json,sys; print(json.load(sys.stdin).get('result',{}).get('message_id',''))" 2>/dev/null || true)"
+if [[ -n "$msg_id" ]]; then
+  curl -fsS -X POST "${API}/pinChatMessage" \
+    -d "chat_id=${TELEGRAM_CHAT_ID}" \
+    -d "message_id=${msg_id}" \
+    -d "disable_notification=true" >/dev/null 2>&1 || true
+fi
+
+curl -fsS -X POST "${API}/setChatMenuButton" \
+  -d "chat_id=${TELEGRAM_CHAT_ID}" \
+  -d 'menu_button={"type":"commands"}' >/dev/null 2>&1 || true
+curl -fsS -X POST "${API}/setMyCommands" \
+  -d 'commands=[{"command":"menu","description":"Panel menusu (sabitle)"},{"command":"paneller","description":"Panel menusu"}]' \
+  >/dev/null 2>&1 || true
+
+# Hermes: sticky reply keyboard = AI noise — remove
+if [[ "$(python3 "$PANELS_PY" use_reply_keyboard 2>/dev/null || echo 1)" == "1" ]]; then
   REPLY="$(python3 "$PANELS_PY" reply_keyboard)"
-  curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+  curl -fsS -X POST "${API}/sendMessage" \
     -d "chat_id=${TELEGRAM_CHAT_ID}" \
     -d "parse_mode=HTML" \
-    --data-urlencode "text=Hızlı erişim — /menu yeniler." \
+    --data-urlencode "text=Paneller — /menu" \
     --data-urlencode "reply_markup=${REPLY}" \
     -d "disable_web_page_preview=true" >/dev/null
 else
-  # Remove sticky keyboard left from old poller sessions
-  curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+  curl -fsS -X POST "${API}/sendMessage" \
     -d "chat_id=${TELEGRAM_CHAT_ID}" \
     -d "parse_mode=HTML" \
-    --data-urlencode "text=Hermes açık — panel için üstteki butonlar. Sohbet = agent." \
+    --data-urlencode "text=Sohbet = Hermes · paneller = sabitli mesaj" \
     --data-urlencode 'reply_markup={"remove_keyboard":true}' \
     -d "disable_web_page_preview=true" >/dev/null
 fi

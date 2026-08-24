@@ -74,7 +74,7 @@ Public status page: `https://status.home/status/pi-gateway` (after Caddy auth).
 
 Mac HTTPS cert warning: `make trust-ca`.
 
-Remote access: Tailscale enabled + MagicDNS (`home` split DNS). Details: `docs/TAILSCALE.md` (ACL: `config/tailscale/acl.hujson.example`).
+Remote access (telefon): Tailscale app **Connected** yeterli — butonlar `http://100.x/p/…` (MagicDNS / Use Tailscale DNS yok). Pi: `setup-caddy-lan-ip` TS:80→LAN Caddy DNAT. Menü sabitlenir. Details: `docs/TAILSCALE.md`.
 
 ## Daily commands (Mac)
 
@@ -169,7 +169,7 @@ SLO PUSH heartbeats → Uptime Kuma (`docs/SLO.md`).
 | `morning-summary.sh` (08:00 timer) | Daily morning summary |
 | n8n ← Uptime Kuma webhook | Service down / back up |
 | n8n ← Forgejo push webhook | Git push (repo: `FORGEJO_REPO_NAME`) |
-| n8n ← NetAlertX webhook | New device, offline / disconnect |
+| Hermes cron → `netalert-newdev.sh` / `netalert-offline.sh` | New device (15m), offline / disconnect (30m) — `NETALERT_NOTIFY_VIA=hermes`, NetAlertX container webhook off |
 
 | Command | Description |
 |---------|-------------|

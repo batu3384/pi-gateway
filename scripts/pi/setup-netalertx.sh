@@ -7,6 +7,7 @@ PG_SCRIPT_NAME="$(basename "$0")"
 # shellcheck source=../lib/env-file.sh
 source "${_PG_ENV_LIB:?}"
 read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
+NETALERT_NOTIFY_VIA="${NETALERT_NOTIFY_VIA:-hermes}"
 NETALERTX_PORT="${NETALERTX_PORT:-20211}"
 NETALERTX_LISTEN_ADDR="${NETALERTX_LISTEN_ADDR:-172.17.0.1}"
 NETALERTX_PASSWORD="${NETALERTX_PASSWORD:-${AGH_ADMIN_PASSWORD:-}}"
@@ -43,6 +44,10 @@ scan_subnet() {
   printf '%s --interface=%s' "${LAN_SUBNET_CIDR}" "${PI_INTERFACE}"
 }
 webhook_url() {
+  if [[ "${NETALERT_NOTIFY_VIA}" == "hermes" ]]; then
+    printf ''
+    return 0
+  fi
   local secret="${N8N_WEBHOOK_SECRET:-}"
   printf 'http://127.0.0.1:%s/webhook/netalert-device-alert-%s' "$N8N_PORT" "$secret"
 }
@@ -65,14 +70,20 @@ wait_http() {
 mkdir -p "${DATA_DIR}/config" "${DATA_DIR}/db"
 chown -R 20211:20211 "${DATA_DIR}" 2>/dev/null || sudo chown -R 20211:20211 "${DATA_DIR}" 2>/dev/null || true
 wait_http
-export CONF_FILE SCAN_SUBNET WEBHOOK_URL MARKER PANEL_PROTOCOL LAN_DOMAIN NETALERTX_PASSWORD
+export CONF_FILE SCAN_SUBNET MARKER PANEL_PROTOCOL LAN_DOMAIN NETALERTX_PASSWORD
 export AGH_ADMIN_USER AGH_ADMIN_PASSWORD ADGUARD_WEB_PORT
 SCAN_SUBNET="$(scan_subnet)"
 WEBHOOK_URL="$(webhook_url)"
-# shellcheck disable=SC2089,SC2090 # JSON string passed to python via env
+NETALERT_WEBHOOK_RUN="'on_notification'"
+NETALERT_WEBHOOK_URL="'${WEBHOOK_URL}'"
+if [[ "${NETALERT_NOTIFY_VIA}" == "hermes" ]]; then
+  NETALERT_WEBHOOK_RUN=''"'"'off'"'"''  # python: 'off'
+  NETALERT_WEBHOOK_URL=''"'"''"'"''      # python: ''
+  log "NetAlertX webhook kapali (NETALERT_NOTIFY_VIA=hermes)"
+fi
 PLUGINS='["ARPSCAN","DIGSCAN","NSLOOKUP","ICMP","WEBHOOK","NEWDEV","NTFPRCS","DBCLNP","CUSTPROP","SETPWD","SYNC","UI","MAINT","VNDRPDT","ADGUARDIMP","AVAHISCAN"]'
-# shellcheck disable=SC2090
-export SCAN_SUBNET WEBHOOK_URL PLUGINS
+# shellcheck disable=SC2089,SC2090
+export SCAN_SUBNET NETALERT_WEBHOOK_URL NETALERT_WEBHOOK_RUN PLUGINS
 python3 <<'PY'
 import os
 import re
@@ -81,7 +92,8 @@ from pathlib import Path
 conf = Path(os.environ["CONF_FILE"])
 marker = Path(os.environ["MARKER"])
 subnet = os.environ["SCAN_SUBNET"]
-webhook = os.environ["WEBHOOK_URL"]
+webhook = os.environ["NETALERT_WEBHOOK_URL"]
+webhook_run = os.environ["NETALERT_WEBHOOK_RUN"]
 password = os.environ["NETALERTX_PASSWORD"]
 password_hash = __import__("hashlib").sha256(password.encode()).hexdigest()
 agh_user = os.environ.get("AGH_ADMIN_USER", "admin")
@@ -102,9 +114,9 @@ text = conf.read_text()
 updates = {
     "LOADED_PLUGINS": plugins,
     "SCAN_SUBNETS": scan_value,
-    "WEBHOOK_URL": f"'{webhook}'",
+    "WEBHOOK_URL": webhook,
     "WEBHOOK_REQUEST_METHOD": "'POST'",
-    "WEBHOOK_RUN": "'on_notification'",
+    "WEBHOOK_RUN": webhook_run,
     "WEBHOOK_REPORT_TYPE": "'preset'",
     "ICMP_RUN": "'schedule'",
     "ARPSCAN_RUN": "'schedule'",
@@ -150,7 +162,7 @@ if changed or not marker.is_file():
     _u = os.environ.get("USER") or os.environ.get("PI_USER") or "pi"
     subprocess.run(["sudo", "chown", f"{_u}:{_u}", str(marker)], check=False)
     print(f"[netalertx-setup] app.conf guncellendi (SCAN_SUBNETS={subnet})")
-    print(f"[netalertx-setup] WEBHOOK_URL={webhook}")
+    print(f"[netalertx-setup] WEBHOOK_RUN={webhook_run} WEBHOOK_URL={webhook}")
 else:
     print("[netalertx-setup] app.conf zaten guncel")
 PY
@@ -162,5 +174,19 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 bash "$SCRIPT_DIR/import-adguard-names-to-netalertx.sh" || log "WARN: AdGuard isim importu atlandi"
 bash "$SCRIPT_DIR/enrich-netalertx-names.sh"
 bash "$SCRIPT_DIR/sync-adguard-persistent-clients.sh" || log "WARN: AdGuard istemci senkronu atlandi"
+DB_DIR="${DATA_DIR}/db"
+DB_FILE="${DB_DIR}/app.db"
+_pi_u="${USER:-pi}"
+if [[ -d "$DB_DIR" ]]; then
+  chown 20211:"$_pi_u" "$DB_DIR" 2>/dev/null || sudo chown 20211:"$_pi_u" "$DB_DIR" 2>/dev/null || true
+  chmod 775 "$DB_DIR" 2>/dev/null || sudo chmod 775 "$DB_DIR" 2>/dev/null || true
+fi
+if [[ -f "$DB_FILE" ]]; then
+  for _dbf in "$DB_DIR"/app.db "$DB_DIR"/app.db-wal "$DB_DIR"/app.db-shm; do
+    [[ -e "$_dbf" ]] || continue
+    chown 20211:"$_pi_u" "$_dbf" 2>/dev/null || sudo chown 20211:"$_pi_u" "$_dbf" 2>/dev/null || true
+    chmod 660 "$_dbf" 2>/dev/null || sudo chmod 660 "$_dbf" 2>/dev/null || true
+  done
+fi
 log "Tamamlandi — https://devices.${LAN_DOMAIN:-home}"
 log "Giris: NetAlertX UI sifresi (NETALERTX_PASSWORD veya AGH_ADMIN_PASSWORD)"

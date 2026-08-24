@@ -150,8 +150,7 @@ run_step_optional "Host sertlestirme" "$SCRIPT_DIR/harden-host.sh"
 if [[ "$DEPLOY_DEGRADED" -eq 0 ]]; then
 if [[ "${ENABLE_MONITORING:-true}" == "true" ]]; then
   run_step_critical "Monitoring data dirs" "$SCRIPT_DIR/ensure-monitoring-data.sh"
-  run_step_optional "Monitoring stack restart" bash -c \
-    'cd "'"$REMOTE_DIR"'/compose" && docker compose --env-file ../.env --profile monitoring up -d prometheus grafana node-exporter'
+  run_step_soft "Monitoring stack restart" "$SCRIPT_DIR/restart-monitoring-stack.sh"
 fi
 if [[ "${ENABLE_FORGEJO:-true}" == "true" ]]; then
   run_step_optional "Forgejo admin" "$SCRIPT_DIR/setup-forgejo.sh"
@@ -181,18 +180,23 @@ if docker ps --format '{{.Names}}' | grep -q '^uptime-kuma$'; then
   run_step_critical "Uptime Kuma monitorler" "$SCRIPT_DIR/setup-uptime-kuma.sh"
 fi
 if [[ "${ENABLE_N8N:-true}" == "true" ]] && [[ "${ENABLE_FORGEJO:-true}" == "true" ]]; then
-  run_step_critical "Forgejo n8n webhook" "$SCRIPT_DIR/setup-forgejo-webhook.sh"
-fi
-if command -v tailscale >/dev/null 2>&1 && tailscale status >/dev/null 2>&1; then
-  run_step_optional "Tailscale uzaktan erisim" "$SCRIPT_DIR/setup-tailscale-remote.sh"
-  run_step_optional "Tailscale panel HTTPS" "$SCRIPT_DIR/setup-tailscale-serve.sh"
-  run_step_optional "Tailscale ACL" "$SCRIPT_DIR/setup-tailscale-acl.sh"
+  run_step_soft "Forgejo n8n webhook" "$SCRIPT_DIR/setup-forgejo-webhook.sh"
 fi
 # LAN IP panel yollari (Tailscale yoksa da)
 if [[ -n "${PI_STATIC_IP:-}" && -f "${REMOTE_DIR}/config/caddy/Caddyfile" ]]; then
   run_step_optional "LAN IP panel yollari" "$SCRIPT_DIR/setup-caddy-lan-ip.sh"
 fi
+if command -v tailscale >/dev/null 2>&1 && tailscale status >/dev/null 2>&1; then
+  run_step_optional "Tailscale uzaktan erisim" "$SCRIPT_DIR/setup-tailscale-remote.sh"
+  run_step_optional "Tailscale panel HTTPS" "$SCRIPT_DIR/setup-tailscale-serve.sh"
+  run_step_optional "Tailscale ACL" "$SCRIPT_DIR/setup-tailscale-acl.sh"
+  # caddy-lan'dan SONRA — UFW ts-panel-* kurallari kalir
+  run_step_optional "Tailscale panel portlari" "$SCRIPT_DIR/setup-ts-panel-ports-unit.sh"
+fi
 run_step_soft "Hermes gateway" "$SCRIPT_DIR/setup-hermes-gateway.sh"
+run_step_soft "Hermes env" "$SCRIPT_DIR/ensure-hermes-env.sh"
+run_step_soft "Hermes config" "$SCRIPT_DIR/patch-hermes-config-pi.sh"
+run_step_soft "Hermes cron" "$SCRIPT_DIR/setup-hermes-cron.sh"
 run_step_soft "Telegram panel bot" "$SCRIPT_DIR/setup-telegram-bot.sh"
 if [[ "${ENABLE_CROWDSEC:-true}" == "true" ]]; then
   run_step_optional "CrowdSec" "$SCRIPT_DIR/setup-crowdsec.sh"

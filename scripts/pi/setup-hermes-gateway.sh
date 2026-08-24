@@ -67,6 +67,7 @@ sudo sed -i "s|PI_USER|${USER}|g" "/etc/systemd/system/$unit" 2>/dev/null || \
 
 [[ -x "$SCRIPT_DIR/patch-hermes-telegram-pi.sh" ]] || die "patch-hermes-telegram-pi.sh yok"
 bash "$SCRIPT_DIR/patch-hermes-telegram-pi.sh" || die "hermes telegram patch basarisiz — gateway enable yok"
+[[ -x "$SCRIPT_DIR/patch-hermes-cron-pi.sh" ]] && bash "$SCRIPT_DIR/patch-hermes-cron-pi.sh" || true
 
 # Poller once — dual getUpdates penceresi olmasin
 if systemctl list-unit-files "$poller" 2>/dev/null | grep -q "$poller"; then

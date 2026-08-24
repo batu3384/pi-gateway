@@ -1,0 +1,17 @@
+[Unit]
+Description=Pi Gateway Tailscale panel port DNAT (no MagicDNS)
+After=network-online.target tailscaled.service docker.service
+Wants=network-online.target tailscaled.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Boot race: wait for 100.x then fail+retry if still missing
+Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
+Environment=PI_GATEWAY_TS_PANEL_REQUIRE=1
+ExecStart=/home/PI_USER/pi-gateway/scripts/pi/setup-tailscale-panel-ports.sh
+Restart=on-failure
+RestartSec=20
+
+[Install]
+WantedBy=multi-user.target

@@ -305,7 +305,25 @@ grep -q 'setup-netalertx.sh' "$PROJECT_DIR/scripts/pi/post-deploy.sh" \
   || die "post-deploy netalertx yok"
 grep -q 'netalert-device-alert' "$PROJECT_DIR/config/n8n/netalert-device-alert.workflow.json" \
   || die "n8n netalert workflow yok"
-ok "netalertx host network + webhook"
+grep -q 'netalert-events.sh' "$PROJECT_DIR/scripts/pi/netalert-newdev.sh" \
+  || die "netalert-newdev wrapper yok"
+[[ -f "$PROJECT_DIR/scripts/pi/netalert-offline.sh" ]] \
+  || die "netalert-offline yok"
+grep -q 'notify_netalert_offline_devices' "$PROJECT_DIR/scripts/lib/notify.sh" \
+  || die "notify offline yok"
+grep -q 'panel_url' "$PROJECT_DIR/scripts/lib/telegram-panels.py" \
+  || die "telegram-panels panel_url yok"
+python3 "$PROJECT_DIR/scripts/lib/netalert-devices.py" --self-check \
+  || die "netalert-devices self-check fail"
+grep -q 'setup-hermes-cron.sh' "$PROJECT_DIR/scripts/pi/post-deploy.sh" \
+  || die "post-deploy hermes cron yok"
+[[ -f "$PROJECT_DIR/scripts/pi/setup-hermes-cron-scripts.sh" ]] \
+  || die "setup-hermes-cron-scripts yok"
+grep -q 'pi-netalert-newdev.sh' "$PROJECT_DIR/config/hermes/cron-jobs.template.json" \
+  || die "hermes cron template relative script yok"
+grep -q 'NETALERT_NOTIFY_VIA' "$PROJECT_DIR/scripts/pi/setup-netalertx.sh" \
+  || die "setup-netalertx NOTIFY_VIA yok"
+ok "netalertx host network + events pipeline + hermes kanal"
 
 grep -q 'STORAGE_TYPE=hybrid' "$PROJECT_DIR/.env.example" \
   || die ".env.example hybrid varsayilan degil"

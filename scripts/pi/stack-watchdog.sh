@@ -12,13 +12,28 @@ REMOTE_DIR="$_WATCHDOG_REMOTE_DIR"
 # shellcheck source=../lib/stack-health.sh
 source "$SCRIPT_DIR/../lib/stack-health.sh"
 STACK_AUTO_RECOVER="${STACK_AUTO_RECOVER:-true}"
+
+if [[ -z "${PI_USER:-}" || "$PI_USER" == "PI_USER" ]]; then
+  PI_USER="$(basename "$(dirname "${REMOTE_DIR}")")"
+fi
+export PI_USER NOTIFY_OWNER="${NOTIFY_OWNER:-$PI_USER}"
+
 log() {
   logger -t "$LOG_TAG" "$*"
   echo "[stack-watchdog] $*"
 }
+
+_stack_notify_recovered() {
+  local host detail
+  host="$1"
+  detail="${2:-Stack normale döndü.}"
+  # shellcheck source=../lib/notify.sh
+  source "$SCRIPT_DIR/../lib/notify.sh"
+  notify_stack_recovered "$host" "$detail"
+}
+
 PROBLEMS=()
 if storage_degraded; then
-  # SSD geri geldiyse idle kalma — restore tetikle
   if declare -F ssd_mount_healthy >/dev/null 2>&1 && ssd_mount_healthy; then
     log "degraded ama SSD saglikli — restore tetikleniyor"
     PROBLEMS+=("storage-degraded-ssd-ready")
@@ -44,19 +59,32 @@ fi
 if ! stack_core_ok; then
   PROBLEMS+=("stack-core-down")
 fi
+
 if [[ ${#PROBLEMS[@]} -eq 0 ]] && stack_gateway_ok && root_rw_ok; then
+  # shellcheck source=../lib/notify.sh
+  source "$SCRIPT_DIR/../lib/notify.sh"
+  if notify_transition_peek "stack-recovered" "ok"; then
+    _stack_notify_recovered "$(hostname -s)" "Tüm kontroller geçti."
+  fi
   exit 0
 fi
+
 [[ ${#PROBLEMS[@]} -eq 0 ]] && PROBLEMS+=("gateway-unreachable")
 log "Sorun: ${PROBLEMS[*]}"
+
 if [[ "$STACK_AUTO_RECOVER" != "true" ]]; then
   exit 1
 fi
+
 if recover_service_running; then
   log "recover-ro calisiyor — bekleniyor"
+  # shellcheck source=../lib/notify.sh
+  source "$SCRIPT_DIR/../lib/notify.sh"
+  notify_transition_commit "stack-recovered" "fail" 2>/dev/null || true
   if wait_for_recover_service; then
     if stack_fully_healthy && root_rw_ok; then
       log "recover-ro tamamlandi — stack saglikli"
+      _stack_notify_recovered "$(hostname -s)" "${PROBLEMS[*]}"
       exit 0
     fi
   else
@@ -64,14 +92,17 @@ if recover_service_running; then
     exit 1
   fi
 fi
+
 if stack_recover_suppressed; then
   log "Kurtarma beklemede (cooldown/boot grace)"
   exit 0
 fi
+
+# shellcheck source=../lib/notify.sh
+source "$SCRIPT_DIR/../lib/notify.sh"
+notify_transition_commit "stack-recovered" "fail" 2>/dev/null || true
 if bash "$SCRIPT_DIR/recover-stack.sh"; then
   log "Kurtarma basarili"
-  # shellcheck source=../lib/notify.sh
-  source "$SCRIPT_DIR/../lib/notify.sh"
   notify_stack_recovered "$(hostname -s)" "${PROBLEMS[*]}"
   exit 0
 fi

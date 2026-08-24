@@ -41,17 +41,21 @@ Approve / label known devices to reduce "new device" alerts.
 
 ## Notifications
 
-| Event | Channel |
-|-------|---------|
-| New device | n8n → Telegram |
-| Offline / disconnect | n8n → Telegram |
+| Event | Channel | Not |
+|-------|---------|-----|
+| New device | Hermes `no_agent` → `netalert-newdev.sh` | Events `New Device`; state v3 |
+| Offline / disconnect | Hermes `no_agent` → `netalert-offline.sh` | Events `Disconnected` |
+| n8n NetAlertX webhook | **Kapalı** (`NETALERT_NOTIFY_VIA=hermes`) | Çift bildirim önlenir |
 
-Direct Telegram in NetAlertX is **disabled** — single path is n8n webhook.
+**Tek bildirim yolu:** `NETALERT_NOTIFY_VIA=hermes` (varsayılan). n8n workflow pasif kalır.
+
+`netalert-newdev.sh` artık MAC listesi değil NetAlertX **Events** (`New Device`) okur; `internet` pseudo-cihaz filtrelenir. İlk kurulumda bootstrap — tarihsel flood yok.
 
 Test:
 
 ```bash
 make telegram-test   # general path
+python3 scripts/lib/netalert-devices.py --self-check
 # smoke: n8n-netalert-webhook (after deploy)
 ```
 

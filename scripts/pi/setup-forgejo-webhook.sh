@@ -133,6 +133,8 @@ code="$(forgejo_http_code POST "${API}/repos/${FORGEJO_ADMIN_USER}/${FORGEJO_REP
   -d "$payload")"
 if [[ "$code" == "201" ]]; then
   log "Webhook eklendi: ${FORGEJO_ADMIN_USER}/${FORGEJO_REPO_NAME} -> $N8N_WEBHOOK_URL"
+elif [[ "$code" == "409" ]]; then
+  log "Webhook zaten kayitli (HTTP 409) — $N8N_WEBHOOK_URL"
 else
   log "HATA: webhook eklenemedi (HTTP $code)"
   exit 1

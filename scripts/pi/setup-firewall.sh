@@ -122,7 +122,9 @@ setup_ufw() {
   sudo ufw allow from "$LAN_SUBNET" to any port 22000 proto tcp comment 'pi-gateway syncthing-tcp'
   sudo ufw allow from "$LAN_SUBNET" to any port 22000 proto udp comment 'pi-gateway syncthing-udp'
   delete_ufw_rules_matching 'pi-gateway docker-adguard'
-  # AdGuard host network — yalnizca compose agi (Caddy -> AdGuard :8080)
+  delete_ufw_rules_matching 'pi-gateway docker-bridge-adguard'
+  delete_ufw_rules_matching 'pi-gateway docker-caddy-adguard'
+  # AdGuard host network — compose_default + genis docker bridge (subnet drift)
   compose_subnet="$(docker network inspect compose_default -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}' 2>/dev/null || true)"
   if [[ -n "$compose_subnet" ]]; then
     sudo ufw allow from "$compose_subnet" to any port 8080 proto tcp comment 'pi-gateway docker-adguard'
@@ -135,6 +137,25 @@ setup_ufw() {
     fi
   else
     log "WARN: compose_default subnet bulunamadi — docker-adguard UFW kurali atlandi"
+  fi
+  # Ek docker bridge subnet'leri (172.16/12 yerine gercek CIDR)
+  while IFS= read -r _dock_subnet; do
+    [[ -n "$_dock_subnet" ]] || continue
+    [[ "$_dock_subnet" == "$compose_subnet" ]] && continue
+    sudo ufw allow from "$_dock_subnet" to any port 8080 proto tcp comment 'pi-gateway docker-bridge-adguard'
+    if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
+      sudo ufw allow from "$_dock_subnet" to any port "${NETALERTX_PORT:-20211}" proto tcp comment 'pi-gateway docker-bridge-netalertx'
+    fi
+  done < <(docker network ls -q 2>/dev/null | while read -r _nid; do
+    [[ -n "$_nid" ]] || continue
+    docker network inspect "$_nid" -f '{{range .IPAM.Config}}{{.Subnet}}{{println}}{{end}}' 2>/dev/null
+  done | awk 'NF' | sort -u)
+  if ! docker network ls -q 2>/dev/null | grep -q .; then
+    log "WARN: docker ag yok — docker0 fallback 172.17.0.0/16"
+    sudo ufw allow from 172.17.0.0/16 to any port 8080 proto tcp comment 'pi-gateway docker0-adguard-fallback'
+    if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
+      sudo ufw allow from 172.17.0.0/16 to any port "${NETALERTX_PORT:-20211}" proto tcp comment 'pi-gateway docker0-netalertx-fallback'
+    fi
   fi
   delete_ufw_rules_matching 'pi-gateway tailscale'
   delete_ufw_rules_matching 'pi-gateway ts-subnet'

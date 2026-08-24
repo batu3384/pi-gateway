@@ -17,6 +17,7 @@ PG_SCRIPT_NAME="$(basename "$0")"
 # shellcheck source=../lib/env-file.sh
 source "${_PG_ENV_LIB:?}"
 read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
+NETALERT_NOTIFY_VIA="${NETALERT_NOTIFY_VIA:-hermes}"
 [[ "${ENABLE_N8N:-true}" == "true" ]] || { log "n8n kapali"; exit 0; }
 [[ -n "${TELEGRAM_BOT_TOKEN:-}" && -n "${TELEGRAM_CHAT_ID:-}" ]] || {
   log "HATA: TELEGRAM_BOT_TOKEN ve TELEGRAM_CHAT_ID gerekli"
@@ -90,6 +91,29 @@ for line in sys.stdin:
   log "HATA: aktivasyon basarisiz — $name"
   return 1
 }
+deactivate_workflow() {
+  local name="$1"
+  local id
+  id="$(n8n_cli list:workflow 2>/dev/null | python3 -c "
+import sys
+name = sys.argv[1]
+for line in sys.stdin:
+    line = line.strip()
+    if not line or '|' not in line:
+        continue
+    wf_id, wf_name = line.split('|', 1)
+    if wf_name == name:
+        print(wf_id)
+        break
+" "$name" 2>/dev/null || true)"
+  [[ -n "$id" ]] || { log "NetAlertX workflow yok — deactivate atlandi"; return 0; }
+  if n8n_cli update:workflow --id="$id" --active=false 2>/dev/null; then
+    log "Pasif: $name (id=$id)"
+    return 0
+  fi
+  log "WARN: deactivate basarisiz — $name"
+  return 0
+}
 import_workflow() {
   local name="$1" file="$2"
   local tmp remote="/tmp/pi-gateway-wf-$$-${RANDOM}.json"
@@ -130,7 +154,11 @@ if [[ "$needs_import" == "true" ]]; then
   import_workflow "Pi Gateway — Uptime Kuma Alert" "${N8N_DIR}/uptime-kuma-alert.workflow.json" || fail=1
   import_workflow "Pi Gateway — Forgejo Push" "${N8N_DIR}/forgejo-push.workflow.json" || fail=1
   if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
-    import_workflow "Pi Gateway — NetAlertX Alert" "${N8N_DIR}/netalert-device-alert.workflow.json" || fail=1
+    if [[ "${NETALERT_NOTIFY_VIA}" == "hermes" ]]; then
+      deactivate_workflow "Pi Gateway — NetAlertX Alert" || true
+    else
+      import_workflow "Pi Gateway — NetAlertX Alert" "${N8N_DIR}/netalert-device-alert.workflow.json" || fail=1
+    fi
   fi
   if [[ "$fail" -eq 0 ]]; then
     render_hash >"$RENDER_MARKER"
@@ -140,7 +168,11 @@ else
   activate_workflow "Pi Gateway — Uptime Kuma Alert" || fail=1
   activate_workflow "Pi Gateway — Forgejo Push" || fail=1
   if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
-    activate_workflow "Pi Gateway — NetAlertX Alert" || fail=1
+    if [[ "${NETALERT_NOTIFY_VIA}" == "hermes" ]]; then
+      deactivate_workflow "Pi Gateway — NetAlertX Alert" || true
+    else
+      activate_workflow "Pi Gateway — NetAlertX Alert" || fail=1
+    fi
   fi
   needs_restart=true
 fi

@@ -26,22 +26,16 @@ chmod 700 "$STATE_DIR" 2>/dev/null || true
 export LAN_DOMAIN PI_STATIC_IP PANEL_PROTOCOL ENABLE_TLS TAILSCALE_PANEL_URL
 export AGH_ADMIN_USER CADDY_AUTH_USER FORGEJO_ADMIN_USER FORGEJO_LOGIN_USER
 export HERMES_TELEGRAM_GATEWAY
+export DOZZLE_PORT ADGUARD_WEB_PORT FORGEJO_PORT N8N_PORT SYNCTHING_PORT GRAFANA_PORT NETALERTX_PORT
 resolve_tailscale_url() {
+  # Legacy MagicDNS URL — panels artık TS IP:PORT kullanır; env yalnız geriye uyum
   if [[ -n "${TAILSCALE_PANEL_URL:-}" ]]; then
     return 0
   fi
   if [[ -f /var/lib/pi-gateway/tailscale-panel-url ]]; then
     TAILSCALE_PANEL_URL="$(cat /var/lib/pi-gateway/tailscale-panel-url 2>/dev/null || true)"
     export TAILSCALE_PANEL_URL
-    [[ -n "$TAILSCALE_PANEL_URL" ]] && return 0
   fi
-  command -v tailscale >/dev/null 2>&1 || return 0
-  TAILSCALE_PANEL_URL="$(tailscale status --json 2>/dev/null | python3 -c "
-import json,sys
-d=json.load(sys.stdin).get('Self',{}).get('DNSName','').rstrip('.')
-print(f'https://{d}' if d else '')
-" 2>/dev/null || true)"
-  export TAILSCALE_PANEL_URL
 }
 resolve_tailscale_url
 tg_api() {
@@ -72,7 +66,7 @@ tg_send_reply_keyboard() {
   local reply="$2"
   tg_api sendMessage \
     -d "chat_id=${chat_id}" \
-    --data-urlencode "text=Hızlı erişim — /menu yeniler." \
+    --data-urlencode "text=Paneller — /menu" \
     -d "parse_mode=HTML" \
     -d "disable_web_page_preview=true" \
     --data-urlencode "reply_markup=${reply}"
@@ -81,7 +75,7 @@ tg_remove_reply_keyboard() {
   local chat_id="$1"
   tg_api sendMessage \
     -d "chat_id=${chat_id}" \
-    --data-urlencode "text=Hermes açık — panel için üstteki butonlar." \
+    --data-urlencode "text=Sohbet = Hermes · paneller = sabitli mesaj" \
     -d "parse_mode=HTML" \
     -d "disable_web_page_preview=true" \
     --data-urlencode 'reply_markup={"remove_keyboard":true}'
@@ -98,10 +92,34 @@ tg_send_text() {
 send_panel_menu() {
   local chat_id="$1"
   local sub="${2:-all}"
-  local inline reply text use_reply
+  local inline reply text use_reply resp msg_id webapp
   inline="$(python3 "$PANELS_PY" keyboard "$sub")"
   text="$(python3 "$PANELS_PY" text "$sub")"
-  tg_send_inline "$chat_id" "$text" "$inline"
+  resp="$(tg_api_json sendMessage \
+    -d "chat_id=${chat_id}" \
+    --data-urlencode "text=${text}" \
+    -d "parse_mode=HTML" \
+    -d "disable_web_page_preview=true" \
+    --data-urlencode "reply_markup=${inline}" 2>/dev/null || true)"
+  msg_id="$(printf '%s' "$resp" | python3 -c "import json,sys; print(json.load(sys.stdin).get('result',{}).get('message_id',''))" 2>/dev/null || true)"
+  if [[ -n "$msg_id" ]]; then
+    tg_api pinChatMessage \
+      -d "chat_id=${chat_id}" \
+      -d "message_id=${msg_id}" \
+      -d "disable_notification=true" >/dev/null 2>&1 || true
+  fi
+  webapp="$(python3 "$PANELS_PY" menu_webapp_url 2>/dev/null || true)"
+  if [[ -n "$webapp" ]]; then
+    tg_api setChatMenuButton \
+      -d "chat_id=${chat_id}" \
+      --data-urlencode "menu_button={\"type\":\"web_app\",\"text\":\"Paneller\",\"web_app\":{\"url\":\"${webapp}/\"}}" \
+      >/dev/null 2>&1 || true
+  else
+    tg_api setChatMenuButton \
+      -d "chat_id=${chat_id}" \
+      -d 'menu_button={"type":"commands"}' \
+      >/dev/null 2>&1 || true
+  fi
   use_reply="$(python3 "$PANELS_PY" use_reply_keyboard 2>/dev/null || echo 1)"
   if [[ "$use_reply" == "1" ]]; then
     reply="$(python3 "$PANELS_PY" reply_keyboard)"
@@ -112,10 +130,10 @@ send_panel_menu() {
 }
 register_bot_ui() {
   tg_api setMyCommands \
-    -d 'commands=[{"command":"menu","description":"Panel linkleri"},{"command":"uzak","description":"Uzaktan linkler"},{"command":"ev","description":"Ev ağı linkleri"}]' \
+    -d 'commands=[{"command":"menu","description":"Panel menusu (sabitle)"},{"command":"paneller","description":"Panel menusu"}]' \
     >/dev/null 2>&1 || true
   tg_api setMyDescription \
-    --data-urlencode "description=Pi Gateway — /menu ile paneller." \
+    --data-urlencode "description=Pi Gateway paneller — /menu. Sohbet Hermes." \
     >/dev/null 2>&1 || true
   tg_api setChatMenuButton \
     -d "chat_id=${TELEGRAM_CHAT_ID}" \
@@ -126,25 +144,17 @@ handle_message() {
   local chat_id="$1"
   local text="$2"
   case "$text" in
-    /start|/menu|/paneller|/linkler|"📋 Paneller"|"📋 Tüm paneller"|menu|paneller|linkler)
+    /start|/menu|/paneller|/linkler|Paneller|menu|paneller|linkler)
       send_panel_menu "$chat_id" all
       ;;
-    /uzak|/remote|"🌐 Uzaktan"|"🌐 Uzaktan (Tailscale)"|"🌐 Uzaktan (HTTPS)"|uzak)
-      mode="$(python3 "$PANELS_PY" remote_mode 2>/dev/null || echo none)"
-      if [[ "$mode" == "serve" ]] || [[ -n "$(tailscale ip -4 2>/dev/null | head -1)" ]]; then
-        send_panel_menu "$chat_id" remote
-      else
-        tg_send_text "$chat_id" "Tailscale yok.\n<code>bash scripts/pi/setup-tailscale-serve.sh</code>"
-      fi
+    /uzak|/remote|uzak)
+      send_panel_menu "$chat_id" remote
       ;;
-    /ev|/home|"🏠 Ev"|"🏠 Ev ağı"|ev)
+    /ev|/home|ev)
       send_panel_menu "$chat_id" home
       ;;
-    /ip|"📍 IP yedek"|ip)
-      send_panel_menu "$chat_id" ip
-      ;;
     /help|help)
-      tg_send_text "$chat_id" "Komutlar: /menu /uzak /ev"
+      tg_send_text "$chat_id" "<b>Pi Gateway</b>\n\n/menu veya /paneller — panel menüsü (sabitlenir)\nButon → Safari’de Aç\n\n<i>Sohbet = Hermes · uyarılar = otomatik bildirimler</i>"
       ;;
     *)
       log "yok sayilan metin (${#text} char)"

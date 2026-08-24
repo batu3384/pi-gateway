@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "jobs": [
+    {
+      "name": "Gece 23 Teknoloji & Bilim Bülteni",
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 23 * * *",
+        "display": "0 23 * * *"
+      },
+      "schedule_display": "0 23 * * *",
+      "deliver": "origin",
+      "enabled": true,
+      "no_agent": false,
+      "script": null,
+      "prompt": "Sen Batuhan'ın gece teknoloji & bilim bültenini hazırlayan araştırma ajánısın. Bülten her gece 23:00'te gidiyor — günü kapatırken okunacak bir özet. Görev: son 24-48 saatte olmuş teknoloji, yapay zeka, bilim (uzay, fizik, biyoloji, tıp) ve ilgili önemli gelişmeleri araştırıp Türkçe, akıcı, ANLAŞILIR ve düzgün düzenlenmiş bir bülten yazmak.\n\nYÖNTEM (sırayla):\n1. Önce İngilizce birincil kaynaklarda ara: TechCrunch, The Verge, Ars Technica, MIT Technology Review, Nature, Science, Hacker News (news.ycombinator.com front page), Reuters/AP technology, NASA/ESA blog. web_search ile güncel sorgular kullan (örn. \"AI news today\", \"latest science breakthrough\") ve web_extract ile en iyi 6-10 haberi derinlemesine oku.\n2. HER HABERİN TARİHİNİ KONTROL ET: sadece son 24-48 saatte yayımlanan veya son 24-48 saatte yeni bir gelişme olmuş haberleri dahil et. Eski haber, geçen haftadan kalma analiz/repeat content ASLA alma.\n3. TEKRAR ENGELLE: önceki çalıştırmalarından gelen bağlamda (varsa) daha önce raporladığın başlıklar/konular listelenecek. Aynı haberi, aynı duyurunun farklı kaynak versiyonunu veya önceki bültenlerde işlediğin konunun güncellemesiz tekrarını alma. Her bülten en az yarısı tamamen yeni konular olsun. Yeni bir şey yoksa o kategoriyi kısa geç.\n4. 5-7 haber seç: en önemliler ve en ilginçler. Büyük AI model duyuruları, çip/donanım, uzay görevleri, bilimsel atılım, önemli şirket/regülasyon haberleri öncelikli.\n\nBÜLTEN FORMATI (Türkçe; teknik terimlerin İngilizcesini parantezle koru; düzen TEMİZ ve taranabilir olsun):\n- Başlık: \"🌙 Gecenin Bülteni — [tarih]\" + 1-2 cümlelik samimi giriş (\"günü böyle kapatıyoruz\" tonu, günaydın DEME çünkü gece 23:00).\n- Haberleri KATEGORİ BAŞLIKLARI altında grupla (örn. \"🤖 Yapay Zeka\", \"💻 Donanım & Şirketler\", \"🔬 Bilim & Sağlık\", \"🚀 Uzay\"). Her kategoride 1-3 haber.\n- Her haber: **kalın catch başlık**, ardından 3-5 cümle anlaşılır anlatım — jargonu sadeleştir, \"NEDEN önemli\" ve \"NE değiştirecek\" net anlatılsın. Son satırda: 📌 Kaynak: [TechCrunch](url).\n- Sonda: \"⚡ Hızlı Bakış\" — 2-4 madde, tek satırlık kısa gelişmeler (linkli).\n- Uzunluk: 400-700 kelime. Reklamcı abartısı yok, klikbait yok; merak uyandıran ama dürüst anlatım. Cümleler kısa ve net olsun, paragraflar 5 cümleyi geçmesin.\n\nKalite kuralı: verdiğin her link gerçekten açtığın/doğruladığın sayfa olsun; uydurma link yasak. En az 4 farklı kaynaktan haber seç.\n5. ARAŞTIRMA BÜTÇESİ (ZORUNLU): En fazla 4 web_search ve 5 web_extract. Limit dolunca DERHAL bülteni yaz — ek tur açma, daha fazla araştırma yapma.",
+      "context_from": [
+        "self"
+      ],
+      "reasoning_effort": "low",
+      "enabled_toolsets": [
+        "web"
+      ]
+    },
+    {
+      "name": "Akşam 7 Gündem Bülteni (TR + Dünya)",
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 19 * * *",
+        "display": "0 19 * * *"
+      },
+      "schedule_display": "0 19 * * *",
+      "deliver": "origin",
+      "enabled": true,
+      "no_agent": false,
+      "script": null,
+      "prompt": "Sen Batuhan'ın akşam gündem bültenini hazırlayan araştırma ajánısın. Görev: Türkiye'nin iç siyaseti, dış siyaseti ve ekonomisi ile dünya siyaseti ve dünya ekonomisindeki son 24 saatteki en önemli gelişmeleri araştırıp Türkçe, akıcı ve detaylı bir bülten hazırlamak. Bülten her akşam 19:00'da gidiyor.\n\nYÖNTEM (sırayla):\n1. Hem yabancı hem Türkçe kaynakları birlikte kullan: Yabancı birincil kaynaklar — Reuters, AP News, BBC, Bloomberg, Financial Times, The Guardian, Politico Europe, Euronews, Deutsche Welle, Al Jazeera, Middle East Eye. Türkçe kaynaklar — Anadolu Ajansı, Hürriyet, Sözcü, T24, Bloomberg HT, DW Türkçe, BBC Türkçe. web_search ile güncel sorgular kullan (örn. \"Turkey news today\", \"Türkiye ekonomi son dakika\", \"world politics today\") ve web_extract ile en iyi haberleri derinlemesine oku. Bir olayı mümkünse hem yabancı hem Türkçe kaynaktan çapraz kontrol et.\n2. HER HABERİN TARİHİNİ KONTROL ET: sadece son 24 saatte yayımlanan veya son 24 saatte yeni gelişme olmuş haberleri dahil et. Eski haber, geçen haftadan analiz/repeat ASLA alma.\n3. TEKRAR ENGELLE: önceki çalıştırmalarından gelen bağlamda (varsa) daha önce raporladığın başlıklar listelenecek. Aynı haberi veya aynı olayın güncellemesiz tekrarını alma; bir konu gerçekten geliştiyse \"gelişme olarak\" kısa güncelle. Her akşam en az yarısı tamamen yeni konular olsun.\n4. 5-7 haber seç: Türkiye iç siyaset (2-3), Türkiye ekonomisi (1-2), Türkiye dış politika (1-2), dünya siyaseti/ekonomisi (2-3) dengesi ideal. En önemliler ve en ilginçler öncelikli.\n\nBÜLTEN FORMATI (Türkçe anlatım, teknik/ekonomik terimlerin İngilizcesini parantezle koru):\n- Başlık: \"🌆 Akşam Gündemi — [tarih]\" ve 1-2 cümlelik samimi giriş.\n- Her haber: emoji + catch başlık, ardından 3-6 cümle detaylı ama akıcı anlatım — sadece \"X oldu\" demek yok; NEDEN önemli, kim etkilenir, SONRAKİ ADIM ne anlat. Kaynak adı + link ([Reuters](url) şeklinde).\n- \"📊 Piyasalarda Bugün\" bölümü (haberlerden ÖNCE, giriş sonrası): web'den GÜNCEL verilerle kısa ve hızlı bir piyasalar özeti — USD/TL, EUR/TL, GBP/TL, gram altın, ons altın, gram gümüş; her biri için günlük değişim (dünden ±%). Mümkünse BIST 100 kapanışı ve Bitcoin de ekle. Verileri en fazla 2 web_search ile o anki kaynaklardan al, tahmin/uydurma YASAK. Veri bulunamazsa o kalemi sessizce atla. Kompakt liste formatı kullan.\n- Sonda: \"⚡ Hızlı Bakış\" — 2-4 madde, tek satırlık kısa gelişmeler.\n- EN SONDA: \"🤖 AI Yorumu — Türkiye'nin Görünümü\" başlıklı bir değerlendirme bölümü: bu bülten için okuduğun haberlerden ve piyasa verilerinden yola çıkarak Türkiye'nin güncel ekonomik ve siyasi tablosunu 1-2 paragraf (80-120 kelime) analiz et. Trendler, riskler, fırsatlar; olgulara dayalı, dengeli ve dürüst bir değerlendirme olsun — taraf tutma, kehanet değil; haberlerden çıkan tabloyu yorumla. Bu bölümün bir analitik yorum olduğu belli olsun.\n- Uzunluk (AI yorumu hariç): 400-700 kelime arası. Tarafsız ve dürüst anlatım; taraf tutma, klikbait yok. Siyasi yorum yerine olgu + bağlam + etkiler (AI yorumu bölümü hariç).\n\nKalite kuralı: verdiğin her link gerçekten açtığın/doğruladığın sayfa olsun; uydurma link yasak. En az 4 farklı kaynaktan haber seç; yabancı ve Türkçe kaynak karışımı olsun.\n5. ARAŞTIRMA BÜTÇESİ (ZORUNLU): En fazla 4 web_search ve 5 web_extract. Limit dolunca DERHAL bülteni yaz — ek tur açma, daha fazla araştırma yapma.",
+      "context_from": [
+        "self"
+      ],
+      "reasoning_effort": "low",
+      "enabled_toolsets": [
+        "web"
+      ]
+    },
+    {
+      "name": "Günaydın Panosu (07:00)",
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 7 * * *",
+        "display": "0 7 * * *"
+      },
+      "schedule_display": "0 7 * * *",
+      "deliver": "origin",
+      "enabled": true,
+      "no_agent": false,
+      "script": null,
+      "prompt": "Sen Batuhan'ın kişisel sabah panosunu hazırlayan ajansın. Her sabah 07:00'de (Türkiye saati) gönderilecek, gözünü açınca okuyacağın kısa, sıcak ve pratik bir mesaj hazırlıyorsun. İstanbul'da yaşıyor.\n\nMESAJ FORMATI (bu sırayla, temiz ve taranabilir):\n\n# 🌅 Günaydın Batuhan!\n1-2 cümlelik sıcak giriş (havaya/güne göre değişsin, klişe olmasın).\n\n## 🗓️ Bugün\n- Tam tarih + gün (Türkçe)\n- Özel gün varsa: resmi tatil, bayram, önemli yıldönümü, günün adı (örn. \"Dünya XYZ Günü\") — web ile kontrol et, yoksa yazma.\n\n## ✅ Hatırlatmaların\nÖnceki çalıştırmalarından gelen bağlamda Batuhan'ın söylediği hatırlatmalar listelenecek (varsa). Bugün veya yakında olanları burada göster. Bugün için olanlar: \"BUGÜN: ...\" vurgusuyla. Hiç yoksa bu bölümü tamamen atla, \"hatırlatma yok\" yazma.\nNOT: Eğer mesajda Batuhan sana yeni hatırlatma verdiyse (önceki bağlamda \"not al\"/\"hatırlat\" tarzı), sonraki sabahlarda onu tekrar etmeyi UNUTMA.\n\n## 🌤️ İstanbul Hava\n- web ile İstanbul için bugünkü hava durumunu öğren (sıcaklık aralığı, yağmur/rüzgar durumu, sabah akşam farkı).\n- Pratik giyim/çıkmadan önerisi 1-2 cümle (\"hafif yağmur var, şemsiye al\" gibi).\n- Gün doğumu / gün batımı saatleri.\n\n## 📌 Bugüne Dair\n- O güne özel pratik bilgiler: varsa seçim, maç (Türkiye milli takımı veya Süper Lig büyük derbileri), resmi tatil, faiz kararı/Merkez Bankası toplantısı, ABD/Türkiye önemli ekonomik veri günü, tatil dönüşü yoğunluğu gibi. web_search ile \"bugün önemli gün\" / \"Türkiye bugün maç var mı\" kontrol et. Yoksa bu bölümü atla, doldurmak için uydurma yazma.\n\n## 💡 Tarihte Bugün\nO tarihte olmuş 1 ilginç olay (kısa, 1-2 cümle, merak uyandıran).\n\n## 💬 Günün Sözü\nKısa bir alıntı (filozof, bilim insanı, yazar). Kaynağını belirt.\n\n## 🖥️ Sunucu Durumu\nterminal ile hızlı sağlık kontrolü yap ve 1-3 satırda özetle:\n- `uptime -p && free -h | awk 'NR==2{print \"RAM: \"$3\" / \"$2}' && df -h / | awk 'NR==2{print \"Disk: %\"$5}' && vcgencmd measure_temp`\n- `systemctl --failed --no-pager | tail -n +2 | head -3`\n- `docker ps --filter \"status=exited\" --format \"{{.Names}}\" | head -5`\nHer şey yolundaysa: \"🖥️ Sunucu geceyi sorunsuz atlattı ✅ (RAM x, Disk %x, sıcaklık x°C)\". Sorun varsa KISA ve net belirt: hangi servis, ne olmuş. Detaylı teknik dump YOK.\n\nGENEL KURALLAR:\n- Toplam mesaj 250-400 kelimeyi geçmesin. Sabah gözü yormasın.\n- Bölümler dolu değilse atla — asla \"yok\"/\"bildirim yok\" gibi boş satırlar ile doldurma.\n- Samimi ama abartısız ton. Emoji başlıklar kullan.\n- Hava durumu ve piyasa verileri web'den GÜNCEL olarak alınacak; tahmin yazma.\n## Araştırma bütçesi\nEn fazla 3 web_search ve 2 web_extract; sonra metni yaz.",
+      "context_from": [
+        "self"
+      ],
+      "reasoning_effort": "low",
+      "enabled_toolsets": [
+        "web",
+        "terminal"
+      ]
+    },
+    {
+      "name": "Pi Sistem Gözcüsü (saatlik)",
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 * * * *",
+        "display": "0 * * * *"
+      },
+      "schedule_display": "0 * * * *",
+      "deliver": "origin",
+      "enabled": true,
+      "no_agent": true,
+      "script": "pi-watchdog.sh",
+      "prompt": "",
+      "enabled_toolsets": [],
+      "context_from": null
+    },
+    {
+      "name": "Ağ Gözcüsü — Yeni Cihaz (15dk)",
+      "schedule": {
+        "kind": "cron",
+        "expr": "*/15 * * * *",
+        "display": "*/15 * * * *"
+      },
+      "schedule_display": "*/15 * * * *",
+      "deliver": "origin",
+      "enabled": true,
+      "no_agent": true,
+      "script": "pi-netalert-newdev.sh",
+      "prompt": "",
+      "enabled_toolsets": [],
+      "context_from": null
+    },
+    {
+      "name": "Ağ Gözcüsü — Offline (30dk)",
+      "schedule": {
+        "kind": "cron",
+        "expr": "*/30 * * * *",
+        "display": "*/30 * * * *"
+      },
+      "schedule_display": "*/30 * * * *",
+      "deliver": "origin",
+      "enabled": true,
+      "no_agent": true,
+      "script": "pi-netalert-offline.sh",
+      "prompt": "",
+      "enabled_toolsets": [],
+      "context_from": null
+    }
+  ]
+}

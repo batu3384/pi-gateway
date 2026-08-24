@@ -12,6 +12,7 @@ LAN_DOMAIN="${LAN_DOMAIN:-home}"
 PI_IP="${PI_STATIC_IP:-}"
 ADGUARD_WEB_PORT="${ADGUARD_WEB_PORT:-8080}"
 NETALERTX_PORT="${NETALERTX_PORT:-20211}"
+NETALERTX_LISTEN_ADDR="${NETALERTX_LISTEN_ADDR:-172.17.0.1}"
 CADDYFILE="${REMOTE_DIR}/config/caddy/Caddyfile"
 MARKER="${REMOTE_DIR}/config/caddy/.tailscale-serve-block"
 log() { echo "[tailscale-serve] $*"; }
@@ -29,20 +30,20 @@ print(json.load(sys.stdin).get('Self',{}).get('DNSName','').rstrip('.'))
 log "Tailscale panel: https://${TS_DNS}"
 # Caddy: path tabanli uzaktan erisim blogu
 if [[ -f "$CADDYFILE" ]]; then
-  python3 - "$CADDYFILE" "$MARKER" "$TS_DNS" "$LAN_DOMAIN" "$PI_IP" "$ADGUARD_WEB_PORT" "$NETALERTX_PORT" <<'PY'
+  python3 - "$CADDYFILE" "$MARKER" "$TS_DNS" "$LAN_DOMAIN" "$PI_IP" "$ADGUARD_WEB_PORT" "$NETALERTX_PORT" "$NETALERTX_LISTEN_ADDR" <<'PY'
 import sys
 from pathlib import Path
-caddyfile, marker, ts_dns, domain, pi_ip, agh_port, nax_port = sys.argv[1:8]
+caddyfile, marker, ts_dns, domain, pi_ip, agh_port, nax_port, nax_host = sys.argv[1:9]
 path = Path(caddyfile)
 text = path.read_text()
 start = f"# BEGIN TAILSCALE PANEL {ts_dns}"
 end = f"# END TAILSCALE PANEL {ts_dns}"
-# Tailscale Serve / MagicDNS: basic_auth YOK — Telegram Basic Auth acmaz; tailnet ACL yeter
-# handle_path yerine strip+Location rewrite (uygulama /login redirect kirilmasin)
+# Tailscale Serve terminates TLS on 100.x:443, then HTTP → Caddy LAN :80.
+# Site MUST be http:// (no tls) — otherwise Caddy 308→https loops through Serve.
+# Caddy compose binds PI_STATIC_IP only (not 127.0.0.1).
 block = f"""{start}
-{ts_dns} {{
-\ttls /etc/caddy/certs/{domain}.pem /etc/caddy/certs/{domain}-key.pem
-\t# no basic_auth — Tailscale ACL
+http://{ts_dns} {{
+\t# no basic_auth — Tailscale ACL; Serve = HTTPS to phone
 \thandle /p/status* {{
 \t\turi strip_prefix /p/status
 \t\treverse_proxy uptime-kuma:3001 {{
@@ -81,7 +82,7 @@ block = f"""{start}
 \t}}
 \thandle /p/devices* {{
 \t\turi strip_prefix /p/devices
-\t\treverse_proxy {pi_ip}:{nax_port} {{
+\t\treverse_proxy {nax_host}:{nax_port} {{
 \t\t\theader_down Location / /p/devices/
 \t\t}}
 \t}}
@@ -113,19 +114,34 @@ fi
 mkdir -p /var/lib/pi-gateway 2>/dev/null || sudo mkdir -p /var/lib/pi-gateway
 echo "https://${TS_DNS}" | sudo tee /var/lib/pi-gateway/tailscale-panel-url >/dev/null 2>&1 || true
 bash "$(dirname "$0")/setup-caddy-lan-ip.sh" || true
-# Gecerli Tailscale HTTPS -> Caddy (mkcert arada; telefon guvenilir sertifika gorur)
-if tailscale serve status 2>/dev/null | grep -q "https"; then
-  log "tailscale serve zaten aktif"
-else
-  log "tailscale serve baslatiliyor (https+insecure -> Caddy:443)"
+
+# Caddy compose binds PI_STATIC_IP:80 — Serve terminates TLS, proxies HTTP (no 308 loop)
+[[ -n "$PI_IP" ]] || { log "HATA: PI_STATIC_IP bos — Serve hedefi yok"; exit 1; }
+serve_target="http://${PI_IP}:80"
+prev_serve="$(tailscale serve status 2>/dev/null || true)"
+log "tailscale serve -> ${serve_target} (Caddy http://MagicDNS, TLS=Serve)"
+if ! sudo tailscale serve --bg "$serve_target" 2>&1; then
+  # --bg overwrite fail ederse reset+retry; basarisizsa onceki config kaybolmasin diye uyari
   sudo tailscale serve reset 2>/dev/null || true
-  if ! sudo tailscale serve --bg "https+insecure://127.0.0.1:443" 2>&1; then
-    log "HATA: Tailscale Serve tailnet'te kapali"
+  if ! sudo tailscale serve --bg "$serve_target" 2>&1; then
+    log "HATA: Tailscale Serve baslatilamadi"
+    if [[ -n "$prev_serve" && "$prev_serve" != *"No serve"* ]]; then
+      log "WARN: onceki Serve config reset edilmis olabilir — elle: sudo tailscale serve --bg '${serve_target}'"
+    fi
     log "Ac: https://login.tailscale.com/f/serve?node=$(tailscale status --json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get(\"Self\",{}).get(\"ID\",\"\"))' 2>/dev/null || echo '')"
-    log "Telegram uzaktan linkler http://$(tailscale ip -4 2>/dev/null | head -1)/p/... kullanacak (Serve sonrasi HTTPS)"
-    bash "$(dirname "$0")/setup-caddy-lan-ip.sh" || true
     exit 0
   fi
 fi
+# Smoke via Tailscale IP (MagicDNS may not resolve on Pi itself)
+ts_ip="$(tailscale ip -4 2>/dev/null | head -1 || true)"
+code="000"
+if [[ -n "$ts_ip" ]]; then
+  code="$(curl -sk -o /dev/null -w '%{http_code}' --connect-timeout 5 \
+    --resolve "${TS_DNS}:443:${ts_ip}" "https://${TS_DNS}/p/status/" 2>/dev/null || echo 000)"
+fi
+case "$code" in
+  000|502|503) log "WARN: Serve smoke https://${TS_DNS}/p/status/ -> HTTP ${code}" ;;
+  *) log "Serve smoke OK (HTTP ${code})" ;;
+esac
 log "Tamamlandi — uzaktan: https://${TS_DNS}/"
-log "Paneller: /p/dns /p/status /p/logs /p/devices ..."
+log "Paneller: /p/dns /p/status /p/logs /p/devices /p/grafana ..."

@@ -18,14 +18,16 @@ if command -v tailscale >/dev/null 2>&1; then
 fi
 ADGUARD_WEB_PORT="${ADGUARD_WEB_PORT:-8080}"
 NETALERTX_PORT="${NETALERTX_PORT:-20211}"
+# NetAlertX host-network LISTEN_ADDR (compose) — not PI_STATIC_IP
+NETALERTX_LISTEN_ADDR="${NETALERTX_LISTEN_ADDR:-172.17.0.1}"
 CADDYFILE="${REMOTE_DIR}/config/caddy/Caddyfile"
 log() { echo "[caddy-lan-ip] $*"; }
 [[ -f "$CADDYFILE" ]] || { log "Caddyfile yok — atlandi"; exit 0; }
 [[ -n "$PI_IP" || -n "$TS_IP" ]] || { log "IP yok — atlandi"; exit 0; }
-python3 - "$CADDYFILE" "$PI_IP" "$TS_IP" "$ADGUARD_WEB_PORT" "$NETALERTX_PORT" <<'PY'
+python3 - "$CADDYFILE" "$PI_IP" "$TS_IP" "$ADGUARD_WEB_PORT" "$NETALERTX_PORT" "$NETALERTX_LISTEN_ADDR" <<'PY'
 import sys
 from pathlib import Path
-caddyfile, pi_ip, ts_ip, agh_port, nax_port = sys.argv[1:6]
+caddyfile, pi_ip, ts_ip, agh_port, nax_port, nax_host = sys.argv[1:7]
 path = Path(caddyfile)
 text = path.read_text()
 start = "# BEGIN DIRECT IP PANELS"
@@ -53,7 +55,7 @@ def panel_block(ip: str, with_auth: bool, auth: str) -> str:
         path_proxy("p/git", "forgejo:3000"),
         path_proxy("p/sync", "syncthing:8384"),
         path_proxy("p/n8n", "n8n:5678"),
-        path_proxy("p/devices", f"{upstream}:{nax_port}"),
+        path_proxy("p/devices", f"{nax_host}:{nax_port}"),
         path_proxy("p/grafana", "grafana:3000"),
         "\thandle {",
         "\t\treverse_proxy homepage:3000",
@@ -96,18 +98,38 @@ for ip in ips:
     mode = "auth" if not is_tailscale_ip(ip) else "no-auth"
     print(f"[caddy-lan-ip] http://{ip}/p/... ({mode})")
 PY
-# Dogrudan :8080/:20211 tailscale0 kapat — sadece Caddy 80/443
-if command -v ufw >/dev/null 2>&1; then
-  while true; do
-    line="$(sudo ufw status numbered 2>/dev/null | grep -E '([0-9]+)/(tcp|udp) on tailscale0.*(8080|20211)|#( pi-gateway )?tailscale-(8080|20211)' | head -1 || true)"
-    [[ -n "$line" ]] || break
-    num="$(printf '%s\n' "$line" | sed -n 's/^[[:space:]]*\[\([0-9]*\)\].*/\1/p')"
-    [[ -n "$num" ]] || break
-    if ! echo y | sudo ufw delete "$num" >/dev/null 2>&1; then
-      sudo ufw --force delete "$num" >/dev/null 2>&1 || break
-    fi
-  done
-fi
+# Not: 8080/20211 tailscale0 allow artik setup-tailscale-panel-ports.sh
+# (dogrudan :PORT — /p/ asset 404 yok). Eski strip loop silindi.
 docker exec caddy caddy reload --config /etc/caddy/Caddyfile 2>/dev/null \
   || docker restart caddy >/dev/null 2>&1 || true
+
+# Caddy compose binds only PI_STATIC_IP:80 — DNAT Tailscale IP:80 → LAN Caddy
+# Phone: Tailscale Connected yeter (MagicDNS / Use Tailscale DNS gerekmez)
+ensure_ts80_dnat() {
+  local ts_ip="$1" pi_ip="$2" marker="/var/lib/pi-gateway/ts80-dnat-ip" old=""
+  [[ "$ts_ip" == 100.* && -n "$pi_ip" ]] || return 0
+  sudo mkdir -p /var/lib/pi-gateway 2>/dev/null || true
+  if [[ -r "$marker" ]]; then
+    old="$(cat "$marker" 2>/dev/null || true)"
+  fi
+  if [[ -n "$old" && "$old" != "$ts_ip" ]]; then
+    sudo iptables -t nat -D PREROUTING -d "$old" -p tcp --dport 80 -j DNAT --to-destination "${pi_ip}:80" 2>/dev/null || true
+    sudo iptables -t nat -D OUTPUT -d "$old" -p tcp --dport 80 -j DNAT --to-destination "${pi_ip}:80" 2>/dev/null || true
+  fi
+  sudo iptables -t nat -D PREROUTING -d "$ts_ip" -p tcp --dport 80 -j DNAT --to-destination "${pi_ip}:80" 2>/dev/null || true
+  sudo iptables -t nat -D OUTPUT -d "$ts_ip" -p tcp --dport 80 -j DNAT --to-destination "${pi_ip}:80" 2>/dev/null || true
+  sudo iptables -t nat -A PREROUTING -d "$ts_ip" -p tcp --dport 80 -j DNAT --to-destination "${pi_ip}:80"
+  sudo iptables -t nat -A OUTPUT -d "$ts_ip" -p tcp --dport 80 -j DNAT --to-destination "${pi_ip}:80"
+  printf '%s\n' "$ts_ip" | sudo tee "$marker" >/dev/null
+  # reboot kaliciligi (varsa)
+  if command -v netfilter-persistent >/dev/null 2>&1; then
+    sudo netfilter-persistent save >/dev/null 2>&1 || true
+  elif [[ -d /etc/iptables ]]; then
+    sudo sh -c 'iptables-save > /etc/iptables/rules.v4' 2>/dev/null || true
+  fi
+  log "TS HTTP: http://${ts_ip}/p/... -> ${pi_ip}:80 (DNS yok)"
+}
+if [[ -n "$TS_IP" && -n "$PI_IP" ]]; then
+  ensure_ts80_dnat "$TS_IP" "$PI_IP" || log "WARN: TS:80 DNAT basarisiz"
+fi
 log "Tamamlandi"

@@ -40,6 +40,10 @@ run_root() {
 }
 
 run_root mkdir -p "$LIB_DIR/scripts/pi" "$LIB_DIR/scripts/lib" /run/pi-gateway /usr/local/sbin
+_pi_state_user="${SUDO_USER:-${USER:-pi}}"
+run_root mkdir -p /var/lib/pi-gateway
+run_root chown "${_pi_state_user}:${_pi_state_user}" /var/lib/pi-gateway
+run_root chmod 775 /var/lib/pi-gateway
 
 install_verified() {
   local src="$1" dst="$2" before after

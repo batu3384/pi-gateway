@@ -19,6 +19,8 @@
       "src": ["tag:owner-device"],
       "dst": ["tag:pi-gateway:22", "tag:pi-gateway:80", "tag:pi-gateway:443"]
     },
+    // TS_PANEL_DIRECT_PORTS=true ise Telegram :PORT butonlari — ornek portlar:
+    // "dst": ["tag:pi-gateway:3001", "tag:pi-gateway:8080", "tag:pi-gateway:9999", "tag:pi-gateway:5678", "tag:pi-gateway:20211"]
     {
       "action": "accept",
       "src": ["tag:owner-device"],
