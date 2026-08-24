@@ -39,6 +39,9 @@ if storage_degraded; then
     PROBLEMS+=("storage-degraded-ssd-ready")
   elif stack_dns_core_ok && root_rw_ok; then
     log "degraded DNS OK (adguard+unbound) — watchdog idle"
+    # shellcheck source=../lib/reset-gateway-units.sh
+    source "$SCRIPT_DIR/../lib/reset-gateway-units.sh"
+    reset_pi_gateway_failed_units
     exit 0
   else
     PROBLEMS+=("storage-degraded-dns-down")
@@ -66,6 +69,9 @@ if [[ ${#PROBLEMS[@]} -eq 0 ]] && stack_gateway_ok && root_rw_ok; then
   if notify_transition_peek "stack-recovered" "ok"; then
     _stack_notify_recovered "$(hostname -s)" "Tüm kontroller geçti."
   fi
+  # shellcheck source=../lib/reset-gateway-units.sh
+  source "$SCRIPT_DIR/../lib/reset-gateway-units.sh"
+  reset_pi_gateway_failed_units
   exit 0
 fi
 

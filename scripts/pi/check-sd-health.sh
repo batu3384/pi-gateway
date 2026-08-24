@@ -145,6 +145,9 @@ if [[ "$_ssd_only" -eq 1 ]]; then
   unset _ssd_only _i
   if root_rw_ok; then
     log "SSD degraded (root rw) — health fail yok; kurtarma pi-ssd-health.timer"
+    # shellcheck source=../lib/reset-gateway-units.sh
+    source "$SCRIPT_DIR/../lib/reset-gateway-units.sh"
+    reset_pi_gateway_failed_units
     exit 0
   fi
   exit 1

@@ -329,7 +329,9 @@ else
 fi
 if [[ "$exit_code" -eq 0 ]]; then
   notify_health_systemd_ok || true
-  systemctl reset-failed pi-gateway-health.service 2>/dev/null || true
+  # shellcheck source=../lib/reset-gateway-units.sh
+  source "$SCRIPT_DIR/../lib/reset-gateway-units.sh"
+  reset_pi_gateway_failed_units
 fi
 DISK_WARN_PCT="${DISK_WARN_PCT:-80}"
 DISK_PRUNE_PCT="${DISK_PRUNE_PCT:-65}"

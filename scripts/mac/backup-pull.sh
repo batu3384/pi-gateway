@@ -27,12 +27,21 @@ mkdir -p "$LOCAL_DEST/restic" "$LOCAL_DEST/config-snapshots"
 count_snapshots() {
   local repo="$1"
   [[ -d "$repo" ]] || { echo 0; return 0; }
-  timeout 120 docker run --rm --network none \
-    -e RESTIC_PASSWORD \
-    -v "${repo}:/repo:ro" \
-    "$RESTIC_IMAGE" -r "local:/repo" snapshots --json 2>/dev/null \
-    | python3 -c 'import sys,json; d=json.load(sys.stdin); print(len(d) if isinstance(d,list) else 0)' \
-    2>/dev/null || echo 0
+  local out
+  if command -v restic >/dev/null 2>&1; then
+    out="$(timeout 120 env RESTIC_PASSWORD="$RESTIC_PASSWORD" \
+      restic -r "$repo" snapshots --json 2>/dev/null)" || { echo 0; return 0; }
+  elif command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+    out="$(timeout 120 docker run --rm --network none \
+      -e RESTIC_PASSWORD \
+      -v "${repo}:/repo:ro" \
+      "$RESTIC_IMAGE" -r "local:/repo" snapshots --json 2>/dev/null)" || { echo 0; return 0; }
+  else
+    echo 0
+    return 0
+  fi
+  python3 -c 'import sys,json; d=json.load(sys.stdin); print(len(d) if isinstance(d,list) else 0)' \
+    <<<"$out" 2>/dev/null || echo 0
 }
 
 # Reinit / shrink gate: --delete eski offsite'i silmesin
@@ -49,9 +58,9 @@ stage_config="$LOCAL_DEST/config-snapshots/.stage-$STAMP"
 trap 'rm -rf "$remote_tmp" "$stage_root" "$stage_config"' EXIT
 mkdir -p "$stage_restic" "$stage_config"
 log "On kontrol: snapshot sayisi"
-if ! rsync -az --timeout=60 \
+if ! rsync -az --timeout=300 \
   "$PI_USER@$PI_HOST:$RESTIC_REMOTE/" \
-  "$remote_tmp/restic/" 2>/dev/null; then
+  "$remote_tmp/restic/"; then
   die "Pi restic repo cekilemedi: $RESTIC_REMOTE"
 fi
 remote_n="$(count_snapshots "$remote_tmp/restic")"

@@ -112,9 +112,9 @@ fi
 if [[ -f "${WATCHDOG_ALERT_STAMP:-/var/lib/pi-gateway/watchdog-last-alert.txt}" ]]; then
   rm -f "${WATCHDOG_ALERT_STAMP:-/var/lib/pi-gateway/watchdog-last-alert.txt}" 2>/dev/null || true
 fi
-for _u in pi-gateway-health pi-gateway-stack-watchdog pi-ssd-health pi-ssd-watch; do
-  systemctl reset-failed "${_u}.service" 2>/dev/null || true
-done
+# shellcheck source=../lib/reset-gateway-units.sh
+source "${SCRIPT_DIR}/../lib/reset-gateway-units.sh"
+reset_pi_gateway_failed_units
 
 if [[ "${WATCHDOG_NOTIFY_BOT:-0}" == "1" ]]; then
   source "${SCRIPT_DIR}/../lib/env-file.sh" 2>/dev/null || true

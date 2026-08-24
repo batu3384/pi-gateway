@@ -169,4 +169,7 @@ if [[ -d "$REMOTE_DIR/compose" ]]; then
 fi
 mark_stack_recover_cooldown
 recover_lock_release
+# shellcheck source=../lib/reset-gateway-units.sh
+source "$SCRIPT_DIR/../lib/reset-gateway-units.sh"
+reset_pi_gateway_failed_units
 exit 0
