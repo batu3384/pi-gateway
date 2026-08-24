@@ -194,8 +194,17 @@ EOF
   fi
   sudo systemctl enable fail2ban
   sudo systemctl restart fail2ban
-  sudo fail2ban-client status sshd 2>/dev/null || sudo fail2ban-client status
-  log "fail2ban aktif"
+  local i=0
+  while (( i < 8 )); do
+    if sudo fail2ban-client status sshd >/dev/null 2>&1 || sudo fail2ban-client status >/dev/null 2>&1; then
+      sudo fail2ban-client status sshd 2>/dev/null || sudo fail2ban-client status
+      log "fail2ban aktif"
+      return 0
+    fi
+    sleep 1
+    (( i += 1 ))
+  done
+  log "WARN: fail2ban socket henuz hazir degil — UFW yine de aktif"
 }
 main() {
   install_packages

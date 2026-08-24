@@ -175,7 +175,7 @@ if [[ "${ENABLE_N8N:-true}" == "true" ]]; then
 fi
 if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
   run_step_critical "NetAlertX ag envanteri" "$SCRIPT_DIR/setup-netalertx.sh"
-  run_step_soft "NetAlert DB erisim" "$SCRIPT_DIR/ensure-netalert-db-access.sh"
+  run_step_critical "NetAlert DB erisim" "$SCRIPT_DIR/ensure-netalert-db-access.sh"
 fi
 if docker ps --format '{{.Names}}' | grep -q '^uptime-kuma$'; then
   run_step_critical "Uptime Kuma monitorler" "$SCRIPT_DIR/setup-uptime-kuma.sh"

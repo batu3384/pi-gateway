@@ -27,6 +27,29 @@ DATA_DIR="${REMOTE_DIR}/data/netalertx"
 CONF_FILE="${DATA_DIR}/config/app.conf"
 MARKER="${DATA_DIR}/.pi-gateway-configured"
 log() { echo "[netalertx-setup] $*"; }
+
+_ensure_netalert_host_gid() {
+  local env_file="${REMOTE_DIR}/.env" want
+  want="$(id -g)"
+  [[ -f "$env_file" ]] || return 1
+  if grep -q '^NETALERTX_GID=' "$env_file" 2>/dev/null; then
+    grep -q "^NETALERTX_GID=${want}$" "$env_file" && return 1
+    sed -i "s/^NETALERTX_GID=.*/NETALERTX_GID=${want}/" "$env_file" 2>/dev/null || \
+      sed -i '' "s/^NETALERTX_GID=.*/NETALERTX_GID=${want}/" "$env_file"
+  else
+    {
+      echo ""
+      echo "# Host grubu — Hermes cron app.db okur (NETALERTX_UID=20211 kalir)"
+      echo "NETALERTX_GID=${want}"
+    } >>"$env_file"
+  fi
+  export NETALERTX_GID="$want"
+  return 0
+}
+
+_netalert_gid_changed=0
+_ensure_netalert_host_gid && _netalert_gid_changed=1 || true
+
 [[ "${ENABLE_NETALERTX:-true}" == "true" ]] || { log "NetAlertX kapali"; exit 0; }
 [[ -n "${NETALERTX_PASSWORD:-}" ]] || { log "HATA: NETALERTX_PASSWORD veya AGH_ADMIN_PASSWORD gerekli"; exit 1; }
 [[ -n "${AGH_ADMIN_PASSWORD:-}" ]] || { log "HATA: AGH_ADMIN_PASSWORD gerekli (ADGUARDIMP)"; exit 1; }
@@ -177,6 +200,12 @@ bash "$SCRIPT_DIR/sync-adguard-persistent-clients.sh" || log "WARN: AdGuard iste
 DB_DIR="${DATA_DIR}/db"
 DB_FILE="${DB_DIR}/app.db"
 _pi_u="${USER:-pi}"
+if (( _netalert_gid_changed )); then
+  log "NETALERTX_GID=${NETALERTX_GID:-$(id -g)} — container yeniden olusturuluyor"
+  (cd "${REMOTE_DIR}/compose" && docker compose --env-file ../.env --profile netalert up -d --force-recreate netalertx) \
+    || log "WARN: netalertx recreate basarisiz"
+  wait_http || true
+fi
 _ensure_db_script="${SCRIPT_DIR}/ensure-netalert-db-access.sh"
 if [[ -x "$_ensure_db_script" ]]; then
   bash "$_ensure_db_script" || log "WARN: ensure-netalert-db-access"

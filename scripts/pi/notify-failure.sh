@@ -36,6 +36,7 @@ notify_failure_skip_sla_only() {
   while IFS= read -r line; do
     line="${line#"${line%%[![:space:]]*}"}"
     line="${line#FAIL }"
+    line="${line#SLO }"
     [[ -z "$line" ]] && continue
     case "$line" in
       offsite-*|optional-*|backup-restore-drill*|exit_code=0) ;;

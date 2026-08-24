@@ -34,7 +34,16 @@ if [[ -n "${ram_avail_mb:-}" ]] && (( ram_avail_mb < RAM_AVAIL_MIN_MB )); then
   ALERTS+=("Available RAM ${ram_avail_mb}MB (min ${RAM_AVAIL_MIN_MB}MB)")
 fi
 
-failed="$(systemctl list-units --state=failed --no-legend --plain 2>/dev/null | awk '{print $1}' | grep -v '^$' | head -5 | tr '\n' ' ')"
+failed=""
+while IFS= read -r unit; do
+  [[ -n "$unit" ]] || continue
+  reason="$(journalctl -u "$unit" -n 1 --no-pager -o cat 2>/dev/null | head -1 | sed 's/^[[:space:]]*//')"
+  if [[ -z "$reason" ]]; then
+    reason="$(systemctl show "$unit" -p Result --value 2>/dev/null || echo "?")"
+  fi
+  failed+="${unit} (${reason}) "
+done < <(systemctl list-units --state=failed --no-legend --plain 2>/dev/null | awk '{print $1}' | grep -v '^$' | head -5)
+failed="${failed%" "}"
 if [[ -n "${failed}" ]]; then
   ALERTS+=("Failed systemd: ${failed}")
 fi
@@ -69,6 +78,15 @@ if ((${#ALERTS[@]})); then
   for a in "${ALERTS[@]}"; do
     alert_text+="- ${a}"$'\n'
   done
+  action_hint="• Sıcaklık: vcgencmd measure_temp — fan/soğutma kontrol edin"
+  if [[ "$alert_text" == *"Failed systemd"* ]]; then
+    action_hint="• Geçici deploy hatası: sudo systemctl reset-failed pi-gateway-health pi-gateway-stack-watchdog
+• Kalıcı: journalctl -u <unit> -n 20 --no-pager"
+  fi
+  if [[ "$alert_text" == *"container"* ]]; then
+    action_hint="• docker ps -a —filter status=exited
+• REMOTE_DIR=~/pi-gateway bash scripts/pi/recover-stack.sh"
+  fi
   if [[ "${WATCHDOG_NOTIFY_BOT:-0}" == "1" ]]; then
     # shellcheck source=../lib/env-file.sh
     source "${SCRIPT_DIR}/../lib/env-file.sh"
@@ -80,12 +98,12 @@ if ((${#ALERTS[@]})); then
     body="$(notify_html_alert "$host" \
       "Sistem gözcüsü metrik eşiği aşıldı." \
       "$esc_alert" \
-      "journalctl -u hermes-gateway -n 20 veya docker ps ile doğrulayın." \
+      "$action_hint" \
       "Saatte en fazla bir hatırlatma.")"
     notify_send_with_transition "watchdog-metrics" "fail" "📋 Pi Gateway · Sistem" "$body" "HTML" || true
   fi
-  printf '📋 Pi Gateway · Sistem\n%s\n\nSistem gözcüsü metrik eşiği aşıldı.\n\n%sNe yapmalı?\njournalctl -u hermes-gateway -n 20 veya docker ps ile doğrulayın.\n\nSaatte en fazla bir hatırlatma.\n' \
-    "$(date '+%d.%m.%Y %H:%M')" "$alert_text"
+  printf '📋 Pi Gateway · Sistem\n%s\n\nSistem gözcüsü metrik eşiği aşıldı.\n\n%sNe yapmalı?\n%s\n\nSaatte en fazla bir hatırlatma.\n' \
+    "$(date '+%d.%m.%Y %H:%M')" "$alert_text" "$action_hint"
   mkdir -p "$(dirname "$STAMP")" 2>/dev/null || true
   echo "$now" >"$STAMP" 2>/dev/null || true
   exit 0
@@ -94,6 +112,9 @@ fi
 if [[ -f "${WATCHDOG_ALERT_STAMP:-/var/lib/pi-gateway/watchdog-last-alert.txt}" ]]; then
   rm -f "${WATCHDOG_ALERT_STAMP:-/var/lib/pi-gateway/watchdog-last-alert.txt}" 2>/dev/null || true
 fi
+for _u in pi-gateway-health pi-gateway-stack-watchdog pi-ssd-health pi-ssd-watch; do
+  systemctl reset-failed "${_u}.service" 2>/dev/null || true
+done
 
 if [[ "${WATCHDOG_NOTIFY_BOT:-0}" == "1" ]]; then
   source "${SCRIPT_DIR}/../lib/env-file.sh" 2>/dev/null || true

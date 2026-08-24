@@ -2,7 +2,6 @@
 # Hermes cron: Pi Gateway hata mesajlari (Türkçe, anlasilir, wrap yok).
 set -euo pipefail
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
-REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 log() { echo "[hermes-cron-patch] $*"; }
 
 SCHEDULER="${HERMES_HOME:-$HOME/.hermes}/hermes-agent/cron/scheduler.py"

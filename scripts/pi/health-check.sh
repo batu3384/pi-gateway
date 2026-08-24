@@ -25,6 +25,12 @@ note_fail() {
   FAILURES+=("$1")
   fail=1
 }
+# Yedek SLA — journal'da FAIL degil SLO (OnFailure/journal grep kirlenmesin)
+slo_note() {
+  logger -t "$LOG_TAG" "SLO $1"
+  FAILURES+=("$1")
+  fail=1
+}
 # SD sagligi (SSD kurtarma yok — pi-ssd-health.timer). SD RO recover kapali.
 if ! SD_HEALTH_AUTO_RECOVER=false SSD_HEALTH_AUTO=false REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/check-sd-health.sh"; then
   fail=1
@@ -187,7 +193,7 @@ elif [[ "${ENABLE_RESTIC:-true}" == "true" ]]; then
       if [[ "${WEAK_BACKUP_OK:-}" == "yes" ]]; then
         logger -t "$LOG_TAG" "WARN offsite-backup-missing WEAK_BACKUP_OK=yes"
       else
-        note_fail "offsite-backup-missing"
+        slo_note "offsite-backup-missing"
       fi
     else
       age_days="$(python3 -c "import os,time; print(int((time.time()-os.path.getmtime('$marker'))//86400))")"
@@ -195,7 +201,7 @@ elif [[ "${ENABLE_RESTIC:-true}" == "true" ]]; then
         if [[ "${WEAK_BACKUP_OK:-}" == "yes" ]]; then
           logger -t "$LOG_TAG" "WARN offsite-backup-stale(${age_days}d) WEAK_BACKUP_OK=yes"
         else
-          note_fail "offsite-backup-stale(${age_days}d)"
+          slo_note "offsite-backup-stale(${age_days}d)"
         fi
       fi
     fi
@@ -209,7 +215,7 @@ if [[ "$drill_max" != "0" ]] && [[ "${ENABLE_RESTIC:-true}" == "true" ]] && ! st
     if [[ "${WEAK_BACKUP_OK:-}" == "yes" ]]; then
       logger -t "$LOG_TAG" "WARN backup-restore-drill-missing WEAK_BACKUP_OK=yes"
     else
-      note_fail "backup-restore-drill-missing"
+      slo_note "backup-restore-drill-missing"
     fi
   else
     drill_age="$(python3 -c "import os,time; print(int((time.time()-os.path.getmtime('$drill_marker'))//86400))")"
@@ -217,7 +223,7 @@ if [[ "$drill_max" != "0" ]] && [[ "${ENABLE_RESTIC:-true}" == "true" ]] && ! st
       if [[ "${WEAK_BACKUP_OK:-}" == "yes" ]]; then
         logger -t "$LOG_TAG" "WARN backup-restore-drill-stale(${drill_age}d) WEAK_BACKUP_OK=yes"
       else
-        note_fail "backup-restore-drill-stale(${drill_age}d)"
+        slo_note "backup-restore-drill-stale(${drill_age}d)"
       fi
     fi
   fi
@@ -323,6 +329,7 @@ else
 fi
 if [[ "$exit_code" -eq 0 ]]; then
   notify_health_systemd_ok || true
+  systemctl reset-failed pi-gateway-health.service 2>/dev/null || true
 fi
 DISK_WARN_PCT="${DISK_WARN_PCT:-80}"
 DISK_PRUNE_PCT="${DISK_PRUNE_PCT:-65}"
