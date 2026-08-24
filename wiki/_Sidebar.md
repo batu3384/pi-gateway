@@ -1,12 +1,12 @@
 **Pi Gateway**
 
-* [Home](Home)
-* [Getting Started](Getting-Started)
-* [Architecture](Architecture)
-* [Troubleshooting](Troubleshooting)
-* [FAQ](FAQ)
-* [Security](Security)
-* [Roadmap](Roadmap)
+* [Home](Home.md)
+* [Getting Started](Getting-Started.md)
+* [Architecture](Architecture.md)
+* [Troubleshooting](Troubleshooting.md)
+* [FAQ](FAQ.md)
+* [Security](Security.md)
+* [Roadmap](Roadmap.md)
 
 ---
 

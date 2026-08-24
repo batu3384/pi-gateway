@@ -1,8 +1,9 @@
 # Design: English docs + INSTALL + doctor
 
 **Date:** 2026-07-25  
-**Status:** Approved (user)  
-**Note:** Spec lives under `docs/` because `docs/superpowers/` is removed in this work.
+**Status:** Implemented (2026-08-25)  
+**Note:** Spec lives under `docs/` because `docs/superpowers/` is removed in this work.  
+**Delivered:** `INSTALL.md`, `scripts/mac/doctor.sh`, `make doctor`. `KURULUM.md` removed.
 
 ## Goal
 
@@ -35,7 +36,7 @@ Sections:
 
 ### 3. Install guide
 
-- Rename/replace `KURULUM.md` → `INSTALL.md` (English)
+- Rename/replace `KURULUM.md` → `INSTALL.md` (English) — done; canonical is `INSTALL.md`
 - Content: requirements, hybrid storage note, router DNS one-time step, `make` commands, basic troubleshooting
 - Update any links that pointed at `KURULUM.md`
 

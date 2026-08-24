@@ -10,7 +10,7 @@ Yes. LAN access via `*.home` + mkcert. Tailscale is optional (`docs/TAILSCALE.md
 
 ## Why is Forgejo down but DNS works?
 
-**Degraded mode** — SSD missing or unhealthy. Core-dns (Unbound + AdGuard) stays on SD; app containers stop. See [Troubleshooting](Troubleshooting).
+**Degraded mode** — SSD missing or unhealthy. Core-dns (Unbound + AdGuard) stays on SD; app containers stop. See [Troubleshooting](Troubleshooting.md).
 
 ## Is JMicron USB SSD reliable on Pi 4?
 
@@ -18,7 +18,7 @@ Often **no** for 24/7 (`152d:0583`). Software recovery helps; ASMedia adapter is
 
 ## Where are secrets?
 
-`.env` on Pi and Mac clone — **never committed**. See [Security](Security).
+`.env` on Pi and Mac clone — **never committed**. See [Security](Security.md).
 
 ## How do I update the stack?
 
@@ -50,4 +50,4 @@ Wiki = operator overview. Deep reference (`ENV.md`, ADRs, runbooks) stays in git
 
 ## Roadmap?
 
-See [Roadmap](Roadmap) — not duplicated here.
+See [Roadmap](Roadmap.md) — not duplicated here.

@@ -44,7 +44,7 @@ make test       # alias
 - **SD** — boot + root OS
 - **SSD** — application data (`/mnt/ssd/pi-gateway-data`)
 
-If SSD drops, stack enters **degraded** (DNS on SD only). See [Troubleshooting](Troubleshooting).
+If SSD drops, stack enters **degraded** (DNS on SD only). See [Troubleshooting](Troubleshooting.md).
 
 ## Next steps
 

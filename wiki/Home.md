@@ -8,12 +8,12 @@ Production DNS / home-lab gateway for **Raspberry Pi 4B**: AdGuard + Unbound, Ca
 
 | Topic | Page |
 |-------|------|
-| Install & first boot | [Getting Started](Getting-Started) |
-| Design & traffic flow | [Architecture](Architecture) |
-| SSD / degraded mode | [Troubleshooting](Troubleshooting) |
-| Common questions | [FAQ](FAQ) |
-| Threat model & secrets | [Security](Security) |
-| **Roadmap (Now / Next / Later)** | [Roadmap](Roadmap) |
+| Install & first boot | [Getting Started](Getting-Started.md) |
+| Design & traffic flow | [Architecture](Architecture.md) |
+| SSD / degraded mode | [Troubleshooting](Troubleshooting.md) |
+| Common questions | [FAQ](FAQ.md) |
+| Threat model & secrets | [Security](Security.md) |
+| **Roadmap (Now / Next / Later)** | [Roadmap](Roadmap.md) |
 
 ## Stack (summary)
 
@@ -43,4 +43,4 @@ Deep reference stays in git: `docs/adr/`, `docs/ENV.md`, `docs/SSD-INSTALL.md`, 
 ## Report issues
 
 - Bugs / features: [GitHub Issues](https://github.com/batu3384/pi-gateway/issues)
-- Security: [Security](Security) — no public issues for vulns
+- Security: [Security](Security.md) — no public issues for vulns

@@ -26,6 +26,8 @@ Optional env:
 
 ## What gets synced
 
+Wiki page links use the `.md` suffix (`[FAQ](FAQ.md)`) so in-repo checkers and Gollum both resolve.
+
 - All `wiki/*.md` except `README.md`
 - `_Sidebar.md` → GitHub sidebar
 - `--delete` removes wiki pages removed from source

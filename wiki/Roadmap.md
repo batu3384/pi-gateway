@@ -2,7 +2,7 @@
 
 Status legend: **Done** | **Now** | **Next** | **Later**
 
-Tracked work lives here and in [GitHub Issues](https://github.com/batu3384/pi-gateway/issues). Security: [Security](Security) / [Security Advisories](https://github.com/batu3384/pi-gateway/security/advisories).
+Tracked work lives here and in [GitHub Issues](https://github.com/batu3384/pi-gateway/issues). Security: [Security](Security.md) / [Security Advisories](https://github.com/batu3384/pi-gateway/security/advisories).
 
 > This page is separate from README feature lists and audit reports — it reflects **milestones**, not wishlist features.
 

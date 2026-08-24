@@ -2,6 +2,8 @@
 
 > **For agentic workers:** Execute task-by-task. Steps use checkbox syntax.
 
+**Status:** COMPLETE (2026-08-25) — `INSTALL.md` + `scripts/mac/doctor.sh` + `make doctor` in tree; `KURULUM.md` gone.
+
 **Goal:** English-first public docs, remove `docs/superpowers/`, add `INSTALL.md` + `make doctor`.
 
 **Architecture:** Docs-only translation plus one Mac script (`doctor.sh`) wired through Makefile. No stack runtime changes. Plan path is `docs/plans/` because `docs/superpowers/` is deleted in Task 1.

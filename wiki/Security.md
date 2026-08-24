@@ -51,6 +51,6 @@ Before publishing: rotate any credential ever in logs/chat; run `make validate`.
 
 ## Related wiki
 
-- [Getting Started](Getting-Started) — TLS & trust-ca
-- [Architecture](Architecture) — compose tiers & exposure
-- [Troubleshooting](Troubleshooting) — access diagnostics
+- [Getting Started](Getting-Started.md) — TLS & trust-ca
+- [Architecture](Architecture.md) — compose tiers & exposure
+- [Troubleshooting](Troubleshooting.md) — access diagnostics
