@@ -14,6 +14,7 @@ from typing import Any
 
 STATE_VERSION = 3
 SKIP_MACS = frozenset({"internet"})
+NOISE_MAC_PREFIXES = ("01:", "33:", "ff:")
 BAD_NAMES = frozenset({"", "?", "(name not found)"})
 STREAMS = {
     "new_device": "New Device",
@@ -79,8 +80,34 @@ def suggest_display_name(
     return f"Cihaz {ip}" if ip else "Bilinmeyen cihaz"
 
 
+def _is_noise_mac(mac: str, *, new_device: bool = False) -> bool:
+    """Gizlilik/multicast MAC — yeni cihaz bildiriminde gürültü."""
+    mac = (mac or "").strip().lower()
+    if not mac or mac in SKIP_MACS:
+        return True
+    if new_device and _is_privacy_mac(mac):
+        return True
+    if new_device:
+        for prefix in NOISE_MAC_PREFIXES:
+            if mac.startswith(prefix):
+                return True
+    return False
+
+
 def _open_db(path: str) -> sqlite3.Connection:
-    return sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    try:
+        return sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    except sqlite3.OperationalError as exc:
+        msg = str(exc).lower()
+        if "unable to open database" in msg:
+            print(
+                "[netalert-devices] HATA: NetAlertX veritabani okunamadi (dosya izni). "
+                "Cozum: bash scripts/pi/ensure-netalert-db-access.sh",
+                file=sys.stderr,
+            )
+        else:
+            print(f"[netalert-devices] HATA: veritabani: {exc}", file=sys.stderr)
+        raise
 
 
 def _empty_state() -> dict[str, Any]:
@@ -300,14 +327,18 @@ def poll_stream(
     max_rowid = last
     for rowid, mac, ip, event_ts, info in rows:
         max_rowid = max(max_rowid, int(rowid))
+        if stream == "new_device" and _is_noise_mac(mac, new_device=True):
+            continue
         dev = device_from_event(con, int(rowid), mac, ip, event_ts, info)
         if dev:
             if stream == "offline":
                 by_mac[dev["mac"]] = dev
             else:
-                devices.append(dev)
+                by_mac[dev["mac"]] = dev
 
     if stream == "offline" and by_mac:
+        devices = sorted(by_mac.values(), key=lambda d: int(d["event_rowid"]))
+    elif stream == "new_device" and by_mac:
         devices = sorted(by_mac.values(), key=lambda d: int(d["event_rowid"]))
 
     con.close()
@@ -528,6 +559,15 @@ def _self_check() -> None:
         con.commit()
         con.close()
 
+        env = build_envelope(db, state, "new_device")
+        assert env["count"] == 0, "gizlilik MAC bildirilmemeli"
+        con = sqlite3.connect(db)
+        con.execute(
+            "INSERT INTO Events VALUES (?,?,?,?,?)",
+            ("dd:ee:ff:00:11:04", "192.168.1.53", now + 2, "New Device", "TP-Link"),
+        )
+        con.commit()
+        con.close()
         env = build_envelope(db, state, "new_device")
         assert env["count"] == 1, env
         commit_rowid(state, "new_device", env["max_rowid"])

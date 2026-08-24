@@ -23,6 +23,15 @@ fail() {
   exit 1
 }
 
+_ensure_db_access() {
+  local fix="${SCRIPT_DIR}/ensure-netalert-db-access.sh"
+  [[ -x "$fix" ]] || fix="${SCRIPT_DIR}/ensure-netalert-db-access.sh"
+  if [[ -f "$fix" ]]; then
+    bash "$fix" || fail "NetAlertX DB izinleri duzeltilemedi — ensure-netalert-db-access.sh"
+  fi
+  [[ -r "$DB" ]] || fail "NetAlertX DB okunamiyor ($DB). Pi: bash scripts/pi/ensure-netalert-db-access.sh"
+}
+
 _json_field() {
   python3 - "$1" "$2" <<'PY'
 import json, sys
@@ -32,6 +41,7 @@ PY
 }
 
 [[ -f "$DB" ]] || die_silent "NetAlertX DB yok."
+_ensure_db_access
 [[ -f "$LIB" ]] || fail "netalert-devices.py yok."
 
 _ensure_state_dir() {

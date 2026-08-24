@@ -177,16 +177,19 @@ bash "$SCRIPT_DIR/sync-adguard-persistent-clients.sh" || log "WARN: AdGuard iste
 DB_DIR="${DATA_DIR}/db"
 DB_FILE="${DB_DIR}/app.db"
 _pi_u="${USER:-pi}"
-if [[ -d "$DB_DIR" ]]; then
+_ensure_db_script="${SCRIPT_DIR}/ensure-netalert-db-access.sh"
+if [[ -x "$_ensure_db_script" ]]; then
+  bash "$_ensure_db_script" || log "WARN: ensure-netalert-db-access"
+elif [[ -d "$DB_DIR" ]]; then
   chown 20211:"$_pi_u" "$DB_DIR" 2>/dev/null || sudo chown 20211:"$_pi_u" "$DB_DIR" 2>/dev/null || true
   chmod 775 "$DB_DIR" 2>/dev/null || sudo chmod 775 "$DB_DIR" 2>/dev/null || true
-fi
-if [[ -f "$DB_FILE" ]]; then
-  for _dbf in "$DB_DIR"/app.db "$DB_DIR"/app.db-wal "$DB_DIR"/app.db-shm; do
-    [[ -e "$_dbf" ]] || continue
-    chown 20211:"$_pi_u" "$_dbf" 2>/dev/null || sudo chown 20211:"$_pi_u" "$_dbf" 2>/dev/null || true
-    chmod 660 "$_dbf" 2>/dev/null || sudo chmod 660 "$_dbf" 2>/dev/null || true
-  done
+  if [[ -f "$DB_FILE" ]]; then
+    for _dbf in "$DB_DIR"/app.db "$DB_DIR"/app.db-wal "$DB_DIR"/app.db-shm; do
+      [[ -e "$_dbf" ]] || continue
+      chown 20211:"$_pi_u" "$_dbf" 2>/dev/null || sudo chown 20211:"$_pi_u" "$_dbf" 2>/dev/null || true
+      chmod 660 "$_dbf" 2>/dev/null || sudo chmod 660 "$_dbf" 2>/dev/null || true
+    done
+  fi
 fi
 log "Tamamlandi — https://devices.${LAN_DOMAIN:-home}"
 log "Giris: NetAlertX UI sifresi (NETALERTX_PASSWORD veya AGH_ADMIN_PASSWORD)"
