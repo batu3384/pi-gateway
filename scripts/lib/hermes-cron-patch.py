@@ -5,21 +5,23 @@ from __future__ import annotations
 import pathlib
 import sys
 
+_FAILURE_END = '    return f"⚠️ Cron \'{job_name}\' failed: {cleaned}"'
 
-def patch_failure_summary(text: str) -> str:
-    marker_v2 = "# pi-gateway: no_agent failure v2"
-    if marker_v2 in text:
-        return text
-
-    old_block_start = "    # pi-gateway: no_agent cron failure summary"
-    if old_block_start not in text:
-        raise SystemExit("VERIFY_FAIL: no_agent failure block missing")
-
-    end_needle = '    return f"⚠️ Cron \'{job_name}\' failed: {cleaned}"'
-    start = text.index(old_block_start)
-    end = text.index(end_needle, start) + len(end_needle)
-
-    new_block = '''    # pi-gateway: no_agent failure v2
+_FAILURE_V3 = '''    # pi-gateway: cron failure v3
+    if "potentially unsafe" in lower or "sensitive content" in lower:
+        return (
+            "📋 Pi Gateway · Bülten\\n\\n"
+            f"Görev: {job_name}\\n"
+            "Sorun: Model sağlayıcı güvenlik filtresi (HTTP 400) — "
+            "araştırma veya üretim engellendi.\\n"
+            "Ne yapmalı? Sonraki tur otomatik dener; sürerse farklı kaynak/model."
+        )
+    if "http 429" in lower or "rate limit" in lower:
+        return (
+            "📋 Pi Gateway · Bülten\\n\\n"
+            f"Görev: {job_name}\\n"
+            "Sorun: API hız limiti (HTTP 429)."
+        )
     if job.get("no_agent"):
         if "script path resolves outside" in lower or "blocked: script path" in lower:
             return (
@@ -72,15 +74,31 @@ def patch_failure_summary(text: str) -> str:
                         f"Görev: {job_name}\\n"
                         f"Sorun: {s[:220]}"
                     )
-        if cleaned:
-            return (
-                "📋 Pi Gateway · Zamanlanmış görev\\n\\n"
-                f"Görev: {job_name}\\n"
-                f"Sorun: {cleaned[:220]}"
-            )
+    if cleaned:
+        kind = "Bülten" if job.get("prompt") and not job.get("no_agent") else "Zamanlanmış görev"
+        return (
+            f"📋 Pi Gateway · {kind}\\n\\n"
+            f"Görev: {job_name}\\n"
+            f"Sorun: {cleaned[:280]}"
+        )
     return f"⚠️ Cron '{job_name}' failed: {cleaned}"'''
 
-    return text[:start] + new_block + text[end:]
+
+def patch_failure_summary(text: str) -> str:
+    marker_v3 = "# pi-gateway: cron failure v3"
+    if marker_v3 in text:
+        return text
+
+    for start_marker in (
+        "    # pi-gateway: no_agent failure v2",
+        "    # pi-gateway: no_agent cron failure summary",
+    ):
+        if start_marker in text:
+            start = text.index(start_marker)
+            end = text.index(_FAILURE_END, start) + len(_FAILURE_END)
+            return text[:start] + _FAILURE_V3 + text[end:]
+
+    raise SystemExit("VERIFY_FAIL: failure block missing")
 
 
 def patch_no_agent_skip_wrap(text: str) -> str:
