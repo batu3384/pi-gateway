@@ -1,6 +1,6 @@
 # Phase 4 — Network visibility (NetAlertX)
 
-LAN device inventory, new-device and offline alerts.
+LAN device inventory and Telegram alert on new MAC.
 
 ## Panel
 
@@ -23,9 +23,8 @@ NETALERTX_SCAN_SUBNETS=
 Automatic during deploy:
 
 1. `netalertx` container (`--profile netalert`, host network)
-2. `setup-netalertx.sh` — ARP scan subnet; container webhook off (`NETALERT_NOTIFY_VIA=hermes`)
-3. Cihaz envanteri: NetAlertX panel (`devices.home`) — Telegram yeni/offline cron kaldırıldı
-4. Kuma monitor `devices.home`
+2. `setup-netalertx.sh` — ARP + AdGuard isimler; yeni cihaz Telegram (`sendMessage`, Hermes `getUpdates` değil)
+3. Panel: `devices.home` — Kuma monitor aynı URL
 
 Manual:
 
@@ -39,14 +38,13 @@ First ARP scan may take **5–10 minutes**. After that, LAN devices appear in **
 
 ## Notifications
 
-Telegram yeni-cihaz / offline / saatlik sistem gözcü cron’ları **kaldırıldı**. Envanter için panel: https://devices.home
+Yeni MAC: NetAlertX `TELEGRAM` plugin → Bot API `sendMessage` (aynı token, Hermes inbox ayrı). Offline spam yok (`NTFPRCS` yalnız `new_devices`).
 
 Test:
 
 ```bash
-make telegram-test   # general path
+make telegram-test
 python3 scripts/lib/netalert-devices.py --self-check
-# smoke: netalert-hermes-poll (after deploy)
 ```
 
 ## Difference from Kuma

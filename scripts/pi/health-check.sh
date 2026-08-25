@@ -226,11 +226,43 @@ if [[ "$drill_max" != "0" ]] && [[ "${ENABLE_RESTIC:-true}" == "true" ]] && ! st
   fi
 fi
 # Hermes bülten SLO (07/19/23 last_run > 26h) — journal SLO, systemd FAIL değil
+_run_hermes_py() {
+  local kind="$1" out ec=0
+  shift
+  out="$("$@" 2>&1)" || ec=$?
+  if (( ec != 0 )); then
+    logger -t "$LOG_TAG" "WARN ${kind} fail(${ec}): ${out:-exit}"
+    return 0
+  fi
+  while IFS= read -r line || [[ -n "${line:-}" ]]; do
+    [[ -n "$line" ]] || continue
+    if [[ "$kind" == *slo ]]; then
+      slo_note "$line"
+    else
+      logger -t "$LOG_TAG" "$line"
+    fi
+  done <<< "$out"
+}
 _jobs_json="${HERMES_HOME:-$HOME/.hermes}/cron/jobs.json"
 if [[ -f "$_jobs_json" ]]; then
-  while IFS= read -r line; do
-    [[ -n "$line" ]] && slo_note "$line"
-  done < <(python3 "$SCRIPT_DIR/../lib/bulletin-slo.py" "$_jobs_json" 2>/dev/null || true)
+  _run_hermes_py bulletin-slo python3 "$SCRIPT_DIR/../lib/bulletin-slo.py" "$_jobs_json"
+fi
+_hermes_db="${HERMES_HOME:-$HOME/.hermes}/state.db"
+_hygiene_py="$SCRIPT_DIR/../lib/hermes-session-hygiene.py"
+# 2 dk timer: şişman/idle Telegram oturumunu DB'de kapat (gateway restart yok, #54878)
+if [[ -f "$_hermes_db" && -f "$_hygiene_py" ]]; then
+  _idle_sec=$(( ${HERMES_SESSION_IDLE_MIN:-720} * 60 ))
+  _run_hermes_py hermes-session-hygiene python3 "$_hygiene_py" --db "$_hermes_db" --idle-seconds "$_idle_sec"
+fi
+if [[ -f "$_hermes_db" ]]; then
+  _run_hermes_py hermes-token-slo python3 "$SCRIPT_DIR/../lib/hermes-token-slo.py" "$_hermes_db"
+fi
+_reap_sh="$SCRIPT_DIR/../lib/reap-dead-docker-scopes.sh"
+if [[ -f "$_reap_sh" ]]; then
+  # shellcheck source=../lib/reap-dead-docker-scopes.sh
+  source "$_reap_sh"
+  _reap_out="$(reap_dead_docker_scopes 2>&1)" || true
+  [[ -n "${_reap_out}" ]] && logger -t "$LOG_TAG" "$_reap_out"
 fi
 # SSD varken DNS-only fail'leri ayır (cascade: container/gateway/ssd symlink)
 health_is_dns_only_fail() {
@@ -264,7 +296,7 @@ elif [[ ${#FAILURES[@]} -gt 0 ]]; then
   exit_code=0
   for f in "${FAILURES[@]}"; do
     case "$f" in
-      optional-*|offsite-*|backup-restore-drill*|bulletin-*) ;;
+      optional-*|offsite-*|backup-restore-drill*|bulletin-*|hermes-session-*) ;;
       *) exit_code=1; break ;;
     esac
   done
@@ -298,7 +330,7 @@ else
       offsite-*|backup-restore-drill*)
         has_slo=1
         ;;
-      bulletin-*)
+      bulletin-*|hermes-session-*)
         ;;
       *)
         has_core=1

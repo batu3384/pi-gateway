@@ -39,7 +39,7 @@ notify_failure_skip_sla_only() {
     line="${line#SLO }"
     [[ -z "$line" ]] && continue
     case "$line" in
-      offsite-*|optional-*|backup-restore-drill*|bulletin-*|exit_code=0) ;;
+      offsite-*|optional-*|backup-restore-drill*|bulletin-*|hermes-session-*|exit_code=0) ;;
       *) return 1 ;;
     esac
   done < <(printf '%s' "$d" | tr ';' '\n' | sort -u)

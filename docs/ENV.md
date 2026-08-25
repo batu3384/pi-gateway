@@ -30,6 +30,12 @@
 | `TELEGRAM_BOT_TOKEN` | @BotFather token (notify outbox + panel; Hermes also keeps copy in `~/.hermes/.env`) |
 | `TELEGRAM_CHAT_ID` | Notify / panel hedef chat veya numeric user id |
 | `HERMES_TELEGRAM_GATEWAY` | `true` = Hermes owns Telegram inbox (`getUpdates`); panel poller off. Allowlist: `TELEGRAM_ALLOWED_USERS` in `~/.hermes/.env` |
+| `HERMES_TELEGRAM_STREAMING` | `false`: Telegram `editMessageText` akıtma kapalı (Bot API flood). GLM API stream = `HERMES_STREAMING` |
+| `HERMES_TELEGRAM_TOOL_PROGRESS` | `off`: “terminale bakıyorum” bubble yok. Patch YAML’e `false` yazar (`off` string restart döngüsü). CLI `display.tool_progress` ayrı |
+| `HERMES_MAX_WEB_SEARCHES` | `4` (bülten “en fazla 4” ile aynı tavan) |
+| `HERMES_STALE_TIMEOUT_SEC` | `600`: `providers.zai.stale_timeout_seconds` (model id `glm-5.3` config set YASAK — walker `glm-5`/`3` yazar) |
+| `HERMES_COMPRESS_TOKEN_CAP` | `96000`: compact/prune tavanı (GLM-5.3 %50≈500k hiç ateşlenmez). Akşam bülten ~71k sığar; sohbet yine sınırlı |
+| `HERMES_SESSION_RESET_MODE` | `both`: Telegram 04:00 + 12s idle reset (cron ayrı). Unutulmuş process 2s sonra kilitlemez (`HERMES_SESSION_BG_MAX_AGE_H`) |
 | `CROWDSEC_BOUNCER_KEY` | Written automatically on first setup |
 
 ## SSD / storage
@@ -109,5 +115,6 @@ If `N8N_ENCRYPTION_KEY` is empty on Pi, `ensure-n8n-encryption-key.sh` generates
 | `NETALERTX_LISTEN_ADDR` | `172.17.0.1` | Host-network docker0; Caddy `host.docker.internal` proxy. Avoid `0.0.0.0`. |
 | `NETALERTX_SCAN_SUBNETS` | (empty) | ARP scan; if empty, `LAN_SUBNET_CIDR` + `PI_INTERFACE` |
 | `NETALERTX_PASSWORD` | (empty → `AGH_ADMIN_PASSWORD`) | NetAlertX UI password |
+| `NETALERT_NOTIFY_VIA` | `telegram` | Native plugin `sendMessage`. `n8n` yok. |
 
 Details: `docs/FAZ4.md`

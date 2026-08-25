@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
-# NetAlertX: subnet tarama, Hermes cron bildirimleri (webhook kapali)
+# NetAlertX: ARP envanter, AdGuard isim, yeni cihaz Telegram (sendMessage)
 set -euo pipefail
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
-_PG_ENV_LIB="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}/../lib/env-file.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_PG_ENV_LIB="${SCRIPT_DIR}/../lib/env-file.sh"
 PG_SCRIPT_NAME="$(basename "$0")"
 # shellcheck source=../lib/env-file.sh
 source "${_PG_ENV_LIB:?}"
 read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
-NETALERT_NOTIFY_VIA="${NETALERT_NOTIFY_VIA:-hermes}"
-if [[ "${NETALERT_NOTIFY_VIA}" != "hermes" ]]; then
-  log "HATA: NETALERT_NOTIFY_VIA=hermes gerekli (n8n yolu kaldirildi)"
+log() { echo "[netalertx-setup] $*"; }
+# shellcheck source=../lib/reap-dead-docker-scopes.sh
+source "${SCRIPT_DIR}/../lib/reap-dead-docker-scopes.sh"
+NETALERT_NOTIFY_VIA="${NETALERT_NOTIFY_VIA:-telegram}"
+[[ "${NETALERT_NOTIFY_VIA}" == "hermes" ]] && NETALERT_NOTIFY_VIA=telegram
+if [[ "${NETALERT_NOTIFY_VIA}" != "telegram" ]]; then
+  log "HATA: NETALERT_NOTIFY_VIA=telegram gerekli (n8n yolu yok)"
   exit 1
 fi
 NETALERTX_PORT="${NETALERTX_PORT:-20211}"
@@ -30,7 +35,6 @@ AGH_ADMIN_PASSWORD="${AGH_ADMIN_PASSWORD:-}"
 DATA_DIR="${REMOTE_DIR}/data/netalertx"
 CONF_FILE="${DATA_DIR}/config/app.conf"
 MARKER="${DATA_DIR}/.pi-gateway-configured"
-log() { echo "[netalertx-setup] $*"; }
 
 _ensure_netalert_host_gid() {
   local env_file="${REMOTE_DIR}/.env" want
@@ -43,7 +47,7 @@ _ensure_netalert_host_gid() {
   else
     {
       echo ""
-      echo "# Host grubu — Hermes cron app.db okur (NETALERTX_UID=20211 kalir)"
+      echo "# Host grubu — app.db okuma (NETALERTX_UID=20211 kalir)"
       echo "NETALERTX_GID=${want}"
     } >>"$env_file"
   fi
@@ -77,11 +81,11 @@ wait_http() {
   local _
   local url="http://${NETALERTX_LISTEN_ADDR}:${NETALERTX_PORT}/"
   for _ in $(seq 1 36); do
-    if curl -fsS -L "$url" >/dev/null 2>&1; then
+    if curl -fsS -L --max-time 3 "$url" >/dev/null 2>&1; then
       return 0
     fi
     # Fallback: n8n restart sonrasi container ayaga kalkana kadar
-    if curl -fsS -L "http://127.0.0.1:${NETALERTX_PORT}/" >/dev/null 2>&1; then
+    if curl -fsS -L --max-time 3 "http://127.0.0.1:${NETALERTX_PORT}/" >/dev/null 2>&1; then
       return 0
     fi
     sleep 5
@@ -89,28 +93,48 @@ wait_http() {
   log "HATA: NetAlertX HTTP hazir degil (${NETALERTX_LISTEN_ADDR}:${NETALERTX_PORT})"
   return 1
 }
+# Host-network leftover nginx/python (ölü docker-*.scope) 20211/20214 tutar.
+_reap_netalert_binds() {
+  docker stop netalertx >/dev/null 2>&1 || true
+  reap_dead_docker_scopes || true
+  sudo fuser -k "${NETALERTX_PORT}/tcp" >/dev/null 2>&1 || true
+  sudo fuser -k 20214/tcp >/dev/null 2>&1 || true
+  sleep 1
+}
 mkdir -p "${DATA_DIR}/config" "${DATA_DIR}/db"
 chown -R "20211:$(id -gn)" "${DATA_DIR}" 2>/dev/null || sudo chown -R "20211:$(id -gn)" "${DATA_DIR}" 2>/dev/null || true
+reap_dead_docker_scopes || true
+if ! curl -fsS -L --max-time 3 "http://${NETALERTX_LISTEN_ADDR}:${NETALERTX_PORT}/" >/dev/null 2>&1 \
+  && ! curl -fsS -L --max-time 3 "http://127.0.0.1:${NETALERTX_PORT}/" >/dev/null 2>&1; then
+  log "HTTP yok — stale bind reap"
+  _reap_netalert_binds
+  docker start netalertx >/dev/null 2>&1 || true
+fi
 wait_http
 export CONF_FILE SCAN_SUBNET MARKER PANEL_PROTOCOL LAN_DOMAIN NETALERTX_PASSWORD
 export AGH_ADMIN_USER AGH_ADMIN_PASSWORD ADGUARD_WEB_PORT NETALERT_NOTIFY_VIA
+export TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}" TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:-}"
 SCAN_SUBNET="$(scan_subnet)"
 WEBHOOK_URL="$(webhook_url)"
 export NETALERT_WEBHOOK_RAW="$WEBHOOK_URL"
-log "NetAlertX webhook kapali (NETALERT_NOTIFY_VIA=hermes)"
-export NETALERTX_PLUGINS='["ARPSCAN","DIGSCAN","NSLOOKUP","ICMP","WEBHOOK","NEWDEV","NTFPRCS","DBCLNP","CUSTPROP","SETPWD","SYNC","UI","MAINT","VNDRPDT","ADGUARDIMP","AVAHISCAN"]'
+log "NetAlertX webhook kapali — Telegram plugin sendMessage"
+# ARP + AdGuard isim + zorunlu iskelet + TELEGRAM. ICMP/DIG/vendor/webhook yok.
+export NETALERTX_PLUGINS='["ARPSCAN","ADGUARDIMP","NEWDEV","NTFPRCS","DBCLNP","CUSTPROP","SETPWD","SYNC","UI","MAINT","TELEGRAM"]'
 export SCAN_SUBNET
 python3 <<'PY'
 import os
 import re
+import subprocess
 import time
 from pathlib import Path
 conf = Path(os.environ["CONF_FILE"])
 marker = Path(os.environ["MARKER"])
 subnet = os.environ["SCAN_SUBNET"]
-notify_via = os.environ.get("NETALERT_NOTIFY_VIA", "hermes")
-if notify_via != "hermes":
-    raise SystemExit("[netalertx-setup] HATA: NETALERT_NOTIFY_VIA=hermes gerekli")
+notify_via = os.environ.get("NETALERT_NOTIFY_VIA", "telegram")
+if notify_via == "hermes":
+    notify_via = "telegram"
+if notify_via != "telegram":
+    raise SystemExit("[netalertx-setup] HATA: NETALERT_NOTIFY_VIA=telegram gerekli")
 webhook = "''"
 webhook_run = "'off'"
 password = os.environ["NETALERTX_PASSWORD"]
@@ -123,13 +147,26 @@ lan = os.environ.get("LAN_DOMAIN", "home")
 proto = os.environ.get("PANEL_PROTOCOL", "https")
 dashboard = f"{proto}://devices.{lan}"
 scan_value = f"['{subnet}']"
+tg_token = (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
+tg_chat = (os.environ.get("TELEGRAM_CHAT_ID") or "").strip()
+
+def q(val: str) -> str:
+    return "'" + val.replace("\\", "\\\\").replace("'", "\\'") + "'"
+
+telegram_run = "'on_notification'" if tg_token and tg_chat else "'disabled'"
+if telegram_run == "'disabled'":
+    print("[netalertx-setup] WARN: TELEGRAM_BOT_TOKEN/CHAT_ID yok — yeni cihaz bildirimi kapali")
+text = ""
 for _ in range(36):
-    if conf.is_file() and conf.stat().st_size > 10:
+    try:
+        text = subprocess.check_output(["sudo", "cat", str(conf)], text=True)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        text = ""
+    if len(text) > 10:
         break
     time.sleep(5)
 else:
     raise SystemExit("[netalertx-setup] HATA: app.conf olusmadi — container loglarina bakin")
-text = conf.read_text()
 updates = {
     "LOADED_PLUGINS": plugins,
     "SCAN_SUBNETS": scan_value,
@@ -137,20 +174,26 @@ updates = {
     "WEBHOOK_REQUEST_METHOD": "'POST'",
     "WEBHOOK_RUN": webhook_run,
     "WEBHOOK_REPORT_TYPE": "'preset'",
-    "ICMP_RUN": "'schedule'",
+    "ICMP_RUN": "'disabled'",
     "ARPSCAN_RUN": "'schedule'",
-    "DIGSCAN_RUN": "'schedule'",
-    "AVAHISCAN_RUN": "'before_name_updates'",
-    "NSLOOKUP_RUN": "'before_name_updates'",
+    "ARPSCAN_RUN_SCHD": "'*/5 * * * *'",
+    "DIGSCAN_RUN": "'disabled'",
+    "AVAHISCAN_RUN": "'disabled'",
+    "NSLOOKUP_RUN": "'disabled'",
+    "VNDRPDT_RUN": "'disabled'",
     "ADGUARDIMP_RUN": "'schedule'",
     "ADGUARDIMP_RUN_SCHD": "'*/5 * * * *'",
     "ADGUARDIMP_RUN_TIMEOUT": "30",
     "ADGUARDIMP_SERVER": "'127.0.0.1'",
     "ADGUARDIMP_PORT": agh_port,
     "ADGUARDIMP_PROTOCOL": "'http'",
-    "ADGUARDIMP_USER": "'" + agh_user.replace("'", "\\'") + "'",
-    "ADGUARDIMP_PASS": "'" + agh_pass.replace("'", "\\'") + "'",
+    "ADGUARDIMP_USER": q(agh_user),
+    "ADGUARDIMP_PASS": q(agh_pass),
     "ADGUARDIMP_FAKE_MAC": "False",
+    "NTFPRCS_INCLUDED_SECTIONS": "['new_devices']",
+    "TELEGRAM_RUN": telegram_run,
+    "TELEGRAM_HOST": q(tg_chat),
+    "TELEGRAM_URL": q(tg_token),
     "SETPWD_enable_password": "True",
     "SETPWD_password": "'" + password_hash + "'",
     "BACKEND_API_URL": "'/server'",
@@ -169,33 +212,34 @@ for key, value in updates.items():
         text = text.rstrip() + "\n" + replacement + "\n"
         changed = True
 if changed or not marker.is_file():
-    import subprocess
     import tempfile
     with tempfile.NamedTemporaryFile("w", delete=False, suffix=".conf") as fh:
         fh.write(text)
         tmp_path = fh.name
     subprocess.run(["sudo", "cp", tmp_path, str(conf)], check=True)
     subprocess.run(["sudo", "chown", "20211:20211", str(conf)], check=True)
+    subprocess.run(["sudo", "chmod", "600", str(conf)], check=True)
     Path(tmp_path).unlink(missing_ok=True)
     subprocess.run(["sudo", "tee", str(marker)], input=b"ok\n", check=True, stdout=subprocess.DEVNULL)
     _u = os.environ.get("USER") or os.environ.get("PI_USER") or "pi"
     subprocess.run(["sudo", "chown", f"{_u}:{_u}", str(marker)], check=False)
     print(f"[netalertx-setup] app.conf guncellendi (SCAN_SUBNETS={subnet})")
-    print(f"[netalertx-setup] WEBHOOK_RUN={webhook_run} WEBHOOK_URL={webhook}")
+    print(f"[netalertx-setup] TELEGRAM_RUN={telegram_run} WEBHOOK_RUN={webhook_run}")
 else:
     print("[netalertx-setup] app.conf zaten guncel")
 PY
 if [[ "$(cat "$MARKER" 2>/dev/null)" == "ok" ]]; then
-  docker restart netalertx >/dev/null 2>&1 || true
+  _reap_netalert_binds
+  docker start netalertx >/dev/null 2>&1 || true
   wait_http || true
 fi
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Isim sync: yalniz ADGUARDIMP plugin (*/5). Timer/import/enrich/geri-sync yok — cift yazici.
 DB_DIR="${DATA_DIR}/db"
 DB_FILE="${DB_DIR}/app.db"
 _pi_u="${USER:-pi}"
 if (( _netalert_gid_changed )); then
   log "NETALERTX_GID=${NETALERTX_GID:-$(id -g)} — container yeniden olusturuluyor"
+  _reap_netalert_binds
   (cd "${REMOTE_DIR}/compose" && docker compose --env-file ../.env --profile netalert up -d --force-recreate netalertx) \
     || log "WARN: netalertx recreate basarisiz"
   wait_http || true

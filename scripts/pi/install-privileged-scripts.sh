@@ -24,6 +24,10 @@ SCRIPTS=(
   scripts/lib/ssd-alive.sh
   scripts/lib/compose-profiles.sh
   scripts/lib/notify.sh
+  scripts/lib/bulletin-slo.py
+  scripts/lib/hermes-token-slo.py
+  scripts/lib/hermes-session-hygiene.py
+  scripts/lib/reap-dead-docker-scopes.sh
   scripts/lib/adguard-api.sh
   scripts/lib/ensure-data-symlink.sh
   scripts/pi/ssd-health.sh

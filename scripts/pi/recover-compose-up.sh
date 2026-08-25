@@ -41,6 +41,9 @@ compose_up() {
   fi
 }
 finish_ok() {
+  # shellcheck source=../lib/reap-dead-docker-scopes.sh
+  source "$SCRIPT_DIR/../lib/reap-dead-docker-scopes.sh"
+  reap_dead_docker_scopes || true
   if [[ "${COMPOSE_RECOVER_MODE:-}" != "core-dns" ]] \
     && [[ "${ENABLE_DOZZLE:-true}" == "true" ]] \
     && [[ ! -f "${REMOTE_DIR}/data/dozzle/users.yml" ]]; then

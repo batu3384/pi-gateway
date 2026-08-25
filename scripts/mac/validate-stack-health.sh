@@ -306,10 +306,24 @@ grep -q 'docker-netalertx' "$PROJECT_DIR/scripts/pi/setup-firewall.sh" \
   || die "netalertx docker ufw kurali yok"
 grep -q 'setup-netalertx.sh' "$PROJECT_DIR/scripts/pi/post-deploy.sh" \
   || die "post-deploy netalertx yok"
+grep -q '_reap_netalert_binds' "$PROJECT_DIR/scripts/pi/setup-netalertx.sh" \
+  || die "setup-netalertx stale bind reap yok"
+grep -q 'reap-dead-docker-scopes.sh' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" \
+  || die "privileged docker-scope reap yok"
 [[ ! -f "$PROJECT_DIR/config/n8n/netalert-device-alert.workflow.json" ]] \
   || die "netalert-device-alert.workflow.json silinmeli"
-grep -q 'NETALERT_NOTIFY_VIA=hermes gerekli' "$PROJECT_DIR/scripts/pi/setup-netalertx.sh" \
-  || die "setup-netalertx hermes-only degil"
+grep -q 'NETALERT_NOTIFY_VIA=telegram gerekli' "$PROJECT_DIR/scripts/pi/setup-netalertx.sh" \
+  || die "setup-netalertx telegram-only degil"
+grep -qE 'VNDRPDT|DIGSCAN|ICMP' "$compose" \
+  && die "netalertx compose hala agir plugin"
+grep -q 'TELEGRAM' "$compose" \
+  || die "netalertx compose TELEGRAM plugin yok"
+grep -q 'ADGUARDIMP' "$compose" \
+  || die "netalertx compose ADGUARDIMP yok"
+grep -q 'TELEGRAM_RUN' "$PROJECT_DIR/scripts/pi/setup-netalertx.sh" \
+  || die "setup-netalertx TELEGRAM_RUN yok"
+grep -q "NTFPRCS_INCLUDED_SECTIONS" "$PROJECT_DIR/scripts/pi/setup-netalertx.sh" \
+  || die "setup-netalertx new_devices-only yok"
 [[ ! -f "$PROJECT_DIR/scripts/pi/netalert-newdev.sh" ]] \
   || die "netalert-newdev.sh silinmeli"
 [[ ! -f "$PROJECT_DIR/scripts/pi/netalert-offline.sh" ]] \
@@ -331,9 +345,13 @@ grep -q 'pi-fx-quote.sh' "$PROJECT_DIR/config/hermes/cron-jobs.template.json" \
   || die "piyasa pi-fx-quote yok"
 grep -q 'HERMES_API_CALL_STALE_TIMEOUT' "$PROJECT_DIR/host/systemd/hermes-gateway.service" \
   || die "hermes-gateway stale timeout yok"
+grep -q 'HERMES_COMPRESS_TOKEN_CAP:-96000' "$PROJECT_DIR/scripts/pi/patch-hermes-config-pi.sh" \
+  || die "hermes compress token cap 96000 degil"
+grep -q 'hermes-token-slo.py' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check token SLO yok"
 grep -q 'NETALERT_NOTIFY_VIA' "$PROJECT_DIR/scripts/pi/setup-netalertx.sh" \
   || die "setup-netalertx NOTIFY_VIA yok"
-ok "netalertx host + hermes bulten (ag cron yok)"
+ok "netalertx host + telegram new-device (ag cron yok)"
 
 grep -q 'STORAGE_TYPE=hybrid' "$PROJECT_DIR/.env.example" \
   || die ".env.example hybrid varsayilan degil"

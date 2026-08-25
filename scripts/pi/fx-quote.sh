@@ -74,11 +74,13 @@ def save_cache(text: str) -> None:
 
 def get(url: str) -> dict | None:
     req = urllib.request.Request(url, headers={"User-Agent": UA})
-    try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError, ValueError):
-        return None
+    for _ in range(2):
+        try:
+            with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError, ValueError):
+            time.sleep(0.4)
+    return None
 
 
 def fmt(n: float, digits: int = 2) -> str:
