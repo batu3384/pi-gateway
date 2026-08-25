@@ -35,9 +35,9 @@ ok "adguard-dhcp kosullu"
 grep -q 'DEGRADED' "$SMOKE" || die "degraded subset yok"
 ok "degraded mode"
 
-grep -q 'ENABLE_REDIS:-false' "$SMOKE" \
-  || die "smoke REDIS default false degil"
-ok "redis default kapali"
+grep -qE 'ENABLE_REDIS|redis-cli|run_check "redis"' "$SMOKE" \
+  && die "smoke hala redis check/ENABLE_REDIS iceriyor"
+ok "smoke redis removed"
 
 grep -q 'tailscale-connected' "$SMOKE" || die "tailscale smoke yok"
 ok "tailscale smoke"

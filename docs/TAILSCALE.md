@@ -30,7 +30,7 @@ On phone, `https://gateway.home` does not trust mkcert certs. Instead:
 3. Telegram menu prefers **`http://100.x.x.x/p/...`** (works without MagicDNS). Serve HTTPS is optional backup when MagicDNS + Override DNS are on.
 
 ```bash
-make telegram-menu   # or on Pi: scripts/pi/telegram-bot.sh --once
+make telegram-menu   # or on Pi: scripts/pi/telegram-menu.sh
 REMOTE_DIR=~/pi-gateway bash scripts/pi/diagnose-remote-access.sh
 ```
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Hermes gateway systemd: mutual exclusion with panel poller via HERMES_TELEGRAM_GATEWAY
+# Hermes gateway systemd: sole Telegram getUpdates owner (panel poller removed)
 set -euo pipefail
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 log() { echo "[hermes-gateway-setup] $*"; }
@@ -20,15 +20,11 @@ poller=pi-gateway-telegram-bot.service
 STABLE_SECS="${HERMES_STABLE_SECS:-12}"
 WAIT_SECS="${HERMES_WAIT_SECS:-60}"
 
-_restore_poller() {
-  [[ -f "$REMOTE_DIR/host/systemd/$poller" ]] || return 1
-  load_telegram_from_hermes || true
-  sudo cp "$REMOTE_DIR/host/systemd/$poller" "/etc/systemd/system/$poller"
-  sudo sed -i "s|PI_USER|${USER}|g" "/etc/systemd/system/$poller" 2>/dev/null || \
-    sudo sed -i '' "s|PI_USER|${USER}|g" "/etc/systemd/system/$poller" 2>/dev/null || true
-  sudo systemctl daemon-reload
-  sudo systemctl enable --now "$poller" 2>/dev/null || true
-  log "Fallback: panel poller enable"
+_remove_leftover_poller() {
+  if systemctl list-unit-files "$poller" 2>/dev/null | grep -q "$poller"; then
+    sudo systemctl disable --now "$poller" 2>/dev/null || true
+  fi
+  sudo rm -f "/etc/systemd/system/$poller" 2>/dev/null || true
 }
 
 _hermes_telegram_connected() {
@@ -37,7 +33,25 @@ _hermes_telegram_connected() {
     | grep -qE 'Connected to Telegram|polling_started=True'
 }
 
-# Rollback / poller mode: Hermes must not keep getUpdates
+# Outbox Bot API — getUpdates gerekmez; inbox down iken de alarm gidebilir
+_alert_inbox_down() {
+  local reason="$1"
+  # shellcheck source=../lib/notify.sh
+  source "${SCRIPT_DIR}/../lib/notify.sh" 2>/dev/null || return 0
+  load_telegram_from_hermes 2>/dev/null || true
+  notify_enabled || return 0
+  notify_send_message "🚨 Pi Gateway · Hermes inbox DOWN
+
+${reason}
+
+Kurtarma:
+  journalctl -u ${unit} -n 80 --no-pager
+  sudo systemctl restart ${unit}
+  REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/setup-hermes-gateway.sh
+
+Outbox (notify) calisabilir; inbox (getUpdates) su an yok." || true
+}
+
 if [[ "${HERMES_TELEGRAM_GATEWAY:-}" != "true" ]]; then
   if [[ -f "$src" ]]; then
     sudo cp "$src" "/etc/systemd/system/$unit"
@@ -51,6 +65,9 @@ if [[ "${HERMES_TELEGRAM_GATEWAY:-}" != "true" ]]; then
   else
     log "HERMES_TELEGRAM_GATEWAY!=true — $unit yok, atlandi"
   fi
+  _remove_leftover_poller || true
+  sudo systemctl daemon-reload 2>/dev/null || true
+  log "WARN: Telegram inbox kapali (Hermes off, poller yok). Outbox notify yine calisir."
   exit 0
 fi
 
@@ -69,11 +86,8 @@ sudo sed -i "s|PI_USER|${USER}|g" "/etc/systemd/system/$unit" 2>/dev/null || \
 bash "$SCRIPT_DIR/patch-hermes-telegram-pi.sh" || die "hermes telegram patch basarisiz — gateway enable yok"
 [[ -x "$SCRIPT_DIR/patch-hermes-cron-pi.sh" ]] && bash "$SCRIPT_DIR/patch-hermes-cron-pi.sh" || true
 
-# Poller once — dual getUpdates penceresi olmasin
-if systemctl list-unit-files "$poller" 2>/dev/null | grep -q "$poller"; then
-  sudo systemctl disable --now "$poller" || die "panel poller kapatilamadi (cift getUpdates riski)"
-  log "Panel poller kapatildi (cutover)"
-fi
+_remove_leftover_poller || true
+log "Panel poller kalintisi temizlendi (cutover)"
 
 sudo systemctl daemon-reload
 sudo systemctl enable "$unit"
@@ -95,9 +109,9 @@ for _ in $(seq 1 "$WAIT_SECS"); do
 done
 
 if [[ "$connected" -ne 1 ]]; then
-  log "HATA: $unit stabil/Connected degil — poller geri acilacak"
-  _restore_poller || true
-  sudo systemctl disable --now "$unit" 2>/dev/null || true
-  die "$unit Telegram Connected yok — journalctl -u $unit"
+  # Poller yok → dual getUpdates riski yok. Unit enabled kalsin (Restart=always kurtarabilir).
+  log "WARN: Connected yok — $unit enabled birakildi (Restart=always); inbox alarm gonderiliyor"
+  _alert_inbox_down "${unit} ${WAIT_SECS}s icinde Telegram Connected gostermedi (journal lag veya token)."
+  die "$unit Telegram Connected yok — journalctl -u $unit (unit hâlâ enabled)"
 fi
 log "Aktif (Connected): $unit"

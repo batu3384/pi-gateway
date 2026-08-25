@@ -6,10 +6,10 @@ Production-grade single-node home dev/DNS server for Raspberry Pi 4B.
 
 - Zero manual config on AdGuard/Unbound after deploy (IaC rendered configs)
 - Automatic network discovery and static IP assignment
-- Self-healing containers (`recover-stack.sh` + healthchecks; autoheal optional)
+- Self-healing containers (`recover-stack.sh` + healthchecks)
 - Independent DNS health monitoring (systemd timer, not dependent on Uptime Kuma)
 - Hybrid storage: SD boot + root; USB SSD for application data (`/mnt/ssd`)
-- Host firewall (UFW) + SSH brute-force protection (fail2ban)
+- Host firewall (UFW) + SSH brute-force protection (CrowdSec)
 - TLS on by default; offsite backup SLA (`make backup-pull`)
 - Optional full automation via AdGuard DHCP mode
 
@@ -19,8 +19,8 @@ Production-grade single-node home dev/DNS server for Raspberry Pi 4B.
 |------|---------------------|------|
 | **dns-core** | `unbound`, `adguard` (always) | LAN DNS — keep up even when SSD degraded |
 | **panels** | `caddy`, homepage, uptime-kuma, `dozzle` | `*.home` UI via Caddy+TLS |
-| **automation** | `forgejo`, `syncthing`, `n8n`, `redis`, `netalert`, `crowdsec` | Best-effort apps on SSD data |
-| **edge** | `cloudflare` (token), `watchtower` (off by default) | Optional public / update watch |
+| **automation** | `n8n`, `netalert`, `crowdsec` | Best-effort apps on SSD data |
+| **edge** | `cloudflare` (token) | Optional public edge |
 
 Feature flags: `ENABLE_*` in `.env` → compose profiles (`scripts/lib/compose-profiles.sh`).
 
@@ -54,20 +54,20 @@ Client DNS query
 | Logs | Dozzle | Live Docker container logs |
 | Monitoring | Uptime Kuma + systemd health timer | Uptime + DNS layer checks |
 | Network inventory | NetAlertX | LAN device discovery, new/offline alerts |
-| Recovery | autoheal | Restart unhealthy containers |
-| Security | UFW + fail2ban | LAN-scoped admin ports, SSH protection |
+| Recovery | recover-stack.sh | Restart unhealthy / degraded stack |
+| Security | UFW + CrowdSec | LAN-scoped admin ports, SSH protection |
 | Host | log2ram, sysctl tuning, watchdog | SD longevity, UDP performance |
 | Remote | Tailscale (host) | Secure admin from anywhere |
-| Storage | `/mnt/ssd/pi-gateway-data` (symlink `~/pi-gateway/data`) | AdGuard, Kuma, Forgejo, Syncthing, backups |
+| Storage | `/mnt/ssd/pi-gateway-data` (symlink `~/pi-gateway/data`) | AdGuard, Kuma, n8n, backups |
 
 ## Phased rollout
 
 | Phase | Status | Items |
 |-------|--------|-------|
-| 0 Foundation | Done | Docker, SSD data disk, UFW, fail2ban, Tailscale hook |
+| 0 Foundation | Done | Docker, SSD data disk, UFW, CrowdSec, Tailscale hook |
 | 1 DNS stack | Done | Unbound, AdGuard, Homepage, Uptime Kuma, Caddy, Dozzle |
-| 2 Dev & sync | Done | Forgejo, Syncthing, Restic (timer) |
-| 3 Advanced | Done | CrowdSec, Redis, n8n; Cloudflare Tunnel (with token) |
+| 2 Backup | Done | Restic (timer); Forgejo/Syncthing removed |
+| 3 Advanced | Done | CrowdSec, n8n; Cloudflare Tunnel (with token) |
 | 4 Network visibility | Done | NetAlertX — `devices.home`, n8n webhook alerts |
 
 ## Network modes
@@ -102,12 +102,9 @@ USB SSD:      /mnt/ssd/
                 pi-gateway-data/   <- ~/pi-gateway/data symlink
                   adguard/work/
                   uptime-kuma/
-                  forgejo/
-                  syncthing/
                   n8n/
                   netalertx/
                   backups/restic/
-                  projects/
 ```
 
 Symlink: `~/pi-gateway/data` → `/mnt/ssd/pi-gateway-data`

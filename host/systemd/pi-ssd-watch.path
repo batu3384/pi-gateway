@@ -1,10 +1,10 @@
 [Unit]
 Description=Pi Gateway SSD device watch (USB hotplug)
-DefaultInstance=
 
 [Path]
+# Disconnect SSOT: udev SYSTEMD_WANTS. Path unit = by-label symlink change only.
 PathChanged=/dev/disk/by-label/pi-data
-PathExistsGone=/dev/disk/by-label/pi-data
+Unit=pi-ssd-watch.service
 
 [Install]
 WantedBy=multi-user.target

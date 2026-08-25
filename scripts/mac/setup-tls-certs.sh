@@ -38,8 +38,6 @@ hosts=(
   "panel.${LAN_DOMAIN}"
   "status.${LAN_DOMAIN}"
   "dns.${LAN_DOMAIN}"
-  "git.${LAN_DOMAIN}"
-  "sync.${LAN_DOMAIN}"
   "n8n.${LAN_DOMAIN}"
   "logs.${LAN_DOMAIN}"
   "devices.${LAN_DOMAIN}"

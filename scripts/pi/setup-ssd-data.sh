@@ -123,13 +123,9 @@ prepare_data_tree() {
     "${DATA_ROOT}/uptime-kuma" \
     "${DATA_ROOT}/docker-volumes" \
     "${DATA_ROOT}/logs" \
-    "${DATA_ROOT}/forgejo" \
-    "${DATA_ROOT}/syncthing" \
     "${DATA_ROOT}/netalertx" \
     "${DATA_ROOT}/restic" \
-    "${DATA_ROOT}/projects" \
     "${DATA_ROOT}/backups" \
-    "${DATA_ROOT}/redis" \
     "${DATA_ROOT}/n8n" \
     "${DATA_ROOT}/crowdsec" \
     "${MOUNT}/.disk-probe"

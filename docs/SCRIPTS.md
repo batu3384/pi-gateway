@@ -7,18 +7,18 @@ Do not treat every `scripts/**/*.sh` as equal. Prefer `make` targets.
 | Area | Scripts |
 |------|---------|
 | Mac pipeline | `install.sh`, `doctor.sh`, `discover-remote.sh`, `render-config.sh`, `validate.sh`, `deploy.sh`, `deploy-fast.sh`, `pre-deploy-check.sh`, `restore-check.sh`, `backup-restore-drill.sh`, `config-drift-check.sh`, `test-smoke-contract.sh` |
-| Pi lifecycle | `bootstrap.sh`, `post-deploy.sh`, `smoke-test.sh`, `health-check.sh`, `export-gateway-state.sh`, `stack-watchdog.sh`, `recover-stack.sh`, `ssd-health.sh`, `ssd-hotplug-handler.sh`, `check-ssd-smart.sh` |
-| Lib | `common.sh`, `stack-health.sh`, `ssd-alive.sh`, `notify.sh`, `adguard-api.sh`, `password-policy.sh`, `compose-profiles.sh`, `telegram-panels.py` (Telegram bot inline keyboard; `telegram-bot.sh` / `telegram-menu.sh`) |
+| Pi lifecycle | `bootstrap.sh`, `post-deploy.sh`, `smoke-test.sh`, `health-check.sh` → `recover-stack.sh`, `export-gateway-state.sh`, `ssd-health.sh`, `ssd-hotplug-handler.sh`, `check-ssd-smart.sh` |
+| Lib | `common.sh`, `stack-health.sh`, `ssd-alive.sh`, `notify.sh`, `adguard-api.sh`, `password-policy.sh`, `compose-profiles.sh`, `telegram-panels.py` (Telegram inline keyboard; `telegram-menu.sh` / `hermes-menu.sh`) |
 | Security | `setup-firewall.sh`, `harden-host.sh` |
 | Backup | `restic-backup.sh`, `backup-pull.sh`, `restore-check.sh`, `install-backup-cron.sh` |
 
 Recover path: callers → `recover-stack.sh` → `stack-health.trigger_stack_recover` → `recover-readonly-root.sh`.
 
-SSD path: hotplug (`pi-ssd-watch.path` PathChanged/PathExistsGone) / `ssd-health.sh` → soft-reset (`ssd-alive.sh`) → remount or degraded core-dns.
+SSD path: udev `SYSTEMD_WANTS` + `pi-ssd-watch.path` (`PathChanged`) / `ssd-health.sh` → soft-reset (`ssd-alive.sh`) → remount or degraded core-dns.
 
 ## ops (enabled features)
 
-Setup helpers: `setup-*.sh` (forgejo, syncthing, n8n, netalertx, crowdsec, dozzle, uptime-kuma, tailscale-*, telegram-*, caddy-lan-ip, morning-*).
+Setup helpers: `setup-*.sh` (n8n, netalertx, crowdsec, dozzle, uptime-kuma, tailscale-*, telegram-menu, caddy-lan-ip, hermes-*).
 
 DNS: `apply-adguard-*.sh`, `configure-adguard.sh`, `wait-adguard-dns.sh`, `diagnose-dns-bypass.sh`, `diagnose-remote-access.sh`.
 

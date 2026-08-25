@@ -43,10 +43,6 @@ dns:
       answer: ${PI_STATIC_IP}
     - domain: panel.${LAN_DOMAIN}
       answer: ${PI_STATIC_IP}
-    - domain: git.${LAN_DOMAIN}
-      answer: ${PI_STATIC_IP}
-    - domain: sync.${LAN_DOMAIN}
-      answer: ${PI_STATIC_IP}
     - domain: n8n.${LAN_DOMAIN}
       answer: ${PI_STATIC_IP}
     - domain: logs.${LAN_DOMAIN}

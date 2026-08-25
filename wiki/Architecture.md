@@ -5,7 +5,7 @@ Single-node home DNS + dev server on Raspberry Pi 4B. Infrastructure-as-code: re
 ## Design goals
 
 - Zero manual AdGuard/Unbound edits after deploy
-- Self-healing stack (`recover-stack.sh`, healthchecks, optional autoheal)
+- Self-healing stack (`recover-stack.sh`, healthchecks)
 - **Hybrid storage** — SD root, SSD data; degraded mode keeps DNS alive
 - TLS on by default (`ENABLE_TLS=true`)
 - Offsite backup SLA (`make backup-pull`, Restic)
@@ -33,9 +33,9 @@ HTTP(S) panels: **Caddy** terminates TLS for `*.home` → Docker services.
 |------|----------|------|
 | **dns-core** | unbound, adguard | Always up — even SSD degraded |
 | **panels** | caddy, homepage, uptime-kuma, dozzle | `*.home` UI |
-| **automation** | forgejo, syncthing, n8n, redis, netalertx, crowdsec | SSD data (best-effort) |
+| **automation** | n8n, netalertx, crowdsec | SSD data (best-effort) |
 | **monitoring** | prometheus, grafana, node-exporter | Profile `monitoring` |
-| **edge** | cloudflare tunnel, watchtower | Opt-in |
+| **edge** | cloudflare tunnel | Opt-in |
 
 Profiles: `ENABLE_*` in `.env` → `scripts/lib/compose-profiles.sh`.
 

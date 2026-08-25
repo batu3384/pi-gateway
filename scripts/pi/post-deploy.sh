@@ -53,7 +53,7 @@ fi
 if [[ "$DEPLOY_DEGRADED" -eq 1 ]]; then
   log "WARN: storage degraded — yalnizca DNS/firewall post-deploy (app setup atlanir)"
 fi
-for key in AGH_ADMIN_PASSWORD DOZZLE_ADMIN_PASSWORD RESTIC_PASSWORD FORGEJO_ADMIN_PASSWORD N8N_WEBHOOK_SECRET UPTIME_KUMA_ADMIN_PASSWORD SYNCTHING_GUI_PASSWORD REDIS_PASSWORD; do
+for key in AGH_ADMIN_PASSWORD DOZZLE_ADMIN_PASSWORD RESTIC_PASSWORD N8N_WEBHOOK_SECRET UPTIME_KUMA_ADMIN_PASSWORD; do
   val="${!key:-}"
   case "$val" in
     ""|CHANGE_ME*|Degistir*)
@@ -63,19 +63,10 @@ for key in AGH_ADMIN_PASSWORD DOZZLE_ADMIN_PASSWORD RESTIC_PASSWORD FORGEJO_ADMI
       if [[ "$key" == "RESTIC_PASSWORD" && "${ENABLE_RESTIC:-true}" != "true" ]]; then
         continue
       fi
-      if [[ "$key" == "FORGEJO_ADMIN_PASSWORD" && "${ENABLE_FORGEJO:-true}" != "true" ]]; then
-        continue
-      fi
       if [[ "$key" == "N8N_WEBHOOK_SECRET" && "${ENABLE_N8N:-true}" != "true" ]]; then
         continue
       fi
       # Uptime Kuma is always deployed (no compose profile) — never skip on ENABLE_N8N
-      if [[ "$key" == "SYNCTHING_GUI_PASSWORD" && "${ENABLE_SYNCTHING:-true}" != "true" ]]; then
-        continue
-      fi
-      if [[ "$key" == "REDIS_PASSWORD" && "${ENABLE_REDIS:-false}" != "true" ]]; then
-        continue
-      fi
       log "HATA: $key bos veya placeholder — .env duzelt"
       exit 1
       ;;
@@ -152,16 +143,6 @@ if [[ "${ENABLE_MONITORING:-true}" == "true" ]]; then
   run_step_critical "Monitoring data dirs" "$SCRIPT_DIR/ensure-monitoring-data.sh"
   run_step_soft "Monitoring stack restart" "$SCRIPT_DIR/restart-monitoring-stack.sh"
 fi
-if [[ "${ENABLE_FORGEJO:-true}" == "true" ]]; then
-  run_step_optional "Forgejo admin" "$SCRIPT_DIR/setup-forgejo.sh"
-fi
-if [[ "${ENABLE_SYNCTHING:-true}" == "true" ]] && docker ps --format '{{.Names}}' | grep -q '^syncthing$'; then
-  run_step_critical "Syncthing GUI auth" "$SCRIPT_DIR/setup-syncthing-auth.sh"
-  run_step_optional "Syncthing eslestirme" "$SCRIPT_DIR/setup-syncthing.sh"
-  DEVICE_ID="$(docker exec syncthing cat /var/syncthing/config/config.xml 2>/dev/null | sed -n 's:.*<device id="\([^"]*\)".*:\1:p' | head -1 || true)"
-  log "Syncthing Pi Device ID: ${DEVICE_ID:-bilinmiyor}"
-  log "Syncthing UI: http://sync.${LAN_DOMAIN:-home}"
-fi
 if [[ "${ENABLE_RESTIC:-true}" == "true" ]]; then
   run_step_soft "Restic yedek" "$SCRIPT_DIR/restic-backup.sh"
 fi
@@ -170,7 +151,6 @@ if [[ "${ENABLE_DOZZLE:-true}" == "true" ]]; then
 fi
 if [[ "${ENABLE_N8N:-true}" == "true" ]]; then
   run_step_critical "n8n encryption key" "$SCRIPT_DIR/ensure-n8n-encryption-key.sh"
-  run_step_optional "Sabah ozeti timer" "$SCRIPT_DIR/setup-morning-timer.sh"
   run_step_critical "n8n otomasyonlar" "$SCRIPT_DIR/setup-n8n-workflows.sh"
 fi
 if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
@@ -179,9 +159,6 @@ if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
 fi
 if docker ps --format '{{.Names}}' | grep -q '^uptime-kuma$'; then
   run_step_critical "Uptime Kuma monitorler" "$SCRIPT_DIR/setup-uptime-kuma.sh"
-fi
-if [[ "${ENABLE_N8N:-true}" == "true" ]] && [[ "${ENABLE_FORGEJO:-true}" == "true" ]]; then
-  run_step_soft "Forgejo n8n webhook" "$SCRIPT_DIR/setup-forgejo-webhook.sh"
 fi
 # LAN IP panel yollari (Tailscale yoksa da)
 if [[ -n "${PI_STATIC_IP:-}" && -f "${REMOTE_DIR}/config/caddy/Caddyfile" ]]; then
@@ -199,9 +176,6 @@ run_step_soft "Hermes env" "$SCRIPT_DIR/ensure-hermes-env.sh"
 run_step_soft "Hermes config" "$SCRIPT_DIR/patch-hermes-config-pi.sh"
 run_step_soft "Hermes cron" "$SCRIPT_DIR/setup-hermes-cron.sh"
 run_step_soft "Hermes menu skill" "$SCRIPT_DIR/setup-hermes-menu-skill.sh"
-# Hermes 07:00 sonrasi: leftover 08:00 timer (ENABLE_N8N=false / onceki deploy)
-run_step_soft "Sabah timer Hermes kesisimi" "$SCRIPT_DIR/setup-morning-timer.sh"
-run_step_soft "Telegram panel bot" "$SCRIPT_DIR/setup-telegram-bot.sh"
 run_step_soft "Gateway systemd cleanup" "$SCRIPT_DIR/../lib/reset-gateway-units.sh"
 run_step_soft "Restic repair" "$SCRIPT_DIR/restic-repair.sh"
 if [[ "${ENABLE_CROWDSEC:-true}" == "true" ]]; then

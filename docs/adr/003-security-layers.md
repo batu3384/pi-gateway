@@ -12,7 +12,7 @@ LAN is partially trusted (guest WiFi, IoT). Admin panels and DNS centralize on o
 
 1. **TLS on by default** (`ENABLE_TLS=true`). Escape: `WEAK_TLS_OK=yes` + `ENABLE_TLS=false`.
 2. **UFW** `caddy-only`: admin UIs via Caddy `:80/:443` only; services bind `127.0.0.1`.
-3. **fail2ban** SSH; optional **CrowdSec**.
+3. **CrowdSec** SSH brute-force (UFW sync / bouncer). No fail2ban.
 4. **Remote**: Tailscale preferred; Cloudflare Tunnel opt-in with explicit hostname allowlist (`docs/CLOUDFLARE-TUNNEL.md`).
 5. **Images pinned** in compose (no `:latest` on critical path); Dependabot weekly.
 

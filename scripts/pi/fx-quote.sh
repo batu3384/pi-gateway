@@ -91,9 +91,7 @@ if cached:
     raise SystemExit(0)
 
 usd = get("https://open.er-api.com/v6/latest/USD")
-btc = get(
-    "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd,try"
-)
+gold = get("https://finans.truncgil.com/today.json")
 
 lines = [
     "📊 Piyasa",
@@ -108,10 +106,27 @@ if isinstance(rates, dict) and "TRY" in rates:
         if code in rates and float(rates[code]) != 0:
             lines.append(f"{label}  {fmt(float(rates['TRY']) / float(rates[code]), 4)}")
             ok += 1
-if isinstance(btc, dict) and "bitcoin" in btc:
-    b = btc["bitcoin"]
-    if isinstance(b, dict) and "usd" in b and "try" in b:
-        lines.append(f"BTC      {fmt(float(b['usd']), 0)} USD / {fmt(float(b['try']), 0)} TRY")
+if isinstance(gold, dict):
+    def gold_price(key: str) -> float | None:
+        item = gold.get(key)
+        if isinstance(item, dict):
+            for field in ("Satış", "Satis"):
+                raw = item.get(field)
+                if raw is None:
+                    continue
+                try:
+                    return float(str(raw).replace(".", "").replace(",", "."))
+                except ValueError:
+                    continue
+        return None
+
+    gram = gold_price("gram-altin")
+    ceyrek = gold_price("ceyrek-altin")
+    if gram:
+        lines.append(f"Gram Altın  {fmt(gram, 2)} ₺")
+        ok += 1
+    if ceyrek:
+        lines.append(f"Çeyrek      {fmt(ceyrek, 2)} ₺")
         ok += 1
 
 text = "📊 Piyasa verisi alınamadı — bu tur atlandı." if ok == 0 else "\n".join(lines)

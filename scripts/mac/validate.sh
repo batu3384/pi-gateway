@@ -27,11 +27,6 @@ if [[ "${ENABLE_TLS:-true}" == "true" && "${ENABLE_N8N:-true}" == "true" ]]; the
   fi
 fi
 
-if [[ "${ENABLE_REDIS:-false}" == "true" ]]; then
-  [[ -n "${REDIS_PASSWORD:-}" ]] || die "Set REDIS_PASSWORD when ENABLE_REDIS=true"
-  [[ "$REDIS_PASSWORD" != CHANGE_ME* ]] || die "REDIS_PASSWORD placeholder — degistir"
-fi
-
 if [[ "${ENABLE_N8N:-true}" == "true" ]]; then
   [[ -n "${N8N_ENCRYPTION_KEY:-}" ]] || die "Set N8N_ENCRYPTION_KEY in .env (openssl rand -hex 24)"
   [[ "${#N8N_ENCRYPTION_KEY}" -ge 32 ]] || die "N8N_ENCRYPTION_KEY must be at least 32 chars"

@@ -8,7 +8,7 @@ ACTION=="add|change", SUBSYSTEM=="usb", ATTR{idVendor}=="152d", ATTR{idProduct}=
 ACTION=="add|change", SUBSYSTEM=="usb", ATTR{idVendor}=="152d", ATTR{idProduct}=="0583", \
   ATTR{power/usb3_hardware_lpm_u2}="0"
 
-# Kopma/takilma: PathExistsGone kacirir (stale by-label) — systemd oneshot
+# Kopma/takilma SSOT: udev → pi-ssd-watch.service (path unit yalniz PathChanged)
 ACTION=="add|remove", SUBSYSTEM=="usb", ENV{ID_VENDOR_ID}=="152d", ENV{ID_MODEL_ID}=="0583", \
   TAG+="systemd", ENV{SYSTEMD_WANTS}="pi-ssd-watch.service"
 

@@ -23,8 +23,8 @@ NETALERTX_SCAN_SUBNETS=
 Automatic during deploy:
 
 1. `netalertx` container (`--profile netalert`, host network)
-2. `setup-netalertx.sh` — ARP scan subnet + n8n webhook
-3. n8n workflow `Pi Gateway — NetAlertX Alert`
+2. `setup-netalertx.sh` — ARP scan subnet; container webhook off (`NETALERT_NOTIFY_VIA=hermes`)
+3. Cihaz envanteri: NetAlertX panel (`devices.home`) — Telegram yeni/offline cron kaldırıldı
 4. Kuma monitor `devices.home`
 
 Manual:
@@ -37,26 +37,16 @@ ssh pi 'REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/setup-netalertx.sh'
 
 First ARP scan may take **5–10 minutes**. After that, LAN devices appear in **Devices**.
 
-Approve / label known devices to reduce "new device" alerts.
-
 ## Notifications
 
-| Event | Channel | Not |
-|-------|---------|-----|
-| New device | Hermes `no_agent` → `netalert-newdev.sh` | Events `New Device`; state v3 |
-| Offline / disconnect | Hermes `no_agent` → `netalert-offline.sh` | Events `Disconnected` |
-| n8n NetAlertX webhook | **Kapalı** (`NETALERT_NOTIFY_VIA=hermes`) | Çift bildirim önlenir |
-
-**Tek bildirim yolu:** `NETALERT_NOTIFY_VIA=hermes` (varsayılan). n8n workflow pasif kalır.
-
-`netalert-newdev.sh` artık MAC listesi değil NetAlertX **Events** (`New Device`) okur; `internet` pseudo-cihaz filtrelenir. İlk kurulumda bootstrap — tarihsel flood yok.
+Telegram yeni-cihaz / offline / saatlik sistem gözcü cron’ları **kaldırıldı**. Envanter için panel: https://devices.home
 
 Test:
 
 ```bash
 make telegram-test   # general path
 python3 scripts/lib/netalert-devices.py --self-check
-# smoke: n8n-netalert-webhook (after deploy)
+# smoke: netalert-hermes-poll (after deploy)
 ```
 
 ## Difference from Kuma

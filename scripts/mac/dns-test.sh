@@ -28,7 +28,7 @@ check() {
 
 check "resolve-cloudflare" bash -c "test -n \"\$(dig +time=3 +tries=1 @${PI_DNS} cloudflare.com A +short | head -1)\""
 check "block-doubleclick" bash -c "dig +time=3 +tries=1 @${PI_DNS} doubleclick.net A | grep -Eq '0\\.0\\.0\\.0|127\\.0\\.0\\.0|NXDOMAIN'"
-check "rewrite-git.home" bash -c "dig +time=3 +tries=1 @${PI_DNS} git.${LAN_DOMAIN} A +short | grep -qx '${PI_DNS}'"
+check "rewrite-gateway.home" bash -c "dig +time=3 +tries=1 @${PI_DNS} gateway.${LAN_DOMAIN} A +short | grep -qx '${PI_DNS}'"
 check "rewrite-logs.home" bash -c "dig +time=3 +tries=1 @${PI_DNS} logs.${LAN_DOMAIN} A +short | grep -qx '${PI_DNS}'"
 check "mac-gateway.home" bash -c "dig +time=3 +tries=1 gateway.${LAN_DOMAIN} +short | grep -qx '${PI_DNS}'"
 

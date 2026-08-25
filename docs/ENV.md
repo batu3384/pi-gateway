@@ -15,14 +15,14 @@
 |----------|---------|
 | `ADGUARD_BOOT_WAIT_SEC` | 180 |
 | `ADGUARD_MIN_FILTER_RULES` | 100000 |
-| `ADGUARD_MIN_REWRITES` | 7 |
+| `ADGUARD_MIN_REWRITES` | 8 |
 | `ADGUARD_BLOCKED_TTL` | 60 |
 
 ## Security
 
 | Variable | Description |
 |----------|-------------|
-| `UNIFIED_LOGIN` | `true` (default): `AGH_ADMIN_*` = Caddy + Dozzle/Kuma/Forgejo/Syncthing/NetAlertX/Grafana |
+| `UNIFIED_LOGIN` | `true` (default): `AGH_ADMIN_*` = Caddy + Dozzle/Kuma/NetAlertX/Grafana |
 | `SYNC_SERVICE_PASSWORDS` | `true` (default with unified): deploy sonrasi GUI sifre esitleme |
 | `ENABLE_MONITORING` | `true`: Prometheus + Grafana + node-exporter (`grafana.home`) |
 | `ENABLE_CANARY_COMPOSE_UPDATE` | `true`: deploy DNS-once, wait, then edge + apps |
@@ -32,19 +32,12 @@
 | `HERMES_TELEGRAM_GATEWAY` | `true` = Hermes owns Telegram inbox (`getUpdates`); panel poller off. Allowlist: `TELEGRAM_ALLOWED_USERS` in `~/.hermes/.env` |
 | `CROWDSEC_BOUNCER_KEY` | Written automatically on first setup |
 
-## Syncthing
-
-| Variable | Description |
-|----------|-------------|
-| `SYNCTHING_MAC_DEVICE_ID` | Mac device ID |
-| `SYNCTHING_GUI_USER` / `SYNCTHING_GUI_PASSWORD` | Web UI |
-
 ## SSD / storage
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `STORAGE_TYPE` | `hybrid` | **Production:** SD root + SSD data (`/mnt/ssd`). `ssd-data` alias. |
-| `DNS_DEGRADED_ON_SSD_LOSS` | `true` | **Recommended.** On SSD loss, Unbound+AdGuard on SD (core-dns). Forgejo/n8n stay down. |
+| `DNS_DEGRADED_ON_SSD_LOSS` | `true` | **Recommended.** On SSD loss, Unbound+AdGuard on SD (core-dns). n8n stay down. |
 | `STORAGE_FALLBACK_SD` | `false` | Back-compat: if `true`, enables same DNS degraded path. Full app stack still requires SSD. |
 | `SSD_PROBE_TIMEOUT_SEC` | `3` | Write-probe timeout for stale/hung `/mnt/ssd` |
 | `SSD_USB_RESET_MAX` | `3` | Soft-reset attempts per window (JMicron `152d:0583`) |
@@ -97,24 +90,13 @@ SSD restic alone is **not** 3-2-1. Run `make backup-pull` / `make backup-cron` /
 | `WEAK_TLS_OK` | (unset) | Required to set `ENABLE_TLS=false` |
 | `N8N_SECURE_COOKIE` | `true` | Must be true when TLS on |
 
-## Watchtower
-
-`ENABLE_WATCHTOWER=true` and:
-
-```
-WATCHTOWER_NOTIFICATION_URL=telegram://TOKEN@telegram?chats=CHAT_ID
-```
-
-Full list: `.env.example`
-
 ## n8n
 
 | Variable | Description |
 |----------|-------------|
 | `N8N_ENCRYPTION_KEY` | Credential encryption (≥32 chars; `openssl rand -hex 24`) |
-| `N8N_WEBHOOK_SECRET` | Webhook URL suffix (Kuma, Forgejo) |
+| `N8N_WEBHOOK_SECRET` | Webhook URL suffix (Kuma) |
 | `N8N_KUMA_WEBHOOK_URL` | Optional; auto-built from secret if empty |
-| `N8N_FORGEJO_WEBHOOK_URL` | Optional; auto-built from secret if empty |
 
 If `N8N_ENCRYPTION_KEY` is empty on Pi, `ensure-n8n-encryption-key.sh` generates it during post-deploy. **Do not change** — existing n8n credentials become unreadable.
 

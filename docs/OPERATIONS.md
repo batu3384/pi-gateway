@@ -20,9 +20,9 @@ Experimental ssd-root: `docs/SSD-ROOT.md`
 
 ### SSD dropped — what happens
 
-1. **Detect** — hotplug (`PathExistsGone` / `PathChanged`) or health timer (`ssd-health` write-probe).
+1. **Detect** — udev (`SYSTEMD_WANTS=pi-ssd-watch.service`) + `PathChanged` on by-label, or health timer (`ssd-health` write-probe).
 2. **Soft-reset** — JMicron USB authorize cycle / remount (rate-limited). See `docs/SSD-JMICRON-FIX.md`.
-3. **Degraded** — flag `/run/pi-gateway/storage-degraded`; Forgejo/n8n/… stop; Unbound+AdGuard (core-dns) on SD.
+3. **Degraded** — flag `/run/pi-gateway/storage-degraded`; n8n/… stop; Unbound+AdGuard (core-dns) on SD.
 4. **Restore** — disk healthy again → remount → symlink → full stack (no reboot required if bus responds).
 5. **Deploy / restic** — while degraded: compose stays core-dns; restic **skips** (no ephemeral SSD-repo lie).
 
@@ -49,9 +49,9 @@ With `ENABLE_TLS=true` (default), all panels use **HTTPS** (`https://*.home`). H
 
 ### Unified login (`UNIFIED_LOGIN=true`, default)
 
-`AGH_ADMIN_USER` + `AGH_ADMIN_PASSWORD` = **tek sifre** Caddy ve servis GUI'leri icin. Deploy `sync-service-passwords` ile Dozzle, Uptime Kuma, Forgejo, Syncthing, NetAlertX ve Grafana sifrelerini esitler.
+`AGH_ADMIN_USER` + `AGH_ADMIN_PASSWORD` = **tek sifre** Caddy ve servis GUI'leri icin. Deploy `sync-service-passwords` ile Dozzle, Uptime Kuma, NetAlertX ve Grafana sifrelerini esitler.
 
-**Not:** Forgejo kullanici adi `admin` **reserved** — uygulama girisi `FORGEJO_ADMIN_USER` (ornegin `gitadmin`); sifre yine `AGH_ADMIN_PASSWORD`. Caddy basic_auth her yerde `AGH_ADMIN_USER`.
+Caddy basic_auth her yerde `AGH_ADMIN_USER`.
 
 | URL | Service | Caddy | App (unified) |
 |-----|---------|-------|---------------|
@@ -60,8 +60,6 @@ With `ENABLE_TLS=true` (default), all panels use **HTTPS** (`https://*.home`). H
 | https://status.home | Uptime Kuma | same | same |
 | https://logs.home | Dozzle | same | same |
 | https://dns.home | AdGuard | same | `AGH_ADMIN_*` |
-| https://git.home | Forgejo | same | same |
-| https://sync.home | Syncthing | same | same |
 | https://n8n.home | n8n | same | Owner (ilk kurulum; Caddy auth yeterli) |
 | https://grafana.home | Grafana | same | `AGH_ADMIN_*` |
 | https://devices.home | NetAlertX | — (API dongusu) | `AGH_ADMIN_*` |
@@ -165,17 +163,15 @@ SLO PUSH heartbeats → Uptime Kuma (`docs/SLO.md`).
 |--------|---------------|
 | `health-check` timer | DNS errors, disk 80%+, SD warnings |
 | `restic-backup` | Backup completed |
-| `stack-watchdog` / SSD hotplug | Stack or SSD recovery |
-| `morning-summary.sh` (08:00 timer) | Daily morning summary |
+| `health-check` / SSD hotplug | Stack or SSD recovery |
 | n8n ← Uptime Kuma webhook | Service down / back up |
-| n8n ← Forgejo push webhook | Git push (repo: `FORGEJO_REPO_NAME`) |
-| Hermes cron → `netalert-newdev.sh` / `netalert-offline.sh` | New device (15m), offline / disconnect (30m) — `NETALERT_NOTIFY_VIA=hermes`, NetAlertX container webhook off |
+| Hermes cron (bülten) | Günaydın / piyasa / akşam / gece — ağ/saatlik gözcü kaldırıldı |
+| Hermes cron (07:00 / 18:55 / 23:00) | Daily bulletins (morning / market / night) |
 
 | Command | Description |
 |---------|-------------|
 | `make telegram-test` | Test message |
 | `make telegram-menu` | Panel link buttons |
-| `make morning-test` | Send morning summary now |
 
 Bot sends notifications only; it does not reply to incoming messages.
 
@@ -184,8 +180,8 @@ Bot sends notifications only; it does not reply to incoming messages.
 When `HERMES_TELEGRAM_GATEWAY=true` in Pi `.env`:
 
 - **Inbox:** `hermes-gateway.service` (Nous Hermes) owns `getUpdates` — chat + commands.
-- **Outbox:** `notify.sh` / Watchtower keep using the same `TELEGRAM_BOT_TOKEN` via `sendMessage`.
-- **Panel poller** `pi-gateway-telegram-bot.service` stays **disabled**; `setup-telegram-bot.sh` is a no-op.
+- **Outbox:** `notify.sh` keeps using the same `TELEGRAM_BOT_TOKEN` via `sendMessage`.
+- **Panel menu:** `telegram-menu.sh` (Mac/outbox) or Hermes `/menu` skill → `hermes-menu.sh`.
 - Secrets: `GLM_API_KEY` + Telegram token live in `~/.hermes/.env` (chmod 600). Coding Plan base URL: `https://api.z.ai/api/coding/paas/v4`. Default model: **`glm-5.3`** (`provider: zai` in `~/.hermes/config.yaml`).
 - Browser (Pi aarch64): system Chromium (`apt install chromium`) + `agent-browser`; set `AGENT_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium` (Chrome-for-Testing ARM64 yok).
 - Allowlist: `TELEGRAM_ALLOWED_USERS` = numeric **user** id (not group chat id). Notify still uses `TELEGRAM_CHAT_ID`.
@@ -198,9 +194,11 @@ When `HERMES_TELEGRAM_GATEWAY=true` in Pi `.env`:
 
 **Pi Telegram patch:** `scripts/pi/patch-hermes-telegram-pi.sh` — cold-start `require_progress=False`, stepped `initialize`, `/etc/hosts` IPv4 pin for `api.telegram.org`, systemd drop-in (`HTTP_POOL_SIZE=8`). Needed because upstream `_await_with_thread_deadline` can wedge on long-poll here. Re-run after every `hermes update`.
 
-**Rollback:** set `HERMES_TELEGRAM_GATEWAY=false` (or remove) in Pi `.env` → redeploy/`setup-hermes-gateway.sh` + `setup-telegram-bot.sh` (Hermes `disable --now`, poller back on). Manual: `sudo systemctl disable --now hermes-gateway` → `sudo systemctl enable --now pi-gateway-telegram-bot`.
+**Disable Hermes inbox:** set `HERMES_TELEGRAM_GATEWAY=false` (or remove) in Pi `.env` → redeploy/`setup-hermes-gateway.sh` (`hermes-gateway` disabled; **no poller fallback** — inbox dark, outbox/`notify.sh` still works).
 
-**Token rotate:** update both `~/pi-gateway/.env` and `~/.hermes/.env`, then `systemctl restart hermes-gateway` (and Watchtower URL if set).
+**Cutover fail:** if Connected check fails, unit stays **enabled** (`Restart=always`) and Telegram outbox alert fires (`_alert_inbox_down`). Fix: `journalctl -u hermes-gateway` → `setup-hermes-gateway.sh` again.
+
+**Token rotate:** update both `~/pi-gateway/.env` and `~/.hermes/.env`, then `systemctl restart hermes-gateway`.
 
 **DM test:** Telegram’da `@RaspberryPi3384_bot` → allowlist user id ile mesaj. Outbox: `make telegram-test`.
 
@@ -208,7 +206,6 @@ When `HERMES_TELEGRAM_GATEWAY=true` in Pi `.env`:
 |---------|-------------|
 | `make telegram-test` | Test message |
 | `make telegram-menu` | Panel link buttons (Mac/outbox; Hermes `/menu` skill on Pi when gateway active) |
-| `make morning-test` | Send morning summary now |
 
 Bot outbox: notifications. Hermes inbox: conversational replies when gateway is active.
 
@@ -217,6 +214,7 @@ Bot outbox: notifications. Hermes inbox: conversational replies when gateway is 
 1. **Pi SSD (encrypted data):** Restic via Docker (`pi-gateway-backup.timer` → `backup.sh` → `restic-backup.sh`). Runs as `PI_USER` with `REMOTE_DIR=~/pi-gateway` — never as root (`/home/root/...` is wrong).
 2. **Config snapshot:** same timer writes `~/pi-gateway/backups/<stamp>/` (compose + config + env key names; no plaintext secrets).
 3. **Mac offsite:** `make backup-pull` or `make backup-cron` → `~/Backups/pi-gateway/`
+4. **Pi OS login kilit:** eski `reset-pi-password.sh` yok. Konsol/HDMI veya SD’yi Mac’te mount → `userconf` / raspi-config; SSH key `~/.ssh/authorized_keys` ile kurtar.
 
 Verify: `systemctl cat pi-gateway-backup.service | grep -E 'User=|REMOTE_DIR'` and `ls ~/pi-gateway/backups`.
 

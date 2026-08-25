@@ -1,6 +1,6 @@
 # Pi Gateway
 
-Home server (Raspberry Pi 4B): AdGuard DNS, Unbound, Caddy, Forgejo, Syncthing, n8n.
+Home server (Raspberry Pi 4B): AdGuard DNS, Unbound, Caddy, n8n.
 
 ## Health Stack
 

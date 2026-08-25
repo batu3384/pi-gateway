@@ -155,7 +155,7 @@ degraded_stop_optional_apps() {
   (
     cd "${remote_dir}/compose"
     docker compose --env-file "${remote_dir}/.env" stop \
-      n8n forgejo syncthing uptime-kuma crowdsec redis dozzle netalertx \
+      n8n uptime-kuma crowdsec dozzle netalertx \
       prometheus grafana node-exporter 2>/dev/null || true
   )
 }

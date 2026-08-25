@@ -1,5 +1,0 @@
-mode: iptables
-iptables_chains:
-  - INPUT
-deny_action: DROP
-deny_log: true

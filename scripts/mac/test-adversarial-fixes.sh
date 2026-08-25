@@ -15,7 +15,6 @@ hotplug="$ROOT/scripts/pi/ssd-hotplug-handler.sh"
 symlink="$ROOT/scripts/lib/ensure-data-symlink.sh"
 post="$ROOT/scripts/pi/post-deploy.sh"
 health="$ROOT/scripts/pi/health-check.sh"
-watchdog="$ROOT/scripts/pi/stack-watchdog.sh"
 deploy="$ROOT/scripts/mac/deploy.sh"
 restore="$ROOT/scripts/mac/restore-check.sh"
 smoke="$ROOT/scripts/pi/smoke-test.sh"
@@ -146,7 +145,6 @@ ok "C15 config snapshot fail-closed"
 [[ -f "$env_loader" ]] || die "C16: safe env loader yok"
 _priv_scripts=(
   scripts/pi/recover-readonly-root.sh
-  scripts/pi/stack-watchdog.sh
   scripts/pi/ssd-hotplug-handler.sh
   scripts/pi/setup-ssd-data.sh
   scripts/pi/recover-stack.sh
@@ -168,17 +166,26 @@ grep -q 'OnFailure=.*pi-gateway-health-failure.service' "$health_unit" \
   || die "C17: health OnFailure wiring yok"
 ok "C17 health failure alert wiring"
 
-# C18: Syncthing sync ports bind only to LAN IP
-grep -q '"\${PI_STATIC_IP:-127.0.0.1}:22000:22000/tcp"' "$compose" \
-  || die "C18: Syncthing TCP global bind"
-grep -q '"\${PI_STATIC_IP:-127.0.0.1}:22000:22000/udp"' "$compose" \
-  || die "C18: Syncthing UDP global bind"
-ok "C18 Syncthing LAN-only bind"
+# C18: forgejo/syncthing removed from compose
+grep -qE 'container_name: (forgejo|syncthing)' "$compose" \
+  && die "C18: forgejo/syncthing hala compose'da"
+ok "C18 forgejo/syncthing removed"
 
-# C19: Redis opt-in requires authentication
-grep -q 'REDIS_PASSWORD' "$compose" || die "C19: Redis password yok"
-grep -q 'REDIS_PASSWORD' "$ROOT/.env.example" || die "C19: Redis password env yok"
-ok "C19 Redis auth"
+# C19: redis/autoheal/watchtower removed from compose
+grep -qE 'container_name: (redis|autoheal|watchtower)' "$compose" \
+  && die "C19: redis/autoheal/watchtower hala compose'da"
+grep -qE 'ENABLE_(AUTOHEAL|REDIS|WATCHTOWER)' "$ROOT/scripts/lib/compose-profiles.sh" \
+  && die "C19: compose-profiles hala redis/autoheal/watchtower"
+ok "C19 redis/autoheal/watchtower removed"
+
+# C19b: stack-watchdog + netalertx-names host paths removed
+[[ -f "$ROOT/scripts/pi/stack-watchdog.sh" ]] && die "C19b: stack-watchdog.sh hala var"
+[[ -f "$ROOT/host/systemd/pi-gateway-stack-watchdog.timer" ]] && die "C19b: stack-watchdog timer hala var"
+[[ -f "$ROOT/host/systemd/pi-gateway-netalertx-names.timer" ]] && die "C19b: netalertx-names timer hala var"
+[[ -f "$ROOT/scripts/pi/import-adguard-names-to-netalertx.sh" ]] && die "C19b: import-adguard-names hala var"
+grep -q 'stack-watchdog.sh' "$ROOT/scripts/pi/install-privileged-scripts.sh" \
+  && die "C19b: install-privileged hala stack-watchdog kopyaliyor"
+ok "C19b stack-watchdog/netalertx-names removed"
 
 # C20: every compose image is digest pinned
 if grep -E '^[[:space:]]+image: ' "$compose" | grep -vq '@sha256:'; then
@@ -196,7 +203,7 @@ ok "C20 compose digest pins"
 if grep -q '192\.168\.0\.0/16\|"root"' "$tailscale_acl"; then
   die "C21: broad Tailscale ACL/root SSH access"
 fi
-grep -q 'YOUR_TAILSCALE_LAN_SUBNET:53,80,443,22000' "$tailscale_acl" \
+grep -q 'YOUR_TAILSCALE_LAN_SUBNET:53,80,443' "$tailscale_acl" \
   || die "C21: Tailscale LAN port allowlist yok"
 grep -q 'DEFAULT_FORWARD_POLICY="DROP"' "$tailscale_remote" \
   || die "C21: Tailscale forward policy DROP yok"
@@ -265,10 +272,11 @@ grep -q 'N8N_ENCRYPTION_KEY\|merge\|preserve' "$deploy" "$sync_cfg" \
   || die "W7: .env Pi key preserve yok"
 ok "W7 env merge"
 
-# W8: watchdog restores when SSD healthy while degraded
-grep -A15 'storage_degraded' "$watchdog" | grep -q 'ssd_mount_healthy' \
+# W8: SSD health restores when SSD healthy while degraded (former stack-watchdog duty)
+ssd_health="$ROOT/scripts/pi/ssd-health.sh"
+grep -A20 'storage_degraded' "$ssd_health" | grep -q 'ssd_mount_healthy' \
   || die "W8: degraded+SSD healthy restore yok"
-ok "W8 watchdog SSD restore"
+ok "W8 ssd-health SSD restore"
 
 # W9: ENABLE_RESTIC default aligned
 grep -q 'ENABLE_RESTIC:-true' "$restic" || die "W9: restic default true degil"

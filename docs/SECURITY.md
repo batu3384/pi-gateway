@@ -10,9 +10,9 @@
 
 | Layer | Component |
 |-------|-----------|
-| Network | UFW (LAN-scoped), fail2ban SSH |
-| Threat | CrowdSec + firewall bouncer |
-| Application | Per-service passwords (Dozzle, Forgejo, Kuma, Syncthing GUI) |
+| Network | UFW (LAN-scoped) |
+| Threat | CrowdSec + UFW sync / bouncer (sole SSH ban — fail2ban yok; CrowdSec/timer down ise UFW yine LAN kısıtlar ama auto-ban yok) |
+| Application | Per-service passwords (Dozzle, Kuma GUI) |
 | DNS | AdGuard filters + Unbound |
 | Remote | Tailscale (optional) |
 
@@ -58,7 +58,6 @@ If a token is set, external access is enabled. Expose only required hostnames; H
 - [ ] All default passwords changed
 - [ ] Telegram notifications tested
 - [ ] `make backup-pull` weekly cron (Mac)
-- [ ] Syncthing GUI password set
 - [ ] Tailscale 2FA (account side)
 
 ## Public GitHub preparation
@@ -70,6 +69,5 @@ Before making the repo public:
 3. **Rotate** any real tokens/passwords seen in chat or logs (Telegram, Tailscale, service passwords)
 4. `config/tailscale/acl.hujson` and `host/dhcpcd/pi-gateway.conf` render only on the Pi — not in git
 5. `TAILSCALE_ACL_OWNER` in `.env` is your real Tailscale email (not tracked)
-6. If Watchtower is enabled, `WATCHTOWER_NOTIFICATION_URL` contains a token — URL may appear in logs; keep disabled unless needed
 
 After going public: follow [.github/SECURITY.md](../.github/SECURITY.md) for security issues; in an emergency, make the repo private and rotate secrets.

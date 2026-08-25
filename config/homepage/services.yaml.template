@@ -26,16 +26,6 @@ services:
       description: Container loglari
       icon: dozzle.png
 
-  - Forgejo:
-      href: ${PANEL_PROTOCOL}://git.${LAN_DOMAIN}
-      description: Git sunucusu
-      icon: forgejo.png
-
-  - Syncthing:
-      href: ${PANEL_PROTOCOL}://sync.${LAN_DOMAIN}
-      description: Dosya senkronu
-      icon: syncthing.png
-
   - n8n:
       href: ${PANEL_PROTOCOL}://n8n.${LAN_DOMAIN}
       description: Otomasyon

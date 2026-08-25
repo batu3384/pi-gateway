@@ -80,54 +80,6 @@
         "web",
         "terminal"
       ]
-    },
-    {
-      "name": "Pi Sistem Gözcüsü (saatlik)",
-      "schedule": {
-        "kind": "cron",
-        "expr": "0 * * * *",
-        "display": "0 * * * *"
-      },
-      "schedule_display": "0 * * * *",
-      "deliver": "origin",
-      "enabled": true,
-      "no_agent": true,
-      "script": "pi-watchdog.sh",
-      "prompt": "",
-      "enabled_toolsets": [],
-      "context_from": null
-    },
-    {
-      "name": "Ağ Gözcüsü — Yeni Cihaz (15dk)",
-      "schedule": {
-        "kind": "cron",
-        "expr": "*/15 * * * *",
-        "display": "*/15 * * * *"
-      },
-      "schedule_display": "*/15 * * * *",
-      "deliver": "origin",
-      "enabled": true,
-      "no_agent": true,
-      "script": "pi-netalert-newdev.sh",
-      "prompt": "",
-      "enabled_toolsets": [],
-      "context_from": null
-    },
-    {
-      "name": "Ağ Gözcüsü — Offline (30dk)",
-      "schedule": {
-        "kind": "cron",
-        "expr": "*/30 * * * *",
-        "display": "*/30 * * * *"
-      },
-      "schedule_display": "*/30 * * * *",
-      "deliver": "origin",
-      "enabled": true,
-      "no_agent": true,
-      "script": "pi-netalert-offline.sh",
-      "prompt": "",
-      "enabled_toolsets": [],
-      "context_from": null
     }
   ]
 }

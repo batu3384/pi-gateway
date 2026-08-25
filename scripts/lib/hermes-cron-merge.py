@@ -122,6 +122,27 @@ def merge(
             )
             changed += 1
 
+    # Template SSOT: drop retired pi-gateway jobs (script basename OR known names)
+    retired_scripts = {"pi-watchdog.sh", "pi-netalert-newdev.sh", "pi-netalert-offline.sh"}
+    retired_names = {
+        "Pi Sistem Gözcüsü (saatlik)",
+        "Ağ Gözcüsü — Yeni Cihaz (15dk)",
+        "Ağ Gözcüsü — Offline (30dk)",
+    }
+    kept: list[dict[str, Any]] = []
+    for job in live_doc.get("jobs") or []:
+        script = str(job.get("script") or "").rsplit("/", 1)[-1]
+        name = job.get("name")
+        # Rename edilmis olsa bile retired script → sil
+        if script in retired_scripts:
+            changed += 1
+            continue
+        if name not in specs and name in retired_names:
+            changed += 1
+            continue
+        kept.append(job)
+    live_doc["jobs"] = kept
+
     live_doc["updated_at"] = datetime.now(timezone.utc).astimezone().isoformat()
     return live_doc, changed
 
@@ -184,7 +205,7 @@ def _self_check() -> None:
                 "deliver": "origin",
                 "enabled": True,
                 "no_agent": True,
-                "script": "pi-watchdog.sh",
+                "script": "pi-fx-quote.sh",
                 "prompt": "",
                 "enabled_toolsets": [],
                 "context_from": None,
@@ -198,7 +219,33 @@ def _self_check() -> None:
         merged, n = merge(template, live, "/home/pi/pi-gateway", "pi")
         assert len(merged["jobs"]) == 1, merged
         assert n == 1
-        live.write_text(json.dumps(merged, ensure_ascii=False, indent=2), encoding="utf-8")
+        # Retired script (renamed job) + retired name → prune
+        live.write_text(
+            json.dumps(
+                {
+                    "jobs": [
+                        merged["jobs"][0],
+                        {
+                            "name": "Custom Watchdog",
+                            "script": "/x/pi-watchdog.sh",
+                            "enabled": True,
+                        },
+                        {
+                            "name": "Pi Sistem Gözcüsü (saatlik)",
+                            "script": "other.sh",
+                            "enabled": True,
+                        },
+                    ]
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        pruned, n_prune = merge(template, live, "/home/pi/pi-gateway", "pi")
+        assert len(pruned["jobs"]) == 1, pruned
+        assert pruned["jobs"][0]["name"] == "Test Job"
+        assert n_prune >= 2
         empty = Path(td) / "empty.json"
         merged_empty, n_empty = merge(template, empty, "/home/pi/pi-gateway", "pi")
         assert len(merged_empty["jobs"]) == 1, merged_empty

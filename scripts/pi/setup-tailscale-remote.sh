@@ -46,10 +46,6 @@ sudo ufw route allow in on tailscale0 out on "${PI_INTERFACE}" to "${LAN_SUBNET}
   port 80 proto tcp comment 'pi-gateway ts-subnet-http'
 sudo ufw route allow in on tailscale0 out on "${PI_INTERFACE}" to "${LAN_SUBNET}" \
   port 443 proto tcp comment 'pi-gateway ts-subnet-https'
-sudo ufw route allow in on tailscale0 out on "${PI_INTERFACE}" to "${LAN_SUBNET}" \
-  port 22000 proto tcp comment 'pi-gateway ts-subnet-sync-tcp'
-sudo ufw route allow in on tailscale0 out on "${PI_INTERFACE}" to "${LAN_SUBNET}" \
-  port 22000 proto udp comment 'pi-gateway ts-subnet-sync-udp'
 TS_IP="$(tailscale ip -4 2>/dev/null | head -1)"
 log "Subnet route reklam: ${LAN_SUBNET}"
 sudo tailscale set --advertise-routes="${LAN_SUBNET}" --accept-routes=false

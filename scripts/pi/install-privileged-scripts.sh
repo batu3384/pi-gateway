@@ -13,7 +13,6 @@ SCRIPTS=(
   scripts/pi/recover-compose-up.sh
   scripts/pi/ensure-ssd-fstab.sh
   scripts/pi/ensure-data-symlink.sh
-  scripts/pi/stack-watchdog.sh
   scripts/pi/apply-adguard-rewrites.sh
   scripts/pi/health-check.sh
   scripts/pi/check-sd-health.sh

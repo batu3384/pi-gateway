@@ -62,18 +62,6 @@ http://{ts_dns} {{
 \t\t\theader_down Location / /p/dns/
 \t\t}}
 \t}}
-\thandle /p/git* {{
-\t\turi strip_prefix /p/git
-\t\treverse_proxy forgejo:3000 {{
-\t\t\theader_down Location / /p/git/
-\t\t}}
-\t}}
-\thandle /p/sync* {{
-\t\turi strip_prefix /p/sync
-\t\treverse_proxy syncthing:8384 {{
-\t\t\theader_down Location / /p/sync/
-\t\t}}
-\t}}
 \thandle /p/n8n* {{
 \t\turi strip_prefix /p/n8n
 \t\treverse_proxy n8n:5678 {{

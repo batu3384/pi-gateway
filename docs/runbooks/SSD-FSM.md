@@ -25,7 +25,7 @@ SSD kaybında stack **unbound + adguard + homepage + caddy** ile devam eder. App
 
 **Yapma:**
 - `docker compose up` full stack (SD clobber riski)
-- SSD takılı değilken Forgejo/Syncthing/n8n başlatma
+- SSD takılı değilken n8n başlatma
 
 **Yap:**
 1. SSD kablo/güç kontrol

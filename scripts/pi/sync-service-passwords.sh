@@ -23,8 +23,6 @@ run() {
 
 run "Dozzle" "$SCRIPT_DIR/setup-dozzle.sh"
 run "Uptime Kuma" "$SCRIPT_DIR/setup-uptime-kuma.sh"
-run "Forgejo" "$SCRIPT_DIR/setup-forgejo.sh"
-run "Syncthing" "$SCRIPT_DIR/setup-syncthing-auth.sh"
 if [[ -x "$SCRIPT_DIR/setup-netalertx.sh" ]]; then
   run "NetAlertX" "$SCRIPT_DIR/setup-netalertx.sh"
 fi

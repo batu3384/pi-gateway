@@ -1,6 +1,6 @@
 # Pi Gateway Wiki
 
-Production DNS / home-lab gateway for **Raspberry Pi 4B**: AdGuard + Unbound, Caddy, Forgejo, Syncthing, n8n, monitoring — deployed from a Mac with one pipeline.
+Production DNS / home-lab gateway for **Raspberry Pi 4B**: AdGuard + Unbound, Caddy, n8n, monitoring — deployed from a Mac with one pipeline.
 
 **Repo:** [github.com/batu3384/pi-gateway](https://github.com/batu3384/pi-gateway)
 
@@ -24,8 +24,8 @@ Production DNS / home-lab gateway for **Raspberry Pi 4B**: AdGuard + Unbound, Ca
 | Reverse proxy | Caddy (`*.home`) |
 | Dashboard | Homepage + gateway widget |
 | Monitoring | Uptime Kuma, Prometheus, Grafana, systemd health timer |
-| Git / sync / backup | Forgejo, Syncthing, Restic (3-2-1 SLA) |
-| Security | UFW, fail2ban, optional CrowdSec / Tailscale |
+| Backup | Restic (3-2-1 SLA) |
+| Security | UFW, CrowdSec / Tailscale |
 
 ## Useful commands (Mac)
 

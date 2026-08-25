@@ -216,13 +216,10 @@ monitors = [
         "ignoreTls": True,
         "maxredirects": 0,
     }),
-    ("Forgejo", MonitorType.HTTP, {"url": "http://forgejo:3000", "accepted_statuscodes": ok}),
-    ("Syncthing", MonitorType.HTTP, {"url": "http://syncthing:8384", "accepted_statuscodes": ok}),
     ("n8n", MonitorType.HTTP, {"url": "http://n8n:5678", "accepted_statuscodes": ok}),
     ("Dozzle", MonitorType.HTTP, {"url": "http://dozzle:8080", "accepted_statuscodes": ok}),
     ("Uptime Kuma", MonitorType.HTTP, {"url": "http://127.0.0.1:3001", "accepted_statuscodes": ok}),
     ("Unbound DNS", MonitorType.PORT, {"hostname": "unbound", "port": 5335}),
-    ("Redis", MonitorType.PORT, {"hostname": "redis", "port": 6379}),
 ]
 if os.environ.get("ENABLE_MONITORING", "true") == "true":
     monitors.append(("Grafana", MonitorType.HTTP, {

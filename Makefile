@@ -12,7 +12,7 @@ PI_USER ?= pi
 REMOTE_DIR ?= /home/$(PI_USER)/pi-gateway
 PI_SSH_HOST ?= $(if $(PI_DEPLOY_HOST),$(PI_DEPLOY_HOST),$(PI_STATIC_IP))
 
-.PHONY: setup validate test render deploy deploy-fast install discover mac-dns harden status dns-test test-remote backup-pull backup-cron backup-restore-drill restore-check verify-data config-drift pi-access trust-ca tls-certs telegram-menu firewall morning-test sync-configs docker-ssd check-pi-env doctor diagnose-remote diagnose-dns audit-dns adguard-tune recover-stack chaos-drill
+.PHONY: setup validate test render deploy deploy-fast install discover mac-dns harden status dns-test test-remote backup-pull backup-cron backup-restore-drill restore-check verify-data config-drift pi-access trust-ca tls-certs telegram-menu firewall sync-configs docker-ssd check-pi-env doctor diagnose-remote diagnose-dns audit-dns adguard-tune recover-stack chaos-drill
 
 check-pi-env:
 	@test -n "$(PI_SSH_HOST)" || (echo "PI_STATIC_IP or PI_DEPLOY_HOST required — edit .env or run make discover" && exit 1)
@@ -49,9 +49,6 @@ sync-configs:
 	@chmod +x scripts/mac/sync-rendered-configs.sh 2>/dev/null || true
 	@make render && ./scripts/mac/sync-rendered-configs.sh
 
-morning-test: check-pi-env
-	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/morning-summary.sh"'
-
 verify-data:
 	@chmod +x scripts/mac/pre-deploy-check.sh scripts/lib/ensure-data-symlink.sh scripts/pi/ensure-data-symlink.sh 2>/dev/null || true
 	@./scripts/mac/pre-deploy-check.sh
@@ -65,9 +62,6 @@ mac-dns:
 dns-fallback:
 	@chmod +x scripts/mac/setup-dns-fallback.sh 2>/dev/null || true
 	@./scripts/mac/setup-dns-fallback.sh
-
-syncthing:
-	@./scripts/mac/setup-syncthing.sh
 
 harden: check-pi-env
 	@ssh "$(PI_USER)@$(PI_SSH_HOST)" "REMOTE_DIR='$(REMOTE_DIR)' bash -s" < ./scripts/pi/harden-host.sh
@@ -162,5 +156,5 @@ tailscale-acl: check-pi-env
 	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-tailscale-acl.sh"'
 
 n8n-workflows: check-pi-env
-	@chmod +x scripts/pi/setup-n8n-workflows.sh scripts/pi/setup-forgejo-webhook.sh 2>/dev/null || true
-	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-n8n-workflows.sh" && REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-uptime-kuma.sh" && REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-forgejo-webhook.sh"'
+	@chmod +x scripts/pi/setup-n8n-workflows.sh 2>/dev/null || true
+	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-n8n-workflows.sh" && REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-uptime-kuma.sh"'

@@ -9,7 +9,6 @@ tmpl="$ROOT/config/hermes/cron-jobs.template.json"
 patch="$ROOT/scripts/lib/hermes-cron-patch.py"
 cfg="$ROOT/scripts/pi/patch-hermes-config-pi.sh"
 unit="$ROOT/host/systemd/hermes-gateway.service"
-morning="$ROOT/scripts/pi/setup-morning-timer.sh"
 watchdog="$ROOT/scripts/pi/watchdog.sh"
 netalert="$ROOT/scripts/lib/netalert-devices.py"
 fx="$ROOT/scripts/pi/fx-quote.sh"
@@ -65,23 +64,22 @@ grep -q 'ddgs>=9.0,<10' "$cfg" || die "ddgs pin yok"
 grep -q 'HERMES_MODEL_TIMEOUT:-300' "$cfg" || die "model.timeout 300 degil"
 ok "hermes config ddgs+timeout"
 
-grep -q 'pi-gateway-morning.timer' "$morning" || die "morning timer disable yok"
-grep -q 'HERMES_TELEGRAM_GATEWAY' "$morning" || die "morning Hermes skip yok"
-grep -q 'Günaydın Panosu' "$morning" || die "morning jobs.json 07:00 skip yok"
-grep -q 'setup-morning-timer.sh' "$ROOT/scripts/pi/setup-hermes-cron.sh" \
-  || die "hermes-cron sabah timer cagirmiyor"
-grep -q 'Sabah timer Hermes kesisimi' "$ROOT/scripts/pi/post-deploy.sh" \
-  || die "post-deploy Hermes sonrasi sabah timer yok"
-ok "cift sabah kapali"
+[[ ! -f "$ROOT/scripts/pi/setup-morning-timer.sh" ]] || die "setup-morning-timer.sh silinmeli"
+[[ ! -f "$ROOT/host/systemd/pi-gateway-morning.service" ]] || die "morning service silinmeli"
+[[ ! -f "$ROOT/host/systemd/pi-gateway-morning.timer" ]] || die "morning timer silinmeli"
+! grep -q 'setup-morning-timer.sh' "$ROOT/scripts/pi/setup-hermes-cron.sh" \
+  || die "hermes-cron hala setup-morning-timer cagiriyor"
+! grep -q 'setup-morning-timer.sh' "$ROOT/scripts/pi/post-deploy.sh" \
+  || die "post-deploy hala setup-morning-timer cagiriyor"
+ok "morning timer kaldirildi"
 
 grep -q 'ddgs_ok' "$cfg" || die "ddgs import-gate yok"
 ok "ddgs import-gate"
 
-grep -q 'Kullanılabilir RAM' "$watchdog" || die "watchdog RAM TR yok"
-grep -q 'Başarısız systemd' "$watchdog" || die "watchdog systemd TR yok"
-! grep -q 'Available RAM' "$watchdog" || die "watchdog English RAM duruyor"
-grep -q 'archive-bulletin.sh' "$watchdog" || die "watchdog arşiv yok"
-ok "watchdog TR + arşiv"
+[[ ! -f "$watchdog" ]] || die "watchdog.sh silinmeli (saatlik gozcu kalkti)"
+! grep -qE 'pi-watchdog|pi-netalert-newdev|pi-netalert-offline|Sistem Gözcüsü|Ağ Gözcüsü' "$tmpl" \
+  || die "cron template hala ag/saatlik gozcu job iceriyor"
+ok "ag + saatlik hermes gozcu kaldirildi"
 
 grep -q 'MAC: `' "$netalert" || die "netalert MAC backtick yok"
 python3 "$netalert" --self-check || die "netalert self-check"

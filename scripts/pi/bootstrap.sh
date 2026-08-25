@@ -12,10 +12,8 @@ PG_SCRIPT_NAME="$(basename "$0")"
 # shellcheck source=../lib/env-file.sh
 source "${_PG_ENV_LIB:?}"
 _BOOT_ENABLE_UFW="${ENABLE_UFW:-}"
-_BOOT_ENABLE_FAIL2BAN="${ENABLE_FAIL2BAN:-}"
 read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 [[ -n "${_BOOT_ENABLE_UFW}" ]] && ENABLE_UFW="${_BOOT_ENABLE_UFW}"
-[[ -n "${_BOOT_ENABLE_FAIL2BAN}" ]] && ENABLE_FAIL2BAN="${_BOOT_ENABLE_FAIL2BAN}"
 ENABLE_CROWDSEC="${ENABLE_CROWDSEC:-true}"
 echo "[bootstrap] Pi Gateway host preparation"
 if ! command -v docker >/dev/null 2>&1; then
@@ -117,7 +115,7 @@ if [[ -f "$REMOTE_DIR/scripts/lib/usb-quirk.sh" ]]; then
     echo "[bootstrap] WARN: cmdline.txt bulunamadi (bootfs mount?)"
   fi
 fi
-for unit in pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-crowdsec-ufw.timer pi-gateway-morning.timer pi-gateway-stack-watchdog.timer pi-gateway-netalertx-names.timer pi-gateway-adguard-filters.timer pi-data-symlink.timer pi-ssd-watch.path pi-ssd-health.timer pi-gateway-ssd-smart.timer; do
+for unit in pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-crowdsec-ufw.timer pi-gateway-adguard-filters.timer pi-data-symlink.timer pi-ssd-watch.path pi-ssd-health.timer pi-gateway-ssd-smart.timer; do
   [[ -f "$REMOTE_DIR/host/systemd/$unit" ]] && sudo cp "$REMOTE_DIR/host/systemd/$unit" "/etc/systemd/system/$unit"
 done
 install_systemd_unit() {
@@ -139,24 +137,26 @@ if [[ -x "$REMOTE_DIR/scripts/pi/install-privileged-scripts.sh" ]]; then
   privileged_script="$REMOTE_DIR/scripts/pi/install-privileged-scripts.sh"
   REMOTE_DIR="$REMOTE_DIR" bash "$privileged_script"
 fi
-for svc in pi-gateway-health.service pi-gateway-backup.service pi-gateway-adguard-config.service pi-gateway-adguard-filters.service pi-gateway-health-failure.service pi-gateway-crowdsec-ufw.service pi-data-symlink.service pi-data-symlink-repair.service pi-gateway-morning.service pi-gateway-recover-ro.service pi-gateway-stack-watchdog.service pi-gateway-netalertx-names.service pi-gateway-ensure-fstab.service pi-ssd-data.service pi-ssd-watch.service pi-ssd-health.service pi-gateway-ssd-smart.service pi-gateway-telegram-bot.service; do
+for svc in pi-gateway-health.service pi-gateway-backup.service pi-gateway-adguard-config.service pi-gateway-adguard-filters.service pi-gateway-health-failure.service pi-gateway-crowdsec-ufw.service pi-data-symlink.service pi-data-symlink-repair.service pi-gateway-recover-ro.service pi-gateway-ensure-fstab.service pi-ssd-data.service pi-ssd-watch.service pi-ssd-health.service pi-gateway-ssd-smart.service; do
   install_systemd_unit "$svc"
 done
+# Eski cift-doktor / cift-isim unit'lerini host'tan temizle (health + ADGUARDIMP yeterli)
+for stale in pi-gateway-stack-watchdog.timer pi-gateway-stack-watchdog.service \
+  pi-gateway-netalertx-names.timer pi-gateway-netalertx-names.service \
+  pi-gateway-morning.timer pi-gateway-morning.service pi-gateway-telegram-bot.service; do
+  sudo systemctl disable --now "$stale" 2>/dev/null || true
+  sudo rm -f "/etc/systemd/system/$stale"
+done
+sudo rm -f /usr/local/lib/pi-gateway/scripts/pi/stack-watchdog.sh 2>/dev/null || true
 sudo systemctl daemon-reload
-sudo systemctl enable pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-adguard-config.service pi-gateway-adguard-filters.timer pi-gateway-morning.timer pi-gateway-recover-ro.service pi-gateway-stack-watchdog.timer 2>/dev/null || true
-if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
-  sudo systemctl enable pi-gateway-netalertx-names.timer 2>/dev/null || true
-fi
+sudo systemctl enable pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-adguard-config.service pi-gateway-adguard-filters.timer pi-gateway-recover-ro.service 2>/dev/null || true
 if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
   sudo systemctl enable pi-data-symlink.service pi-gateway-ensure-fstab.service pi-data-symlink.timer pi-ssd-watch.path pi-ssd-data.service pi-ssd-health.timer pi-gateway-ssd-smart.timer 2>/dev/null || true
 fi
 if [[ "${ENABLE_CROWDSEC:-true}" == "true" ]]; then
   sudo systemctl enable --now pi-gateway-crowdsec-ufw.timer 2>/dev/null || true
 fi
-sudo systemctl start pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-morning.timer pi-gateway-stack-watchdog.timer pi-gateway-adguard-filters.timer 2>/dev/null || true
-if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
-  sudo systemctl start pi-gateway-netalertx-names.timer 2>/dev/null || true
-fi
+sudo systemctl start pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-adguard-filters.timer 2>/dev/null || true
 if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
   sudo systemctl reset-failed pi-ssd-health.service 2>/dev/null || true
   sudo systemctl enable --now pi-ssd-health.timer pi-gateway-ssd-smart.timer 2>/dev/null || true
@@ -217,8 +217,7 @@ if [[ -f "$REMOTE_DIR/scripts/pi/ensure-data-symlink.sh" ]]; then
   fi
 else
   mkdir -p "$REMOTE_DIR/data/adguard/work" "$REMOTE_DIR/data/uptime-kuma" \
-    "$REMOTE_DIR/data/forgejo" "$REMOTE_DIR/data/syncthing" "$REMOTE_DIR/data/projects" \
-    "$REMOTE_DIR/data/redis" "$REMOTE_DIR/data/n8n" "$REMOTE_DIR/data/crowdsec" \
+    "$REMOTE_DIR/data/n8n" "$REMOTE_DIR/data/crowdsec" \
     "$REMOTE_DIR/data/prometheus" "$REMOTE_DIR/data/grafana"
 fi
 if [[ "${ENABLE_MONITORING:-true}" == "true" ]] && [[ -x "$REMOTE_DIR/scripts/pi/ensure-monitoring-data.sh" ]]; then

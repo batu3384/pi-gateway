@@ -87,11 +87,8 @@ else
     local name="$1"
     docker ps --format '{{.Names}}' | grep -q "^${name}$" || note_fail "optional-${name}-down"
   }
-  [[ "${ENABLE_FORGEJO:-true}" == "true" ]] && optional_down forgejo
   [[ "${ENABLE_N8N:-true}" == "true" ]] && optional_down n8n
   [[ "${ENABLE_NETALERTX:-true}" == "true" ]] && optional_down netalertx
-  [[ "${ENABLE_SYNCTHING:-true}" == "true" ]] && optional_down syncthing
-  [[ "${ENABLE_REDIS:-false}" == "true" ]] && optional_down redis
   [[ "${ENABLE_DOZZLE:-true}" == "true" ]] && optional_down dozzle
   [[ "${ENABLE_MONITORING:-true}" == "true" ]] && optional_down prometheus
   [[ "${ENABLE_MONITORING:-true}" == "true" ]] && optional_down grafana
@@ -118,8 +115,8 @@ fi
 if ! dig +time=2 +tries=1 @"${PI_STATIC_IP}" doubleclick.net A 2>/dev/null | grep -Eq '0\.0\.0\.0|127\.0\.0\.0|NXDOMAIN'; then
   note_fail "adguard-block-test"
 fi
-if ! dig +time=2 +tries=1 @"${PI_STATIC_IP}" "git.${LAN_DOMAIN}" A +short 2>/dev/null | grep -qx "${PI_STATIC_IP}"; then
-  note_fail "adguard-rewrite-git.${LAN_DOMAIN}"
+if ! dig +time=2 +tries=1 @"${PI_STATIC_IP}" "gateway.${LAN_DOMAIN}" A +short 2>/dev/null | grep -qx "${PI_STATIC_IP}"; then
+  note_fail "adguard-rewrite-gateway.${LAN_DOMAIN}"
 fi
 if [[ -n "${AGH_ADMIN_PASSWORD:-}" ]]; then
   COOKIE="$(mktemp)"
@@ -157,7 +154,7 @@ print(sum((f.get('rules_count') or 0) for f in d.get('filters',[])))
       fi
       [[ "${rules:-0}" -ge "${ADGUARD_MIN_FILTER_RULES:-100000}" ]] || note_fail "adguard-filter-rules-low(${rules:-0})"
     }
-    [[ "${rewrites:-0}" -ge "${ADGUARD_MIN_REWRITES:-7}" ]] || note_fail "adguard-rewrites-low(${rewrites:-0})"
+    [[ "${rewrites:-0}" -ge "${ADGUARD_MIN_REWRITES:-8}" ]] || note_fail "adguard-rewrites-low(${rewrites:-0})"
     [[ "$dns_ok" == "1" ]] || {
       if [[ "${ADGUARD_AUTO_HEAL:-true}" == "true" ]]; then
         logger -t "$LOG_TAG" "adguard-dns-config-drift — auto-heal"

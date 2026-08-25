@@ -23,9 +23,10 @@ EOF
 mkdir -p "$HERMES_SCRIPTS"
 [[ -d "${REMOTE_DIR}/scripts/pi" ]] || { log "HATA: ${REMOTE_DIR}/scripts/pi yok"; exit 1; }
 
-_install pi-watchdog.sh watchdog.sh
-_install pi-netalert-newdev.sh netalert-newdev.sh
-_install pi-netalert-offline.sh netalert-offline.sh
 _install pi-fx-quote.sh fx-quote.sh
 
 log "Tamamlandi — ${HERMES_SCRIPTS}"
+# Eski wrapper kalintilari
+rm -f "${HERMES_SCRIPTS}/pi-watchdog.sh" \
+  "${HERMES_SCRIPTS}/pi-netalert-newdev.sh" \
+  "${HERMES_SCRIPTS}/pi-netalert-offline.sh" 2>/dev/null || true

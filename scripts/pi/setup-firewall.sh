@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-# UFW + fail2ban — Pi Gateway host guvenligi
+# UFW — Pi Gateway host guvenligi (SSH ban = CrowdSec, fail2ban yok)
 set -euo pipefail
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 LAN_SUBNET="${LAN_SUBNET_CIDR:-192.168.1.0/24}"
 ENABLE_UFW="${ENABLE_UFW:-true}"
-ENABLE_FAIL2BAN="${ENABLE_FAIL2BAN:-true}"
 # full = tum admin portlari LAN | caddy-only = 80/443 disinda dogrudan port yok
 UFW_ADMIN_EXPOSURE="${UFW_ADMIN_EXPOSURE:-caddy-only}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,24 +12,32 @@ source "$SCRIPT_DIR/../lib/env-file.sh"
 read_remote_dotenv || { echo "[firewall] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 LAN_SUBNET="${LAN_SUBNET_CIDR:-$LAN_SUBNET}"
 ENABLE_UFW="${ENABLE_UFW:-true}"
-ENABLE_FAIL2BAN="${ENABLE_FAIL2BAN:-true}"
 UFW_ADMIN_EXPOSURE="${UFW_ADMIN_EXPOSURE:-caddy-only}"
 log() { echo "[firewall] $*"; }
 pkg_on_path() {
   command -v "$1" >/dev/null 2>&1 || [[ -x "/usr/sbin/$1" ]]
 }
 install_packages() {
-  if pkg_on_path ufw && pkg_on_path fail2ban-client; then
+  if pkg_on_path ufw; then
     return 0
   fi
-  log "Paketler kuruluyor (ufw, fail2ban)..."
+  log "Paketler kuruluyor (ufw)..."
   sudo systemctl stop packagekit packagekit.service 2>/dev/null || true
   sudo systemctl stop unattended-upgrades 2>/dev/null || true
   if ! timeout 180 sudo apt-get update -qq; then
     log "HATA: apt-get update timeout — packagekit kapali mi?"
     return 1
   fi
-  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ufw fail2ban
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ufw
+}
+# Eski kurulumlardan fail2ban kalintisi — CrowdSec tek SSH bekci
+purge_fail2ban_leftover() {
+  sudo systemctl disable --now fail2ban 2>/dev/null || true
+  sudo rm -f /etc/fail2ban/jail.d/pi-gateway.local 2>/dev/null || true
+  if dpkg -l fail2ban 2>/dev/null | grep -q '^ii'; then
+    log "fail2ban kaldiriliyor (CrowdSec yeterli)"
+    sudo DEBIAN_FRONTEND=noninteractive apt-get purge -y -qq fail2ban 2>/dev/null || true
+  fi
 }
 tailscale_connected() {
   command -v tailscale >/dev/null 2>&1 || return 1
@@ -109,18 +116,19 @@ setup_ufw() {
       delete_ufw_rules_matching "pi-gateway $port"
       sudo ufw allow from "$LAN_SUBNET" to any port "$port" proto tcp comment "pi-gateway $port"
     done
-    for port in 3001 3002 3040 5678 8080 8384 9999; do
+    for port in 3001 3040 5678 8080 9999; do
       delete_lan_admin_port "$port"
     done
   else
-    for port in 80 443 3001 3002 3040 5678 8080 8384 9999; do
+    for port in 80 443 3001 3040 5678 8080 9999; do
       delete_ufw_rules_matching "pi-gateway $port"
       sudo ufw allow from "$LAN_SUBNET" to any port "$port" proto tcp comment "pi-gateway $port"
     done
   fi
+  # REMOVED: syncthing 22000 / forgejo 3002 — eski kurulumlardan temizle
   delete_ufw_rules_matching 'pi-gateway syncthing'
-  sudo ufw allow from "$LAN_SUBNET" to any port 22000 proto tcp comment 'pi-gateway syncthing-tcp'
-  sudo ufw allow from "$LAN_SUBNET" to any port 22000 proto udp comment 'pi-gateway syncthing-udp'
+  delete_lan_admin_port 3002
+  delete_lan_admin_port 8384
   delete_ufw_rules_matching 'pi-gateway docker-adguard'
   delete_ufw_rules_matching 'pi-gateway docker-bridge-adguard'
   delete_ufw_rules_matching 'pi-gateway docker-caddy-adguard'
@@ -171,45 +179,10 @@ setup_ufw() {
   sudo ufw status numbered
   log "UFW aktif"
 }
-setup_fail2ban() {
-  [[ "$ENABLE_FAIL2BAN" == "true" ]] || { log "fail2ban atlandi"; return 0; }
-  local jail_dir="/etc/fail2ban/jail.d"
-  sudo mkdir -p "$jail_dir"
-  if [[ -f "$REMOTE_DIR/host/fail2ban/pi-gateway.local" ]]; then
-    sudo cp "$REMOTE_DIR/host/fail2ban/pi-gateway.local" "$jail_dir/pi-gateway.local"
-  else
-    sudo tee "$jail_dir/pi-gateway.local" >/dev/null <<'EOF'
-[DEFAULT]
-bantime  = 1h
-findtime = 10m
-maxretry = 5
-backend = systemd
-[sshd]
-enabled = true
-port    = ssh
-filter  = sshd
-maxretry = 4
-bantime  = 2h
-EOF
-  fi
-  sudo systemctl enable fail2ban
-  sudo systemctl restart fail2ban
-  local i=0
-  while (( i < 8 )); do
-    if sudo fail2ban-client status sshd >/dev/null 2>&1 || sudo fail2ban-client status >/dev/null 2>&1; then
-      sudo fail2ban-client status sshd 2>/dev/null || sudo fail2ban-client status
-      log "fail2ban aktif"
-      return 0
-    fi
-    sleep 1
-    (( i += 1 ))
-  done
-  log "WARN: fail2ban socket henuz hazir degil — UFW yine de aktif"
-}
 main() {
   install_packages
+  purge_fail2ban_leftover
   setup_ufw
-  setup_fail2ban
   log "Tamamlandi"
 }
 main "$@"

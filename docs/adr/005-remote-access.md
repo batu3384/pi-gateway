@@ -12,7 +12,7 @@ Need admin from outside home without opening WAN ports on the router.
 
 - **Primary**: Tailscale on host; UFW allows `tailscale0` for `22/80/443`; MagicDNS / Serve for panels.
 - **Optional**: Cloudflare Tunnel when `CLOUDFLARE_TUNNEL_TOKEN` set — public edge. Must restrict hostnames; prefer HTTPS; treat as increased attack surface.
-- Do not expose Syncthing/Forgejo/n8n ports on WAN.
+- Do not expose n8n / panel ports on WAN.
 
 ## Consequences
 

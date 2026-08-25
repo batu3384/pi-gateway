@@ -16,18 +16,6 @@ dns.__LAN_DOMAIN__ {
   reverse_proxy host.docker.internal:__ADGUARD_WEB_PORT__
 }
 
-git.__LAN_DOMAIN__ {
-  tls /etc/caddy/certs/__LAN_DOMAIN__.pem /etc/caddy/certs/__LAN_DOMAIN__-key.pem
-  __CADDY_BASIC_AUTH__
-  reverse_proxy forgejo:3000
-}
-
-sync.__LAN_DOMAIN__ {
-  tls /etc/caddy/certs/__LAN_DOMAIN__.pem /etc/caddy/certs/__LAN_DOMAIN__-key.pem
-  __CADDY_BASIC_AUTH__
-  reverse_proxy syncthing:8384
-}
-
 n8n.__LAN_DOMAIN__ {
   tls /etc/caddy/certs/__LAN_DOMAIN__.pem /etc/caddy/certs/__LAN_DOMAIN__-key.pem
   __CADDY_BASIC_AUTH__

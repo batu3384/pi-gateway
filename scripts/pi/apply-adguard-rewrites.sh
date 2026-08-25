@@ -46,6 +46,31 @@ add_rewrite() {
     -d "{\"domain\":\"${domain}\",\"answer\":\"${answer}\"}" >/dev/null
   log "eklendi: ${domain} -> ${answer}"
 }
+delete_rewrite() {
+  local domain="$1"
+  local answer="${2:-}"
+  local payload
+  if [[ -n "$answer" ]]; then
+    payload="{\"domain\":\"${domain}\",\"answer\":\"${answer}\"}"
+  else
+    # answer bilinmiyorsa listedeki kaydi bul
+    answer="$(curl -fsS -b "$COOKIE" "${BASE}/control/rewrite/list" | python3 -c "
+import json, sys
+domain = sys.argv[1]
+for row in json.load(sys.stdin):
+    if row.get('domain') == domain:
+        print(row.get('answer') or '')
+        sys.exit(0)
+sys.exit(1)
+" "$domain" 2>/dev/null || true)"
+    [[ -n "$answer" ]] || { log "yok (silme): ${domain}"; return 0; }
+    payload="{\"domain\":\"${domain}\",\"answer\":\"${answer}\"}"
+  fi
+  curl -fsS -b "$COOKIE" -X POST "${BASE}/control/rewrite/delete" \
+    -H 'Content-Type: application/json' \
+    -d "$payload" >/dev/null || true
+  log "silindi: ${domain}"
+}
 verify_rewrites() {
   local expected="$1"
   local count
@@ -58,7 +83,12 @@ print(len(json.load(sys.stdin)))
     exit 1
   fi
 }
-DOMAINS=(gateway dns status panel git sync n8n logs devices grafana)
+# REMOVED: git sync (forgejo/syncthing)
+OBSOLETE=(git sync)
+for sub in "${OBSOLETE[@]}"; do
+  delete_rewrite "${sub}.${LAN_DOMAIN}"
+done
+DOMAINS=(gateway dns status panel n8n logs devices grafana)
 for sub in "${DOMAINS[@]}"; do
   add_rewrite "${sub}.${LAN_DOMAIN}" "$PI_STATIC_IP"
 done

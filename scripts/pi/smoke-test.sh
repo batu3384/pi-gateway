@@ -11,8 +11,6 @@ read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv pars
 PI_STATIC_IP="${PI_STATIC_IP:-127.0.0.1}"
 ADGUARD_WEB_PORT="${ADGUARD_WEB_PORT:-8080}"
 LAN_DOMAIN="${LAN_DOMAIN:-home}"
-FORGEJO_PORT="${FORGEJO_PORT:-3002}"
-SYNCTHING_PORT="${SYNCTHING_PORT:-8384}"
 N8N_PORT="${N8N_PORT:-5678}"
 DOZZLE_PORT="${DOZZLE_PORT:-9999}"
 NETALERTX_PORT="${NETALERTX_PORT:-20211}"
@@ -79,7 +77,7 @@ run_check "adguard-53" dig +time=3 +tries=1 @"$PI_STATIC_IP" cloudflare.com A
 run_check "adguard-block" bash -c \
   "for d in doubleclick.net googletagmanager.com pagead.l.doubleclick.net; do dig +time=3 +tries=1 @${PI_STATIC_IP} \"\$d\" A | grep -Eq '0.0.0.0|127.0.0.0|NXDOMAIN' || exit 1; done"
 run_check "dns-rewrite" bash -c \
-  "dig +time=3 +tries=1 @${PI_STATIC_IP} git.${LAN_DOMAIN} A +short | grep -qx '${PI_STATIC_IP}'"
+  "dig +time=3 +tries=1 @${PI_STATIC_IP} gateway.${LAN_DOMAIN} A +short | grep -qx '${PI_STATIC_IP}'"
 run_check "dns-rewrite-logs" bash -c \
   "dig +time=3 +tries=1 @${PI_STATIC_IP} logs.${LAN_DOMAIN} A +short | grep -qx '${PI_STATIC_IP}'"
 run_check "dns-rewrite-devices" bash -c \
@@ -130,16 +128,6 @@ fi
 if [[ "${ENABLE_DOZZLE:-true}" == "true" ]]; then
   run_check "dozzle" curl -fsS -u "${DOZZLE_ADMIN_USER:-admin}:${DOZZLE_ADMIN_PASSWORD}" "http://127.0.0.1:${DOZZLE_PORT}/"
 fi
-if [[ "${ENABLE_FORGEJO:-true}" == "true" ]]; then
-  run_check "forgejo" bash -c \
-    "for _ in 1 2 3 4 5; do curl -fsS \"http://127.0.0.1:${FORGEJO_PORT}/\" >/dev/null && exit 0; sleep 3; done; exit 1"
-fi
-if [[ "${ENABLE_SYNCTHING:-true}" == "true" ]]; then
-  run_check "syncthing" curl -fsS "http://127.0.0.1:${SYNCTHING_PORT}/"
-fi
-if [[ "${ENABLE_REDIS:-false}" == "true" ]]; then
-  run_check "redis" docker exec redis redis-cli --no-auth-warning -a "${REDIS_PASSWORD}" ping
-fi
 if [[ "${ENABLE_N8N:-true}" == "true" ]]; then
   run_check "n8n" bash -c \
     "for _ in 1 2 3 4 5; do curl -fsS \"http://127.0.0.1:${N8N_PORT}/\" >/dev/null && exit 0; sleep 4; done; exit 1"
@@ -158,27 +146,6 @@ fi
 if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
   run_check "netalertx" bash -c \
     "for _ in 1 2 3 4 5 6; do curl -fsS -L \"http://${NETALERTX_LISTEN_ADDR:-127.0.0.1}:${NETALERTX_PORT}/\" >/dev/null && exit 0; sleep 5; done; exit 1"
-  case "${NETALERT_NOTIFY_VIA:-hermes}" in
-    hermes)
-      run_check "netalert-hermes-poll" bash -c \
-        'REMOTE_DIR="'"${REMOTE_DIR}"'" bash "'"${REMOTE_DIR}"'/scripts/pi/netalert-events.sh" offline 2>&1 | grep -qE "^\[SILENT\]"'
-      ;;
-    n8n)
-      case "${N8N_WEBHOOK_SECRET:-}" in
-        ""|CHANGE_ME*) ;;
-        *)
-          if [[ "${ENABLE_N8N:-true}" == "true" ]]; then
-            run_check "n8n-netalert-webhook" bash -c \
-              'code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 -X POST \
-                "http://127.0.0.1:'"${N8N_PORT}"'/webhook/netalert-device-alert-'"${N8N_WEBHOOK_SECRET}"'" \
-                -H "Content-Type: application/json" \
-                -d "{\"body\":{\"attachments\":[{\"text\":{\"new_devices\":[{\"MAC\":\"aa:bb:cc:dd:ee:ff\",\"IP\":\"192.168.1.99\",\"Device name\":\"Smoke Test\"}]}}]}}"); \
-                [[ "$code" == "200" ]]'
-          fi
-          ;;
-      esac
-      ;;
-  esac
 fi
 run_check "privileged-lib-installed" test -x /usr/local/lib/pi-gateway/scripts/pi/recover-readonly-root.sh
 run_check "privileged-lib-sync" diff -q \
@@ -218,29 +185,17 @@ if [[ "${ENABLE_UFW:-true}" == "true" ]] && [[ -x /usr/sbin/ufw ]]; then
     "sudo -n /usr/sbin/ufw status | grep -E '53/(tcp|udp)' | grep -q '${LAN_SUBNET_CIDR:-192.168.1.0/24}'"
   if [[ "$UFW_ADMIN_EXPOSURE" == "caddy-only" ]]; then
     run_check "ufw-caddy-only" bash -c \
-      "! sudo -n /usr/sbin/ufw status | grep -E 'pi-gateway (9999|8080|3001|8384)' | grep -q '${LAN_SUBNET_CIDR:-192.168.1.0/24}'"
+      "! sudo -n /usr/sbin/ufw status | grep -E 'pi-gateway (9999|8080|3001)' | grep -q '${LAN_SUBNET_CIDR:-192.168.1.0/24}'"
     run_check "adguard-ui-ufw-no-lan" bash -c \
       "! sudo -n /usr/sbin/ufw status numbered | grep -E '8080/tcp' | grep -q '${LAN_SUBNET_CIDR:-192.168.1.0/24}'"
     # Docker UFW'yi bypass eder — bind gercekten localhost olmali (AdGuard host:0.0.0.0 kasıtlı — UFW blok)
     run_check "admin-ports-localhost" bash -c \
-      '! ss -lnt | grep -E ":(3040|3001|5678|9999|3002|8384)\\b" | grep -vE "127\\.0\\.0\\.1|\\[::1\\]" | grep -q .'
+      '! ss -lnt | grep -E ":(3040|3001|5678|9999)\\b" | grep -vE "127\\.0\\.0\\.1|\\[::1\\]" | grep -q .'
     if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
       run_check "netalertx-ufw-caddy-only" bash -c \
         '! sudo -n /usr/sbin/ufw status | grep -E ":'"${NETALERTX_PORT:-20211}"'\\b" | grep -q "${LAN_SUBNET_CIDR:-192.168.1.0/24}"'
     fi
   fi
-fi
-if [[ "${ENABLE_SYNCTHING:-true}" == "true" ]] && docker ps --format '{{.Names}}' | grep -q '^syncthing$'; then
-  case "${SYNCTHING_GUI_PASSWORD:-}" in
-    ""|CHANGE_ME*|Degistir*)
-      run_check "syncthing-auth-configured" bash -c 'echo "SYNCTHING_GUI_PASSWORD placeholder"; exit 1'
-      ;;
-    *)
-      # Syncthing 2.x: sendBasicAuthPrompt=false → form auth; REST auth'suz 403
-      run_check "syncthing-auth-deny" bash -c \
-        'code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "http://127.0.0.1:'"${SYNCTHING_PORT}"'/rest/system/status"); [[ "$code" == "403" || "$code" == "401" ]]'
-      ;;
-  esac
 fi
 if command -v tailscale >/dev/null 2>&1 && tailscale status >/dev/null 2>&1; then
   run_check "tailscale-connected" tailscale status

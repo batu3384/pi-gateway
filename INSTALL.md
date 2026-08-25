@@ -38,7 +38,7 @@ make install   # runs doctor → discover → render → validate → deploy
 | SSD data disk at `/mnt/ssd` | Yes (USB SSD must be attached) |
 | Docker + compose stack | Yes |
 | AdGuard + Unbound + Homepage + Uptime Kuma | Yes |
-| Optional profiles (Caddy, Forgejo, Syncthing, n8n, …) | Yes (from `.env` flags) |
+| Optional profiles (Caddy, n8n, …) | Yes (from `.env` flags) |
 | Post-deploy service setup + smoke test | Yes |
 
 ## One-time manual steps

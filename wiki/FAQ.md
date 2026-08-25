@@ -8,9 +8,9 @@
 
 Yes. LAN access via `*.home` + mkcert. Tailscale is optional (`docs/TAILSCALE.md`).
 
-## Why is Forgejo down but DNS works?
+## Why are apps down but DNS works?
 
-**Degraded mode** — SSD missing or unhealthy. Core-dns (Unbound + AdGuard) stays on SD; app containers stop. See [Troubleshooting](Troubleshooting.md).
+**Degraded mode** — SSD missing or unhealthy. Core-dns (Unbound + AdGuard) stays on SD; app containers (n8n, …) stop. See [Troubleshooting](Troubleshooting.md).
 
 ## Is JMicron USB SSD reliable on Pi 4?
 
@@ -42,7 +42,7 @@ Daily Restic on SSD; offsite via `make backup-pull` / B2/R2 (`docs/adr/004-backu
 
 ## Unified login?
 
-Default `UNIFIED_LOGIN=true` — `AGH_ADMIN_*` passwords sync to Dozzle, Kuma, Forgejo, Syncthing via deploy.
+Default `UNIFIED_LOGIN=true` — `AGH_ADMIN_*` passwords sync to Dozzle, Kuma, NetAlertX via deploy.
 
 ## Wiki vs repo docs?
 

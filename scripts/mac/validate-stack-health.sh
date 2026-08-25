@@ -8,20 +8,29 @@ PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 die() { echo "[validate-stack] HATA: $*" >&2; exit 1; }
 ok() { echo "[validate-stack] OK: $*"; }
 
-watchdog="$PROJECT_DIR/scripts/pi/stack-watchdog.sh"
+watchdog_gone="$PROJECT_DIR/scripts/pi/stack-watchdog.sh"
 stack_health="$PROJECT_DIR/scripts/lib/stack-health.sh"
 recover="$PROJECT_DIR/scripts/pi/recover-readonly-root.sh"
 compose="$PROJECT_DIR/compose/docker-compose.yml"
 compose_up="$PROJECT_DIR/scripts/pi/recover-compose-up.sh"
+health="$PROJECT_DIR/scripts/pi/health-check.sh"
 
-[[ -f "$watchdog" ]] || die "stack-watchdog.sh yok"
+[[ -f "$watchdog_gone" ]] && die "stack-watchdog.sh hala var — silindi (health tek doktor)"
+[[ -f "$PROJECT_DIR/host/systemd/pi-gateway-stack-watchdog.timer" ]] \
+  && die "pi-gateway-stack-watchdog.timer hala host/systemd'de"
+[[ -f "$PROJECT_DIR/host/systemd/pi-gateway-netalertx-names.timer" ]] \
+  && die "pi-gateway-netalertx-names.timer hala host/systemd'de"
+[[ -f "$PROJECT_DIR/scripts/pi/import-adguard-names-to-netalertx.sh" ]] \
+  && die "import-adguard-names-to-netalertx.sh hala var"
+[[ -f "$PROJECT_DIR/scripts/pi/enrich-netalertx-names.sh" ]] \
+  && die "enrich-netalertx-names.sh hala var"
+ok "dead stack-watchdog / netalertx-names paths removed"
+
 [[ -f "$stack_health" ]] || die "stack-health.sh yok"
 [[ -f "$recover" ]] || die "recover-readonly-root.sh yok"
-
-if grep -q 'is-active.*pi-gateway-recover-ro' "$watchdog"; then
-  die "stack-watchdog hala is-active ile recover kontrol ediyor"
-fi
-ok "watchdog is-active regresyonu yok"
+[[ -f "$health" ]] || die "health-check.sh yok"
+grep -q 'recover-stack.sh' "$health" || die "health-check recover-stack cagirmiyor"
+ok "health-check sole doctor"
 
 grep -q 'recover-readonly-root.sh' "$stack_health" \
   || die "trigger_stack_recover recover scriptini cagirmiyor"
@@ -118,9 +127,9 @@ echo "$soft" | grep -q 'force-recreate' \
 grep -q 'force-recreate' "$compose_up" || die "son care force-recreate kayboldu"
 ok "recover-compose soft sonra force"
 
-grep -q 'TimeoutStartSec=360' "$PROJECT_DIR/host/systemd/pi-gateway-stack-watchdog.service" \
-  || die "watchdog TimeoutStartSec 360 degil"
-ok "watchdog timeout 360s"
+grep -q 'TimeoutStartSec=360' "$PROJECT_DIR/host/systemd/pi-gateway-recover-ro.service" \
+  || die "recover-ro TimeoutStartSec 360 degil"
+ok "recover-ro timeout 360s"
 
 grep -q '/usr/local/lib/pi-gateway' "$PROJECT_DIR/host/systemd/pi-gateway-recover-ro.service" \
   || die "recover-ro hala kullanici repo path"
@@ -132,7 +141,7 @@ ok "Caddy basic_auth placeholder"
 
 grep -q 'CHANGE_ME_' "$PROJECT_DIR/.env.example" \
   || die ".env.example CHANGE_ME placeholder yok"
-if grep -qE 'DegistirBunu|DegistirRestic|DegistirForgejo' "$PROJECT_DIR/.env.example"; then
+if grep -qE 'DegistirBunu|DegistirRestic' "$PROJECT_DIR/.env.example"; then
   die ".env.example hala sabit eski sifre iceriyor"
 fi
 ok ".env.example guvenli placeholders"
@@ -209,8 +218,6 @@ grep -q '! stack_fully_healthy || ! root_rw_ok' "$PROJECT_DIR/scripts/pi/health-
   || die "health-check root RO recover tetiklemesi yok"
 grep -q 'recover-stack.sh' "$PROJECT_DIR/scripts/pi/health-check.sh" \
   || die "health-check recover-stack.sh cagirmiyor"
-grep -q 'recover-stack.sh' "$watchdog" \
-  || die "watchdog recover-stack.sh cagirmiyor"
 [[ -f "$PROJECT_DIR/scripts/pi/recover-stack.sh" ]] \
   || die "recover-stack.sh yok"
 ok "health-check recover tetiklemesi"
@@ -246,11 +253,15 @@ ok "STORAGE_FALLBACK_SD tanimli"
 
 grep -q 'ssd_mount_healthy' "$PROJECT_DIR/scripts/lib/ssd-alive.sh" \
   || die "ssd-alive.sh yok/eksik"
-grep -q 'PathExistsGone' "$PROJECT_DIR/host/systemd/pi-ssd-watch.path" \
-  || die "PathExistsGone yok"
+grep -q 'PathChanged=' "$PROJECT_DIR/host/systemd/pi-ssd-watch.path" \
+  || die "PathChanged yok"
+grep -qE 'PathExistsGone|DefaultInstance' "$PROJECT_DIR/host/systemd/pi-ssd-watch.path" \
+  && die "gecersiz path unit key (PathExistsGone/DefaultInstance)"
+grep -q 'SYSTEMD_WANTS.*pi-ssd-watch.service' "$PROJECT_DIR/host/udev/99-pi-gateway-jmicron.rules" \
+  || die "udev SYSTEMD_WANTS pi-ssd-watch yok"
 grep -q 'ssd-alive.sh' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" \
   || die "install-privileged ssd-alive kopyalamiyor"
-ok "SSD auto-recovery (alive+path+priv)"
+ok "SSD auto-recovery (alive+udev+path+priv)"
 
 [[ -f "$PROJECT_DIR/scripts/pi/setup-docker-fallback.sh" ]] \
   || die "setup-docker-fallback.sh yok"
@@ -284,17 +295,9 @@ grep -q 'n8n-kuma-webhook' "$PROJECT_DIR/scripts/pi/smoke-test.sh" \
   || die "smoke n8n webhook e2e yok"
 ok "smoke n8n webhook e2e"
 
-grep -q 'insecure_ssl' "$PROJECT_DIR/scripts/pi/setup-forgejo-webhook.sh" \
-  && die "forgejo webhook insecure_ssl hala var"
-ok "forgejo webhook ssl guvenli"
-
-grep -q '127.0.0.1:.*8384' "$compose" \
-  || die "syncthing GUI localhost bind yok"
-grep -q '22000:22000/tcp' "$compose" \
-  || die "syncthing sync port publish yok"
-grep -q '127.0.0.1:22000' "$compose" \
-  && die "syncthing 22000 localhost bind — Mac sync kirilir"
-ok "syncthing GUI localhost, sync LAN"
+grep -qE 'container_name: (forgejo|syncthing)' "$compose" \
+  && die "forgejo/syncthing hala compose'da"
+ok "forgejo/syncthing removed"
 
 grep -q 'network_mode: host' "$compose" \
   && grep -q 'container_name: netalertx' "$compose" \
@@ -303,14 +306,19 @@ grep -q 'docker-netalertx' "$PROJECT_DIR/scripts/pi/setup-firewall.sh" \
   || die "netalertx docker ufw kurali yok"
 grep -q 'setup-netalertx.sh' "$PROJECT_DIR/scripts/pi/post-deploy.sh" \
   || die "post-deploy netalertx yok"
-grep -q 'netalert-device-alert' "$PROJECT_DIR/config/n8n/netalert-device-alert.workflow.json" \
-  || die "n8n netalert workflow yok"
-grep -q 'netalert-events.sh' "$PROJECT_DIR/scripts/pi/netalert-newdev.sh" \
-  || die "netalert-newdev wrapper yok"
-[[ -f "$PROJECT_DIR/scripts/pi/netalert-offline.sh" ]] \
-  || die "netalert-offline yok"
-grep -q 'notify_netalert_offline_devices' "$PROJECT_DIR/scripts/lib/notify.sh" \
-  || die "notify offline yok"
+[[ ! -f "$PROJECT_DIR/config/n8n/netalert-device-alert.workflow.json" ]] \
+  || die "netalert-device-alert.workflow.json silinmeli"
+grep -q 'NETALERT_NOTIFY_VIA=hermes gerekli' "$PROJECT_DIR/scripts/pi/setup-netalertx.sh" \
+  || die "setup-netalertx hermes-only degil"
+[[ ! -f "$PROJECT_DIR/scripts/pi/netalert-newdev.sh" ]] \
+  || die "netalert-newdev.sh silinmeli"
+[[ ! -f "$PROJECT_DIR/scripts/pi/netalert-offline.sh" ]] \
+  || die "netalert-offline.sh silinmeli"
+[[ ! -f "$PROJECT_DIR/scripts/pi/watchdog.sh" ]] \
+  || die "watchdog.sh silinmeli"
+grep -qE 'pi-netalert-newdev|pi-watchdog|Sistem Gözcüsü|Ağ Gözcüsü' \
+  "$PROJECT_DIR/config/hermes/cron-jobs.template.json" \
+  && die "hermes cron template hala ag/saatlik gozcu"
 grep -q 'panel_url' "$PROJECT_DIR/scripts/lib/telegram-panels.py" \
   || die "telegram-panels panel_url yok"
 python3 "$PROJECT_DIR/scripts/lib/netalert-devices.py" --self-check \
@@ -319,15 +327,13 @@ grep -q 'setup-hermes-cron.sh' "$PROJECT_DIR/scripts/pi/post-deploy.sh" \
   || die "post-deploy hermes cron yok"
 [[ -f "$PROJECT_DIR/scripts/pi/setup-hermes-cron-scripts.sh" ]] \
   || die "setup-hermes-cron-scripts yok"
-grep -q 'pi-netalert-newdev.sh' "$PROJECT_DIR/config/hermes/cron-jobs.template.json" \
-  || die "hermes cron template relative script yok"
+grep -q 'pi-fx-quote.sh' "$PROJECT_DIR/config/hermes/cron-jobs.template.json" \
+  || die "piyasa pi-fx-quote yok"
 grep -q 'HERMES_API_CALL_STALE_TIMEOUT' "$PROJECT_DIR/host/systemd/hermes-gateway.service" \
   || die "hermes-gateway stale timeout yok"
-grep -q 'pi-fx-quote.sh' "$PROJECT_DIR/config/hermes/cron-jobs.template.json" \
-  || die "akşam bülten pi-fx-quote yok"
 grep -q 'NETALERT_NOTIFY_VIA' "$PROJECT_DIR/scripts/pi/setup-netalertx.sh" \
   || die "setup-netalertx NOTIFY_VIA yok"
-ok "netalertx host network + events pipeline + hermes kanal"
+ok "netalertx host + hermes bulten (ag cron yok)"
 
 grep -q 'STORAGE_TYPE=hybrid' "$PROJECT_DIR/.env.example" \
   || die ".env.example hybrid varsayilan degil"
@@ -405,11 +411,11 @@ ok "Kuma password check N8N'den bagimsiz"
 
 grep -q 'compose-profiles.sh' "$PROJECT_DIR/scripts/mac/deploy.sh" \
   || die "deploy.sh compose-profiles tek kaynak degil"
-grep -q 'ENABLE_AUTOHEAL:-false' "$PROJECT_DIR/scripts/lib/compose-profiles.sh" \
-  || die "compose-profiles AUTOHEAL default false degil"
-grep -q 'ENABLE_REDIS:-false' "$PROJECT_DIR/scripts/lib/compose-profiles.sh" \
-  || die "compose-profiles REDIS default false degil"
-ok "compose-profiles tek kaynak + defaults"
+grep -qE 'ENABLE_(AUTOHEAL|REDIS|WATCHTOWER)' "$PROJECT_DIR/scripts/lib/compose-profiles.sh" \
+  && die "compose-profiles hala redis/autoheal/watchtower profil bayragi"
+grep -qE 'container_name: (redis|autoheal|watchtower)' "$compose" \
+  && die "redis/autoheal/watchtower hala compose'da"
+ok "compose-profiles tek kaynak + removed services"
 
 grep -q 'doctor.sh' "$PROJECT_DIR/scripts/mac/install.sh" \
   || die "install.sh doctor cagirmiyor"

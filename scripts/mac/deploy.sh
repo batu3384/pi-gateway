@@ -170,8 +170,6 @@ log "  Gateway : https://gateway.${DOMAIN}"
 log "  Status  : https://status.${DOMAIN}"
 log "  Logs    : https://logs.${DOMAIN}"
 log "  DNS     : https://dns.${DOMAIN}"
-log "  Git     : https://git.${DOMAIN}"
-log "  Sync    : https://sync.${DOMAIN}"
 log "  n8n     : https://n8n.${DOMAIN}"
 log "  UFW     : ${UFW_ADMIN_EXPOSURE:-caddy-only}"
 if [[ "${NETWORK_MODE:-router-dns}" == "router-dns" ]]; then

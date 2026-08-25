@@ -12,7 +12,7 @@ Optional public edge. Prefer **Tailscale** (ADR-005). Only enable when you need 
 
 1. Zero Trust → Networks → Tunnels → Create.
 2. Public hostnames: **only** what you need (e.g. `status.example.com` → `http://127.0.0.1:80` or HTTPS to Caddy).
-3. Do **not** publish `dns.home` / AdGuard, Syncthing `:22000`, Redis, or raw service ports.
+3. Do **not** publish `dns.home` / AdGuard, or raw service ports.
 4. Set in `.env`:
 
 ```bash

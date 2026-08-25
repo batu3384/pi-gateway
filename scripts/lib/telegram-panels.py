@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Telegram panel menu — URL builder + keyboard (CLI only).
 
-Callers: telegram-bot.sh, telegram-menu.sh
+Callers: telegram-menu.sh, hermes-menu.sh
 
 Remote (telefon, MagicDNS yok):
   http://100.x:PORT  — dogrudan servis (asset /p/ 404 yok)
@@ -26,9 +26,7 @@ PANELS: list[tuple[str, str, str, str, int]] = [
     ("logs", "Loglar", "logs", "/p/logs/", int(os.environ.get("DOZZLE_PORT", "9999") or "9999")),
     ("dns", "AdGuard", "dns", "/p/dns/", int(os.environ.get("ADGUARD_WEB_PORT", "8080") or "8080")),
     ("devices", "Cihazlar", "devices", "/p/devices/", int(os.environ.get("NETALERTX_PORT", "20211") or "20211")),
-    ("git", "Forgejo", "git", "/p/git/", int(os.environ.get("FORGEJO_PORT", "3002") or "3002")),
     ("n8n", "n8n", "n8n", "/p/n8n/", int(os.environ.get("N8N_PORT", "5678") or "5678")),
-    ("sync", "Syncthing", "sync", "/p/sync/", int(os.environ.get("SYNCTHING_PORT", "8384") or "8384")),
     ("grafana", "Grafana", "grafana", "/p/grafana/", int(os.environ.get("GRAFANA_PORT", "3030") or "3030")),
 ]
 
@@ -159,18 +157,11 @@ def menu_text(panels: list[dict[str, Any]], mode: str = "all") -> str:
     """Minimal professional copy — buttons carry destinations."""
     remote_base, remote_mode = remote_access_base()
     user = os.environ.get("AGH_ADMIN_USER") or os.environ.get("CADDY_AUTH_USER") or "admin"
-    fj = (
-        os.environ.get("FORGEJO_ADMIN_USER")
-        or os.environ.get("FORGEJO_LOGIN_USER")
-        or "gitadmin"
-    )
     u = html.escape(user)
-    fju = html.escape(fj)
 
     lines = [
         "<b>Pi Gateway</b>",
-        f"Giriş <code>{u}</code>"
-        + (f" · Forgejo <code>{fju}</code>" if fju != u else ""),
+        f"Giriş <code>{u}</code>",
     ]
     if remote_mode == "ts-http" and remote_base:
         lines.append(f"<code>{html.escape(remote_base)}</code> · Tailscale Connected")

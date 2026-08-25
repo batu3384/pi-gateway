@@ -7,7 +7,6 @@
 | # | Service | URL / bind | Notes |
 |---|---------|------------|-------|
 | 5 | CrowdSec | `127.0.0.1:8082` | SSH attack detection (offline API default) |
-| 9 | Redis | `127.0.0.1:6379` | **Kapalı varsayılan**; açılırsa `REDIS_PASSWORD` zorunlu |
 | 10 | n8n | https://n8n.home | Automation / webhooks |
 | 2 | Cloudflare Tunnel | — | Active when `CLOUDFLARE_TUNNEL_TOKEN` is set |
 
@@ -16,16 +15,6 @@
 1. https://n8n.home
 2. Create owner account on first launch
 3. `N8N_ENCRYPTION_KEY` in `.env` must stay fixed — do not change it
-
-## Redis (opt-in)
-
-Varsayılan `ENABLE_REDIS=false` (tüketici yok). Açmak için `.env` → `ENABLE_REDIS=true` ve güçlü `REDIS_PASSWORD`, sonra `make deploy`.
-
-Test from Mac (Redis açıkken):
-```bash
-ssh -L 6379:127.0.0.1:6379 "$PI_USER@$PI_STATIC_IP"
-redis-cli -h 127.0.0.1 -a "$REDIS_PASSWORD" ping
-```
 
 ## CrowdSec
 

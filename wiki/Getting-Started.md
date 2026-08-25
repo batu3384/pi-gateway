@@ -50,7 +50,7 @@ If SSD drops, stack enters **degraded** (DNS on SD only). See [Troubleshooting](
 
 | Goal | Doc (repo) |
 |------|----------------|
-| Forgejo / Syncthing | `docs/FAZ2.md` |
+| Backup (Restic) | `docs/FAZ2.md` |
 | n8n / CrowdSec | `docs/FAZ3.md` |
 | NetAlertX | `docs/FAZ4.md` |
 | Env reference | `docs/ENV.md` |

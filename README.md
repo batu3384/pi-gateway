@@ -2,7 +2,7 @@
 
 Production DNS / home-lab gateway for **Raspberry Pi 4B**.
 
-AdGuard + Unbound DNS, Caddy reverse proxy, Forgejo, Syncthing, n8n, monitoring — deployed from a Mac with one pipeline.
+AdGuard + Unbound DNS, Caddy reverse proxy, n8n, monitoring — deployed from a Mac with one pipeline.
 
 ## Stack
 
@@ -14,10 +14,9 @@ AdGuard + Unbound DNS, Caddy reverse proxy, Forgejo, Syncthing, n8n, monitoring 
 | Dashboard | Homepage |
 | Monitoring | Uptime Kuma + host health timer |
 | Logs | Dozzle |
-| Git | Forgejo |
-| Sync / backup | Syncthing + Restic |
+| Backup | Restic |
 | Network inventory | NetAlertX |
-| Security | UFW, fail2ban, optional CrowdSec / Tailscale |
+| Security | UFW + CrowdSec (SSH) + Tailscale |
 
 ## Requirements
 

@@ -65,8 +65,8 @@ dns_degraded_allowed() {
 
 data_tree_dirs() {
   printf '%s\n' \
-    adguard/work uptime-kuma docker-volumes logs forgejo syncthing netalertx \
-    restic projects backups redis n8n crowdsec/config crowdsec/db dozzle .disk-probe
+    adguard/work uptime-kuma docker-volumes logs netalertx \
+    restic backups n8n crowdsec/config crowdsec/db dozzle .disk-probe
 }
 
 verify_symlink() {

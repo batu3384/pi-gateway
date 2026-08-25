@@ -52,8 +52,6 @@ def panel_block(ip: str, with_auth: bool, auth: str) -> str:
         path_proxy("p/status", "uptime-kuma:3001"),
         path_proxy("p/logs", "dozzle:8080"),
         path_proxy("p/dns", f"{upstream}:{agh_port}"),
-        path_proxy("p/git", "forgejo:3000"),
-        path_proxy("p/sync", "syncthing:8384"),
         path_proxy("p/n8n", "n8n:5678"),
         path_proxy("p/devices", f"{nax_host}:{nax_port}"),
         path_proxy("p/grafana", "grafana:3000"),

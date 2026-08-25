@@ -179,7 +179,3 @@ envsubst '${PI_STATIC_IP} ${LAN_PREFIX} ${LAN_GATEWAY} ${PI_INTERFACE} ${PI_IPV6
   > "$PROJECT_DIR/host/dhcpcd/pi-gateway.conf"
 
 log "Rendered configs for PI_STATIC_IP=$PI_STATIC_IP mode=${NETWORK_MODE:-router-dns}"
-
-if [[ -n "${TELEGRAM_BOT_TOKEN:-}" && -n "${TELEGRAM_CHAT_ID:-}" && -z "${WATCHTOWER_NOTIFICATION_URL:-}" ]]; then
-  log "Ipucu: Watchtower icin .env -> WATCHTOWER_NOTIFICATION_URL=telegram://BOT_TOKEN@telegram?chats=CHAT_ID"
-fi

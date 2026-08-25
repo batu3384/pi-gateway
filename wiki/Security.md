@@ -12,7 +12,7 @@ Summary of repo [`docs/SECURITY.md`](https://github.com/batu3384/pi-gateway/blob
 
 | Layer | Control |
 |-------|---------|
-| Network | UFW (LAN-scoped admin), fail2ban SSH |
+| Network | UFW (LAN-scoped admin), CrowdSec (SSH) |
 | Threat intel | CrowdSec + UFW bouncer (optional) |
 | Application | Per-service passwords; unified login option |
 | DNS | AdGuard filters + Unbound recursion |

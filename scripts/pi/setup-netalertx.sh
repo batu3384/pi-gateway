@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# NetAlertX: subnet tarama, webhook (n8n), plugin ayarlari
+# NetAlertX: subnet tarama, Hermes cron bildirimleri (webhook kapali)
 set -euo pipefail
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 _PG_ENV_LIB="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}/../lib/env-file.sh"
@@ -8,6 +8,10 @@ PG_SCRIPT_NAME="$(basename "$0")"
 source "${_PG_ENV_LIB:?}"
 read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 NETALERT_NOTIFY_VIA="${NETALERT_NOTIFY_VIA:-hermes}"
+if [[ "${NETALERT_NOTIFY_VIA}" != "hermes" ]]; then
+  log "HATA: NETALERT_NOTIFY_VIA=hermes gerekli (n8n yolu kaldirildi)"
+  exit 1
+fi
 NETALERTX_PORT="${NETALERTX_PORT:-20211}"
 NETALERTX_LISTEN_ADDR="${NETALERTX_LISTEN_ADDR:-172.17.0.1}"
 NETALERTX_PASSWORD="${NETALERTX_PASSWORD:-${AGH_ADMIN_PASSWORD:-}}"
@@ -67,12 +71,7 @@ scan_subnet() {
   printf '%s --interface=%s' "${LAN_SUBNET_CIDR}" "${PI_INTERFACE}"
 }
 webhook_url() {
-  if [[ "${NETALERT_NOTIFY_VIA}" == "hermes" ]]; then
-    printf ''
-    return 0
-  fi
-  local secret="${N8N_WEBHOOK_SECRET:-}"
-  printf 'http://127.0.0.1:%s/webhook/netalert-device-alert-%s' "$N8N_PORT" "$secret"
+  printf ''
 }
 wait_http() {
   local _
@@ -98,9 +97,7 @@ export AGH_ADMIN_USER AGH_ADMIN_PASSWORD ADGUARD_WEB_PORT NETALERT_NOTIFY_VIA
 SCAN_SUBNET="$(scan_subnet)"
 WEBHOOK_URL="$(webhook_url)"
 export NETALERT_WEBHOOK_RAW="$WEBHOOK_URL"
-if [[ "${NETALERT_NOTIFY_VIA}" == "hermes" ]]; then
-  log "NetAlertX webhook kapali (NETALERT_NOTIFY_VIA=hermes)"
-fi
+log "NetAlertX webhook kapali (NETALERT_NOTIFY_VIA=hermes)"
 export NETALERTX_PLUGINS='["ARPSCAN","DIGSCAN","NSLOOKUP","ICMP","WEBHOOK","NEWDEV","NTFPRCS","DBCLNP","CUSTPROP","SETPWD","SYNC","UI","MAINT","VNDRPDT","ADGUARDIMP","AVAHISCAN"]'
 export SCAN_SUBNET
 python3 <<'PY'
@@ -112,13 +109,10 @@ conf = Path(os.environ["CONF_FILE"])
 marker = Path(os.environ["MARKER"])
 subnet = os.environ["SCAN_SUBNET"]
 notify_via = os.environ.get("NETALERT_NOTIFY_VIA", "hermes")
-if notify_via == "hermes":
-    webhook = "''"
-    webhook_run = "'off'"
-else:
-    raw = os.environ.get("NETALERT_WEBHOOK_RAW", "")
-    webhook = f"'{raw}'" if raw else "''"
-    webhook_run = "'on_notification'"
+if notify_via != "hermes":
+    raise SystemExit("[netalertx-setup] HATA: NETALERT_NOTIFY_VIA=hermes gerekli")
+webhook = "''"
+webhook_run = "'off'"
 password = os.environ["NETALERTX_PASSWORD"]
 password_hash = __import__("hashlib").sha256(password.encode()).hexdigest()
 agh_user = os.environ.get("AGH_ADMIN_USER", "admin")
@@ -196,9 +190,7 @@ if [[ "$(cat "$MARKER" 2>/dev/null)" == "ok" ]]; then
   wait_http || true
 fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-bash "$SCRIPT_DIR/import-adguard-names-to-netalertx.sh" || log "WARN: AdGuard isim importu atlandi"
-bash "$SCRIPT_DIR/enrich-netalertx-names.sh"
-bash "$SCRIPT_DIR/sync-adguard-persistent-clients.sh" || log "WARN: AdGuard istemci senkronu atlandi"
+# Isim sync: yalniz ADGUARDIMP plugin (*/5). Timer/import/enrich/geri-sync yok — cift yazici.
 DB_DIR="${DATA_DIR}/db"
 DB_FILE="${DB_DIR}/app.db"
 _pi_u="${USER:-pi}"

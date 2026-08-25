@@ -3,8 +3,6 @@ services:
     image: klutchell/unbound@sha256:a3412dcc5cf5e98dfde226bca68154a80027aaca5c4ffd864fc89140a446ff57
     container_name: unbound
     restart: unless-stopped
-    labels:
-      autoheal: "true"
     volumes:
       - ../config/unbound/unbound.conf:/etc/unbound/custom.conf.d/pi-gateway.conf:ro
     ports:
@@ -22,8 +20,6 @@ services:
     container_name: adguard
     restart: unless-stopped
     network_mode: host
-    labels:
-      autoheal: "true"
     depends_on:
       unbound:
         condition: service_healthy
@@ -52,26 +48,11 @@ services:
       EVENTS: 1
       VERSION: 1
 
-  autoheal:
-    # 1.2.0 arm64 manifest (Pi 4 runtime).
-    image: willfarrell/autoheal@sha256:e5f5827d7120a50e15af145cdb44bd7eb3af7f12f3d46d7757ce452c5bb5383e
-    container_name: autoheal
-    restart: unless-stopped
-    profiles: ["autoheal"]
-    environment:
-      AUTOHEAL_CONTAINER_LABEL: autoheal
-      AUTOHEAL_INTERVAL: 30
-      AUTOHEAL_START_PERIOD: 120
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-
   caddy:
     image: caddy@sha256:b4e3952384eb9524a887633ce65c752dd7c71314d2c2acf98cd5c715aaa534f0
     container_name: caddy
     restart: unless-stopped
     profiles: ["caddy"]
-    labels:
-      autoheal: "true"
     ports:
       # Tailscale Serve 100.x:443 tutabilir — Caddy sadece LAN IP
       - "${PI_STATIC_IP:-127.0.0.1}:80:80"
@@ -106,8 +87,6 @@ services:
     image: ghcr.io/gethomepage/homepage@sha256:a0b71c8e757298d02560186bab9fbe3fc2d375c523a62cc1019177b37e48aa28
     container_name: homepage
     restart: unless-stopped
-    labels:
-      autoheal: "true"
     depends_on:
       gateway-state:
         condition: service_started
@@ -123,8 +102,6 @@ services:
     image: louislam/uptime-kuma@sha256:a8610b3b4c38077922ba51b036691e06887d7cefd91fe620fd3d6d23d03dc240
     container_name: uptime-kuma
     restart: unless-stopped
-    labels:
-      autoheal: "true"
     ports:
       - "127.0.0.1:3001:3001"
     volumes:
@@ -135,8 +112,6 @@ services:
     container_name: dozzle
     restart: unless-stopped
     profiles: ["dozzle"]
-    labels:
-      autoheal: "true"
     depends_on:
       - docker-socket-proxy
     ports:
@@ -149,74 +124,11 @@ services:
       DOZZLE_FILTER: "status=running"
       DOZZLE_AUTH_PROVIDER: simple
 
-  forgejo:
-    image: codeberg.org/forgejo/forgejo@sha256:3c34f11fe8b9983096eef3f8f25c2d2c21c4ae7504960cb203f0b075d1d8ed73
-    container_name: forgejo
-    restart: unless-stopped
-    profiles: ["forgejo"]
-    labels:
-      autoheal: "true"
-    environment:
-      USER_UID: ${FORGEJO_UID:-1000}
-      USER_GID: ${FORGEJO_GID:-1000}
-      FORGEJO__server__DOMAIN: ${FORGEJO_DOMAIN:-git.home}
-      FORGEJO__server__ROOT_URL: ${FORGEJO_ROOT_URL:-http://${FORGEJO_DOMAIN:-git.home}}/
-      FORGEJO__server__HTTP_PORT: 3000
-      FORGEJO__server__DISABLE_SSH: "true"
-    volumes:
-      - ../data/forgejo:/data
-    ports:
-      - "127.0.0.1:${FORGEJO_PORT:-3002}:3000"
-
-  syncthing:
-    image: syncthing/syncthing@sha256:4464f4161dd0251e20d46bb3aec83363db75d80cef1abdd5d5fd4054b04a004d
-    container_name: syncthing
-    restart: unless-stopped
-    profiles: ["syncthing"]
-    labels:
-      autoheal: "true"
-    environment:
-      PUID: ${SYNCTHING_UID:-1000}
-      PGID: ${SYNCTHING_GID:-1000}
-      STGUIADDRESS: 0.0.0.0:8384
-      STGUIUSER: ${SYNCTHING_GUI_USER:-}
-      STGUIPASSWORD: ${SYNCTHING_GUI_PASSWORD:-}
-    volumes:
-      - ../data/syncthing:/var/syncthing
-      - ../data/projects:/var/syncthing/Projects
-    ports:
-      - "127.0.0.1:${SYNCTHING_PORT:-8384}:8384"
-      # Sync: LAN IP (UFW kisitli); global bind WAN'a acik port birakir
-      - "${PI_STATIC_IP:-127.0.0.1}:22000:22000/tcp"
-      - "${PI_STATIC_IP:-127.0.0.1}:22000:22000/udp"
-
-  redis:
-    image: redis@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
-    container_name: redis
-    restart: unless-stopped
-    profiles: ["redis"]
-    labels:
-      autoheal: "true"
-    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-}"]
-    environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-    volumes:
-      - ../data/redis:/data
-    ports:
-      - "127.0.0.1:6379:6379"
-    healthcheck:
-      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$$REDIS_PASSWORD\" ping"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-
   n8n:
     image: docker.n8n.io/n8nio/n8n@sha256:60ad3a0ffd2490c4f0d021b95cb4ef856c4d31fb7fa6a6ffa60fd0f4ed1d89ab
     container_name: n8n
     restart: unless-stopped
     profiles: ["n8n"]
-    labels:
-      autoheal: "true"
     ports:
       - "127.0.0.1:${N8N_PORT:-5678}:5678"
     environment:
@@ -247,8 +159,6 @@ services:
       - NET_RAW
       - NET_ADMIN
       - NET_BIND_SERVICE
-    labels:
-      autoheal: "true"
     environment:
       PORT: ${NETALERTX_PORT:-20211}
       # Host network; docker0 — Caddy host.docker.internal (172.17.0.1) proxy
@@ -269,8 +179,6 @@ services:
     restart: unless-stopped
     network_mode: host
     profiles: ["crowdsec"]
-    labels:
-      autoheal: "true"
     environment:
       GID: "1000"
       COLLECTIONS: "crowdsecurity/linux crowdsecurity/sshd"
@@ -320,8 +228,6 @@ services:
     container_name: prometheus
     restart: unless-stopped
     profiles: ["monitoring"]
-    labels:
-      autoheal: "true"
     depends_on:
       node-exporter:
         condition: service_started
@@ -342,8 +248,6 @@ services:
     container_name: grafana
     restart: unless-stopped
     profiles: ["monitoring"]
-    labels:
-      autoheal: "true"
     depends_on:
       prometheus:
         condition: service_started
@@ -358,19 +262,6 @@ services:
       - ../data/grafana:/var/lib/grafana
     ports:
       - "127.0.0.1:${GRAFANA_PORT:-3030}:3000"
-
-  watchtower:
-    image: containrrr/watchtower@sha256:6dd50763bbd632a83cb154d5451700530d1e44200b268a4e9488fefdfcf2b038
-    container_name: watchtower
-    restart: unless-stopped
-    profiles: ["watchtower"]
-    environment:
-      WATCHTOWER_CLEANUP: "true"
-      WATCHTOWER_SCHEDULE: "0 4 * * 0"
-      WATCHTOWER_MONITOR_ONLY: "true"
-      WATCHTOWER_NOTIFICATION_URL: ${WATCHTOWER_NOTIFICATION_URL:-}
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
 
 volumes:
   caddy_data:

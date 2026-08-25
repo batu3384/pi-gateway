@@ -24,7 +24,7 @@
     {
       "action": "accept",
       "src": ["tag:owner-device"],
-      "dst": ["YOUR_TAILSCALE_LAN_SUBNET:53,80,443,22000"]
+      "dst": ["YOUR_TAILSCALE_LAN_SUBNET:53,80,443"]
     }
   ],
 

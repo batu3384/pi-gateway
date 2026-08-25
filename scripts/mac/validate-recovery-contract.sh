@@ -90,13 +90,17 @@ grep -q 'ssd-alive.sh' "$STACK_HEALTH" || die "stack-health ssd-alive source yok
 grep -q 'ssd_mount_healthy' "$STACK_HEALTH" || die "stack-health ssd_mount_healthy kullanmiyor"
 ok "stack-health ssd-alive entegrasyonu"
 
-grep -q 'PathExistsGone' "$PROJECT_DIR/host/systemd/pi-ssd-watch.path" \
-  || die "pi-ssd-watch.path PathExistsGone yok"
+grep -q 'PathChanged=' "$PROJECT_DIR/host/systemd/pi-ssd-watch.path" \
+  || die "pi-ssd-watch.path PathChanged yok"
+grep -qE 'PathExistsGone|DefaultInstance' "$PROJECT_DIR/host/systemd/pi-ssd-watch.path" \
+  && die "pi-ssd-watch.path gecersiz key (PathExistsGone/DefaultInstance)"
+grep -q 'SYSTEMD_WANTS.*pi-ssd-watch.service' "$PROJECT_DIR/host/udev/99-pi-gateway-jmicron.rules" \
+  || die "udev SYSTEMD_WANTS pi-ssd-watch yok"
 if grep -q 'ConditionPathExists=/dev/disk/by-label/pi-data' \
   "$PROJECT_DIR/host/systemd/pi-ssd-watch.service"; then
   die "pi-ssd-watch.service ConditionPathExists hâlâ var (disconnect olu)"
 fi
-ok "ssd-watch disconnect path"
+ok "ssd-watch disconnect path (udev+PathChanged)"
 
 grep -q 'ssd_mount_healthy\|Stale' "$PROJECT_DIR/scripts/pi/ssd-hotplug-handler.sh" \
   || die "hotplug stale/healthy yok"

@@ -2,7 +2,7 @@
 
 ## SSD dropped / degraded
 
-**Symptoms:** Forgejo/n8n down, Telegram “SSD Degraded”, `storage_degraded: 1`.
+**Symptoms:** n8n down, Telegram “SSD Degraded”, `storage_degraded: 1`.
 
 ```bash
 # On Pi
