@@ -57,6 +57,11 @@ phase_dns() {
   compose up -d unbound adguard
   wait_container_healthy unbound 40 || true
   wait_container_healthy adguard 90 || true
+  # Recreate rewrite list'i siler; wait-adguard boot=filtre, rewrite = apply.
+  if [[ -x "$SCRIPT_DIR/apply-adguard-rewrites.sh" ]]; then
+    REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/apply-adguard-rewrites.sh" \
+      || log "WARN: AdGuard rewrite apply basarisiz"
+  fi
   wait_dns_core || { log "HATA: DNS core hazir degil"; return 1; }
   log "DNS OK — ${DNS_WAIT_SEC}s bekleme"
   sleep "$DNS_WAIT_SEC"
