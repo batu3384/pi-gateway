@@ -43,6 +43,20 @@ grep -q 'dhcp-dns-offer.sh' "$PROJECT_DIR/Makefile" \
 
 grep -q 'doh.txt' "$PROJECT_DIR/config/adguard/filter-lists.json" \
   || die "HaGeZi DoH listesi filter-lists.json yok"
+grep -q 'filter_53' "$PROJECT_DIR/config/adguard/filter-lists.json" \
+  || die "AWAvenue filter_53 yok"
+grep -q 'native.lgwebos' "$PROJECT_DIR/config/adguard/filter-lists.json" \
+  || die "HaGeZi native.lgwebos yok"
+grep -q 'adblock/tif.txt' "$PROJECT_DIR/config/adguard/filter-lists.json" \
+  || die "HaGeZi TIF Full (tif.txt) aggressive profilde yok"
+grep -q 'tif.full.txt' "$PROJECT_DIR/config/adguard/filter-lists.json" \
+  && die "tif.full.txt yok (HaGeZi dosya adi tif.txt; jsDelivr 403)"
+grep -q 'filter_7.txt' "$PROJECT_DIR/config/adguard/filter-lists.json" \
+  || die "Smart TV HostlistsRegistry filter_7 yok"
+grep -q 'iptables REDIRECT' "$PROJECT_DIR/docs/DNS-BLOCKING.md" \
+  || die "DNS-BLOCKING Pi NAT anti-pattern yok"
+grep -F 'ponytail: AGH add/remove_url' "$PROJECT_DIR/scripts/pi/apply-adguard-filters.sh" >/dev/null \
+  || die "apply-adguard-filters AGH non-JSON POST govde"
 grep -q 'ensure-ipv6-ula' "$PROJECT_DIR/Makefile" \
   || die "Makefile ensure-ipv6-ula yok"
 grep -q 'setup-rdnss-ra' "$PROJECT_DIR/Makefile" \

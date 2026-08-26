@@ -8,17 +8,21 @@
       ["HaGeZi Apple Tracker", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_67.txt"],
       ["HaGeZi Windows/Office Tracker", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_63.txt"],
       ["HaGeZi Samsung Tracker", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_61.txt"],
-      ["HaGeZi Smart TV", "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/smarttv.txt"]
+      ["HaGeZi Smart TV", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_7.txt"],
+      ["AWAvenue Ads Rule", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_53.txt"],
+      ["HaGeZi LG webOS Tracker", "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/native.lgwebos.txt"]
     ],
     "aggressive": [
       ["HaGeZi Pro++", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_51.txt"],
-      ["HaGeZi TIF Full", "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/tif.full.txt"],
+      ["HaGeZi TIF Full", "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/tif.txt"],
       ["HaGeZi DoH/DoT Bypass", "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/doh.txt"],
       ["AdGuard DNS Popup Hosts", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_59.txt"],
       ["HaGeZi Apple Tracker", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_67.txt"],
       ["HaGeZi Windows/Office Tracker", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_63.txt"],
       ["HaGeZi Samsung Tracker", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_61.txt"],
-      ["HaGeZi Smart TV", "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/smarttv.txt"],
+      ["HaGeZi Smart TV", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_7.txt"],
+      ["AWAvenue Ads Rule", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_53.txt"],
+      ["HaGeZi LG webOS Tracker", "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/native.lgwebos.txt"],
       ["HaGeZi Fake", "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/fake.txt"]
     ]
   }

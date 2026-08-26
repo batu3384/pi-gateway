@@ -13,16 +13,21 @@ Result: Ads served from the same domain (YouTube `googlevideo.com`, some in-app 
 
 ## Current DNS stack
 
-Profile: `ADGUARD_FILTER_PROFILE=balanced` (default) or `aggressive` (TIF full + fake; more RAM).
+Profile: `ADGUARD_FILTER_PROFILE=balanced` (default, TIF Medium) or `aggressive` (TIF Full + Fake; more RAM). Repo default stays `balanced`. Live Pi can use `aggressive`.
+
+HaGeZi **TIF** (threat intel) ≠ **Multi Ultimate** (ad list). TIF levels: Mini / Medium / Full. Multi Ultimate replaces Pro++ and breaks META/Xbox — not used. Do not stack TIF Full + TIF Medium.
 
 1. **HaGeZi Pro++** — primary ad/tracker list (OISD and others already included)
-2. **HaGeZi TIF Medium** (balanced) or **TIF Full** (aggressive) — malware/phishing
-3. **AdGuard DNS Popup Hosts** — popup hosts
-4. **Apple / Windows / Samsung tracker** — device telemetry
-5. **HaGeZi Smart TV** — CTV / smart TV ad domains
-6. **User rules** — `config/adguard/user-rules.txt` (Google Ads, mobile SDKs, TR trackers, `$important`)
+2. **HaGeZi TIF Medium** (balanced) or **TIF Full** (`adblock/tif.txt`, aggressive; AGH ≥2GB RAM) — malware/phishing. `tif.full.txt` yok; jsDelivr o isimde 403 verir.
+3. **HaGeZi DoH/DoT Bypass** — known encrypted-DNS hosts
+4. **AdGuard DNS Popup Hosts** — popup hosts
+5. **Apple / Windows / Samsung tracker** — device telemetry
+6. **HaGeZi Smart TV** + **native.lgwebos** — CTV / LG webOS ad domains
+7. **AWAvenue Ads Rule** — Android advertising SDKs (DNS-level; not the AdGuard browser Mobile Ads filter)
+8. **User rules** — `config/adguard/user-rules.txt` (Google Ads, mobile SDKs, TR trackers, `$important`)
 
-OISD Big is intentionally omitted: duplicates Pro++; wastes Pi RAM.
+OISD Big and AdGuard DNS filter (`filter_1`) omitted: duplicate Pro++; waste Pi RAM.
+AdGuard browser Mobile Ads (`filters.adtidy.org/.../11.txt`) is CSS/path — skip for AdGuard Home.
 
 Auto-heal: `ADGUARD_AUTO_HEAL=true` (health-check drift → `ensure-adguard-blocking.sh --fix-light`).
 Bypass check: `ADGUARD_BYPASS_CHECK=strict` on `make diagnose-dns` (LAN clients must appear in query log).
@@ -48,9 +53,17 @@ Modem panelinde DNS ayari **tek basina tum cihazlari otomatik Pi'ye baglamaz**.
 
 **DoH kilidi:** HaGeZi Encrypted DNS Bypass listesi (`adblock/doh.txt`) — bilinen DoH/DoT hostlari engeller. Ozel/unknown DoH host yine kacabilir.
 
-**Modem ikincil DNS:** Bazi ZTE modemler DNS2 bos olsa bile DHCP OFFER'a kendi IP'sini ekler. Dis DNS (1.1.1.1) degildir; Pi ayaktayken kullanilmaz. Pi dusunce fallback bypass riski kalir — tam kilit icin modem force-DNS veya `adguard-dhcp`.
+**Modem ikincil DNS:** Bazı ZTE modemler DNS2 boş olsa bile DHCP OFFER'a kendi IP'sini ekler. Dış DNS (1.1.1.1) değildir; Pi ayaktayken kullanılmaz. Pi düşünce fallback bypass riski kalır — tam kilit için modem Force DNS veya `adguard-dhcp`.
 
-**Kontrol:** `make audit-dns` — ARP'taki her cihaz query log'da gorunmeli.
+**Force DNS (modem NAT 53):** Hardcoded `8.8.8.8` (LG TV vb.) Pi'ye uğramaz — Pi LAN gateway değil. Intercept **modemde**: Force DNS / DNS hijack / NAT 53 → `PI_STATIC_IP`. Menü adı modele göre değişir.
+
+| Yap | Yapma |
+|-----|-------|
+| Modem LAN DHCP DNS1 = Pi, DNS2 boş | WAN / Internet DNS = Pi IP |
+| Modem Force DNS → Pi (varsa) | Pi'de `iptables REDIRECT :53` — LAN trafiği Pi'ye gelmez, işe yaramaz |
+| Pi UFW: :53 yalnız LAN (`setup-firewall.sh`, `deny routed`) | Pi WAN :53'ü Unbound çıkışı için kapatmak — recursive DNS ölür |
+
+**Kontrol:** `make audit-dns` — ARP'taki her cihaz query log'da görünmeli. Yoksa liste değil, bypass (eski lease, Private DNS, iCloud Relay, IPv6 RDNSS).
 
 ### Neden bazi cihazlar bypass eder?
 
@@ -65,9 +78,9 @@ Modem panelinde DNS ayari **tek basina tum cihazlari otomatik Pi'ye baglamaz**.
 
 `NETWORK_MODE=adguard-dhcp` — Pi DHCP dagitir, her lease Pi DNS alir. Modem DHCP kapatilir. Bkz. `docs/ADGUARD-DHCP.md` (planli bakim penceresi).
 
-## Browser / YouTube
+## Browser / YouTube / SSAI
 
-If DNS is not enough, add on the device:
+DNS kills third-party ad **domains** (game/app SDKs, `doubleclick.net`). Same-origin / SSAI ads stay: YouTube `googlevideo.com`, Instagram in-feed, Netflix/Prime baked-in ads. iSponsorBlockTV is out of scope (TV pairing). Device-side only if you choose to:
 
 - Safari: AdGuard for Safari / uBlock Origin Lite
 - Chrome/Firefox: uBlock Origin

@@ -58,26 +58,38 @@ for fname in ("user-rules.txt", "user-rules.local.txt"):
             rules.append(line)
 
 def api(path, method="GET", payload=None):
-    cmd = ["curl", "-fsS", "-b", cookie, "-X", method, f"{base}{path}"]
+    cmd = ["curl", "-fsS", "--max-time", "300", "-b", cookie, "-X", method, f"{base}{path}"]
     if payload is not None:
         cmd += ["-H", "Content-Type: application/json", "-d", json.dumps(payload)]
-    out = subprocess.check_output(cmd, text=True)
-    return json.loads(out) if out.strip() else {}
+    out = subprocess.check_output(cmd, text=True).strip()
+    # ponytail: AGH add/remove_url often 200 + empty/"OK", not JSON
+    if not out or out[0] not in "{[":
+        return {}
+    return json.loads(out)
 
 status = api("/control/filtering/status")
 current = {f.get("url"): f for f in status.get("filters", []) if f.get("url")}
 removed = added = 0
+failed = []
 for url in sorted(set(current) - desired_urls):
-    api("/control/filtering/remove_url", "POST", {"url": url})
-    print(f"[adguard-filters] kaldirildi: {current[url].get('name', url)}")
-    removed += 1
+    try:
+        api("/control/filtering/remove_url", "POST", {"url": url})
+        print(f"[adguard-filters] kaldirildi: {current[url].get('name', url)}")
+        removed += 1
+    except subprocess.CalledProcessError:
+        print(f"[adguard-filters] HATA kaldirilamadi: {url}", file=sys.stderr)
+        failed.append(url)
 for name, url in desired:
     if url in current:
         print(f"[adguard-filters] mevcut: {name}")
         continue
-    api("/control/filtering/add_url", "POST", {"name": name, "url": url, "whitelist": False})
-    print(f"[adguard-filters] eklendi: {name}")
-    added += 1
+    try:
+        api("/control/filtering/add_url", "POST", {"name": name, "url": url, "whitelist": False})
+        print(f"[adguard-filters] eklendi: {name}")
+        added += 1
+    except subprocess.CalledProcessError:
+        print(f"[adguard-filters] HATA eklenemedi: {name}", file=sys.stderr)
+        failed.append(name)
 
 rules_digest = hashlib.sha256("\n".join(rules).encode()).hexdigest()
 prev_digest = ""
@@ -110,6 +122,9 @@ if added or removed:
     print("[adguard-filters] filtreler yenilendi")
 else:
     print("[adguard-filters] filtre seti degismedi")
+if failed:
+    print(f"[adguard-filters] HATA: {len(failed)} islem basarisiz", file=sys.stderr)
+    sys.exit(1)
 PY
 if [[ -x "$SCRIPT_DIR/apply-adguard-rewrites.sh" ]]; then
   bash "$SCRIPT_DIR/apply-adguard-rewrites.sh"

@@ -17,6 +17,7 @@
 | `ADGUARD_MIN_FILTER_RULES` | 100000 |
 | `ADGUARD_MIN_REWRITES` | 8 |
 | `ADGUARD_BLOCKED_TTL` | 60 |
+| `ADGUARD_FILTER_PROFILE` | `balanced` (TIF Medium). `aggressive` = TIF Full + Fake; AGH ≥2GB RAM. Not Multi Ultimate. See `docs/DNS-BLOCKING.md`. |
 
 ## Security
 
@@ -32,7 +33,8 @@
 | `HERMES_TELEGRAM_GATEWAY` | `true` = Hermes owns Telegram inbox (`getUpdates`); panel poller off. Allowlist: `TELEGRAM_ALLOWED_USERS` in `~/.hermes/.env` |
 | `HERMES_TELEGRAM_STREAMING` | `false`: Telegram `editMessageText` akıtma kapalı (Bot API flood). GLM API stream = `HERMES_STREAMING` |
 | `HERMES_TELEGRAM_TOOL_PROGRESS` | `off`: “terminale bakıyorum” bubble yok. Patch YAML’e `false` yazar (`off` string restart döngüsü). CLI `display.tool_progress` ayrı |
-| `HERMES_MAX_WEB_SEARCHES` | `4` (bülten “en fazla 4” ile aynı tavan) |
+| `HERMES_MAX_WEB_SEARCHES` | `6` (19:00/23:00 bülten tavanı; sabah 3 kullanır) |
+| `HERMES_MAX_WEB_EXTRACTS` | `8` |
 | `HERMES_STALE_TIMEOUT_SEC` | `600`: `providers.zai.stale_timeout_seconds` (model id `glm-5.3` config set YASAK — walker `glm-5`/`3` yazar) |
 | Notify state | `/var/lib/pi-gateway/notify` (reboot-safe). Boot: `pi-gateway-boot-notify.service` + `last-alive` |
 | `HERMES_COMPRESS_TOKEN_CAP` | `96000`: compact/prune tavanı (GLM-5.3 %50≈500k hiç ateşlenmez). Akşam bülten ~71k sığar; sohbet yine sınırlı |
