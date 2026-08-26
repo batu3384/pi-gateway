@@ -412,8 +412,17 @@ grep -q 'notify_slo_backup' "$PROJECT_DIR/scripts/lib/notify.sh" \
   || die "notify slo backup yok"
 grep -q 'health_is_dns_only_fail' "$PROJECT_DIR/scripts/pi/health-check.sh" \
   || die "health dns-only fail ayrimi yok"
-[[ -f "$PROJECT_DIR/scripts/pi/test-notify-transitions.sh" ]] \
-  || die "test-notify-transitions.sh yok"
+grep -q 'pi-gateway-boot-notify.service' "$PROJECT_DIR/scripts/pi/bootstrap.sh" \
+  || die "bootstrap boot-notify yok"
+grep -q 'boot-notify.sh' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" \
+  || die "privileged boot-notify yok"
+grep -q 'NOTIFY_STATE_DIR:-/var/lib/pi-gateway/notify' "$PROJECT_DIR/scripts/lib/notify.sh" \
+  || die "notify state kalici degil"
+grep -q 'notify_touch_alive' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check last-alive yok"
+[[ -f "$PROJECT_DIR/host/systemd/pi-gateway-boot-notify.service" ]] \
+  || die "boot-notify unit yok"
+ok "boot lifecycle notify"
 grep -q 'config/tailscale/acl.hujson' "$PROJECT_DIR/.gitignore" \
   || die "acl.hujson gitignore yok"
 grep -q 'TAILSCALE_ACL_OWNER' "$PROJECT_DIR/.env.example" \

@@ -114,6 +114,7 @@ ensure_data_symlink() {
   log "WARN: data symlink onarimi basarisiz"
   return 1
 }
+RECOVER_DID_WORK=0
 enter_degraded_mode() {
   log "SSD yok — degraded mod (core-dns: Unbound+AdGuard SD)"
   ensure_runtime_dir
@@ -127,6 +128,7 @@ enter_degraded_mode() {
   # shellcheck source=../lib/notify.sh
   source "$SCRIPT_DIR/../lib/notify.sh"
   notify_ssd_degraded "$(hostname -s)" "SSD mount yok — core DNS SD uzerinde"
+  RECOVER_DID_WORK=1
 }
 run_compose_recover() {
   local mode="${1:-full}"
@@ -135,6 +137,13 @@ run_compose_recover() {
   else
     run_compose_up "$REMOTE_DIR" "$PI_GATEWAY_USER"
   fi
+  RECOVER_DID_WORK=1
+}
+_notify_stack_ok() {
+  [[ "${RECOVER_DID_WORK:-0}" -eq 1 ]] || return 0
+  # shellcheck source=../lib/notify.sh
+  source "$SCRIPT_DIR/../lib/notify.sh"
+  notify_stack_recovered "$(hostname -s)" "${1:-stack recover OK}"
 }
 main() {
   if ! ensure_root_rw; then
@@ -221,18 +230,21 @@ main() {
     clear_storage_degraded || log "WARN: degraded flag temizlenemedi"
     log "OK stack ayakta (adguard, unbound, caddy, gateway)"
     apply_adguard_rewrites_best_effort "$REMOTE_DIR"
+    _notify_stack_ok "adguard/unbound/caddy/gateway"
     recover_lock_release
     exit 0
   fi
   if storage_degraded && stack_dns_core_ok && root_rw_ok; then
     log "OK degraded DNS core ayakta (gateway/caddy eksik olabilir)"
     apply_adguard_rewrites_best_effort "$REMOTE_DIR"
+    _notify_stack_ok "degraded DNS core"
     recover_lock_release
     exit 0
   fi
   if ! storage_restore_pending && stack_fully_healthy && root_rw_ok && docker_ssd_root_ok; then
     log "OK stack_fully_healthy"
     apply_adguard_rewrites_best_effort "$REMOTE_DIR"
+    _notify_stack_ok "stack_fully_healthy"
     recover_lock_release
     exit 0
   fi

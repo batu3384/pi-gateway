@@ -2,11 +2,15 @@
 # Bildirim yardımcıları (Telegram). health-check, backup, systemd tarafından kullanılır.
 set -euo pipefail
 
-NOTIFY_STATE_DIR="${NOTIFY_STATE_DIR:-/run/pi-gateway/notify}"
+# Kalıcı — /run reboot'ta silinir, recover bildirimi kaybolurdu.
+NOTIFY_STATE_DIR="${NOTIFY_STATE_DIR:-/var/lib/pi-gateway/notify}"
+NOTIFY_LAST_ALIVE_FILE="${NOTIFY_LAST_ALIVE_FILE:-/var/lib/pi-gateway/last-alive}"
 NOTIFY_COOLDOWN_SEC="${NOTIFY_COOLDOWN_SEC:-300}"
 NOTIFY_REPEAT_SEC="${NOTIFY_REPEAT_SEC:-3600}"
 NOTIFY_SLO_REPEAT_SEC="${NOTIFY_SLO_REPEAT_SEC:-86400}"
 NOTIFY_DISK_REPEAT_SEC="${NOTIFY_DISK_REPEAT_SEC:-86400}"
+# Boot notify: last-alive'dan bu kadar kısaysa atla (timer yarışı)
+NOTIFY_BOOT_MIN_DOWN_SEC="${NOTIFY_BOOT_MIN_DOWN_SEC:-90}"
 
 LAN_DOMAIN="${LAN_DOMAIN:-home}"
 
@@ -52,9 +56,41 @@ notify_ensure_dir() {
   if [[ "$(id -u)" -eq 0 ]]; then
     install -d -m 0775 -o "$owner" -g "$owner" "$NOTIFY_STATE_DIR" 2>/dev/null \
       || mkdir -p "$NOTIFY_STATE_DIR"
+    install -d -m 0775 -o "$owner" -g "$owner" "$(dirname "$NOTIFY_LAST_ALIVE_FILE")" 2>/dev/null \
+      || mkdir -p "$(dirname "$NOTIFY_LAST_ALIVE_FILE")"
   else
     mkdir -p "$NOTIFY_STATE_DIR" 2>/dev/null || true
+    mkdir -p "$(dirname "$NOTIFY_LAST_ALIVE_FILE")" 2>/dev/null || true
   fi
+}
+
+# Health timer her tick — reboot downtime hesabı için.
+notify_touch_alive() {
+  local now
+  notify_ensure_dir
+  now="$(date +%s)"
+  echo "$now" > "$NOTIFY_LAST_ALIVE_FILE" 2>/dev/null || true
+}
+
+notify_boot_up() {
+  local host="$1"
+  local down_sec="${2:-0}"
+  local mins body detail
+  mins=$(( (down_sec + 59) / 60 ))
+  if (( down_sec <= 0 )); then
+    detail="last-alive yok (ilk kurulum veya stamp silinmiş)."
+  else
+    detail="Kapalı / ulaşılamaz süre ~${mins} dk (${down_sec}s)."
+  fi
+  body="$(notify_html_alert "$host" \
+    "Pi açıldı — stack ayağa kalkıyor." \
+    "$detail" \
+    "DNS 1–3 dk sürebilir. Panel: $(notify_escape_html "$(panel_url gateway)")" \
+    "Boot lifecycle — oneshot.")"
+  notify_ensure_dir
+  # Her boot ayrı olay: önceki state fail gibi (ok→ok susturulmasın).
+  echo fail > "${NOTIFY_STATE_DIR}/boot-lifecycle.state" 2>/dev/null || true
+  notify_send_with_transition "boot-lifecycle" "ok" "✅ Pi Gateway · Açıldı" "$body" "HTML"
 }
 
 notify_repeat_sec_for() {
@@ -368,14 +404,17 @@ notify_sd_recovered() {
 notify_stack_recovered() {
   local host="$1"
   local details="$2"
-  local gateway body
+  local gateway body esc_gw
   gateway="$(panel_url gateway)"
   esc_gw="$(notify_escape_html "$gateway")"
   body="$(notify_html_alert "$host" \
     "Stack otomatik kurtarma tamamlandı." \
-    "$details" \
+    "$(notify_escape_html "$details")" \
     "Panel: ${esc_gw}" \
-    "Saatte en fazla bir özet.")"
+    "Edge-trigger: yalnız gerçek recover sonrası.")"
+  notify_ensure_dir
+  # Recover her zaman "ok" — önceki state fail gibi görünsün ki peek açılsın.
+  echo fail > "${NOTIFY_STATE_DIR}/stack-recovered.state" 2>/dev/null || true
   notify_send_with_transition "stack-recovered" "ok" "✅ Pi Gateway · Stack" "$body" "HTML"
 }
 

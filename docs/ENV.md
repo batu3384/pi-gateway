@@ -34,6 +34,7 @@
 | `HERMES_TELEGRAM_TOOL_PROGRESS` | `off`: “terminale bakıyorum” bubble yok. Patch YAML’e `false` yazar (`off` string restart döngüsü). CLI `display.tool_progress` ayrı |
 | `HERMES_MAX_WEB_SEARCHES` | `4` (bülten “en fazla 4” ile aynı tavan) |
 | `HERMES_STALE_TIMEOUT_SEC` | `600`: `providers.zai.stale_timeout_seconds` (model id `glm-5.3` config set YASAK — walker `glm-5`/`3` yazar) |
+| Notify state | `/var/lib/pi-gateway/notify` (reboot-safe). Boot: `pi-gateway-boot-notify.service` + `last-alive` |
 | `HERMES_COMPRESS_TOKEN_CAP` | `96000`: compact/prune tavanı (GLM-5.3 %50≈500k hiç ateşlenmez). Akşam bülten ~71k sığar; sohbet yine sınırlı |
 | `HERMES_SESSION_RESET_MODE` | `both`: Telegram 04:00 + 12s idle reset (cron ayrı). Unutulmuş process 2s sonra kilitlemez (`HERMES_SESSION_BG_MAX_AGE_H`) |
 | `CROWDSEC_BOUNCER_KEY` | Written automatically on first setup |

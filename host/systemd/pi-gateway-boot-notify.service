@@ -1,0 +1,17 @@
+[Unit]
+Description=Pi Gateway boot lifecycle Telegram notify
+Documentation=file:///home/PI_USER/pi-gateway/docs/OPERATIONS.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=PI_USER
+Group=PI_USER
+Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
+# Network hazır; AdGuard henüz yüklenmemiş olabilir — outbox Bot API yeter.
+ExecStart=/usr/local/lib/pi-gateway/scripts/pi/boot-notify.sh
+Nice=5
+
+[Install]
+WantedBy=multi-user.target

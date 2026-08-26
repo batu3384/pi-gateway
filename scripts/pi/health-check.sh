@@ -395,6 +395,8 @@ fi
 if [[ -x "$SCRIPT_DIR/push-slo-heartbeat.sh" ]]; then
   REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/push-slo-heartbeat.sh" >/dev/null 2>&1 || true
 fi
+# Boot downtime hesabı — her tick (fail olsa da canlılık)
+notify_touch_alive || true
 if (( exit_code != 0 )); then
   mkdir -p /run/pi-gateway 2>/dev/null || true
   {

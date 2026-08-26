@@ -24,6 +24,7 @@ SCRIPTS=(
   scripts/lib/ssd-alive.sh
   scripts/lib/compose-profiles.sh
   scripts/lib/notify.sh
+  scripts/pi/boot-notify.sh
   scripts/lib/bulletin-slo.py
   scripts/lib/hermes-token-slo.py
   scripts/lib/hermes-session-hygiene.py

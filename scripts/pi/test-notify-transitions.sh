@@ -35,5 +35,15 @@ NOTIFY_REPEAT_SEC=0
 notify_transition_peek "t" "fail" || fail "repeat fail peek"
 ok "repeat fail"
 
+# Default path kalici olmali (/run reboot'ta silinir)
+grep -q '/var/lib/pi-gateway/notify' "$SCRIPT_DIR/../lib/notify.sh" \
+  || fail "NOTIFY_STATE_DIR kalici path degil"
+grep -q 'notify_touch_alive' "$SCRIPT_DIR/../lib/notify.sh" || fail "notify_touch_alive yok"
+grep -q 'notify_boot_up' "$SCRIPT_DIR/../lib/notify.sh" || fail "notify_boot_up yok"
+[[ -f "$SCRIPT_DIR/boot-notify.sh" ]] || fail "boot-notify.sh yok"
+grep -q '_notify_stack_ok\|notify_stack_recovered' "$SCRIPT_DIR/recover-readonly-root.sh" \
+  || fail "recover-readonly stack notify yok"
+ok "boot+persist+stack recover wiring"
+
 rm -rf "$NOTIFY_STATE_DIR"
 ok "tum transition testleri gecti"
