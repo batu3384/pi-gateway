@@ -27,7 +27,7 @@ Full walkthrough: repo [`INSTALL.md`](https://github.com/batu3384/pi-gateway/blo
 
 ## After install
 
-1. **Router DNS** — point DHCP DNS to Pi static IP (`PI_STATIC_IP` in `.env`).
+1. **Router DNS1** — Pi static IP (`PI_STATIC_IP`). ZTE DNS2=modem often still in OFFER (ads on LAN `:53`). IP filter FORWARD — dest `.1:53` drop INPUT resolver’ı kesmez. Mac: `make mac-dns` (yalnız ev LAN). Bu ZTE’de `adguard-dhcp`+relay DISCOVER yutuyor — modem DHCP açık kalsın. Repo: `docs/DNS-BLOCKING.md`.
 2. **Panels** — `https://gateway.home`, `https://dns.home`, `https://status.home` (TLS default).
 3. **Trust CA on Mac** — `make trust-ca` if browser warns on mkcert.
 4. **Remote** — optional Tailscale: `docs/TAILSCALE.md` in repo.

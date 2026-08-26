@@ -91,6 +91,36 @@ if [[ -f "$PROJECT_DIR/.env" ]]; then
     ok "PI_STATIC_IP=${PI_STATIC_IP}"
   fi
 
+  case "${ROUTER_DNS_SECONDARY:-}" in
+    1.1.1.1|1.0.0.1|8.8.8.8|8.8.4.4|9.9.9.9)
+      warn "ROUTER_DNS_SECONDARY=${ROUTER_DNS_SECONDARY} public — WAN :53 drop timeout. Bos veya LAN_GATEWAY. make mac-dns ezer."
+      ;;
+  esac
+  if [[ "${MAC_DNS_GATEWAY_FALLBACK:-false}" == "true" ]]; then
+    warn "MAC_DNS_GATEWAY_FALLBACK=true — Mac DNS2 modem, LAN :53 reklam kacirir. Kilit: false."
+  fi
+
+  if [[ "$(uname)" == Darwin ]]; then
+    _eth_ip="$(networksetup -getinfo Ethernet 2>/dev/null | awk -F': ' '/^IP address:/{print $2; exit}')"
+    _eth_dns="$(networksetup -getdnsservers Ethernet 2>/dev/null || true)"
+    _lan_pfx="${PI_STATIC_IP%.*}."
+    # 192.168.1.1 ⊂ 192.168.1.112 — satir eslesmesi; *LAN_GATEWAY* false WARN.
+    if [[ -n "${PI_STATIC_IP:-}" && -n "$_eth_ip" && "$_eth_ip" != "none" && "$_eth_ip" == "$_lan_pfx"* ]]; then
+      if [[ "$_eth_dns" == *"aren't any DNS"* ]] \
+        || { [[ -n "${LAN_GATEWAY:-}" ]] && printf '%s\n' "$_eth_dns" | grep -Fxq "$LAN_GATEWAY"; }; then
+        warn "Ethernet LAN ($_eth_ip) DHCP/modem DNS — make mac-dns"
+      elif printf '%s\n' "$_eth_dns" | grep -Fxq "$PI_STATIC_IP"; then
+        ok "Ethernet DNS Pi"
+      fi
+    fi
+    if command -v tailscale >/dev/null && tailscale status >/dev/null 2>&1; then
+      if tailscale dns status 2>/dev/null | grep -q 'Tailscale DNS: enabled'; then
+        warn "Tailscale DNS enabled — fallback sistem NS (fe80/.1). make mac-dns Pi yazar; MagicDNS 100.x ayni."
+      fi
+    fi
+    unset _eth_ip _eth_dns _lan_pfx
+  fi
+
   if [[ -z "${PI_USER:-}" ]]; then
     warn "PI_USER empty — default is pi"
   else

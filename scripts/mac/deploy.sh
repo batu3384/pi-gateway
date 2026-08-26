@@ -158,7 +158,7 @@ else
     ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" \
       "REMOTE_DIR='$REMOTE_DIR' bash '$REMOTE_DIR/scripts/pi/canary-compose-update.sh'"
   else
-    ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" "cd '$REMOTE_DIR/compose' && docker compose --env-file ../.env $PROFILE_ARGS pull && docker compose --env-file ../.env $PROFILE_ARGS up -d --remove-orphans"
+    ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" "cd '$REMOTE_DIR/compose' && docker compose --env-file ../.env $PROFILE_ARGS pull && docker compose --env-file ../.env $PROFILE_ARGS up -d --remove-orphans && docker compose --env-file ../.env $PROFILE_ARGS up -d --force-recreate unbound"
   fi
 fi
 sleep 12

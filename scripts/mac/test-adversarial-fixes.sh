@@ -292,6 +292,7 @@ ok "W10 smoke placeholder fail"
 
 # W2: NetAlertX GraphQL UFW
 grep -q 'GRAPHQL\|20214\|NETALERTX_GRAPHQL' "$firewall" || die "W2: GraphQL UFW yok"
+grep -q 'pi-gateway dhcp' "$firewall" || die "W2: adguard-dhcp UFW UDP/67 yok"
 ok "W2 netalert graphql ufw"
 
 # W4: privileged hash verify at runtime

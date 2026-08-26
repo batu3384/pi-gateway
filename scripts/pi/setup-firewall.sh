@@ -110,6 +110,12 @@ setup_ufw() {
   fi
   sudo ufw allow from fe80::/10 to any port 53 proto udp comment 'pi-gateway dns6'
   sudo ufw allow from fe80::/10 to any port 53 proto tcp comment 'pi-gateway dns6'
+  # DHCP DISCOVER 0.0.0.0:68 → :67 broadcast; from LAN_SUBNET eşleşmez
+  delete_ufw_rules_matching 'pi-gateway dhcp'
+  if [[ "${NETWORK_MODE:-router-dns}" == "adguard-dhcp" ]]; then
+    sudo ufw allow in on "${PI_INTERFACE:-eth0}" proto udp to any port 67 comment 'pi-gateway dhcp'
+    log "DHCP UDP/67 ${PI_INTERFACE:-eth0} (adguard-dhcp)"
+  fi
   if [[ "$UFW_ADMIN_EXPOSURE" == "caddy-only" ]]; then
     log "Admin modu: caddy-only (paneller yalnizca *.home / Tailscale uzerinden 80/443)"
     for port in 80 443; do

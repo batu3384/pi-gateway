@@ -25,11 +25,17 @@ heal_full() {
   REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/configure-adguard.sh"
 }
 
+# health-check --fix-light: DNS zaten kirik; diagnose (nmap/audit) 30s+ ve .113 false FAIL.
+if [[ "$FIX_LIGHT" == "true" ]]; then
+  heal_light
+  exit $?
+fi
+
 if run_diagnose; then
   exit 0
 fi
 
-if [[ "$FIX" != "true" && "$FIX_LIGHT" != "true" ]]; then
+if [[ "$FIX" != "true" ]]; then
   echo "[ensure-adguard] drift var — onarmak icin: $0 --fix-light veya --fix" >&2
   exit 1
 fi
@@ -37,11 +43,6 @@ fi
 heal_light
 if run_diagnose; then
   exit 0
-fi
-
-if [[ "$FIX_LIGHT" == "true" ]]; then
-  echo "[ensure-adguard] hedefli onarim yetersiz" >&2
-  exit 1
 fi
 
 heal_full

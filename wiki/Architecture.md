@@ -13,17 +13,16 @@ Single-node home DNS + dev server on Raspberry Pi 4B. Infrastructure-as-code: re
 ## Traffic flow
 
 ```
-Client DNS query
+Client DHCP (modem)
+  DNS1=Pi .112 | DNS2=.1 (ZTE inject) | IPv6 RDNSS fe80::1
+       │                │
+       ▼                ▼
+ AdGuard :53      Modem INPUT :53 (aynı L2 — Pi gormez)
        │
-       ▼
- AdGuard Home (:53, host network)
-       │ blocklists + rewrites
-       ▼
- Unbound (:5335, recursive)
-       │
-       ▼
- Internet
+ Unbound :5335 DoT :853  (WAN dest:53 drop)
 ```
+
+Pi gateway değil. Kutu/elle DNS yoksa tavan: availability-first, block best-effort. Detay: repo `docs/ARCHITECTURE.md`.
 
 HTTP(S) panels: **Caddy** terminates TLS for `*.home` → Docker services.
 

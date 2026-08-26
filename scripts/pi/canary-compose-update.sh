@@ -54,7 +54,9 @@ pull_if() {
 phase_dns() {
   log "phase 1/3: DNS (unbound + adguard)"
   pull_if unbound adguard
-  compose up -d unbound adguard
+  # bind-mount unbound.conf process reload etmez — DoT + modem :53 drop icin recreate sart
+  compose up -d --force-recreate unbound
+  compose up -d adguard
   wait_container_healthy unbound 40 || true
   wait_container_healthy adguard 90 || true
   # Recreate rewrite list'i siler; wait-adguard boot=filtre, rewrite = apply.

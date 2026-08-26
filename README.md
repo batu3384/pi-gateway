@@ -9,7 +9,7 @@ AdGuard + Unbound DNS, Caddy reverse proxy, n8n, monitoring — deployed from a 
 | Layer | Component |
 |-------|-----------|
 | DNS filter | AdGuard Home |
-| Recursive DNS | Unbound |
+| DNS resolver | Unbound (DoT :853) |
 | Reverse proxy | Caddy (`*.home`) |
 | Dashboard | Homepage |
 | Monitoring | Uptime Kuma + host health timer |
@@ -38,7 +38,7 @@ make backup-cron   # offsite SLA (3-2-1)
 make status
 ```
 
-After install (router-dns mode): set the router DHCP DNS server to the Pi static IP once.
+After install (router-dns): set router **DHCP DNS1** to the Pi static IP. ZTE H3600P still injects DNS2=`192.168.1.1` (modem **INPUT** `:53`, ads leak). IP filter is FORWARD — dest `.1:53` drop does **not** stop the resolver. Mac: `make mac-dns` only on home LAN (Pi + ULA; hotspot'a yazmaz). LAN-wide IPv4 lock: `NETWORK_MODE=adguard-dhcp` — this ZTE relay swallows DISCOVER; see [docs/ADGUARD-DHCP.md](docs/ADGUARD-DHCP.md).
 
 Full walkthrough: **[INSTALL.md](INSTALL.md)**
 

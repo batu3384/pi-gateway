@@ -2,11 +2,9 @@
 # macOS: *.home sorgularini Pi DNS'e yonlendir
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-_PG_ENV_LIB="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}/../lib/env-file.sh"
-PG_SCRIPT_NAME="$(basename "$0")"
-# shellcheck source=../lib/env-file.sh
-source "${_PG_ENV_LIB:?}"
-read_project_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
+# shellcheck source=../lib/common.sh
+source "$SCRIPT_DIR/../lib/common.sh"
+load_env
 PI_DNS="${PI_STATIC_IP:-}"
 RESOLVER_DIR="/etc/resolver"
 RESOLVER_FILE="${RESOLVER_DIR}/home"
@@ -28,8 +26,8 @@ else
     }
   fi
 fi
-sudo dscacheutil -flushcache
-sudo killall -HUP mDNSResponder 2>/dev/null || true
+sudo -n dscacheutil -flushcache 2>/dev/null || true
+sudo -n killall -HUP mDNSResponder 2>/dev/null || true
 log "Test: dig gateway.home +short"
 result="$(dig +time=3 +tries=1 gateway.home +short 2>/dev/null | head -1 || true)"
 if [[ "$result" == "$PI_DNS" ]]; then

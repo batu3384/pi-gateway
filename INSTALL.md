@@ -45,11 +45,11 @@ make install   # runs doctor → discover → render → validate → deploy
 
 ### router-dns mode (default)
 
-Router admin → DHCP / DNS → primary DNS = Pi static IP (leave secondary empty if possible).
+Router admin → DHCP DNS1 = Pi static IP. ZTE H3600P still injects DNS2=gateway (LAN `:53` ads; IP filter is FORWARD). Mac: `make mac-dns` (LAN only; hotspot’a yazmaz). See [docs/DNS-BLOCKING.md](docs/DNS-BLOCKING.md).
 
-### adguard-dhcp mode (full automation)
+### adguard-dhcp mode
 
-In `.env`: `NETWORK_MODE=adguard-dhcp`. Disable DHCP on the router so AdGuard serves DNS to all clients.
+Do **not** use on ZTE H3600P — DHCP relay swallows LAN DISCOVER, house loses IP. Other routers only: modem DHCP off **after** AdGuard `:67` is proven. Rollback: modem DHCP **on first**. [docs/ADGUARD-DHCP.md](docs/ADGUARD-DHCP.md)
 
 ## Remote access
 

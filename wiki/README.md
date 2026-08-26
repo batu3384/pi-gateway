@@ -5,7 +5,7 @@ Markdown in this folder is the **source of truth** for the GitHub Wiki. Only fil
 ## First-time setup
 
 1. Enable Wiki on the GitHub repo (Settings → Features → Wikis).
-2. On GitHub, open **Wiki → Create the first page** and save **Home** once (empty OK). This initializes the `.wiki.git` repo.
+2. On GitHub, open **Wiki → Create the first page** and save **Home** once (empty OK). This initializes the GitHub Wiki git remote (not in this tree).
 3. Ensure `gh` is authenticated: `gh auth login`
 
 ## Sync
@@ -22,14 +22,14 @@ Optional env:
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `GITHUB_REPOSITORY` | `batu3384/pi-gateway` | `owner/repo` for wiki remote |
-| `GH_TOKEN` | (from `gh auth`) | Push to `.wiki.git` |
+| `GH_TOKEN` | (from `gh auth`) | Push to the GitHub Wiki remote |
 
 ## What gets synced
 
 Wiki page links use the `.md` suffix (`[FAQ](FAQ.md)`) so in-repo checkers and Gollum both resolve.
 
 - All `wiki/*.md` except `README.md`
-- `_Sidebar.md` → GitHub sidebar
+- Sidebar source: `wiki/_Sidebar.md`
 - `--delete` removes wiki pages removed from source
 
 ## Edit workflow

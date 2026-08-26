@@ -63,9 +63,13 @@ def api(path, method="GET", payload=None):
         cmd += ["-H", "Content-Type: application/json", "-d", json.dumps(payload)]
     out = subprocess.check_output(cmd, text=True).strip()
     # ponytail: AGH add/remove_url often 200 + empty/"OK", not JSON
-    if not out or out[0] not in "{[":
+    if not out:
         return {}
-    return json.loads(out)
+    if out[0] in "{[":
+        return json.loads(out)
+    if out in ("OK", "ok", "true", "True"):
+        return {}
+    raise RuntimeError(f"AGH non-JSON: {out[:200]}")
 
 status = api("/control/filtering/status")
 current = {f.get("url"): f for f in status.get("filters", []) if f.get("url")}
@@ -76,8 +80,8 @@ for url in sorted(set(current) - desired_urls):
         api("/control/filtering/remove_url", "POST", {"url": url})
         print(f"[adguard-filters] kaldirildi: {current[url].get('name', url)}")
         removed += 1
-    except subprocess.CalledProcessError:
-        print(f"[adguard-filters] HATA kaldirilamadi: {url}", file=sys.stderr)
+    except (subprocess.CalledProcessError, RuntimeError) as exc:
+        print(f"[adguard-filters] HATA kaldirilamadi: {url} ({exc})", file=sys.stderr)
         failed.append(url)
 for name, url in desired:
     if url in current:
@@ -87,8 +91,8 @@ for name, url in desired:
         api("/control/filtering/add_url", "POST", {"name": name, "url": url, "whitelist": False})
         print(f"[adguard-filters] eklendi: {name}")
         added += 1
-    except subprocess.CalledProcessError:
-        print(f"[adguard-filters] HATA eklenemedi: {name}", file=sys.stderr)
+    except (subprocess.CalledProcessError, RuntimeError) as exc:
+        print(f"[adguard-filters] HATA eklenemedi: {name} ({exc})", file=sys.stderr)
         failed.append(name)
 
 rules_digest = hashlib.sha256("\n".join(rules).encode()).hexdigest()
@@ -101,20 +105,25 @@ if hash_file.is_file():
 if rules_digest == prev_digest:
     print(f"[adguard-filters] user rules degismedi ({len(rules)} kural, set_rules atlandi)")
 else:
-    api("/control/filtering/set_rules", "POST", {"rules": rules, "enabled": True})
-    hash_file.parent.mkdir(parents=True, exist_ok=True)
     try:
-        hash_file.write_text(rules_digest + "\n")
-    except PermissionError:
-        subprocess.run(
-            ["sudo", "tee", str(hash_file)],
-            input=rules_digest + "\n",
-            text=True,
-            check=True,
-            stdout=subprocess.DEVNULL,
-        )
-        subprocess.run(["sudo", "chmod", "644", str(hash_file)], check=False)
-    print(f"[adguard-filters] user rules guncellendi ({len(rules)} kural)")
+        api("/control/filtering/set_rules", "POST", {"rules": rules, "enabled": True})
+    except (subprocess.CalledProcessError, RuntimeError) as exc:
+        print(f"[adguard-filters] HATA set_rules: {exc}", file=sys.stderr)
+        failed.append("set_rules")
+    else:
+        hash_file.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            hash_file.write_text(rules_digest + "\n")
+        except PermissionError:
+            subprocess.run(
+                ["sudo", "tee", str(hash_file)],
+                input=rules_digest + "\n",
+                text=True,
+                check=True,
+                stdout=subprocess.DEVNULL,
+            )
+            subprocess.run(["sudo", "chmod", "644", str(hash_file)], check=False)
+        print(f"[adguard-filters] user rules guncellendi ({len(rules)} kural)")
 
 print(f"[adguard-filters] profil={profile}")
 if added or removed:

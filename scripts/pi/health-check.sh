@@ -97,9 +97,32 @@ fi
 if ! dig +time=2 +tries=1 @127.0.0.1 -p "${UNBOUND_PORT}" cloudflare.com A >/dev/null 2>&1; then
   note_fail "unbound:${UNBOUND_PORT}"
 fi
+if ! grep -q 'forward-tls-upstream: yes' "${REMOTE_DIR}/config/unbound/unbound.conf" 2>/dev/null; then
+  note_fail "unbound-dot-conf"
+fi
+# bind-mount: up -d process reload etmez; cache'li dig yaniltir. Restart AdGuard'i dusurur (depends_on).
+unbound_conf_stale() {
+  local conf="${REMOTE_DIR}/config/unbound/unbound.conf"
+  local started_rfc started_epoch conf_mtime
+  [[ -f "$conf" ]] || return 1
+  docker inspect unbound >/dev/null 2>&1 || return 1
+  started_rfc="$(docker inspect -f '{{.State.StartedAt}}' unbound 2>/dev/null || true)"
+  [[ -n "$started_rfc" ]] || return 1
+  started_epoch="$(date -d "$started_rfc" +%s 2>/dev/null || true)"
+  [[ -n "$started_epoch" ]] || return 1
+  conf_mtime="$(stat -c %Y "$conf" 2>/dev/null || true)"
+  [[ -n "$conf_mtime" ]] || return 1
+  (( conf_mtime > started_epoch + 15 ))
+}
+unbound_conf_stale && note_fail "unbound-stale-conf"
 adguard_dns_ok() {
+  local aaaa
   dig +time=2 +tries=1 @"${PI_STATIC_IP}" cloudflare.com A >/dev/null 2>&1 \
-    && dig +time=2 +tries=1 @"${PI_STATIC_IP}" doubleclick.net A 2>/dev/null | grep -Eq '0\.0\.0\.0|127\.0\.0\.0|NXDOMAIN'
+    && dig +time=2 +tries=1 @"${PI_STATIC_IP}" doubleclick.net A 2>/dev/null | grep -Eq '0\.0\.0\.0|127\.0\.0\.0|NXDOMAIN' \
+    || return 1
+  aaaa="$(dig +time=2 +tries=1 +short @"${PI_STATIC_IP}" doubleclick.net AAAA 2>/dev/null || true)"
+  aaaa="${aaaa%%$'\n'*}"
+  [[ -z "$aaaa" || "$aaaa" == "::" || "$aaaa" == "::1" ]]
 }
 if ! adguard_dns_ok; then
   if [[ "${ADGUARD_AUTO_HEAL:-true}" == "true" ]]; then
@@ -114,6 +137,13 @@ if ! dig +time=2 +tries=1 @"${PI_STATIC_IP}" cloudflare.com A >/dev/null 2>&1; t
 fi
 if ! dig +time=2 +tries=1 @"${PI_STATIC_IP}" doubleclick.net A 2>/dev/null | grep -Eq '0\.0\.0\.0|127\.0\.0\.0|NXDOMAIN'; then
   note_fail "adguard-block-test"
+else
+  _aaaa="$(dig +time=2 +tries=1 +short @"${PI_STATIC_IP}" doubleclick.net AAAA 2>/dev/null || true)"
+  _aaaa="${_aaaa%%$'\n'*}"
+  if [[ -n "$_aaaa" && "$_aaaa" != "::" && "$_aaaa" != "::1" ]]; then
+    note_fail "adguard-block-aaaa"
+  fi
+  unset _aaaa
 fi
 if ! dig +time=2 +tries=1 @"${PI_STATIC_IP}" "gateway.${LAN_DOMAIN}" A +short 2>/dev/null | grep -qx "${PI_STATIC_IP}"; then
   note_fail "adguard-rewrite-gateway.${LAN_DOMAIN}"
@@ -268,7 +298,7 @@ fi
 health_is_dns_only_fail() {
   local f="$1"
   case "$f" in
-    unbound:*|container\ unbound\ down|adguard-block-test|adguard-rewrite-*|adguard-dns-config-drift|adguard-filter-rules-low|adguard-rewrites-low)
+    unbound:*|unbound-dot-conf|unbound-stale-conf|container\ unbound\ down|adguard-block-test|adguard-block-aaaa|adguard-rewrite-*|adguard-dns-config-drift|adguard-filter-rules-low|adguard-rewrites-low)
       return 0
       ;;
     *)

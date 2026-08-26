@@ -8,21 +8,20 @@ services:
     ports:
       - "127.0.0.1:5335:5335/tcp"
       - "127.0.0.1:5335:5335/udp"
+    # unbound-host = recursive :53. WAN dest:53 drop → forever unhealthy → health-check auto-recover loop.
+    # Host health-check.sh dig :5335 is the real probe. No Health = container_health_ok (status none).
     healthcheck:
-      test: ["CMD", "unbound-host", "-t", "A", "cloudflare.com"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
+      disable: true
 
   adguard:
     image: adguard/adguardhome@sha256:a2085b04bbfc4759e68fa1d13d4e1558aede67c783c55820e036a95a36dd3ebf
     container_name: adguard
     restart: unless-stopped
     network_mode: host
+    # service_healthy waits forever after WAN :53 drop (unbound-host SERVFAIL).
     depends_on:
       unbound:
-        condition: service_healthy
+        condition: service_started
     volumes:
       - ../data/adguard/work:/opt/adguardhome/work
       - ../config/adguard:/opt/adguardhome/conf

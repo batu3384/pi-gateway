@@ -20,7 +20,7 @@ Production DNS / home-lab gateway for **Raspberry Pi 4B**: AdGuard + Unbound, Ca
 | Layer | Component |
 |-------|-----------|
 | DNS filter | AdGuard Home |
-| Recursive DNS | Unbound |
+| DNS resolver | Unbound (DoT :853) |
 | Reverse proxy | Caddy (`*.home`) |
 | Dashboard | Homepage + gateway widget |
 | Monitoring | Uptime Kuma, Prometheus, Grafana, systemd health timer |

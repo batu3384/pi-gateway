@@ -11,7 +11,7 @@ Production-grade single-node home dev/DNS server for Raspberry Pi 4B.
 - Hybrid storage: SD boot + root; USB SSD for application data (`/mnt/ssd`)
 - Host firewall (UFW) + SSH brute-force protection (CrowdSec)
 - TLS on by default; offsite backup SLA (`make backup-pull`)
-- Optional full automation via AdGuard DHCP mode
+- Optional AdGuard DHCP — **not on ZTE H3600P** (relay swallows DISCOVER)
 
 ## Compose tiers
 
@@ -31,24 +31,40 @@ See [docs/adr/](adr/README.md). Script map: [docs/SCRIPTS.md](SCRIPTS.md).
 ## Traffic flow
 
 ```
-Client DNS query
-       |
-       v
- AdGuard Home (:53, host network)
-   | filter blocklists
+Client (DHCP from modem .1)
+  DNS1 = Pi .112          DNS2 = .1 (ZTE inject, panel yok sayilir)
+  IPv6 RDNSS = fe80::1    (+ Pi ULA RA, last-RA savasi)
+       |                      |
+       v                      v
+ AdGuard :53              Modem INPUT :53  ← ayni L2, Pi gormez
+   | blocklists               (reklam kacar)
    v
- Unbound (:5335, recursive)
-   | root DNS resolution
+ Unbound :5335 DoT :853
+   | WAN dest:53 drop
    v
  Internet
 ```
+
+Pi **LAN gateway değil.** Aynı L2’de `192.168.1.1:53` Pi’den geçmez. `iptables REDIRECT` / “Pi’yi GW yap” DNS2’yi kesmez (on-link). Yeni kutu veya cihaz DNS yoksa **tavan bu.**
+
+## Mevcut donanım tavanı (kutu yok, elle yok)
+
+| Karar | Neden |
+|-------|--------|
+| `NETWORK_MODE=router-dns` | Ev IP yaşar. `adguard-dhcp` bu ZTE’de ölçüldü, öldü. |
+| Modem DHCP + DNS1=Pi | Tek otomatik dağıtım. DNS2=.1 firmware. |
+| WAN dest:53 drop + Unbound DoT | Public resolver :53 kapanır; Pi :853 ile çıkar. |
+| Pi forwarding kapalı | SPOF + on-link `.1:53` hâlâ açık = kazanç yok, kesinti var. |
+| Mac `make mac-dns` | Tek istemci kilidi (LAN IP). Telefon/TV/IoT DHCP DNS2. |
+
+Tam ev kilidi = başka L2 (OpenWrt) veya cihaz DNS. İkisi de bu hedefte yok. Mimari **availability-first, block best-effort.**
 
 ## Components
 
 | Layer | Component | Role |
 |-------|-----------|------|
 | DNS filter | AdGuard Home | Block ads/trackers, local rewrites |
-| DNS resolver | Unbound (klutchell) | Recursive DNS, privacy |
+| DNS resolver | Unbound (klutchell) | DoT forward (Quad9/CF :853); not recursive |
 | Proxy | Caddy | gateway.home, dns.home, status.home |
 | Dashboard | Homepage | Service links |
 | Logs | Dozzle | Live Docker container logs |
@@ -74,13 +90,13 @@ Client DNS query
 
 ### router-dns (default)
 - Pi gets static IP via router IP reservation + dhcpcd drop-in
-- Router DHCP unchanged; set router DNS to Pi static IP once
-- Mac/PC may need manual DNS or DHCP renew to use Pi
+- Set router **DHCP DNS1** to Pi. ZTE still adds DNS2=gateway (unfiltered LAN `:53`)
+- Mac: `make mac-dns` (Pi+ULA, yalnız ev LAN IP). Other clients: DHCP renew; DNS2 may bypass
+- ZTE relay LAN DISCOVER yutuyor — `adguard-dhcp` ev IP keser. LAN dest `.1:53` drop INPUT resolver’ı kesmez. Pi’yi GW yapmak on-link `.1:53` kesmez. Tavan: [ARCHITECTURE.md](ARCHITECTURE.md) “Mevcut donanım tavanı”. — [DNS-BLOCKING.md](DNS-BLOCKING.md)
 
-### adguard-dhcp (full automation)
-- Disable router DHCP
-- AdGuard serves DHCP + DNS
-- All clients automatically use Pi DNS
+### adguard-dhcp (diğer router; ZTE H3600P hayır)
+- Disable router DHCP; AdGuard serves DHCP + DNS
+- ZTE H3600P: relay LAN DISCOVER yutuyor — ev IP keser. Bu kutuda kullanma. [ADGUARD-DHCP.md](ADGUARD-DHCP.md)
 
 ## Automation pipeline
 

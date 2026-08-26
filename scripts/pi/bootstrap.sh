@@ -58,8 +58,11 @@ if command -v tailscale >/dev/null 2>&1 && tailscale status --json 2>/dev/null |
   sudo tailscale set --accept-dns=false 2>/dev/null || true
 fi
 if ! grep -qE '^nameserver[[:space:]]+127\.0\.0\.1' /etc/resolv.conf 2>/dev/null; then
-  echo -e "nameserver 127.0.0.1\nnameserver 192.168.1.1" | sudo tee /etc/resolv.conf >/dev/null
-  echo "[bootstrap] resolv.conf -> 127.0.0.1 (yerel AdGuard)"
+  # 127.0.0.1 = AdGuard. Ikinci = modem — AGH dusunce apt/docker icin son cikis; reklam engellemez.
+  _gw="${LAN_GATEWAY:-192.168.1.1}"
+  echo -e "nameserver 127.0.0.1\nnameserver ${_gw}" | sudo tee /etc/resolv.conf >/dev/null
+  echo "[bootstrap] resolv.conf -> 127.0.0.1 (AdGuard), ${_gw} (AGH-down fallback)"
+  unset _gw
 fi
 if [[ -f "$REMOTE_DIR/scripts/pi/harden-host.sh" ]]; then
   echo "[bootstrap] Host sertlestirme..."

@@ -18,6 +18,10 @@
 | `ADGUARD_MIN_REWRITES` | 8 |
 | `ADGUARD_BLOCKED_TTL` | 60 |
 | `ADGUARD_FILTER_PROFILE` | `balanced` (TIF Medium). `aggressive` = TIF Full + Fake; AGH ≥2GB RAM. Not Multi Ultimate. See `docs/DNS-BLOCKING.md`. |
+| `ROUTER_DNS_SECONDARY` | Yalnız `MAC_DNS_GATEWAY_FALLBACK=true` iken. **Bos** veya `LAN_GATEWAY`. Public resolver WAN `:53` drop ile ölür. |
+| `MAC_DNS_GATEWAY_FALLBACK` | `false` (varsayılan): `make mac-dns` modem `.1` eklemez; **yalnız LAN IP** olan Ethernet/Wi-Fi. Hotspot'a Pi+ULA yazmaz (`make mac-dns-clear`). `true`: Pi down yedek; modem LAN `:53` reklam kaçırır. |
+| `DHCP_RANGE_START` / `DHCP_RANGE_END` / `LAN_SUBNET_MASK` | Yalnız `NETWORK_MODE=adguard-dhcp`. Örnek: `192.168.1.100`–`200`, `255.255.255.0`. |
+| `MODEM_IPV6_DNS_LL` | `fe80::1`. radvd RFC 8106 lifetime 0 (modem RDNSS un-advertise). |
 
 ## Security
 
