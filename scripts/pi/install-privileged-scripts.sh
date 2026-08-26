@@ -23,6 +23,9 @@ SCRIPTS=(
   scripts/lib/env-file.sh
   scripts/lib/ssd-alive.sh
   scripts/lib/compose-profiles.sh
+  scripts/pi/export-gateway-state.sh
+  scripts/lib/gateway-probes.py
+  scripts/lib/netalert-devices.py
   scripts/lib/notify.sh
   scripts/pi/boot-notify.sh
   scripts/lib/bulletin-slo.py

@@ -252,49 +252,21 @@ if status_slug not in pages:
     print(f"status-page: {status_slug} eklendi")
 else:
     print(f"status-page: {status_slug} zaten var")
-use_n8n = os.environ.get("ENABLE_N8N", "true") == "true"
-n8n_hook = os.environ.get("N8N_KUMA_WEBHOOK_URL", "http://n8n:5678/webhook/uptime-kuma-alert")
-existing = {n.get("name") for n in api.get_notifications()}
-if use_n8n:
-    if "n8n Webhook" not in existing:
-        api.add_notification(
-            name="n8n Webhook",
-            type="webhook",
-            isDefault=True,
-            applyExisting=True,
-            webhookURL=n8n_hook,
-            webhookContentType="application/json",
-        )
-        print(f"notification: n8n Webhook eklendi ({n8n_hook})")
-    else:
-        notifs = {n.get("name"): n for n in api.get_notifications()}
-        nid = notifs.get("n8n Webhook", {}).get("id")
-        if nid:
-            api.edit_notification(
-                nid,
-                name="n8n Webhook",
-                type="webhook",
-                isDefault=True,
-                applyExisting=True,
-                webhookURL=n8n_hook,
-                webhookContentType="application/json",
-            )
-            print(f"notification: n8n Webhook guncellendi ({n8n_hook})")
-        else:
-            print("notification: n8n Webhook zaten var")
-elif tg_token and tg_chat:
-    if "Telegram" not in existing:
-        api.add_notification(
-            name="Telegram",
-            type="telegram",
-            isDefault=True,
-            applyExisting=True,
-            telegramBotToken=tg_token,
-            telegramChatID=tg_chat,
-        )
-        print("notification: Telegram eklendi")
-    else:
-        print("notification: Telegram zaten var")
+# Faz 1: Kuma→Telegram/n8n kapalı (flap çöp). Opsiyonel container: health-check.
+for n in list(api.get_notifications() or []):
+    name = n.get("name") or ""
+    nid = n.get("id")
+    if name not in ("n8n Webhook", "Telegram") or not nid:
+        continue
+    try:
+        api.delete_notification(nid)
+        print(f"notification: {name} silindi (Telegram kapali)")
+    except Exception as exc:
+        try:
+            api.edit_notification(nid, name=name, isDefault=False, applyExisting=True)
+            print(f"notification: {name} default kapandi ({exc})")
+        except Exception as exc2:
+            print(f"notification: {name} kapatilamadi: {exc2}")
 by_name = {m.get("name"): m for m in api.get_monitors() if m.get("type") != "group"}
 slow_monitors = {f"devices.{lan}", f"logs.{lan}", "NetAlertX"}
 updated = added = 0

@@ -1,6 +1,6 @@
 ---
 name: menu
-description: "Pi Gateway panel menusu. ONLY when user message is exactly one of: /menu /paneller /start /linkler menu paneller Paneller. Run hermes-menu.sh; do not chat."
+description: "Pi Gateway durum kartı. ONLY when user message is exactly one of: /menu /paneller /start /linkler menu paneller Paneller. Run hermes-menu.sh; do not chat."
 version: 1.1.0
 author: Pi Gateway
 license: MIT
@@ -28,6 +28,6 @@ Hemen terminal (web arama yok, uzun aciklama yok):
 REMOTE_DIR=__REMOTE_DIR__ bash __REMOTE_DIR__/scripts/pi/hermes-menu.sh
 ```
 
-Basarili: `Panel menusu gonderildi. Buton → Safari’de Aç.`
+Basarili: `Durum kartı güncellendi. Buton → Safari’de Aç.`
 
 Hata: `Panel menusu gonderilemedi — Pi log.`

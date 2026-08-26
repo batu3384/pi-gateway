@@ -42,11 +42,20 @@ fxj = next(j for j in jobs if j["name"].startswith("Piyasa"))
 assert fxj["no_agent"] is True
 assert fxj["script"] == "pi-fx-quote.sh"
 assert fxj["schedule"]["expr"] == "55 18 * * *"
-night = next(j for j in jobs if j["name"].startswith("Gece 23"))
-assert night["enabled_toolsets"] == ["web"]
 morn = next(j for j in jobs if "07:00" in j["name"])
-assert "terminal" in morn["enabled_toolsets"]
+assert "terminal" not in morn["enabled_toolsets"]
 assert "web" in morn["enabled_toolsets"]
+assert "vcgencmd" not in (morn.get("prompt") or "")
+assert "docker ps" not in (morn.get("prompt") or "")
+assert "Sunucu" not in (morn.get("prompt") or "")
+eve = next(j for j in jobs if j["name"].startswith("Akşam 7"))
+assert eve["reasoning_effort"] == "medium"
+assert "6 web_search" in eve["prompt"]
+assert "__BULLETIN_RECENT_TITLES__" in eve["prompt"]
+night = next(j for j in jobs if j["name"].startswith("Gece 23"))
+assert night["reasoning_effort"] == "medium"
+assert night["enabled_toolsets"] == ["web"]
+assert "6 web_search" in night["prompt"]
 PY
 ok "cron template format/prompt"
 
@@ -54,7 +63,12 @@ grep -q 'cron failure v6' "$patch" || die "hermes-cron-patch v6 yok"
 grep -q 'if not job.get("no_agent")' "$patch" || die "v6 no_agent timeout kapısı yok"
 grep -q 'Piyasa 18:55' "$patch" || die "v6 piyasa fallback yok"
 grep -q 'http 400' "$patch" || die "v6 HTTP 400 yok"
+grep -q 'bulletin post helper' "$patch" || die "hermes-cron-patch bulletin post yok"
 ok "cron patch v6"
+
+post="$ROOT/scripts/lib/bulletin-post.py"
+python3 "$post" --self-check || die "bulletin-post self-check"
+ok "bulletin-post"
 
 grep -q 'HERMES_API_CALL_STALE_TIMEOUT=300' "$unit" || die "systemd stale timeout yok"
 ok "gateway stale env"
@@ -67,7 +81,8 @@ grep -q 'HERMES_TELEGRAM_TOOL_PROGRESS:-off' "$cfg" || die "telegram tool_progre
 grep -q 'case "${_tp}"' "$cfg" || die "tool_progress off→false map yok"
 grep -q 'providers.zai.stale_timeout_seconds' "$cfg" || die "stale timeout provider-level degil"
 ! grep -q 'models.glm-5.3.stale_timeout' "$cfg" || die "glm-5.3 stale config set hala var"
-grep -q 'HERMES_MAX_WEB_SEARCHES:-4' "$cfg" || die "max_web_searches default 4 degil"
+grep -q 'HERMES_MAX_WEB_SEARCHES:-6' "$cfg" || die "max_web_searches default 6 degil"
+grep -q 'HERMES_MAX_WEB_EXTRACTS:-8' "$cfg" || die "max_web_extracts yok"
 grep -q 'HERMES_COMPRESS_TOKEN_CAP:-96000' "$cfg" || die "compress token cap 96000 degil"
 grep -q 'HERMES_SESSION_RESET_MODE:-both' "$cfg" || die "session_reset both yok"
 grep -q 'session_reset.bg_process_max_age_hours' "$cfg" || die "bg_process_max_age yok"
@@ -100,6 +115,8 @@ ok "netalert MAC + self-check"
 chmod +x "$fx" "$archive" 2>/dev/null || true
 grep -q 'TIMEOUT = 3' "$fx" || die "fx timeout 3s degil"
 grep -q 'latest/USD' "$fx" || die "fx tek USD endpoint yok"
+grep -q 'Pi Gateway · Bülten' "$fx" || die "fx bülten çerçevesi yok"
+grep -q 'delta_s' "$fx" || die "fx dünkü fark yok"
 ! grep -q 'latest/EUR' "$fx" || die "fx hâlâ ayrı EUR isteği"
 bash "$fx" --self-check || die "fx-quote self-check"
 ok "fx-quote script"
@@ -208,5 +225,29 @@ grep -q 'cron failure v6' "$tmp5" || die "v5->v6 patch uygulanmadi"
 grep -q 'if not job.get("no_agent")' "$tmp5" || die "v6 no_agent kapısı yazilmadi"
 ! grep -q 'cron failure v5' "$tmp5" || die "v5 marker kaldi"
 ok "v5->v6 patch"
+
+tmpb="$(mktemp)"
+trap 'rm -rf "$tmpd" "$tmp" "$tmp4" "$tmp5" "$tmpb"' EXIT
+cat >"$tmpb" <<'STUBB'
+    # pi-gateway: cron failure v6
+    return f"⚠️ Cron '{job_name}' failed: {cleaned}"
+    # pi-gateway: no_agent skip wrap
+    if wrap_response and not job.get("no_agent"):
+        pass
+    # pi-gateway: failure nudge tr
+    return "nudge"
+def _deliver_result(job: dict, content: str) -> None:
+    wrap_response = False
+    if wrap_response and not job.get("no_agent"):
+        delivery_content = "x"
+    else:
+        delivery_content = content
+    # Run the async send in a fresh event loop (safe from any thread)
+    coro = _send_to_platform(platform, pconfig, chat_id, delivery_content, thread_id=thread_id)
+STUBB
+python3 "$patch" "$tmpb" >/dev/null
+grep -q 'bulletin post helper' "$tmpb" || die "bulletin helper yazilmadi"
+grep -q '_pi_gw_bulletin_prepare' "$tmpb" || die "bulletin prepare cagri yok"
+ok "bulletin post patch"
 
 echo "[test-hermes-bulletins] Tum kontroller gecti"

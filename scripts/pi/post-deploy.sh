@@ -197,6 +197,7 @@ if [[ "$DEPLOY_DEGRADED" -eq 0 ]]; then
   fi
   run_step_optional "SLO push monitors" "$SCRIPT_DIR/setup-slo-monitors.sh"
   run_step_optional "SSD SMART timer" "$SCRIPT_DIR/setup-ssd-smart-timer.sh"
+  run_step_optional "Home ops timers" "$SCRIPT_DIR/setup-home-ops-timers.sh"
   run_step_critical "Post-deploy integration" "$SCRIPT_DIR/post-deploy-integration.sh"
 fi
 log "Post-deploy tamamlandi"

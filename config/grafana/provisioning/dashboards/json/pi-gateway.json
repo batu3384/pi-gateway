@@ -84,6 +84,44 @@
       ],
       "title": "Backup / drill age (days, -1 = missing)",
       "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ms" }, "overrides": [] },
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 18 },
+      "id": 7,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
+      "targets": [
+        { "expr": "pi_gateway_dns_latency_ms", "legendFormat": "DNS", "refId": "A" },
+        { "expr": "pi_gateway_panel_latency_ms", "legendFormat": "panel", "refId": "B" }
+      ],
+      "title": "DNS / panel latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "Mbps" }, "overrides": [] },
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 18 },
+      "id": 8,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
+      "targets": [
+        { "expr": "pi_gateway_isp_download_mbps", "legendFormat": "download", "refId": "A" }
+      ],
+      "title": "ISP download (sample)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "decimals": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] } },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 24 },
+      "id": 9,
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [{ "expr": "pi_gateway_hosts_online", "refId": "A" }],
+      "title": "Who's home (count)",
+      "type": "stat"
     }
   ],
   "refresh": "30s",

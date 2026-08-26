@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Telegram panel menu — URL builder + keyboard (CLI only).
 
-Callers: telegram-menu.sh, hermes-menu.sh
+Callers: telegram-menu.sh, hermes-menu.sh, telegram-status-card.py
 
 Remote (telefon, MagicDNS yok):
   http://100.x:PORT  — dogrudan servis (asset /p/ 404 yok)
@@ -21,13 +21,13 @@ from typing import Any
 
 # id, label, home host, LAN path, TS port (0 = Caddy :80 root)
 PANELS: list[tuple[str, str, str, str, int]] = [
-    ("gateway", "Ana Panel", "gateway", "", 0),
-    ("status", "Uptime", "status", "/p/status/", 3001),
-    ("logs", "Loglar", "logs", "/p/logs/", int(os.environ.get("DOZZLE_PORT", "9999") or "9999")),
-    ("dns", "AdGuard", "dns", "/p/dns/", int(os.environ.get("ADGUARD_WEB_PORT", "8080") or "8080")),
+    ("gateway", "Ana", "gateway", "", 0),
+    ("dns", "DNS", "dns", "/p/dns/", int(os.environ.get("ADGUARD_WEB_PORT", "8080") or "8080")),
+    ("status", "Durum", "status", "/p/status/", 3001),
     ("devices", "Cihazlar", "devices", "/p/devices/", int(os.environ.get("NETALERTX_PORT", "20211") or "20211")),
-    ("n8n", "n8n", "n8n", "/p/n8n/", int(os.environ.get("N8N_PORT", "5678") or "5678")),
-    ("grafana", "Grafana", "grafana", "/p/grafana/", int(os.environ.get("GRAFANA_PORT", "3030") or "3030")),
+    ("logs", "Kayıtlar", "logs", "/p/logs/", int(os.environ.get("DOZZLE_PORT", "9999") or "9999")),
+    ("n8n", "Otomasyon", "n8n", "/p/n8n/", int(os.environ.get("N8N_PORT", "5678") or "5678")),
+    ("grafana", "Grafikler", "grafana", "/p/grafana/", int(os.environ.get("GRAFANA_PORT", "3030") or "3030")),
 ]
 
 
@@ -165,7 +165,7 @@ def menu_text(panels: list[dict[str, Any]], mode: str = "all") -> str:
         f"Giriş <code>{u}</code>",
     ]
     if remote_mode == "ts-http" and remote_base:
-        lines.append(f"<code>{html.escape(remote_base)}</code> · Tailscale Connected")
+        lines.append(f"<code>{html.escape(remote_base)}</code> · Tailscale açık")
     elif remote_mode == "lan":
         pi_ip = os.environ.get("PI_STATIC_IP", "").strip()
         if pi_ip:
@@ -178,7 +178,7 @@ def menu_text(panels: list[dict[str, Any]], mode: str = "all") -> str:
     lines.append("")
     lines.append(
         "<i>Buton → … → Safari’de Aç. Telegram içi tarayıcı kırık. "
-        "Altta <b>Paneller</b> / komut <code>/menu</code>.</i>"
+        "Kart: <code>/menu</code>.</i>"
     )
     return "\n".join(lines)
 

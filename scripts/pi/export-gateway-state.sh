@@ -81,6 +81,18 @@ pi_gateway_backup_restore_drill_age_days ${drill_age}
 pi_gateway_restic_offsite_copy_age_days ${offsite_copy_age}
 EOF
 
+PROBES_PY="${SCRIPT_DIR}/../lib/gateway-probes.py"
+[[ -f "$PROBES_PY" ]] || PROBES_PY="${REMOTE_DIR}/scripts/lib/gateway-probes.py"
+probe_json="{}"
+if [[ -f "$PROBES_PY" ]]; then
+  probe_out="$(REMOTE_DIR="$REMOTE_DIR" python3 "$PROBES_PY" 2>/dev/null || true)"
+  if [[ -n "$probe_out" ]]; then
+    probe_prom="$(printf '%s\n' "$probe_out" | sed '/^{/,$d')"
+    probe_json="$(printf '%s\n' "$probe_out" | sed -n '/^{/,$p')"
+    [[ -n "$probe_prom" ]] && printf '%s\n' "$probe_prom" >>"$tmp"
+  fi
+fi
+
 run_as_needed mkdir -p "$METRICS_DIR" "$(dirname "$STATE_JSON")" 2>/dev/null || true
 if [[ "$(id -u)" -eq 0 ]]; then
   install -m 644 "$tmp" "$METRICS_FILE"
@@ -91,9 +103,15 @@ rm -f "$tmp"
 
 json_tmp="$(mktemp)"
 python3 - "$json_tmp" "$STATE_JSON" "$ts" "$degraded" "$ssd_ok" "$docker_ssd" "${root_pct:-}" "${ssd_pct:-}" \
-  "$offsite_age" "$drill_age" "$offsite_copy_age" <<'PY'
-import json, os, sys
+  "$offsite_age" "$drill_age" "$offsite_copy_age" "$probe_json" <<'PY'
+import json, sys
 tmp, path = sys.argv[1], sys.argv[2]
+extra = {}
+raw = sys.argv[12] if len(sys.argv) > 12 else "{}"
+try:
+    extra = json.loads(raw) if raw.strip() else {}
+except json.JSONDecodeError:
+    extra = {}
 data = {
     "ts": sys.argv[3],
     "storage_degraded": int(sys.argv[4]),
@@ -105,6 +123,10 @@ data = {
     "backup_restore_drill_age_days": int(sys.argv[10]),
     "restic_offsite_copy_age_days": int(sys.argv[11]),
 }
+if isinstance(extra, dict):
+    for k in ("dns_latency_ms", "panel_latency_ms", "hosts_online", "who_home"):
+        if k in extra:
+            data[k] = extra[k]
 with open(tmp, "w", encoding="utf-8") as f:
     json.dump(data, f, indent=2)
     f.write("\n")
@@ -121,3 +143,37 @@ else
   run_as_needed chown "${USER}:${USER}" "$STATE_JSON" "$METRICS_FILE" 2>/dev/null || true
 fi
 echo "[export-state] OK ${METRICS_FILE}"
+
+# P2 yavaşlama — kartta ms; eşikte alarm
+# shellcheck source=../lib/notify.sh
+source "$SCRIPT_DIR/../lib/notify.sh"
+load_telegram_from_hermes 2>/dev/null || true
+DNS_LATENCY_WARN_MS="${DNS_LATENCY_WARN_MS:-150}"
+PANEL_LATENCY_WARN_MS="${PANEL_LATENCY_WARN_MS:-800}"
+dns_ms="$(python3 -c 'import json,sys
+try:
+    d=json.loads(sys.argv[1] or "{}")
+except Exception:
+    d={}
+print(int(d.get("dns_latency_ms", -1) or -1))' "$probe_json" 2>/dev/null || echo -1)"
+panel_ms="$(python3 -c 'import json,sys
+try:
+    d=json.loads(sys.argv[1] or "{}")
+except Exception:
+    d={}
+print(int(d.get("panel_latency_ms", -1) or -1))' "$probe_json" 2>/dev/null || echo -1)"
+slow=0
+detail=""
+if [[ "$dns_ms" =~ ^[0-9]+$ ]] && (( dns_ms > DNS_LATENCY_WARN_MS )); then
+  slow=1
+  detail="DNS ${dns_ms}ms (eşik ${DNS_LATENCY_WARN_MS}ms)"
+fi
+if [[ "$panel_ms" =~ ^[0-9]+$ ]] && (( panel_ms > PANEL_LATENCY_WARN_MS )); then
+  slow=1
+  detail="${detail:+$detail; }Panel ${panel_ms}ms (eşik ${PANEL_LATENCY_WARN_MS}ms)"
+fi
+if [[ "$slow" -eq 1 ]]; then
+  notify_latency_slow "$(hostname -s 2>/dev/null || echo pi-gateway)" "$detail" || true
+else
+  notify_latency_ok || true
+fi

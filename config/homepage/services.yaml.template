@@ -70,6 +70,14 @@ widgets:
           label: Offsite yedek (gun)
         - field: backup_restore_drill_age_days
           label: Restore drill (gun)
+        - field: dns_latency_ms
+          label: DNS gecikme (ms)
+        - field: panel_latency_ms
+          label: Panel gecikme (ms)
+        - field: hosts_online
+          label: Evde (adet)
+        - field: who_home
+          label: Kim evde
   - uptimekuma:
       url: ${PANEL_PROTOCOL}://status.${LAN_DOMAIN}
       slug: ${UPTIME_KUMA_STATUS_SLUG}

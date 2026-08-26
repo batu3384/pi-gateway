@@ -439,6 +439,23 @@ notify_ssd_restored() {
   notify_send_with_transition "ssd-degraded" "ok" "✅ Pi Gateway · SSD" "$body" "HTML"
 }
 
+notify_latency_slow() {
+  local host="$1"
+  local details="$2"
+  local body
+  body="$(notify_html_alert "$host" \
+    "DNS veya panel yanıtı yavaş — ev DNS ayakta, gecikme yüksek." \
+    "$details" \
+    "Kartta ms güncellenir. Sürerse Unbound / AdGuard / WAN bak." \
+    "P2 — saatte en fazla bir hatırlatma.")"
+  notify_send_with_transition "health-latency" "fail" "📋 Pi Gateway · Yavaş" "$body" "HTML"
+}
+
+notify_latency_ok() {
+  notify_transition_peek "health-latency" "ok" || return 0
+  notify_transition_commit "health-latency" "ok"
+}
+
 notify_test() {
   local gateway body
   gateway="$(panel_url gateway)"

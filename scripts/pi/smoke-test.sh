@@ -134,12 +134,12 @@ if [[ "${ENABLE_N8N:-true}" == "true" ]]; then
   case "${N8N_WEBHOOK_SECRET:-}" in
     ""|CHANGE_ME*) ;;
     *)
-      run_check "n8n-kuma-webhook" bash -c \
+      run_check "n8n-kuma-telegram-off" bash -c \
         'code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 -X POST \
           "http://127.0.0.1:'"${N8N_PORT}"'/webhook/uptime-kuma-alert-'"${N8N_WEBHOOK_SECRET}"'" \
           -H "Content-Type: application/json" \
           -d "{\"heartbeat\":{\"status\":1,\"msg\":\"smoke\"},\"monitor\":{\"name\":\"Smoke Test\"}}"); \
-          [[ "$code" == "200" ]]'
+          [[ "$code" != "200" ]]'
       ;;
   esac
 fi

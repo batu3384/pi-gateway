@@ -310,7 +310,7 @@ if [[ "$sd_fail" -eq 1 ]]; then
   logger -t "$LOG_TAG" "SD fail — notify check-sd-health"
 elif [[ ${#FAILURES[@]} -eq 0 ]]; then
   logger -t "$LOG_TAG" "OK dns stack healthy"
-  notify_dns_recovered "$host" || true
+  # Çekirdek DNS: OnFailure (notify_health_systemd_*) — health-dns çift bubble yok
   notify_optional_recovered || true
   notify_slo_backup_ok || true
 else
@@ -339,20 +339,12 @@ else
   done
   if [[ "$has_ssd" -eq 1 ]]; then
     notify_ssd_degraded "$host" "$details"
-    dns_only=()
-    for f in "${FAILURES[@]}"; do
-      health_is_dns_only_fail "$f" && dns_only+=("$f")
-    done
-    if [[ ${#dns_only[@]} -gt 0 ]]; then
-      notify_dns_fail "$host" "${dns_only[*]}"
-    fi
   elif [[ "$has_core" -eq 1 ]]; then
-    notify_dns_fail "$host" "$details"
+    logger -t "$LOG_TAG" "core fail — Telegram OnFailure (health-dns yok)"
   elif [[ "$has_optional" -eq 1 ]]; then
     notify_optional_warn "$host" "$details"
   else
     logger -t "$LOG_TAG" "OK dns stack healthy"
-    notify_dns_recovered "$host" || true
     notify_optional_recovered || true
   fi
   if [[ "$has_slo" -eq 1 ]]; then
@@ -388,9 +380,17 @@ for mount in / /mnt/ssd; do
     fi
   fi
 done
-if [[ -x "$SCRIPT_DIR/export-gateway-state.sh" ]]; then
-  REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/export-gateway-state.sh" >/dev/null 2>&1 \
+_export="${SCRIPT_DIR}/export-gateway-state.sh"
+[[ -x "$_export" ]] || _export="${REMOTE_DIR}/scripts/pi/export-gateway-state.sh"
+if [[ -x "$_export" ]]; then
+  REMOTE_DIR="$REMOTE_DIR" bash "$_export" >/dev/null 2>&1 \
     || logger -t "$LOG_TAG" "WARN export-gateway-state failed"
+fi
+_card="${REMOTE_DIR}/scripts/pi/telegram-status-card.sh"
+if [[ -x "$_card" ]]; then
+  PI_GATEWAY_HEALTH_OK="$([[ "$exit_code" -eq 0 ]] && echo 1 || echo 0)" \
+    REMOTE_DIR="$REMOTE_DIR" bash "$_card" >/dev/null 2>&1 \
+    || logger -t "$LOG_TAG" "WARN telegram-status-card failed"
 fi
 if [[ -x "$SCRIPT_DIR/push-slo-heartbeat.sh" ]]; then
   REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/push-slo-heartbeat.sh" >/dev/null 2>&1 || true

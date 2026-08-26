@@ -209,6 +209,44 @@ def commit_rowid(state_path: str, stream: str, max_rowid: int) -> None:
         save_state(state_path, state)
 
 
+def online_devices(db_path: str, *, recency_sec: int = 900) -> list[dict[str, str]]:
+    """Homepage/Grafana kim-evde — Telegram yok."""
+    con = _open_db(db_path)
+    try:
+        cols = {row[1] for row in con.execute("PRAGMA table_info(Devices)")}
+        where = "COALESCE(devIsArchived, 0)=0"
+        args: list[Any] = []
+        if "devPresent" in cols:
+            where += " AND COALESCE(devPresent, 0)=1"
+        elif "devLastConnection" in cols:
+            where += " AND COALESCE(devLastConnection, 0) >= ?"
+            args.append(time.time() - recency_sec)
+        sql = f"""
+            SELECT devMac, devName, devVendor, devType, devLastIP
+            FROM Devices
+            WHERE {where}
+            ORDER BY devName COLLATE NOCASE
+        """
+        rows = con.execute(sql, args).fetchall()
+        out: list[dict[str, str]] = []
+        for mac, name, vendor, dtype, ip in rows:
+            mac_s = (mac or "").strip().lower()
+            if _is_noise_mac(mac_s):
+                continue
+            display = suggest_display_name(name, vendor, dtype, ip, mac_s)
+            out.append(
+                {
+                    "mac": mac_s,
+                    "name": display,
+                    "ip": (ip or "").strip(),
+                    "vendor": (vendor or "").strip() or "?",
+                }
+            )
+        return out
+    finally:
+        con.close()
+
+
 def fetch_device(con: sqlite3.Connection, mac: str) -> dict[str, str] | None:
     row = con.execute(
         """
@@ -585,6 +623,9 @@ def _self_check() -> None:
         st, err = load_state(bad)
         assert st is None and err
 
+        home = online_devices(db)
+        assert any(d["mac"] == "aa:bb:cc:dd:ee:01" for d in home), home
+
     print("[netalert-devices] self-check OK")
 
 
@@ -601,10 +642,18 @@ def main() -> int:
         default="envelope",
     )
     ap.add_argument("--self-check", action="store_true")
+    ap.add_argument("--online-json", action="store_true")
     args = ap.parse_args()
 
     if args.self_check:
         _self_check()
+        return 0
+
+    if args.online_json:
+        if not args.db:
+            ap.error("--db required with --online-json")
+        json.dump(online_devices(args.db), sys.stdout, ensure_ascii=False)
+        sys.stdout.write("\n")
         return 0
 
     if not args.db or not args.state:

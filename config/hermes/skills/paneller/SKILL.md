@@ -19,4 +19,4 @@ metadata:
 REMOTE_DIR=__REMOTE_DIR__ bash __REMOTE_DIR__/scripts/pi/hermes-menu.sh
 ```
 
-Basarili: `Panel menusu gonderildi. Buton → Safari’de Aç.`
+Basarili: `Durum kartı güncellendi. Buton → Safari’de Aç.`

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# n8n workflow import + aktif et (Uptime Kuma)
+# n8n workflow import. Kuma Telegram kapalı (health optional-* + durum kartı).
 set -euo pipefail
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 N8N_DIR="${REMOTE_DIR}/config/n8n"
@@ -104,7 +104,7 @@ for line in sys.stdin:
         print(wf_id)
         break
 " "$name" 2>/dev/null || true)"
-  [[ -n "$id" ]] || { log "NetAlertX workflow yok — deactivate atlandi"; return 0; }
+  [[ -n "$id" ]] || { log "workflow yok — deactivate atlandi ($name)"; return 0; }
   if n8n_cli update:workflow --id="$id" --active=false 2>/dev/null; then
     log "Pasif: $name (id=$id)"
     return 0
@@ -150,13 +150,14 @@ fail=0
 needs_restart=false
 if [[ "$needs_import" == "true" ]]; then
   import_workflow "Pi Gateway — Uptime Kuma Alert" "${N8N_DIR}/uptime-kuma-alert.workflow.json" || fail=1
+  deactivate_workflow "Pi Gateway — Uptime Kuma Alert" || true
   deactivate_workflow "Pi Gateway — NetAlertX Alert" || true
   if [[ "$fail" -eq 0 ]]; then
     render_hash >"$RENDER_MARKER"
     needs_restart=true
   fi
 else
-  activate_workflow "Pi Gateway — Uptime Kuma Alert" || fail=1
+  deactivate_workflow "Pi Gateway — Uptime Kuma Alert" || true
   deactivate_workflow "Pi Gateway — NetAlertX Alert" || true
   needs_restart=true
 fi

@@ -28,26 +28,44 @@ MERGE_KEYS = (
 )
 
 
-def _subst(text: str | None, remote_dir: str, pi_user: str) -> str | None:
+def _recent_titles() -> str:
+    post = Path(__file__).with_name("bulletin-post.py")
+    try:
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("bulletin_post", post)
+        if spec is None or spec.loader is None:
+            return "(yok)"
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return str(mod.recent_titles() or "(yok)")
+    except Exception:
+        return "(yok)"
+
+
+def _subst(text: str | None, remote_dir: str, pi_user: str, titles: str | None = None) -> str | None:
     if text is None:
         return None
-    return (
+    out = (
         text.replace("__REMOTE_DIR__", remote_dir)
         .replace("__PI_USER__", pi_user)
         .replace("/home/PI_USER", f"/home/{pi_user}")
     )
+    if "__BULLETIN_RECENT_TITLES__" in out:
+        out = out.replace("__BULLETIN_RECENT_TITLES__", titles if titles is not None else _recent_titles())
+    return out
 
 
-def _merge_job(live: dict[str, Any], spec: dict[str, Any], remote_dir: str, pi_user: str) -> bool:
+def _merge_job(live: dict[str, Any], spec: dict[str, Any], remote_dir: str, pi_user: str, titles: str | None = None) -> bool:
     changed = False
     for key in MERGE_KEYS:
         if key not in spec:
             continue
         val = spec[key]
         if key == "prompt":
-            val = _subst(val, remote_dir, pi_user)
+            val = _subst(val, remote_dir, pi_user, titles)
         elif key == "script" and val and ("__REMOTE_DIR__" in str(val) or str(val).startswith("/")):
-            val = _subst(val, remote_dir, pi_user)
+            val = _subst(val, remote_dir, pi_user, titles)
         if live.get(key) != val:
             live[key] = val
             changed = True
@@ -57,11 +75,11 @@ def _merge_job(live: dict[str, Any], spec: dict[str, Any], remote_dir: str, pi_u
     return changed
 
 
-def _spawn_job(spec: dict[str, Any], sibling: dict[str, Any], remote_dir: str, pi_user: str) -> dict[str, Any]:
+def _spawn_job(spec: dict[str, Any], sibling: dict[str, Any], remote_dir: str, pi_user: str, titles: str | None = None) -> dict[str, Any]:
     now = datetime.now(timezone.utc).astimezone().isoformat()
     job = deepcopy(spec)
-    job["prompt"] = _subst(job.get("prompt"), remote_dir, pi_user)
-    job["script"] = _subst(job.get("script"), remote_dir, pi_user)
+    job["prompt"] = _subst(job.get("prompt"), remote_dir, pi_user, titles)
+    job["script"] = _subst(job.get("script"), remote_dir, pi_user, titles)
     job["id"] = secrets.token_hex(6)
     for key in ("origin", "provider_snapshot", "model_snapshot", "deliver"):
         if key not in job and key in sibling:
@@ -102,6 +120,7 @@ def merge(
     else:
         live_doc = {"jobs": []}
 
+    titles = _recent_titles()
     specs = {j["name"]: j for j in template.get("jobs", []) if j.get("name")}
     by_name = {j.get("name"): j for j in live_doc.get("jobs", [])}
     changed = 0
@@ -114,11 +133,11 @@ def merge(
 
     for name, spec in specs.items():
         if name in by_name:
-            if _merge_job(by_name[name], spec, remote_dir, pi_user):
+            if _merge_job(by_name[name], spec, remote_dir, pi_user, titles):
                 changed += 1
         else:
             live_doc.setdefault("jobs", []).append(
-                _spawn_job(spec, sibling, remote_dir, pi_user)
+                _spawn_job(spec, sibling, remote_dir, pi_user, titles)
             )
             changed += 1
 

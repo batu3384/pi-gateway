@@ -200,9 +200,11 @@ grep -q '__PANEL_PROTOCOL__' "$PROJECT_DIR/config/n8n/uptime-kuma-alert.workflow
   || die "n8n uptime workflow PANEL_PROTOCOL yok"
 grep -q 'ensure-n8n-encryption-key' "$PROJECT_DIR/scripts/pi/post-deploy.sh" \
   || die "post-deploy n8n encryption key yok"
+grep -q 'deactivate_workflow "Pi Gateway — Uptime Kuma Alert"' "$PROJECT_DIR/scripts/pi/setup-n8n-workflows.sh" \
+  || die "n8n Kuma Telegram deactivate yok"
 grep -q 'update:workflow.*active=true' "$PROJECT_DIR/scripts/pi/setup-n8n-workflows.sh" \
-  || die "n8n workflow aktivasyonu yok"
-ok "n8n webhook guncelleme + aktivasyon"
+  || die "n8n workflow aktivasyon helper yok"
+ok "n8n webhook guncelleme + Kuma Telegram kapali"
 
 grep -q '/run/pi-gateway/stack-recover.lock' "$stack_health" \
   || die "STACK_LOCK_FILE tmpfs degil"
@@ -291,9 +293,9 @@ grep -q 'caddy-.*-auth-deny' "$PROJECT_DIR/scripts/pi/smoke-test.sh" \
   || die "smoke Caddy auth deny testi yok"
 ok "smoke auth iki yonlu"
 
-grep -q 'n8n-kuma-webhook' "$PROJECT_DIR/scripts/pi/smoke-test.sh" \
-  || die "smoke n8n webhook e2e yok"
-ok "smoke n8n webhook e2e"
+grep -q 'n8n-kuma-telegram-off' "$PROJECT_DIR/scripts/pi/smoke-test.sh" \
+  || die "smoke n8n kuma telegram-off yok"
+ok "smoke n8n kuma telegram kapali"
 
 grep -qE 'container_name: (forgejo|syncthing)' "$compose" \
   && die "forgejo/syncthing hala compose'da"
@@ -403,6 +405,10 @@ ok "ssd-root-harden script"
 grep -q 'sd_data_native_ok' "$PROJECT_DIR/scripts/lib/stack-health.sh" \
   || die "sd_data_native_ok helper yok"
 ok "sd native data fallback helper"
+
+grep -q 'notification:.*silindi\|delete_notification' "$PROJECT_DIR/scripts/pi/setup-uptime-kuma.sh" \
+  || die "Kuma Telegram/n8n notification silme yok"
+ok "Kuma native Telegram kapali"
 
 grep -q 'notify_transition_peek' "$PROJECT_DIR/scripts/lib/notify.sh" \
   || die "notify transition peek yok"

@@ -136,7 +136,8 @@ set_cfg "session_reset.idle_minutes" "${HERMES_SESSION_IDLE_MIN:-720}"
 set_cfg "session_reset.notify" "${HERMES_SESSION_RESET_NOTIFY:-false}"
 # Unutulmuş background process 04:00 reset'i kilitlemesin (#29177). Process öldürülmez.
 set_cfg "session_reset.bg_process_max_age_hours" "${HERMES_SESSION_BG_MAX_AGE_H:-2}"
-set_cfg "code_execution.loop_caps.max_web_searches" "${HERMES_MAX_WEB_SEARCHES:-4}"
+set_cfg "code_execution.loop_caps.max_web_searches" "${HERMES_MAX_WEB_SEARCHES:-6}"
+set_cfg "code_execution.loop_caps.max_web_extracts" "${HERMES_MAX_WEB_EXTRACTS:-8}"
 
 # /menu skill Telegram / menüsünde görünsün (cap yüzünden skill'ler düşüyordu)
 _menu_prio_py="${SCRIPT_DIR}/../lib/hermes-telegram-menu-priority.py"

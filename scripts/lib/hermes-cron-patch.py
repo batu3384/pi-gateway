@@ -168,12 +168,80 @@ def patch_failure_nudge_tr(text: str) -> str:
     return text.replace(old, new, 1)
 
 
+_HELPER = '''def _pi_gw_bulletin_prepare(job, content):
+    # pi-gateway: bulletin post helper
+    if job.get("no_agent") or not str(job.get("prompt") or "").strip():
+        return content
+    try:
+        import json as _json
+        import os as _os
+        import pathlib as _pl
+        import subprocess as _sp
+        import sys as _sys
+        cands = []
+        rd = _os.environ.get("REMOTE_DIR") or ""
+        if rd:
+            cands.append(_pl.Path(rd) / "scripts/lib/bulletin-post.py")
+        cands.append(_pl.Path.home() / "pi-gateway/scripts/lib/bulletin-post.py")
+        script = next((p for p in cands if p.is_file()), None)
+        if script is None:
+            return content
+        r = _sp.run(
+            [_sys.executable, str(script), "--prepare", str(job.get("name") or "")],
+            input=content or "",
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+        data = _json.loads(r.stdout or "{}")
+        if data.get("skip"):
+            return None
+        return data.get("first") or content
+    except Exception:
+        return content
+
+
+'''
+
+
+def patch_bulletin_post(text: str) -> str:
+    marker = "# pi-gateway: bulletin post helper"
+    if marker in text:
+        return text
+    needle_fn = "def _deliver_result(job: dict, content: str) -> None:"
+    if needle_fn not in text:
+        return text
+    text = text.replace(needle_fn, _HELPER + needle_fn, 1)
+    old = (
+        "        else:\n"
+        "            delivery_content = content\n"
+        "        # Run the async send in a fresh event loop (safe from any thread)\n"
+        "        coro = _send_to_platform(platform, pconfig, chat_id, delivery_content, thread_id=thread_id)"
+    )
+    new = (
+        "        else:\n"
+        "            delivery_content = content\n"
+        "        # pi-gateway: bulletin post\n"
+        "        delivery_content = _pi_gw_bulletin_prepare(job, delivery_content)\n"
+        "        if delivery_content is None:\n"
+        "            logger.info(\"Job '%s': bulletin skeleton missing — skip delivery\", job.get(\"id\"))\n"
+        "            return\n"
+        "        # Run the async send in a fresh event loop (safe from any thread)\n"
+        "        coro = _send_to_platform(platform, pconfig, chat_id, delivery_content, thread_id=thread_id)"
+    )
+    if old not in text:
+        # wrap_response false path yoksa yine teslim et (iskeletsiz kesme)
+        return text
+    return text.replace(old, new, 1)
+
+
 def main() -> int:
     path = pathlib.Path(sys.argv[1])
     text = path.read_text()
     text = patch_failure_summary(text)
     text = patch_no_agent_skip_wrap(text)
     text = patch_failure_nudge_tr(text)
+    text = patch_bulletin_post(text)
     path.write_text(text)
     print("patched")
     return 0

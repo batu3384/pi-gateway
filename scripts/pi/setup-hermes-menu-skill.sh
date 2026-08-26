@@ -25,10 +25,10 @@ if [[ -d "$SRC_PANEL" ]]; then
   sed -i "s|__REMOTE_DIR__|${REMOTE_DIR}|g" "$DST_PANEL/SKILL.md" 2>/dev/null \
     || sed -i '' "s|__REMOTE_DIR__|${REMOTE_DIR}|g" "$DST_PANEL/SKILL.md"
 fi
-log "OK $DST_MENU ${DST_PANEL:+$DST_PANEL}"
+    log "OK $DST_MENU ${DST_PANEL:+$DST_PANEL}"
 
-if [[ -x "${REMOTE_DIR}/scripts/pi/telegram-menu.sh" ]]; then
+    if [[ -x "${REMOTE_DIR}/scripts/pi/telegram-menu.sh" ]]; then
   bash "${REMOTE_DIR}/scripts/pi/telegram-menu.sh" \
-    && log "Telegram panel menusu + Paneller butonu guncellendi" \
+    && log "Telegram durum karti guncellendi" \
     || log "WARN: telegram-menu basarisiz"
 fi

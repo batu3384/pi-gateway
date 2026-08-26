@@ -1,0 +1,10 @@
+[Unit]
+Description=Pi Gateway monthly Kuma scorecard (1st 09:00)
+
+[Timer]
+OnCalendar=*-*-01 09:00:00
+Persistent=true
+AccuracySec=1h
+
+[Install]
+WantedBy=timers.target

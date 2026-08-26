@@ -1,0 +1,10 @@
+[Unit]
+Description=Pi Gateway ISP speed sample every 3 hours
+
+[Timer]
+OnCalendar=*-*-* 00/3:15:00
+Persistent=true
+AccuracySec=5min
+
+[Install]
+WantedBy=timers.target
