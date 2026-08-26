@@ -26,7 +26,7 @@ set -euo pipefail
 R="${REMOTE_DIR:-/home/${PI_USER}/pi-gateway}"
 NEW="/tmp/pi-gateway.env.new"
 OLD="${R}/.env"
-PRESERVE='N8N_ENCRYPTION_KEY CROWDSEC_BOUNCER_KEY CROWDSEC_API_KEY'
+PRESERVE='N8N_ENCRYPTION_KEY CROWDSEC_BOUNCER_KEY CROWDSEC_API_KEY HERMES_TELEGRAM_GATEWAY'
 python3 - "$NEW" "$OLD" "$OLD" $PRESERVE <<'PY'
 import sys
 from pathlib import Path
