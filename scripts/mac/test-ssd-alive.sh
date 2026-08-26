@@ -178,6 +178,9 @@ grep -q 'config/hermes/skills/menu' "$PROJECT_DIR/scripts/pi/setup-hermes-menu-s
   || die "setup-hermes-menu-skill menu path yok"
 grep -q 'hermes_owns_inbox' "$PROJECT_DIR/scripts/pi/telegram-menu.sh" \
   || die "telegram-menu Hermes setMyCommands korumasi yok"
+grep -q 'BotCommandScope\|scope.*chat\|type.: .chat' "$PROJECT_DIR/scripts/pi/telegram-menu.sh" \
+  || grep -q '"type": "chat"' "$PROJECT_DIR/scripts/pi/telegram-menu.sh" \
+  || die "telegram-menu chat-scope /menu yok"
 PANEL_PROTOCOL='' ENABLE_TLS=true LAN_DOMAIN=home PI_STATIC_IP=192.168.1.50 \
   python3 "$PROJECT_DIR/scripts/lib/telegram-panels.py" panels_json \
   | grep -q 'https://gateway.home' \

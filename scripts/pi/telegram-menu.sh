@@ -48,9 +48,48 @@ curl -fsS -X POST "${API}/setChatMenuButton" \
   -d "chat_id=${TELEGRAM_CHAT_ID}" \
   -d 'menu_button={"type":"commands"}' >/dev/null 2>&1 || true
 
-# Hermes owns setMyCommands — bizim replace Hermes /help listesini silerdi.
-# Panel slash: skill /menu (priority ile menüde). Burada sadece reply keyboard.
-if [[ "$(python3 "$PANELS_PY" hermes_owns_inbox 2>/dev/null || echo 0)" != "1" ]]; then
+# Hermes owns global setMyCommands (60+ core → skill /menu menüye sığmaz).
+# Bu chat için daha dar scope: menu/paneller önde, mevcut liste korunur.
+_register_chat_panel_commands() {
+  python3 - "$API" "$TELEGRAM_CHAT_ID" <<'PY'
+import json, sys, urllib.parse, urllib.request
+
+api, chat_id = sys.argv[1], sys.argv[2]
+want = [
+    ("menu", "Panel menusu (sabitle)"),
+    ("paneller", "Panel menusu"),
+]
+
+def api_call(method, payload):
+    data = urllib.parse.urlencode(payload).encode()
+    req = urllib.request.Request(f"{api}/{method}", data=data, method="POST")
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        return json.load(resp)
+
+existing = api_call("getMyCommands", {})
+cmds = []
+seen = set()
+for name, desc in want:
+    cmds.append({"command": name, "description": desc[:40]})
+    seen.add(name)
+for c in existing.get("result") or []:
+    name = str(c.get("command") or "")
+    if not name or name in seen:
+        continue
+    cmds.append({"command": name, "description": str(c.get("description") or "")[:40]})
+    seen.add(name)
+    if len(cmds) >= 100:
+        break
+scope = json.dumps({"type": "chat", "chat_id": int(chat_id) if str(chat_id).lstrip("-").isdigit() else chat_id})
+out = api_call("setMyCommands", {"commands": json.dumps(cmds), "scope": scope})
+print("ok" if out.get("ok") else out, file=sys.stderr)
+raise SystemExit(0 if out.get("ok") else 1)
+PY
+}
+
+if [[ "$(python3 "$PANELS_PY" hermes_owns_inbox 2>/dev/null || echo 0)" == "1" ]]; then
+  _register_chat_panel_commands || log "WARN: chat-scope /menu komutlari"
+else
   curl -fsS -X POST "${API}/setMyCommands" \
     -d 'commands=[{"command":"menu","description":"Panel menusu (sabitle)"},{"command":"paneller","description":"Panel menusu"}]' \
     >/dev/null 2>&1 || true
