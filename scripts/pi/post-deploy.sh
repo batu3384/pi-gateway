@@ -176,6 +176,7 @@ run_step_soft "Hermes env" "$SCRIPT_DIR/ensure-hermes-env.sh"
 run_step_soft "Hermes config" "$SCRIPT_DIR/patch-hermes-config-pi.sh"
 run_step_soft "Hermes cron" "$SCRIPT_DIR/setup-hermes-cron.sh"
 run_step_soft "Hermes menu skill" "$SCRIPT_DIR/setup-hermes-menu-skill.sh"
+run_step_soft "Compose orphan cleanup" "$SCRIPT_DIR/cleanup-compose-orphans.sh"
 run_step_soft "Gateway systemd cleanup" "$SCRIPT_DIR/../lib/reset-gateway-units.sh"
 run_step_soft "Restic repair" "$SCRIPT_DIR/restic-repair.sh"
 if [[ "${ENABLE_CROWDSEC:-true}" == "true" ]]; then

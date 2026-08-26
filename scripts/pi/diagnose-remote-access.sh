@@ -58,17 +58,19 @@ else
   warn "gateway.${LAN_DOMAIN} rewrite beklenen ${PI_IP} degil"
 fi
 # SNI zorunlu: -H Host yetmez (TLS alert / false FAIL)
+# Caddy LAN IP bind — 127.0.0.1:443 yok
 gw_code="$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 \
-  --resolve "gateway.${LAN_DOMAIN}:443:127.0.0.1" \
+  --resolve "gateway.${LAN_DOMAIN}:443:${PI_IP}" \
   "https://gateway.${LAN_DOMAIN}/" 2>/dev/null || echo 000)"
 if [[ "$gw_code" =~ ^(401|200|302)$ ]]; then
   pass "Caddy gateway.${LAN_DOMAIN} HTTPS (SNI) -> ${gw_code}"
 else
   fail "Caddy gateway.${LAN_DOMAIN} HTTPS yanit vermiyor (${gw_code})"
 fi
-if [[ -n "${TS_DNS:-}" ]]; then
-  # Serve uzerinden gercek MagicDNS (localhost Host+SNI yaniltir)
+if [[ -n "${TS_DNS:-}" && -n "${TS_IP:-}" ]]; then
+  # MagicDNS Pi'de cozulmeyebilir — Serve'i TS IP uzerinden SNI ile dene
   code="$(curl -sk -o /dev/null -w "%{http_code}" --max-time 8 \
+    --resolve "${TS_DNS}:443:${TS_IP}" \
     "https://${TS_DNS}/" 2>/dev/null || echo 000)"
   if [[ "$code" =~ ^(200|401|302)$ ]]; then
     pass "Tailscale Serve URL: https://${TS_DNS}/ -> ${code}"

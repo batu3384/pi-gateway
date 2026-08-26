@@ -138,6 +138,17 @@ set_cfg "session_reset.notify" "${HERMES_SESSION_RESET_NOTIFY:-false}"
 set_cfg "session_reset.bg_process_max_age_hours" "${HERMES_SESSION_BG_MAX_AGE_H:-2}"
 set_cfg "code_execution.loop_caps.max_web_searches" "${HERMES_MAX_WEB_SEARCHES:-4}"
 
+# /menu skill Telegram / menüsünde görünsün (cap yüzünden skill'ler düşüyordu)
+_menu_prio_py="${SCRIPT_DIR}/../lib/hermes-telegram-menu-priority.py"
+if [[ -f "$_menu_prio_py" ]]; then
+  if python3 "$_menu_prio_py"; then
+    CFG_CHANGED=1
+    log "OK platforms.telegram.extra.command_menu priority += menu"
+  else
+    log "skip command_menu priority"
+  fi
+fi
+
 hermes_py="${HOME}/.hermes/hermes-agent/venv/bin/python"
 ddgs_ok=0
 if [[ -x "$hermes_py" ]]; then

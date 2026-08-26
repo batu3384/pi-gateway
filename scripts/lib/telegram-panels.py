@@ -126,6 +126,7 @@ def inline_keyboard(panels: list[dict[str, Any]], mode: str = "all") -> dict[str
 
 
 def reply_keyboard() -> dict[str, Any]:
+    """Sticky bottom button — Hermes skill `menu` catches the text."""
     return {
         "keyboard": [[{"text": "Paneller"}]],
         "resize_keyboard": True,
@@ -175,8 +176,45 @@ def menu_text(panels: list[dict[str, Any]], mode: str = "all") -> str:
         lines.append(html_links(panels, mode))
 
     lines.append("")
-    lines.append("<i>Buton → Safari’de Aç (Telegram içi auth kırık). Sabitli menü.</i>")
+    lines.append(
+        "<i>Buton → … → Safari’de Aç. Telegram içi tarayıcı kırık. "
+        "Altta <b>Paneller</b> / komut <code>/menu</code>.</i>"
+    )
     return "\n".join(lines)
+
+
+def probe_panels(timeout: float = 6.0) -> int:
+    """Live HTTP check for each button URL (Pi-side)."""
+    import urllib.error
+    import urllib.request
+
+    panels = panel_urls()
+    bad: list[str] = []
+    ok_codes = {200, 301, 302, 401}
+    for p in panels:
+        url = p.get("button") or ""
+        if not url:
+            bad.append(f"{p['id']}: empty button")
+            continue
+        req = urllib.request.Request(
+            url, method="GET", headers={"User-Agent": "pi-gateway-panel-probe"}
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
+                code = int(getattr(resp, "status", 200) or 200)
+        except urllib.error.HTTPError as e:
+            code = int(e.code)
+        except Exception as e:  # noqa: BLE001
+            bad.append(f"{p['id']} {url} → {e}")
+            continue
+        if code not in ok_codes:
+            bad.append(f"{p['id']} {url} → HTTP {code}")
+            continue
+        print(f"OK {p['id']} → {code} {url}")
+    if bad:
+        print("FAIL:", "; ".join(bad), file=sys.stderr)
+        return 1
+    return 0
 
 
 def self_check() -> int:
@@ -215,6 +253,8 @@ def main() -> None:
     sub = sys.argv[2] if len(sys.argv) > 2 else "all"
     if mode == "self_check":
         raise SystemExit(self_check())
+    if mode == "probe":
+        raise SystemExit(probe_panels())
     panels = panel_urls()
     if mode == "keyboard":
         print(json.dumps(inline_keyboard(panels, sub), ensure_ascii=False))
@@ -234,8 +274,11 @@ def main() -> None:
         if not match:
             raise SystemExit(f"unknown panel: {pid}")
         print(match.get("button") or match.get("remote") or match.get("home") or "")
+    elif mode == "hermes_owns_inbox":
+        print("1" if hermes_owns_inbox() else "0")
     elif mode == "use_reply_keyboard":
-        print("0" if hermes_owns_inbox() else "1")
+        # Always show sticky Paneller (Hermes skill `menu` handles the tap)
+        print("1")
     elif mode == "menu_webapp_url":
         print("")
     else:

@@ -172,6 +172,12 @@ grep -q 'hermes-menu' "$PROJECT_DIR/scripts/lib/telegram-panels.py" \
   || die "telegram-panels hermes-menu caller yok"
 grep -q 'grafana' "$PROJECT_DIR/scripts/lib/telegram-panels.py" \
   || die "telegram-panels grafana yok"
+grep -q 'name: menu' "$PROJECT_DIR/config/hermes/skills/menu/SKILL.md" \
+  || die "hermes menu skill name=menu yok"
+grep -q 'config/hermes/skills/menu' "$PROJECT_DIR/scripts/pi/setup-hermes-menu-skill.sh" \
+  || die "setup-hermes-menu-skill menu path yok"
+grep -q 'hermes_owns_inbox' "$PROJECT_DIR/scripts/pi/telegram-menu.sh" \
+  || die "telegram-menu Hermes setMyCommands korumasi yok"
 PANEL_PROTOCOL='' ENABLE_TLS=true LAN_DOMAIN=home PI_STATIC_IP=192.168.1.50 \
   python3 "$PROJECT_DIR/scripts/lib/telegram-panels.py" panels_json \
   | grep -q 'https://gateway.home' \
@@ -179,6 +185,10 @@ PANEL_PROTOCOL='' ENABLE_TLS=true LAN_DOMAIN=home PI_STATIC_IP=192.168.1.50 \
 PANEL_PROTOCOL='' ENABLE_TLS=true LAN_DOMAIN=home PI_STATIC_IP=192.168.1.50 \
   python3 "$PROJECT_DIR/scripts/lib/telegram-panels.py" self_check \
   || die "telegram-panels self_check fail"
+PANEL_PROTOCOL='' ENABLE_TLS=true LAN_DOMAIN=home PI_STATIC_IP=192.168.1.50 \
+  python3 "$PROJECT_DIR/scripts/lib/telegram-panels.py" use_reply_keyboard \
+  | grep -qx '1' \
+  || die "telegram-panels reply keyboard kapali"
 grep -q 'p/grafana' "$PROJECT_DIR/scripts/pi/setup-caddy-lan-ip.sh" \
   || die "caddy-lan-ip grafana path yok"
 grep -q 'p/grafana' "$PROJECT_DIR/scripts/pi/setup-tailscale-serve.sh" \

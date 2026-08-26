@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Telegram: temiz panel menüsü (pin + tek sütun URL butonlari)
+# Telegram: panel menüsü (pin + tek sütun URL + Paneller reply keyboard)
 set -euo pipefail
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -47,25 +47,22 @@ fi
 curl -fsS -X POST "${API}/setChatMenuButton" \
   -d "chat_id=${TELEGRAM_CHAT_ID}" \
   -d 'menu_button={"type":"commands"}' >/dev/null 2>&1 || true
-curl -fsS -X POST "${API}/setMyCommands" \
-  -d 'commands=[{"command":"menu","description":"Panel menusu (sabitle)"},{"command":"paneller","description":"Panel menusu"}]' \
-  >/dev/null 2>&1 || true
 
-# Hermes: sticky reply keyboard = AI noise — remove
-if [[ "$(python3 "$PANELS_PY" use_reply_keyboard 2>/dev/null || echo 1)" == "1" ]]; then
-  REPLY="$(python3 "$PANELS_PY" reply_keyboard)"
-  curl -fsS -X POST "${API}/sendMessage" \
-    -d "chat_id=${TELEGRAM_CHAT_ID}" \
-    -d "parse_mode=HTML" \
-    --data-urlencode "text=Paneller — /menu" \
-    --data-urlencode "reply_markup=${REPLY}" \
-    -d "disable_web_page_preview=true" >/dev/null
-else
-  curl -fsS -X POST "${API}/sendMessage" \
-    -d "chat_id=${TELEGRAM_CHAT_ID}" \
-    -d "parse_mode=HTML" \
-    --data-urlencode "text=Sohbet = Hermes · paneller = sabitli mesaj" \
-    --data-urlencode 'reply_markup={"remove_keyboard":true}' \
-    -d "disable_web_page_preview=true" >/dev/null
+# Hermes owns setMyCommands — bizim replace Hermes /help listesini silerdi.
+# Panel slash: skill /menu (priority ile menüde). Burada sadece reply keyboard.
+if [[ "$(python3 "$PANELS_PY" hermes_owns_inbox 2>/dev/null || echo 0)" != "1" ]]; then
+  curl -fsS -X POST "${API}/setMyCommands" \
+    -d 'commands=[{"command":"menu","description":"Panel menusu (sabitle)"},{"command":"paneller","description":"Panel menusu"}]' \
+    >/dev/null 2>&1 || true
 fi
+
+# Paneller sticky reply — Hermes skill "Paneller" / /menu yakalar
+REPLY="$(python3 "$PANELS_PY" reply_keyboard)"
+curl -fsS -X POST "${API}/sendMessage" \
+  -d "chat_id=${TELEGRAM_CHAT_ID}" \
+  -d "parse_mode=HTML" \
+  --data-urlencode "text=Paneller — /menu" \
+  --data-urlencode "reply_markup=${REPLY}" \
+  -d "disable_web_page_preview=true" >/dev/null
+
 log "Menü gönderildi"
