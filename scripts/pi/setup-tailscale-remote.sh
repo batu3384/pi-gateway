@@ -48,15 +48,22 @@ sudo ufw route allow in on tailscale0 out on "${PI_INTERFACE}" to "${LAN_SUBNET}
   port 443 proto tcp comment 'pi-gateway ts-subnet-https'
 TS_IP="$(tailscale ip -4 2>/dev/null | head -1)"
 log "Subnet route reklam: ${LAN_SUBNET}"
-sudo tailscale set --advertise-routes="${LAN_SUBNET}" --accept-routes=false
+# Pi MagicDNS/global NS kendini cözmesin — AdGuard 127.0.0.1 kalsin.
+sudo tailscale set --advertise-routes="${LAN_SUBNET}" --accept-routes=false --accept-dns=false
 log "Tamamlandi"
 log ""
 log "=== Senin yapman gereken (bir kez, tarayici) ==="
+log "ONCESI: UFW tailscale0 :53/udp + ACL tag:pi-gateway:53 + Mac/telefon:"
+log "        dig @${TS_IP} doubleclick.net    (0.0.0.0 / NXDOMAIN)"
+log "        Pi uzerinde dig @${TS_IP} UFW yolunu dogrulamaz."
 log "1) https://login.tailscale.com/admin/dns"
-log "   Nameserver: ${TS_IP}"
-log "   Split DNS domain: ${LAN_DOMAIN}"
-log "   'Override local DNS' ac (telefon/Mac uzaktan *.${LAN_DOMAIN} icin)"
+log "   Global nameserver: ${TS_IP}   (LAN ${LAN_SUBNET%%/*} DEGIL — INPUT 100.x kaynagi LAN kurali tutmaz)"
+log "   Split DNS ${LAN_DOMAIN} -> ${TS_IP} kalsin (Override kapali cihaz)."
+log "   Ikinci global NS ekleme (Tailscale paralel sorar, reklam kacar)."
+log "   Override DNS servers: UFW+ACL+uzak dig yesil SONRA ac."
 log "2) https://login.tailscale.com/admin/machines"
-log "   pi-gateway -> Edit route settings -> ${LAN_SUBNET} ONAYLA"
+log "   pi-gateway -> tag:pi-gateway; route ${LAN_SUBNET} ONAYLA"
+log "   Telefon/Mac: group:owners (tagsiz) veya tag:owner-device"
+log "3) Telefon/Mac: Tailscale Connected + Use Tailscale DNS. Private DNS / iCloud Relay / Chrome Secure DNS kapali."
 log ""
-log "Sonra telefonda Tailscale acikken: http://gateway.${LAN_DOMAIN}"
+log "Panel ayni: http://${TS_IP}/  (MagicDNS sart degil). Filtre icin TS DNS sart."

@@ -177,7 +177,10 @@ setup_ufw() {
     for port in 22 80 443; do
       sudo ufw allow in on tailscale0 to any port "$port" proto tcp comment "pi-gateway tailscale-$port"
     done
-    log "Tailscale bagli — tailscale0: 22/80/443 (admin panelleri Caddy uzerinden)"
+    # DNS UDP asil; 53'u TCP dongusune ekleme. Global NS = Pi 100.x (LAN :53 kurali 100.x kaynagi tutmaz).
+    sudo ufw allow in on tailscale0 to any port 53 proto udp comment 'pi-gateway tailscale-53'
+    sudo ufw allow in on tailscale0 to any port 53 proto tcp comment 'pi-gateway tailscale-53'
+    log "Tailscale bagli — tailscale0: 22/80/443/53 (panel TCP; DNS UDP+TCP)"
   else
     log "Tailscale bagli degil — tailscale0 kurali eklenmedi"
   fi

@@ -74,7 +74,7 @@ Public status page: `https://status.home/status/pi-gateway` (after Caddy auth).
 
 Mac HTTPS cert warning: `make trust-ca`.
 
-Remote access (telefon): Tailscale app **Connected** yeterli — butonlar `http://100.x/p/…` (MagicDNS / Use Tailscale DNS yok). Pi: `setup-caddy-lan-ip` TS:80→LAN Caddy DNAT. Menü sabitlenir. Details: `docs/TAILSCALE.md`.
+Remote access (telefon): Tailscale **Connected** — paneller `http://100.x/p/…` (MagicDNS şart değil). **Filtre ev dışı:** Use Tailscale DNS + admin global NS=`100.x` + Override (`docs/TAILSCALE.md`). Private DNS / iCloud Relay / Chrome Secure DNS kapalı. Pi: `setup-caddy-lan-ip` TS:80→LAN Caddy DNAT.
 
 ## Daily commands (Mac)
 
@@ -107,7 +107,7 @@ If deploy fails: run `make verify-data` to check `data/` symlink; `data/` must n
 
 - **UFW:** `caddy-only` — admin panels only via `*.home` (ports 80/443)
 - **Passwords:** per-service (`.env`, not in git)
-- **Tailscale:** UFW allows only 22/80/443; device restriction via ACL recommended
+- **Tailscale:** UFW `tailscale0` `22/80/443` TCP + `:53` UDP+TCP (AdGuard). ACL `group:owners` / `tag:owner-device`. WAN `:53` kapalı.
 
 Reapply firewall (Pi):
 

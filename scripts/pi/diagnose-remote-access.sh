@@ -49,6 +49,29 @@ else:
       fail "Tailscale IP HTTP yanit vermiyor (${code})"
     fi
   fi
+  # INPUT tailscale0 :53 — Pi local dig @TS_IP bu yolu dogrulamaz (local delivery).
+  if sudo ufw status 2>/dev/null | grep -F 'pi-gateway tailscale-53' | grep -qi udp; then
+    pass "UFW tailscale0 :53/udp (global NS INPUT)"
+  else
+    fail "UFW tailscale0 :53/udp yok — setup-firewall.sh (TS bagliyken)"
+  fi
+  if ss -ulnH 2>/dev/null | grep -qE '(:53 |[.:]53 )'; then
+    pass "host :53/udp dinliyor"
+  else
+    warn "ss :53/udp yok — AdGuard ayakta mi"
+  fi
+  if tailscale debug prefs 2>/dev/null | grep -q '"CorpDNS": false'; then
+    pass "Pi accept-dns=false"
+  elif tailscale debug prefs 2>/dev/null | grep -q '"CorpDNS": true'; then
+    fail "Pi accept-dns=true — MagicDNS Pi resolv kirar"
+  else
+    warn "Pi accept-dns (CorpDNS) okunamadi"
+  fi
+  if [[ -n "$TS_IP" ]]; then
+    echo "       Uzak kanit (Mac/telefon, TS acik, Override henuz sart degil):"
+    echo "       dig @${TS_IP} cloudflare.com +short"
+    echo "       dig @${TS_IP} doubleclick.net +short   # 0.0.0.0 / NXDOMAIN"
+  fi
 else
   fail "Tailscale bagli degil"
 fi

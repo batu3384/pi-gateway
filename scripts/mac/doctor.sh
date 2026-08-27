@@ -115,7 +115,9 @@ if [[ -f "$PROJECT_DIR/.env" ]]; then
     fi
     if command -v tailscale >/dev/null && tailscale status >/dev/null 2>&1; then
       if tailscale dns status 2>/dev/null | grep -q 'Tailscale DNS: enabled'; then
-        warn "Tailscale DNS enabled — fallback sistem NS (fe80/.1). make mac-dns Pi yazar; MagicDNS 100.x ayni."
+        ok "Tailscale DNS enabled (hedef: Pi 100.x AdGuard; Ethernet fe80/.1 ayri)"
+      else
+        warn "Tailscale DNS kapali — ev disi AdGuard yok. Admin Override + Use Tailscale DNS."
       fi
     fi
     unset _eth_ip _eth_dns _lan_pfx

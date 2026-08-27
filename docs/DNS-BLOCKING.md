@@ -64,11 +64,15 @@ Modem panelinde DNS ayari **tek basina tum cihazlari otomatik Pi'ye baglamaz**.
 
 **Kablolu + WiFi:** OS ethernet'i tercih eder. O NIC'te DNS=8.8.8.8/1.1.1.1 ise WAN drop = "LAN internet yok, kabloyu çekince WiFi gelir". Mac: `make mac-dns` (Ethernet+Wi-Fi → Pi [+ULA]; public yedek yok). Wi-Fi DNS boşsa RDNSS `fe80::1` önce — internet var, reklam modemden kaçar.
 
+### Tailscale (owner telefon/Mac — ev dışı AdGuard)
+
+Panel tüneli aynı (`http://100.x`). DNS evde DHCP; dışarıda ISP — Tailscale DNS yoksa filtre sıfır. Sıra: UFW `tailscale0` `:53` UDP+TCP → ACL `tag:pi-gateway:53` (`group:owners`) → **Mac/telefon** `dig @100.x` (Pi local `dig` UFW doğrulamaz) → admin **global nameserver = Pi Tailscale IPv4** (LAN IP değil) → Override. İkinci global NS yok. Pi `--accept-dns=false`. Chrome Secure DNS / Android Private DNS / iCloud Relay Tailscale DNS’i deler. TV/IoT Tailscale yok. Ayrıntı: [TAILSCALE.md](TAILSCALE.md).
+
 | Yap | Yapma |
 |-----|-------|
 | Modem LAN DHCP DNS1 = Pi, DNS2 boş (OFFER yine `.1` basabilir) | WAN / Internet DNS = Pi IP |
 | H3600P: dest boş `:53` Düşür (Unbound DoT ayakta) | Pi'de `iptables REDIRECT :53` — LAN trafiği Pi'ye gelmez, işe yaramaz |
-| Pi UFW: :53 yalnız LAN (`setup-firewall.sh`, `deny routed`) | Unbound DoT yokken WAN `:53` drop — recursive ölür |
+| Pi UFW: :53 LAN + `tailscale0` (`setup-firewall.sh`, `deny routed`) | Unbound DoT yokken WAN `:53` drop — recursive ölür |
 | LAN Grubu Apply yalnız DNS/lease — SSID checkbox'a dokunma | Misafir SSID (`Misafir_*`) açık bırakmak |
 
 **Kontrol:** `make audit-dns` — ARP'taki her cihaz query log'da görünmeli. Yoksa liste değil, bypass (eski lease, Private DNS, iCloud Relay, IPv6 RDNSS).

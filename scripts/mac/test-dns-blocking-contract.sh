@@ -26,6 +26,19 @@ grep -q 'adguard-dhcp OFFER hâlâ modem DNS' "$PROJECT_DIR/scripts/lib/dhcp-dns
   || die "dhcp-dns adguard-dhcp modem DNS FAIL yok"
 grep -q 'pi-gateway dhcp' "$PROJECT_DIR/scripts/pi/setup-firewall.sh" \
   || die "UFW adguard-dhcp UDP/67 yok"
+grep -q 'in on tailscale0 to any port 53 proto udp' "$PROJECT_DIR/scripts/pi/setup-firewall.sh" \
+  || die "UFW tailscale0 :53/udp yok (global NS)"
+grep -q 'in on tailscale0 to any port 53 proto tcp' "$PROJECT_DIR/scripts/pi/setup-firewall.sh" \
+  || die "UFW tailscale0 :53/tcp yok"
+if grep -q 'for port in 22 80 443 53' "$PROJECT_DIR/scripts/pi/setup-firewall.sh"; then
+  die "UFW :53 TCP dongusunde — UDP ayri sart"
+fi
+grep -q -- '--accept-dns=false' "$PROJECT_DIR/scripts/pi/setup-tailscale-remote.sh" \
+  || die "tailscale-remote accept-dns=false yok"
+grep -q 'Uzak kanit' "$PROJECT_DIR/scripts/pi/diagnose-remote-access.sh" \
+  || die "diagnose uzak kanit (Mac dig @100.x) yok"
+grep -q 'pi-gateway tailscale-53' "$PROJECT_DIR/scripts/pi/diagnose-remote-access.sh" \
+  || die "diagnose UFW tailscale-53 yok"
 grep -q 'MISSING_DEVICES' "$PROJECT_DIR/scripts/pi/wait-dns-rollout.sh" \
   || die "rollout MISSING_DEVICES parse yok"
 grep -q 'set +e' "$PROJECT_DIR/scripts/pi/wait-dns-rollout.sh" \
@@ -183,6 +196,12 @@ grep -q 'DHCP_RANGE_START' "$PROJECT_DIR/.env.example" \
   || die ".env.example DHCP_RANGE_START yok"
 grep -Fq 'does **not** stop the resolver' "$PROJECT_DIR/README.md" \
   || die "README LAN IP filtre INPUT yetmez notu yok"
+grep -q 'global nameserver = Pi Tailscale IPv4' "$PROJECT_DIR/docs/DNS-BLOCKING.md" \
+  || die "DNS-BLOCKING Tailscale global NS yok"
+grep -q 'Global nameserver' "$PROJECT_DIR/docs/TAILSCALE.md" \
+  || die "TAILSCALE.md Global nameserver yok"
+grep -q 'dig @100.x' "$PROJECT_DIR/docs/TAILSCALE.md" \
+  || die "TAILSCALE.md uzak dig @100.x yok"
 
 grep -q 'combined_original_trackers.txt' "$PROJECT_DIR/config/adguard/filter-lists.json" \
   || die "CNAME original_trackers aggressive profilde yok"

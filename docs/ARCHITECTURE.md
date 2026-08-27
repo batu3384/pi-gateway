@@ -43,6 +43,10 @@ Client (DHCP from modem .1)
    | WAN dest:53 drop
    v
  Internet
+
+Owner telefon/Mac (Tailscale, Override):
+  DNS --> Pi 100.x:53 (UFW tailscale0) --> ayni AdGuard
+  Panel --> Pi 100.x:80/443 (Caddy). MagicDNS sart degil.
 ```
 
 Pi **LAN gateway değil.** Aynı L2’de `192.168.1.1:53` Pi’den geçmez. `iptables REDIRECT` / “Pi’yi GW yap” DNS2’yi kesmez (on-link). Yeni kutu veya cihaz DNS yoksa **tavan bu.**
@@ -56,6 +60,7 @@ Pi **LAN gateway değil.** Aynı L2’de `192.168.1.1:53` Pi’den geçmez. `ipt
 | WAN dest:53 drop + Unbound DoT | Public resolver :53 kapanır; Pi :853 ile çıkar. |
 | Pi forwarding kapalı | SPOF + on-link `.1:53` hâlâ açık = kazanç yok, kesinti var. |
 | Mac `make mac-dns` | Tek istemci kilidi (LAN IP). Telefon/TV/IoT DHCP DNS2. |
+| Tailscale global NS (`100.x`) | Owner cihaz ev dışında da AdGuard. TV/IoT kapsamaz. |
 
 Tam ev kilidi = başka L2 (OpenWrt) veya cihaz DNS. İkisi de bu hedefte yok. Mimari **availability-first, block best-effort.**
 
@@ -73,7 +78,7 @@ Tam ev kilidi = başka L2 (OpenWrt) veya cihaz DNS. İkisi de bu hedefte yok. Mi
 | Recovery | recover-stack.sh | Restart unhealthy / degraded stack |
 | Security | UFW + CrowdSec | LAN-scoped admin ports, SSH protection |
 | Host | log2ram, sysctl tuning, watchdog | SD longevity, UDP performance |
-| Remote | Tailscale (host) | Secure admin from anywhere |
+| Remote | Tailscale (host) | Panels `100.x` + owner DNS to AdGuard `:53` |
 | Storage | `/mnt/ssd/pi-gateway-data` (symlink `~/pi-gateway/data`) | AdGuard, Kuma, n8n, backups |
 
 ## Phased rollout

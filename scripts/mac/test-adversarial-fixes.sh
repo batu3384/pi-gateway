@@ -205,6 +205,17 @@ if grep -q '192\.168\.0\.0/16\|"root"' "$tailscale_acl"; then
 fi
 grep -q 'YOUR_TAILSCALE_LAN_SUBNET:53,80,443' "$tailscale_acl" \
   || die "C21: Tailscale LAN port allowlist yok"
+grep -q 'tag:pi-gateway:53' "$tailscale_acl" \
+  || die "C21: Tailscale Pi :53 (global NS) yok"
+grep -q '"src": \["group:owners", "tag:owner-device"\]' "$tailscale_acl" \
+  || die "C21: ACL src group:owners (tagsiz telefon) yok"
+if grep -q 'for port in 22 80 443 53' "$firewall"; then
+  die "C21: DNS 53 TCP dongusunde — UDP ayri kural sart"
+fi
+grep -q 'in on tailscale0 to any port 53 proto udp' "$firewall" \
+  || die "C21: UFW tailscale0 :53/udp yok"
+grep -q 'in on tailscale0 to any port 53 proto tcp' "$firewall" \
+  || die "C21: UFW tailscale0 :53/tcp yok"
 grep -q 'DEFAULT_FORWARD_POLICY="DROP"' "$tailscale_remote" \
   || die "C21: Tailscale forward policy DROP yok"
 grep -q 'ts-subnet-dns-udp\|ts-subnet-https' "$tailscale_remote" \
