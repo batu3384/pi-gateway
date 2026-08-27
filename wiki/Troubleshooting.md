@@ -88,6 +88,5 @@ shellcheck -S warning scripts/pi/*.sh scripts/mac/*.sh scripts/lib/*.sh
 | SSD FSM runbook | `docs/runbooks/SSD-FSM.md` |
 | Operations | `docs/OPERATIONS.md` |
 | Restore / Restic | `docs/RESTORE.md` |
-| Codebase audits | `docs/codebase-audit/` |
 
 Open a [GitHub Issue](https://github.com/batu3384/pi-gateway/issues) with `journalctl` snippets and `state.json`.

@@ -4,7 +4,7 @@ Status legend: **Done** | **Now** | **Next** | **Later**
 
 Tracked work lives here and in [GitHub Issues](https://github.com/batu3384/pi-gateway/issues). Security: [Security](Security.md) / [Security Advisories](https://github.com/batu3384/pi-gateway/security/advisories).
 
-> This page is separate from README feature lists and audit reports — it reflects **milestones**, not wishlist features.
+> Milestones only — not a feature wishlist.
 
 ## Now
 
@@ -62,7 +62,6 @@ gantt
 
     section Docs
     ADR set 001-005                :done, doc1, 2025-01, 2026-06
-    Codebase audit cadence         :done, doc2, 2026-08, 2026-08
     Docker SSD doc matrix          :doc3, 2026-09, 2026-10
 ```
 
@@ -73,4 +72,3 @@ gantt
 | Bug / feature | [Issues](https://github.com/batu3384/pi-gateway/issues) |
 | Security | [Security Advisories](https://github.com/batu3384/pi-gateway/security/advisories) |
 | Architecture | PR + update `docs/adr/` |
-| Audit findings | `docs/codebase-audit/` + fix PR |

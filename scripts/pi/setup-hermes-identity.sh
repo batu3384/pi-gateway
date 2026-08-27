@@ -80,30 +80,45 @@ print("OK skills.disabled +=", ",".join(deny))
 PY
 log "OK skills.disabled (ölü Pi skill)"
 
-# MEMORY: yanlış yığın iddialarını kısaca düzelt (ajan notu; SOUL SSOT kalır)
+# MEMORY: wishlist / eski rapor kuyruğunu sil; SSOT notu bırak
 mem="${HERMES_HOME}/memories/MEMORY.md"
 if [[ -f "$mem" ]]; then
   python3 - <<'PY'
 from pathlib import Path
 p = Path.home() / ".hermes" / "memories" / "MEMORY.md"
-text = p.read_text(errors="replace")
-marker = "Pi Gateway yığın SSOT"
-note = (
+raw = p.read_text(errors="replace")
+drop_prefixes = (
+    "Proje kuyruğu",
+    "Reklam engelleme projesi",
+    "En Yaratıcı",
+    "Waow",
+    "engineering-report",
+    "Mühendislik Analiz",
+)
+parts = [b.strip() for b in raw.split("§") if b.strip()]
+kept = []
+for b in parts:
+    if any(b.startswith(d) or d in b[:80] for d in drop_prefixes):
+        continue
+    if "Proje kuyruğu:" in b or "Vaultwarden, deprem" in b:
+        continue
+    kept.append(b)
+ssot = (
     "Pi Gateway yığın SSOT: AdGuard+Unbound+Caddy+n8n+NetAlertX+CrowdSec+"
     "Prometheus/Grafana+restic+Hermes. Forgejo/Syncthing YOK. "
-    "Detay: ~/.hermes/SOUL.md + skill pi-gateway-ops."
+    "Özellik wishlist yok. Detay: ~/.hermes/SOUL.md + skill pi-gateway-ops."
 )
-if marker in text:
-    raise SystemExit(0)
-# Eski Forgejo satırlarını yumuşat
-for bad in ("Forgejo", "Syncthing"):
-    if bad in text and "YOK" not in text.split(bad, 1)[0][-40:]:
-        text = text.replace(bad, f"{bad}(KALDIRILDI)", 1)
-block = text.rstrip() + "\n§\n" + note + "\n"
-p.write_text(block)
-print("OK MEMORY.md SSOT notu")
+kept = [b for b in kept if "Pi Gateway yığın SSOT" not in b]
+kept.append(ssot)
+new = "\n§\n".join(kept) + "\n"
+if new != raw:
+    p.with_suffix(".md.bak-wishlist-purge").write_text(raw)
+    p.write_text(new)
+    print("OK MEMORY.md wishlist purge")
+else:
+    print("skip MEMORY.md")
 PY
-  log "OK MEMORY SSOT notu" || log "skip MEMORY"
+  log "OK MEMORY wishlist purge" || log "skip MEMORY"
 fi
 
 log "Tamam — gateway restart önerilir (yeni SOUL)"

@@ -11,7 +11,7 @@ metadata:
 ---
 # Pi Gateway ops
 
-Home server: Raspberry Pi 4B 4GB (`batu`, ~192.168.1.112). Repo: `~/pi-gateway`.
+Home server: Raspberry Pi 4B 4GB. Repo: `~/pi-gateway`.
 
 ## Stack (doğru)
 

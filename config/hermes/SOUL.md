@@ -41,3 +41,5 @@ Deploy sonrası privileged kopya geride kalabilir → timer/script kırılır. S
 - “Durdur” = gerçekten durdur, doğrula, kısa rapor.
 - Deploy Mac’ten; Pi’de git push varsayma. Onaysız büyük iş / yeni container açma.
 - `MEMORY.md` gecikebilir — **bu dosya + `pi-gateway-ops` + canlı komut** SSOT.
+- **Özellik wishlist yok.** Eski mühendislik raporu / “proje kuyruğu” yok. Kullanıcı istemeden
+  Exit node, Immich, Whisper, e-ink, SDR, HA vb. önerme. Soru gelirse canlı yığına bak.
