@@ -32,11 +32,14 @@ if git grep -E '@(gmail|github)\.com' -- ':!*.example' 2>/dev/null \
   die "Gercek e-posta tracked dosyada (example.com / home.local haric)"
 fi
 
-# Kisisel LAN IP (ornek subnet dokumanlari haric)
-if git grep -E '192\.168\.1\.(10[0-9]|11[0-9]|112)' \
-  -- ':!docs/ADGUARD-DHCP.md' ':!scripts/mac/validate-public-repo.sh' 2>/dev/null | head -1; then
+# Kisisel LAN IP (.100–.119 / .112). Ornek DHCP: .50. SIGPIPE+pipefail flaky — capture.
+_lan_hits="$(git grep -nE '192\.168\.1\.(10[0-9]|11[0-9]|112)' \
+  -- ':!docs/ADGUARD-DHCP.md' ':!scripts/mac/validate-public-repo.sh' 2>/dev/null || true)"
+if [[ -n "$_lan_hits" ]]; then
+  printf '%s\n' "$_lan_hits" | head -5 >&2
   die "Kisisel LAN IP tracked dosyada"
 fi
+unset _lan_hits
 
 if git grep -E 'batu@' -- ':!scripts/mac/validate-public-repo.sh' 2>/dev/null | head -1; then
   die "Kisisel kullanici adi tracked dosyada"

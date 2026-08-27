@@ -104,7 +104,7 @@ if [[ -f "$PROJECT_DIR/.env" ]]; then
     _eth_ip="$(networksetup -getinfo Ethernet 2>/dev/null | awk -F': ' '/^IP address:/{print $2; exit}')"
     _eth_dns="$(networksetup -getdnsservers Ethernet 2>/dev/null || true)"
     _lan_pfx="${PI_STATIC_IP%.*}."
-    # 192.168.1.1 ⊂ 192.168.1.112 — satir eslesmesi; *LAN_GATEWAY* false WARN.
+    # gateway IP string Pi IP icinde (ornek .1 ⊂ .11x) — *LAN_GATEWAY* false WARN.
     if [[ -n "${PI_STATIC_IP:-}" && -n "$_eth_ip" && "$_eth_ip" != "none" && "$_eth_ip" == "$_lan_pfx"* ]]; then
       if [[ "$_eth_dns" == *"aren't any DNS"* ]] \
         || { [[ -n "${LAN_GATEWAY:-}" ]] && printf '%s\n' "$_eth_dns" | grep -Fxq "$LAN_GATEWAY"; }; then
