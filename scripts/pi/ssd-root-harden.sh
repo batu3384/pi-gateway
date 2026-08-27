@@ -70,10 +70,11 @@ if command -v rpi-eeprom-config >/dev/null 2>&1; then
 else
   log "WARN: rpi-eeprom-config yok"
 fi
-# SSH: password auth + zayiflik
+# SSH: password auth + zayiflik (asıl kapatma: harden-host.sh 00-pi-gateway-ssh.conf)
 if [[ -f /etc/ssh/sshd_config ]]; then
-  if grep -Eiq '^\s*PasswordAuthentication\s+yes' /etc/ssh/sshd_config; then
-    log "WARN: SSH PasswordAuthentication=yes — key ekleyip kapat"
+  if grep -Eiq '^\s*PasswordAuthentication\s+yes' /etc/ssh/sshd_config \
+    && [[ ! -f /etc/ssh/sshd_config.d/00-pi-gateway-ssh.conf ]]; then
+    log "WARN: SSH PasswordAuthentication=yes — key ekleyip harden-host calistir"
   fi
 fi
 if [[ -f "$HOME/.ssh/authorized_keys" ]] && [[ -s "$HOME/.ssh/authorized_keys" ]]; then

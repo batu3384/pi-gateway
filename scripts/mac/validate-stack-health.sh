@@ -148,7 +148,46 @@ ok ".env.example guvenli placeholders"
 
 grep -q 'NODES_EXCLUDE.*executeCommand' "$compose" \
   || die "n8n executeCommand exclude yok"
-ok "n8n executeCommand kapali"
+grep -q 'n8n-nodes-base.ssh' "$compose" \
+  || die "n8n ssh node exclude yok"
+grep -q 'n8n-nodes-base.ssh' "$PROJECT_DIR/scripts/pi/post-deploy-code.sh" \
+  || die "code deploy n8n ssh skip yok"
+ok "n8n code-deploy skip recreate"
+
+grep -q 'df -iP' "$health" || die "health inode df -iP yok"
+grep -q 'MemAvailable' "$health" || die "health mem esigi yok"
+ok "health inode+mem"
+
+grep -q 'passwordauthentication yes' "$PROJECT_DIR/scripts/pi/harden-host.sh" \
+  || die "SSH sshd -T dogrulama yok"
+
+grep -q 'cloud-init-local' "$PROJECT_DIR/scripts/lib/reset-gateway-units.sh" \
+  || die "reset-failed cloud-init yok"
+if awk '/units=\(/,/\)/' "$PROJECT_DIR/scripts/lib/reset-gateway-units.sh" | grep -q 'pi-gateway-backup'; then
+  die "reset-failed yedek fail gizlemesin"
+fi
+grep -q 'scripts/lib/reset-gateway-units.sh' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" \
+  || die "privileged reset-gateway-units yok"
+ok "privileged reset-gateway-units"
+grep -q 'PasswordAuthentication no' "$PROJECT_DIR/scripts/pi/harden-host.sh" \
+  || die "SSH PasswordAuthentication kapatma yok"
+ok "SSH key-only harden"
+
+grep -q 'chmod 600' "$PROJECT_DIR/scripts/pi/fix-config-perms.sh" \
+  || die ".env 600 yok"
+ok ".env mode 600"
+
+grep -q 'X-Content-Type-Options nosniff' "$PROJECT_DIR/config/caddy/Caddyfile.tls.template" \
+  || die "Caddy nosniff yok"
+if grep -qi 'Strict-Transport-Security' "$PROJECT_DIR/config/caddy/Caddyfile.tls.template" \
+  "$PROJECT_DIR/config/caddy/Caddyfile.template"; then
+  die "Caddy HSTS yasak (LAN mkcert)"
+fi
+ok "Caddy security header (no HSTS)"
+
+grep -q 'No Alertmanager' "$PROJECT_DIR/config/prometheus/prometheus.yml" \
+  || die "prometheus dashboard-only yorum yok"
+ok "prometheus scrape-only notu"
 
 grep -q 'N8N_WEBHOOK_SECRET' "$PROJECT_DIR/.env.example" \
   || die "N8N_WEBHOOK_SECRET .env.example yok"

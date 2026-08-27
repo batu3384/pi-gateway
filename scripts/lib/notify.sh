@@ -376,13 +376,13 @@ notify_slo_backup_ok() {
 notify_disk_warn() {
   local mount="$1"
   local detail="$2"
+  local headline="${3:-Disk doluluk uyarısı: ${mount}}"
   local key="disk-${mount//\//-}"
   local body
   body="$(notify_html_alert "$(hostname -s 2>/dev/null || echo pi-gateway)" \
-    "Disk doluluk uyarısı: ${mount}" \
+    "$headline" \
     "$detail" \
-    "Pi: <code>df -h ${mount}</code>
-Gerekirse log veya eski yedek temizliği.")"
+    "Pi: <code>df -hP ${mount}</code> · <code>df -iP ${mount}</code> · <code>free -m</code>")"
   notify_send_with_transition "$key" "fail" "📋 Pi Gateway · Disk" "$body" "HTML"
 }
 

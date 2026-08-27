@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Code deploy: repo sync + privileged lib + Hermes/notify hot path.
-# Skip: bootstrap, compose canary/recreate, UFW/n8n/Kuma/CrowdSec full post-deploy.
+# Skip: bootstrap, compose canary, UFW/Kuma/CrowdSec full post-deploy.
+# n8n: yalnız NODES_EXCLUDE henüz uygulanmadıysa recreate.
 set -euo pipefail
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 SCRIPT_DIR="${REMOTE_DIR}/scripts/pi"
@@ -32,6 +33,23 @@ crit() {
 
 crit "Privileged scripts" "$SCRIPT_DIR/install-privileged-scripts.sh"
 soft "Config izinleri" "$SCRIPT_DIR/fix-config-perms.sh"
+soft "Host sertlestirme" "$SCRIPT_DIR/harden-host.sh"
+
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx caddy; then
+  log ">> Caddy reload"
+  docker exec caddy caddy reload --config /etc/caddy/Caddyfile \
+    || log "WARN: caddy reload"
+fi
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx n8n; then
+  n8n_ex="$(docker inspect n8n --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | grep '^NODES_EXCLUDE=' || true)"
+  if [[ "$n8n_ex" == *n8n-nodes-base.ssh* ]]; then
+    log "n8n NODES_EXCLUDE zaten ssh kapali — recreate yok"
+  else
+    log ">> n8n recreate (NODES_EXCLUDE ssh)"
+    (cd "$REMOTE_DIR/compose" && docker compose --env-file ../.env up -d --no-deps n8n) \
+      || log "WARN: n8n up"
+  fi
+fi
 
 # Hermes / Telegram outbox hot path (sohbet + alarm metinleri)
 if [[ "${HERMES_TELEGRAM_GATEWAY:-}" == "true" ]]; then

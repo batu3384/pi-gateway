@@ -42,7 +42,7 @@ Include: affected path, reproduction, impact.
 
 - `UFW_ADMIN_EXPOSURE=caddy-only`
 - Admin ports bound to localhost where possible
-- n8n `executeCommand` disabled in workflow set
+- n8n `executeCommand` and SSH nodes disabled in compose `NODES_EXCLUDE`
 - Gitleaks in CI (`validate` workflow)
 
 ## Public repo checklist

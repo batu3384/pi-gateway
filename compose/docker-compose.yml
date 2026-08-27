@@ -141,7 +141,7 @@ services:
       N8N_DIAGNOSTICS_ENABLED: "false"
       N8N_PERSONALIZATION_ENABLED: "false"
       # executeCommand = host komut yuzeyi; disk/morning host scriptlerinde
-      NODES_EXCLUDE: '["n8n-nodes-base.executeCommand"]'
+      NODES_EXCLUDE: '["n8n-nodes-base.executeCommand","n8n-nodes-base.ssh"]'
       PI_TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       PI_TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
     volumes:

@@ -1,41 +1,56 @@
+(security_headers) {
+  header {
+    X-Content-Type-Options nosniff
+    X-Frame-Options SAMEORIGIN
+    Referrer-Policy no-referrer
+  }
+}
+
 gateway.__LAN_DOMAIN__, panel.__LAN_DOMAIN__ {
   tls /etc/caddy/certs/__LAN_DOMAIN__.pem /etc/caddy/certs/__LAN_DOMAIN__-key.pem
+  import security_headers
   __CADDY_BASIC_AUTH__
   reverse_proxy homepage:3000
 }
 
 status.__LAN_DOMAIN__ {
   tls /etc/caddy/certs/__LAN_DOMAIN__.pem /etc/caddy/certs/__LAN_DOMAIN__-key.pem
+  import security_headers
   __CADDY_BASIC_AUTH__
   reverse_proxy uptime-kuma:3001
 }
 
 dns.__LAN_DOMAIN__ {
   tls /etc/caddy/certs/__LAN_DOMAIN__.pem /etc/caddy/certs/__LAN_DOMAIN__-key.pem
+  import security_headers
   __CADDY_BASIC_AUTH__
   reverse_proxy host.docker.internal:__ADGUARD_WEB_PORT__
 }
 
 n8n.__LAN_DOMAIN__ {
   tls /etc/caddy/certs/__LAN_DOMAIN__.pem /etc/caddy/certs/__LAN_DOMAIN__-key.pem
+  import security_headers
   __CADDY_BASIC_AUTH__
   reverse_proxy n8n:5678
 }
 
 logs.__LAN_DOMAIN__ {
   tls /etc/caddy/certs/__LAN_DOMAIN__.pem /etc/caddy/certs/__LAN_DOMAIN__-key.pem
+  import security_headers
   __CADDY_BASIC_AUTH__
   reverse_proxy dozzle:8080
 }
 
 grafana.__LAN_DOMAIN__ {
   tls /etc/caddy/certs/__LAN_DOMAIN__.pem /etc/caddy/certs/__LAN_DOMAIN__-key.pem
+  import security_headers
   __CADDY_BASIC_AUTH__
   reverse_proxy grafana:3000
 }
 
 devices.__LAN_DOMAIN__ {
   tls /etc/caddy/certs/__LAN_DOMAIN__.pem /etc/caddy/certs/__LAN_DOMAIN__-key.pem
+  import security_headers
   # Host-network NetAlertX — Caddy bridge -> host.docker.internal (extra_hosts)
   reverse_proxy host.docker.internal:__NETALERTX_PORT__ {
     header_up X-Forwarded-Proto {scheme}

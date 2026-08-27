@@ -1,3 +1,5 @@
+# Scrape only — alerts are health-check + Uptime Kuma + Telegram (notify.sh).
+# No Alertmanager. Grafana dashboards consume this.
 global:
   scrape_interval: 30s
   evaluation_interval: 30s

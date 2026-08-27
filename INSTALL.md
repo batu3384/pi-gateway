@@ -59,6 +59,8 @@ Do **not** use on ZTE H3600P — DHCP relay swallows LAN DISCOVER, house loses I
 
 Details: [docs/TAILSCALE.md](docs/TAILSCALE.md)
 
+**SSH:** deploy sonrası şifre kapalı (yalnız key). Key kaybı: HDMI/konsol veya SD `userconf` / raspi-config; `sudo rm /etc/ssh/sshd_config.d/00-pi-gateway-ssh.conf && sudo systemctl reload ssh`
+
 ## Commands
 
 ```bash

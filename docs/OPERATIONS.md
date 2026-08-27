@@ -125,8 +125,12 @@ If deploy fails: run `make verify-data` to check `data/` symlink; `data/` must n
 ## Security (defaults)
 
 - **UFW:** `caddy-only` — admin panels only via `*.home` (ports 80/443)
-- **Passwords:** per-service (`.env`, not in git)
+- **Passwords:** per-service (`.env`, not in git). `.env` mode 600. Restic şifresi `.env` içinde (aynı disk; ciphertext tek başına açılmaz)
+- **SSH:** key-only (`/etc/ssh/sshd_config.d/00-pi-gateway-ssh.conf`, sshd first-wins vs cloud-init). `pi` sudo NOPASSWD:ALL bilinçli (whitelist yok)
+- **Prometheus:** Grafana scrape. Uyarı = health-check + Kuma + Telegram — Alertmanager yok
 - **Tailscale:** UFW `tailscale0` `22/80/443` TCP + `:53` UDP+TCP (AdGuard). ACL `group:owners` / `tag:owner-device`. WAN `:53` kapalı.
+
+SSH şifre geri (key kaybı): Pi HDMI/konsol veya SD `userconf`; sonra `sudo rm /etc/ssh/sshd_config.d/00-pi-gateway-ssh.conf && sudo systemctl reload ssh`
 
 Reapply firewall (Pi):
 
@@ -183,7 +187,7 @@ SLO PUSH heartbeats → Uptime Kuma (`docs/SLO.md`).
 
 | Source | What it sends |
 |--------|---------------|
-| `health-check` timer | DNS errors, disk 80%+, SD warnings |
+| `health-check` timer | DNS errors, disk/inode 80%+, düşük RAM, SD warnings |
 | `restic-backup` | Backup completed |
 | `health-check` / SSD hotplug | Stack or SSD recovery |
 | n8n ← Uptime Kuma webhook | Service down / back up |

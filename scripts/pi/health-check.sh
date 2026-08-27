@@ -386,21 +386,31 @@ if [[ "$exit_code" -eq 0 ]]; then
 fi
 DISK_WARN_PCT="${DISK_WARN_PCT:-80}"
 DISK_PRUNE_PCT="${DISK_PRUNE_PCT:-65}"
+INODE_WARN_PCT="${INODE_WARN_PCT:-80}"
+MEM_WARN_MB="${MEM_WARN_MB:-128}"
 for mount in / /mnt/ssd; do
   if [[ -d "$mount" ]]; then
-    usage="$(df "$mount" 2>/dev/null | awk 'NR==2 {gsub(/%/,""); print $5}')"
-    if [[ -n "${usage:-}" ]] && (( usage >= DISK_WARN_PCT )); then
-      # shellcheck source=../lib/notify.sh
-      source "$SCRIPT_DIR/../lib/notify.sh"
-      notify_disk_warn "$mount" "$usage"
+    usage="$(df -P "$mount" 2>/dev/null | awk 'NR==2 {gsub(/%/,""); print $5}')"
+    if [[ -n "${usage:-}" && "$usage" =~ ^[0-9]+$ ]] && (( 10#$usage >= DISK_WARN_PCT )); then
+      notify_disk_warn "$mount" "${usage}%"
       logger -t "$LOG_TAG" "WARN disk ${mount} at ${usage}%"
     fi
-    if [[ "$mount" == "/" ]] && [[ -n "${usage:-}" ]] && (( usage >= DISK_PRUNE_PCT )); then
+    iusage="$(df -iP "$mount" 2>/dev/null | awk 'NR==2 {gsub(/%/,""); print $5}')"
+    if [[ -n "${iusage:-}" && "$iusage" =~ ^[0-9]+$ ]] && (( 10#$iusage >= INODE_WARN_PCT )); then
+      notify_disk_warn "$mount" "inode ${iusage}%" "Inode doluluk: ${mount}"
+      logger -t "$LOG_TAG" "WARN inode ${mount} at ${iusage}%"
+    fi
+    if [[ "$mount" == "/" ]] && [[ -n "${usage:-}" && "$usage" =~ ^[0-9]+$ ]] && (( 10#$usage >= DISK_PRUNE_PCT )); then
       REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/prune-sd-space.sh" || \
         logger -t "$LOG_TAG" "WARN sd-prune failed"
     fi
   fi
 done
+mem_avail_mb="$(awk '/^MemAvailable:/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || true)"
+if [[ -n "${mem_avail_mb:-}" && "$mem_avail_mb" =~ ^[0-9]+$ ]] && (( 10#$mem_avail_mb < MEM_WARN_MB )); then
+  notify_disk_warn "memory" "MemAvailable ${mem_avail_mb}MiB (esik ${MEM_WARN_MB})" "Bellek düşük"
+  logger -t "$LOG_TAG" "WARN mem available ${mem_avail_mb}MiB"
+fi
 _export="${SCRIPT_DIR}/export-gateway-state.sh"
 [[ -x "$_export" ]] || _export="${REMOTE_DIR}/scripts/pi/export-gateway-state.sh"
 if [[ -x "$_export" ]]; then

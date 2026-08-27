@@ -35,9 +35,10 @@ WEAK_TLS_OK=yes
 
 ## Secrets
 
-- `.env` never goes into git
+- `.env` never goes into git (Pi: mode 600 via `fix-config-perms.sh`)
 - `backup.sh` / `backup-pull` skip `.env` and `caddy/certs` (mkcert private key). AGH runtime yaml skipped on Mac pull (mode 640). Encrypted restic still has data + certs.
-- Restic is encrypted; use `make backup-pull` for offsite
+- Restic is encrypted; password lives in `.env` on the same Pi (co-location accepted). Use `make backup-pull` for offsite
+- SSH: password auth off after key install (`harden-host.sh`). Rollback: HDMI/SD userconf + remove `00-pi-gateway-ssh.conf`
 
 ## CrowdSec bouncer
 

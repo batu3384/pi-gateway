@@ -30,6 +30,7 @@ SCRIPTS=(
   scripts/lib/gateway-probes.py
   scripts/lib/netalert-devices.py
   scripts/lib/notify.sh
+  scripts/lib/reset-gateway-units.sh
   scripts/pi/boot-notify.sh
   scripts/pi/hermes-inbox-up-notify.sh
   scripts/lib/bulletin-slo.py
