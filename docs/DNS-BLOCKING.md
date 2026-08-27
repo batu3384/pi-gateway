@@ -36,6 +36,8 @@ Custom rules: copy `config/adguard/user-rules.local.txt.example` → `user-rules
 Daily filter refresh: `pi-gateway-adguard-filters.timer` (~04:15).
 One-shot tune from Mac: `make adguard-tune` (post-deploy yok). Unbound `--force-recreate` yalnız `unbound.conf` container start'tan yeni ise — filtre-only DNS deliği yok.
 
+**DNS knobs** (`apply-adguard-dns.sh`, env): `ADGUARD_RATELIMIT=50` (Tailscale burst; düşürme), `ADGUARD_CACHE_SIZE=16777216` (16MiB), `ADGUARD_QUERYLOG_INTERVAL_DAYS=7` + `ADGUARD_STATS_INTERVAL_DAYS=7`. Fresh install template aynı. TLD/IDN blanket block yok (FP). Kaçan reklam: manuel “reklam şimdi” + querylog — otomatik haftalık LLM rapor yok.
+
 **Grafana:** `export-adguard-metrics.sh` (health timer, textfile) → blocked ratio + per-list `rules_count` / `last_updated` age. A silent 403 on one list shows as that series going stale, not only `ADGUARD_MIN_FILTER_RULES`.
 
 **DNSSEC:** Unbound default validator. Proof (not assumption): `diagnose-dns-bypass.sh` / smoke — Unbound `:5335` AD flag on `cloudflare.com`; `dnssec-failed.org` SERVFAIL (`+time=8`, first miss can exceed 3s). Health timer checks AD only (no flaky third-party bogus domain every 2 min). AGH may copy AD to clients; contract is Unbound.

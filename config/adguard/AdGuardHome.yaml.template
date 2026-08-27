@@ -21,12 +21,13 @@ dns:
     - 127.0.0.1:5335
   protection_enabled: true
   filtering_enabled: true
-  ratelimit: 20
+  # Tailscale Override burst: 20 dusuk (SERVFAIL). apply-adguard-dns ADGUARD_RATELIMIT ile override.
+  ratelimit: 50
   refuse_any: true
   upstream_mode: load_balance
   upstream_timeout: 5s
   blocked_response_ttl: 60
-  cache_size: 4194304
+  cache_size: 16777216
   cache_ttl_min: 300
   cache_ttl_max: 86400
   cache_optimistic: true
@@ -61,12 +62,12 @@ __USER_RULES_YAML__
 
 querylog:
   enabled: true
-  interval: 24h
-  size_memory: 1000
+  interval: 168h
+  size_memory: 5000
 
 statistics:
   enabled: true
-  interval: 24h
+  interval: 168h
 
 __DHCP_BLOCK__
 

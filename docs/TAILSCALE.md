@@ -58,7 +58,7 @@ Do **not** flip Override first. Same lesson as WAN `:53` drop: listen + ACL + pr
 
 Exit node later: enable **Use with exit node** on this nameserver or DNS bypasses AdGuard.
 
-AGH `ratelimit: 20` — if apps flake after Override, check AdGuard logs before adding a public NS.
+AGH `ratelimit` default **50** (`ADGUARD_RATELIMIT`) — Override sonrası app flake olursa AdGuard log'a bak; public NS ekleme, gerekirse limiti yükselt (düşürme).
 
 ## Tailscale Serve (recommended — remote Telegram links)
 

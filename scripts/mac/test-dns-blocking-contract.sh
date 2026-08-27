@@ -13,6 +13,7 @@ need "$PROJECT_DIR/scripts/pi/audit-dns-coverage.sh"
 need "$PROJECT_DIR/scripts/pi/diagnose-dns-bypass.sh"
 need "$PROJECT_DIR/scripts/pi/ensure-adguard-blocking.sh"
 need "$PROJECT_DIR/scripts/pi/wait-dns-rollout.sh"
+need "$PROJECT_DIR/scripts/pi/apply-adguard-dns.sh"
 need "$PROJECT_DIR/scripts/pi/apply-adguard-filters.sh"
 need "$PROJECT_DIR/config/adguard/filter-lists.json"
 need "$PROJECT_DIR/config/adguard/user-rules.txt"
@@ -78,6 +79,20 @@ grep -q 'filter_7.txt' "$PROJECT_DIR/config/adguard/filter-lists.json" \
   || die "Smart TV HostlistsRegistry filter_7 yok"
 grep -q 'iptables REDIRECT' "$PROJECT_DIR/docs/DNS-BLOCKING.md" \
   || die "DNS-BLOCKING Pi NAT anti-pattern yok"
+grep -q 'ADGUARD_RATELIMIT' "$PROJECT_DIR/scripts/pi/apply-adguard-dns.sh" \
+  || die "apply-adguard-dns RATELIMIT yok"
+grep -q 'querylog_config' "$PROJECT_DIR/scripts/pi/apply-adguard-dns.sh" \
+  || die "apply-adguard-dns querylog_config yok"
+grep -q 'ADGUARD_RATELIMIT=50' "$PROJECT_DIR/.env.example" \
+  || die ".env.example ADGUARD_RATELIMIT yok"
+grep -q 'ratelimit: 50' "$PROJECT_DIR/config/adguard/AdGuardHome.yaml.template" \
+  || die "AGH template ratelimit 50 yok"
+grep -q 'interval: 168h' "$PROJECT_DIR/config/adguard/AdGuardHome.yaml.template" \
+  || die "AGH template querylog 168h yok"
+grep -q 'ADGUARD_RATELIMIT=50' "$PROJECT_DIR/docs/DNS-BLOCKING.md" \
+  || die "DNS-BLOCKING knobs dokuman yok"
+awk '/^adguard-tune:/,/^recover-stack:/' "$PROJECT_DIR/Makefile" | grep -q 'apply-adguard-dns.sh' \
+  || die "Makefile adguard-tune apply-adguard-dns sync yok"
 grep -F 'ponytail: AGH add/remove_url' "$PROJECT_DIR/scripts/pi/apply-adguard-filters.sh" >/dev/null \
   || die "apply-adguard-filters AGH non-JSON POST govde"
 grep -q 'AGH non-JSON' "$PROJECT_DIR/scripts/pi/apply-adguard-filters.sh" \
