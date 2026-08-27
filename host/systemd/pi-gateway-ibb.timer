@@ -1,0 +1,11 @@
+[Unit]
+Description=Pi Gateway İBB HKI every 30 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=30min
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

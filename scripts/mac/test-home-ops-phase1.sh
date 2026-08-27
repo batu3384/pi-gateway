@@ -35,6 +35,7 @@ python3 "$ROOT/scripts/lib/quake-alert.py" --self-check || die "quake-alert"
 bash "$ROOT/scripts/pi/kuma-monthly-report.sh" --self-check || die "kuma-report"
 bash "$ROOT/scripts/pi/isp-speedtest.sh" --self-check || die "speedtest"
 bash "$ROOT/scripts/pi/export-adguard-metrics.sh" --self-check || die "adguard-metrics"
+bash "$ROOT/scripts/pi/ibb-air-quality.sh" --self-check || die "ibb-air"
 ok "A4 A5 B2 B4 self-check"
 
 grep -q 'pi_gateway_dns_latency_ms' "$ROOT/scripts/lib/gateway-probes.py" \
@@ -48,12 +49,28 @@ grep -q 'pi_gateway_hosts_online' "$ROOT/config/grafana/provisioning/dashboards/
   || die "grafana kim-evde yok"
 grep -q 'pi_gateway_adguard_blocked_ratio' "$ROOT/config/grafana/provisioning/dashboards/json/pi-gateway.json" \
   || die "grafana adguard blocked_ratio yok"
+grep -q 'pi_gateway_adguard_top_client_queries' "$ROOT/scripts/lib/adguard-metrics.py" \
+  || die "adguard top_client metrik yok"
+grep -q 'pi_gateway_adguard_top_client_queries' "$ROOT/config/grafana/provisioning/dashboards/json/pi-gateway.json" \
+  || die "grafana adguard top clients yok"
+grep -q 'pi_gateway_ibb_hki' "$ROOT/config/grafana/provisioning/dashboards/json/pi-gateway.json" \
+  || die "grafana ibb hki yok"
+grep -q 'notify_ibb_hki_warn' "$ROOT/scripts/lib/notify.sh" || die "ibb notify yok"
 grep -q 'who_home' "$ROOT/config/homepage/services.yaml.template" || die "homepage kim-evde yok"
 grep -q 'def online_devices' "$ROOT/scripts/lib/netalert-devices.py" || die "online_devices yok"
 ok "A5 B2 B3 panolar"
 
 [[ -f "$ROOT/host/systemd/pi-gateway-kuma-report.timer" ]] || die "kuma timer yok"
 [[ -f "$ROOT/host/systemd/pi-gateway-speedtest.timer" ]] || die "speedtest timer yok"
+[[ -f "$ROOT/host/systemd/pi-gateway-ibb.timer" ]] || die "ibb timer yok"
+grep -q 'pi-gateway-ibb.timer' "$ROOT/scripts/pi/setup-home-ops-timers.sh" \
+  || die "home-ops ibb timer yok"
+grep -q 'sudo install -m 644' "$ROOT/scripts/pi/ibb-air-quality.sh" \
+  || die "ibb metrics sudo install yok"
+grep -q 'OnUnitActiveSec=30min' "$ROOT/host/systemd/pi-gateway-ibb.timer" \
+  || die "ibb timer 30min degil"
+grep -q 'setup-home-ops-timers.sh' "$ROOT/scripts/pi/post-deploy-code.sh" \
+  || die "code deploy home-ops timers yok"
 grep -q 'OnUnitActiveSec=10s' "$ROOT/host/systemd/pi-gateway-quake.timer" \
   || die "quake timer 10s degil"
 grep -q 'fetch_kandilli\|Kandilli' "$ROOT/scripts/lib/quake-alert.py" \
@@ -68,6 +85,7 @@ grep -q 'TimeoutStartSec' "$ROOT/host/systemd/pi-gateway-quake.service" \
 grep -q 'setup-home-ops-timers.sh' "$ROOT/scripts/pi/post-deploy.sh" \
   || die "post-deploy home-ops timers yok"
 grep -q 'pi-gateway-quake.timer' "$ROOT/scripts/pi/bootstrap.sh" || die "bootstrap quake yok"
+grep -q 'pi-gateway-ibb.timer' "$ROOT/scripts/pi/bootstrap.sh" || die "bootstrap ibb yok"
 ok "timer wiring"
 
 grep -q 'LOCAL_MAG' "$ROOT/scripts/lib/quake-alert.py" || die "deprem esik yok"

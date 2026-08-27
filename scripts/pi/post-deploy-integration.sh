@@ -30,6 +30,11 @@ if [[ -f /var/lib/pi-gateway/metrics/pi_gateway_adguard.prom ]]; then
 else
   note_fail "adguard-metrics-file-missing"
 fi
+if [[ -f /var/lib/pi-gateway/metrics/pi_gateway_ibb.prom ]]; then
+  ok "ibb-metrics-file"
+else
+  echo "[post-deploy-integration] WARN ibb-metrics-file-missing (timer henüz koşmamış olabilir)"
+fi
 
 if [[ -f /var/lib/pi-gateway/state.json ]]; then
   ok "state-json"

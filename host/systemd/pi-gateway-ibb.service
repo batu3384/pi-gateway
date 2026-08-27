@@ -1,0 +1,20 @@
+[Unit]
+Description=Pi Gateway İBB HKI (Istanbul air quality)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=PI_USER
+Group=PI_USER
+WorkingDirectory=/home/PI_USER/pi-gateway
+Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
+Environment=HOME=/home/PI_USER
+ExecStart=/home/PI_USER/pi-gateway/scripts/pi/ibb-air-quality.sh
+Nice=19
+TimeoutStartSec=60
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

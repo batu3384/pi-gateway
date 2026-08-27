@@ -25,10 +25,13 @@ install_unit() {
 for unit in \
   pi-gateway-kuma-report.service pi-gateway-kuma-report.timer \
   pi-gateway-speedtest.service pi-gateway-speedtest.timer \
-  pi-gateway-quake.service pi-gateway-quake.timer
+  pi-gateway-quake.service pi-gateway-quake.timer \
+  pi-gateway-ibb.service pi-gateway-ibb.timer
 do
   install_unit "$unit"
 done
 sudo systemctl daemon-reload
-sudo systemctl enable --now pi-gateway-kuma-report.timer pi-gateway-speedtest.timer pi-gateway-quake.timer
-log "Aktif: kuma-report / speedtest / quake"
+sudo systemctl enable --now pi-gateway-kuma-report.timer pi-gateway-speedtest.timer pi-gateway-quake.timer pi-gateway-ibb.timer
+# OnBootSec geçmişse timer ilk scrape atlar — bir kez şimdi.
+sudo systemctl start pi-gateway-ibb.service || log "WARN: ibb ilk scrape"
+log "Aktif: kuma-report / speedtest / quake / ibb"

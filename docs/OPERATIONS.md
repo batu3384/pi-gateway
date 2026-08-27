@@ -170,7 +170,8 @@ Health timer writes:
 
 - `/var/lib/pi-gateway/state.json` — human JSON (`make status`)
 - `/var/lib/pi-gateway/metrics/pi_gateway.prom` — Prometheus textfile
-- `/var/lib/pi-gateway/metrics/pi_gateway_adguard.prom` — AdGuard stats / per-list rules
+- `/var/lib/pi-gateway/metrics/pi_gateway_adguard.prom` — AdGuard stats / per-list rules / top clients+blocked
+- `/var/lib/pi-gateway/metrics/pi_gateway_ibb.prom` — İBB HKI (en yakın istasyon, 30 dk)
 
 SLO PUSH heartbeats → Uptime Kuma (`docs/SLO.md`).
 
@@ -192,10 +193,13 @@ SLO PUSH heartbeats → Uptime Kuma (`docs/SLO.md`).
 | `health-check` / SSD hotplug | Stack or SSD recovery |
 | n8n ← Uptime Kuma webhook | Service down / back up |
 | `pi-gateway-quake.timer` (10s) | AFAD+Kandilli poll → outbox bot (Hermes yok; EEW değil) |
+| `pi-gateway-ibb.timer` (30 dk) | İBB HKI ≥ `IBB_HKI_WARN` (51) → Telegram; iyileşince bir kez OK. API fail = sessiz |
 | Hermes cron (bülten) | Günaydın / piyasa / akşam / gece — ağ/saatlik gözcü kaldırıldı |
 | Hermes cron (07:00 / 18:55 / 23:00) | Daily bulletins (morning / market / night) |
 
 **Deprem:** yayın sonrası bildirim. Gecikme ≈ kaynak sayfası + ≤10s poll. İlk koşu bootstrap (tarihî liste spam yok). Eşik/konum: `.env` `QUAKE_*` (bkz. `.env.example`).
+
+**Hava (İBB):** en yakın sabit istasyon (varsayılan Aksaray civarı). HKI sarı bant (51+) geçiş bildirimi; tekrar `NOTIFY_IBB_REPEAT_SEC`. Ev bahçesi ölçümü değil — istasyon açık veri.
 
 | Command | Description |
 |---------|-------------|

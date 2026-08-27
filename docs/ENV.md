@@ -135,3 +135,14 @@ If `N8N_ENCRYPTION_KEY` is empty on Pi, `ensure-n8n-encryption-key.sh` generates
 | `NETALERT_NOTIFY_VIA` | `telegram` | Native plugin `sendMessage`. `n8n` yok. |
 
 Details: `docs/FAZ4.md`
+
+## Home ops (Grafana / İBB)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ADGUARD_METRICS_TOP_N` | `12` (max 25) | Grafana bar: top client / blocked / queried domain |
+| `IBB_AQI_STATION_ID` | empty | İBB istasyon UUID. Boş = `IBB_HOME_*` / `QUAKE_HOME_*` en yakın (Mobil atlanır) |
+| `IBB_HOME_LAT` / `IBB_HOME_LON` | `QUAKE_HOME_*` veya Aksaray civarı | En yakın HKI istasyonu |
+| `IBB_HKI_WARN` | `51` | Telegram eşik (İBB sarı bant). scrape fail = Telegram yok |
+| `NOTIFY_IBB_REPEAT_SEC` | `21600` | Aynı HKI-kötü durumunda tekrar (6 saat) |
+| `IBB_HTTP_TIMEOUT_SEC` | `20` | İBB API timeout |

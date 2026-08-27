@@ -26,14 +26,14 @@ make deploy-code   # monitoring ilk kurulum / compose için: make deploy
 
 - Giriş: `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` (unified login = `AGH_ADMIN_*`)
 - Caddy basic auth da geçerli (çift katman)
-- Hazır dashboard: **Pi Gateway** (SSD, CPU, backup age, AdGuard blocked ratio / per-list rules / last_updated age)
+- Hazır dashboard: **Pi Gateway** (SSD, CPU, backup age, AdGuard blocked ratio / top clients / top blocked domains / per-list rules, İBB HKI)
 
 ## Metrik kaynakları
 
 | Kaynak | Job | Not |
 |--------|-----|-----|
 | `node-exporter` | `node` | CPU, disk, host |
-| Textfile | `/var/lib/pi-gateway/metrics/*.prom` | `export-gateway-state.sh` + `export-adguard-metrics.sh` |
+| Textfile | `/var/lib/pi-gateway/metrics/*.prom` | `export-gateway-state.sh` + `export-adguard-metrics.sh` + `ibb-air-quality.sh` |
 | `prometheus` | `prometheus` | Self |
 
 ## Canary güncelleme

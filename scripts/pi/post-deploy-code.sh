@@ -70,5 +70,6 @@ if [[ "${HERMES_TELEGRAM_GATEWAY:-}" == "true" ]]; then
   fi
 fi
 
+soft "Home ops timers" "$SCRIPT_DIR/setup-home-ops-timers.sh"
 soft "Notify transition self-check" "$SCRIPT_DIR/test-notify-transitions.sh"
 log "Code post-deploy tamamlandi"

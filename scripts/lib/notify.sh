@@ -115,6 +115,7 @@ notify_repeat_sec_for() {
     health-slo-backup) printf '%s' "$NOTIFY_SLO_REPEAT_SEC" ;;
     disk-*) printf '%s' "$NOTIFY_DISK_REPEAT_SEC" ;;
     restic-ok) printf '%s' "${NOTIFY_BACKUP_OK_COOLDOWN_SEC:-86400}" ;;
+    ibb-hki) printf '%s' "${NOTIFY_IBB_REPEAT_SEC:-21600}" ;;
     *) printf '%s' "$NOTIFY_REPEAT_SEC" ;;
   esac
 }
@@ -465,6 +466,27 @@ notify_latency_slow() {
 notify_latency_ok() {
   notify_transition_peek "health-latency" "ok" || return 0
   notify_transition_commit "health-latency" "ok"
+}
+
+notify_ibb_hki_warn() {
+  local detail="$1"
+  local body graf
+  graf="$(notify_escape_html "$(notify_panel_url grafana)")"
+  body="$(notify_html_alert "$(hostname -s 2>/dev/null || echo pi-gateway)" \
+    "İstanbul hava kalitesi eşik üstü (HKI)." \
+    "$detail" \
+    "Hassas gruplar dışarıda temkinli olsun.
+Grafik: ${graf}
+Kaynak: İBB açık veri (istasyon ölçümü, ev bahçesi değil).")"
+  notify_send_with_transition "ibb-hki" "fail" "📋 Pi Gateway · Hava" "$body" "HTML"
+}
+
+notify_ibb_hki_ok() {
+  local body
+  body="$(notify_html_alert "$(hostname -s 2>/dev/null || echo pi-gateway)" \
+    "İstanbul hava kalitesi eşiğin altına indi." \
+    "HKI tekrar iyi bandında.")"
+  notify_send_with_transition "ibb-hki" "ok" "✅ Pi Gateway · Hava" "$body" "HTML"
 }
 
 notify_test() {

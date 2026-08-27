@@ -197,6 +197,96 @@
       ],
       "title": "AdGuard filter last_updated age (days)",
       "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "decimals": 0 }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 44 },
+      "id": 16,
+      "options": { "displayMode": "gradient", "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showUnfilled": true },
+      "targets": [
+        { "expr": "topk(12, pi_gateway_adguard_top_client_queries)", "legendFormat": "{{client}}", "refId": "A" }
+      ],
+      "title": "AdGuard top clients (stats window)",
+      "type": "bargauge"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "decimals": 0 }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 44 },
+      "id": 17,
+      "options": { "displayMode": "gradient", "orientation": "horizontal", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "showUnfilled": true },
+      "targets": [
+        { "expr": "topk(12, pi_gateway_adguard_top_blocked_domain)", "legendFormat": "{{domain}}", "refId": "A" }
+      ],
+      "title": "AdGuard top blocked domains",
+      "type": "bargauge"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "max": 200,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 51 },
+              { "color": "orange", "value": 101 },
+              { "color": "red", "value": 151 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 52 },
+      "id": 18,
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [{ "expr": "pi_gateway_ibb_hki", "refId": "A" }],
+      "title": "İBB HKI (nearest station)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "mappings": [], "max": 1, "min": 0, "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] } },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 52 },
+      "id": 19,
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "targets": [{ "expr": "pi_gateway_ibb_up", "refId": "A" }],
+      "title": "İBB scrape",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "decimals": 1 }, "overrides": [] },
+      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 52 },
+      "id": 20,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
+      "targets": [
+        { "expr": "pi_gateway_ibb_pm10", "legendFormat": "PM10 {{station}}", "refId": "A" },
+        { "expr": "pi_gateway_ibb_no2", "legendFormat": "NO2", "refId": "B" },
+        { "expr": "pi_gateway_ibb_so2", "legendFormat": "SO2", "refId": "C" },
+        { "expr": "pi_gateway_ibb_o3", "legendFormat": "O3", "refId": "D" }
+      ],
+      "title": "İBB concentrations (latest hour)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "decimals": 0 }, "overrides": [] },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 56 },
+      "id": 21,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
+      "targets": [
+        { "expr": "pi_gateway_ibb_hki", "legendFormat": "HKI {{station}}", "refId": "A" }
+      ],
+      "title": "İBB HKI over time",
+      "type": "timeseries"
     }
   ],
   "refresh": "30s",
