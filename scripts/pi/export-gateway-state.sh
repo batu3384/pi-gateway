@@ -142,6 +142,12 @@ if [[ "$(id -u)" -eq 0 ]]; then
 else
   run_as_needed chown "${USER}:${USER}" "$STATE_JSON" "$METRICS_FILE" 2>/dev/null || true
 fi
+_agh_export="${SCRIPT_DIR}/export-adguard-metrics.sh"
+[[ -x "$_agh_export" ]] || _agh_export="${REMOTE_DIR}/scripts/pi/export-adguard-metrics.sh"
+if [[ -x "$_agh_export" ]]; then
+  REMOTE_DIR="$REMOTE_DIR" bash "$_agh_export" \
+    || echo "[export-state] WARN export-adguard-metrics failed" >&2
+fi
 echo "[export-state] OK ${METRICS_FILE}"
 
 # P2 yavaşlama — kartta ms; eşikte alarm

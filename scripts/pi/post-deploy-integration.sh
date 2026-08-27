@@ -25,6 +25,11 @@ if [[ -f /var/lib/pi-gateway/metrics/pi_gateway.prom ]]; then
 else
   note_fail "metrics-file-missing"
 fi
+if [[ -f /var/lib/pi-gateway/metrics/pi_gateway_adguard.prom ]]; then
+  ok "adguard-metrics-file"
+else
+  note_fail "adguard-metrics-file-missing"
+fi
 
 if [[ -f /var/lib/pi-gateway/state.json ]]; then
   ok "state-json"

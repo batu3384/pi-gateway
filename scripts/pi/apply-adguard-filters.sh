@@ -62,12 +62,13 @@ def api(path, method="GET", payload=None):
     if payload is not None:
         cmd += ["-H", "Content-Type: application/json", "-d", json.dumps(payload)]
     out = subprocess.check_output(cmd, text=True).strip()
-    # ponytail: AGH add/remove_url often 200 + empty/"OK", not JSON
+    # ponytail: AGH add/remove_url often 200 + empty/"OK"/"OK 93 rules", not JSON
     if not out:
         return {}
     if out[0] in "{[":
         return json.loads(out)
-    if out in ("OK", "ok", "true", "True"):
+    first = out.split(None, 1)[0].lower()
+    if first in ("ok", "true"):
         return {}
     raise RuntimeError(f"AGH non-JSON: {out[:200]}")
 

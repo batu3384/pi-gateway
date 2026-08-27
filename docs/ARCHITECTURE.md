@@ -64,7 +64,7 @@ Tam ev kilidi = başka L2 (OpenWrt) veya cihaz DNS. İkisi de bu hedefte yok. Mi
 | Layer | Component | Role |
 |-------|-----------|------|
 | DNS filter | AdGuard Home | Block ads/trackers, local rewrites |
-| DNS resolver | Unbound (klutchell) | DoT forward (Quad9/CF :853); not recursive |
+| DNS resolver | Unbound (klutchell) | DoT forward (Quad9/CF :853); not recursive. DNSSEC validator (AD + `dnssec-failed.org` SERVFAIL in diagnose) |
 | Proxy | Caddy | gateway.home, dns.home, status.home |
 | Dashboard | Homepage | Service links |
 | Logs | Dozzle | Live Docker container logs |

@@ -34,6 +34,7 @@ python3 "$ROOT/scripts/lib/gateway-probes.py" --self-check || die "gateway-probe
 python3 "$ROOT/scripts/lib/quake-alert.py" --self-check || die "quake-alert"
 bash "$ROOT/scripts/pi/kuma-monthly-report.sh" --self-check || die "kuma-report"
 bash "$ROOT/scripts/pi/isp-speedtest.sh" --self-check || die "speedtest"
+bash "$ROOT/scripts/pi/export-adguard-metrics.sh" --self-check || die "adguard-metrics"
 ok "A4 A5 B2 B4 self-check"
 
 grep -q 'pi_gateway_dns_latency_ms' "$ROOT/scripts/lib/gateway-probes.py" \
@@ -45,6 +46,8 @@ grep -q 'pi_gateway_isp_download_mbps' "$ROOT/config/grafana/provisioning/dashbo
   || die "grafana speedtest yok"
 grep -q 'pi_gateway_hosts_online' "$ROOT/config/grafana/provisioning/dashboards/json/pi-gateway.json" \
   || die "grafana kim-evde yok"
+grep -q 'pi_gateway_adguard_blocked_ratio' "$ROOT/config/grafana/provisioning/dashboards/json/pi-gateway.json" \
+  || die "grafana adguard blocked_ratio yok"
 grep -q 'who_home' "$ROOT/config/homepage/services.yaml.template" || die "homepage kim-evde yok"
 grep -q 'def online_devices' "$ROOT/scripts/lib/netalert-devices.py" || die "online_devices yok"
 ok "A5 B2 B3 panolar"

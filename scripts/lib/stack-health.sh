@@ -115,6 +115,20 @@ docker_ssd_root_ok() {
   fi
   return 0
 }
+# bind-mount unbound.conf process reload etmez. Recreate AdGuard'ı düşürür (depends_on).
+unbound_conf_stale() {
+  local conf="${REMOTE_DIR}/config/unbound/unbound.conf"
+  local started_rfc started_epoch conf_mtime
+  [[ -n "${REMOTE_DIR:-}" && -f "$conf" ]] || return 1
+  docker inspect unbound >/dev/null 2>&1 || return 1
+  started_rfc="$(docker inspect -f '{{.State.StartedAt}}' unbound 2>/dev/null || true)"
+  [[ -n "$started_rfc" ]] || return 1
+  started_epoch="$(date -d "$started_rfc" +%s 2>/dev/null || true)"
+  [[ -n "$started_epoch" ]] || return 1
+  conf_mtime="$(stat -c %Y "$conf" 2>/dev/null || true)"
+  [[ -n "$conf_mtime" ]] || return 1
+  (( conf_mtime > started_epoch + 15 ))
+}
 recover_lock_acquire() {
   [[ "${SKIP_RECOVER_LOCK:-false}" == "true" ]] && return 0
   acquire_recover_lock_wait

@@ -63,6 +63,8 @@ grep -F 'ponytail: AGH add/remove_url' "$PROJECT_DIR/scripts/pi/apply-adguard-fi
   || die "apply-adguard-filters AGH non-JSON POST govde"
 grep -q 'AGH non-JSON' "$PROJECT_DIR/scripts/pi/apply-adguard-filters.sh" \
   || die "apply-adguard-filters HTML/hata govdeyi basari saymamali"
+grep -q 'first in ("ok", "true")' "$PROJECT_DIR/scripts/pi/apply-adguard-filters.sh" \
+  || die "apply-adguard-filters OK 93 rules prefix yok"
 grep -q '8.8.8.8 UDP timeout' "$PROJECT_DIR/scripts/pi/diagnose-dns-bypass.sh" \
   || die "diagnose 8.8.8.8 timeout ≠ 0.0.0.0 WARN"
 grep -q 'Filtre Kriterleri' "$PROJECT_DIR/docs/DNS-BLOCKING.md" \
@@ -79,8 +81,15 @@ grep -q 'INPUT :53 (FORWARD filtre yetmez) / DHCP DNS2' "$PROJECT_DIR/scripts/pi
   || die "diagnose modem LAN resolver leak yok"
 grep -q 'dest bos kural eksik' "$PROJECT_DIR/scripts/pi/diagnose-dns-bypass.sh" \
   || die "diagnose 8.8.4.4 acik dest-bos FAIL yok"
-awk '/^adguard-tune:/,/^recover-stack:/' "$PROJECT_DIR/Makefile" | grep -q 'force-recreate --no-deps unbound' \
+awk '/^adguard-tune:/,/^recover-stack:/' "$PROJECT_DIR/Makefile" | grep -q 'adguard-tune.sh' \
+  || die "Makefile adguard-tune.sh cagirmiyor"
+[[ -f "$PROJECT_DIR/scripts/pi/adguard-tune.sh" ]] || die "adguard-tune.sh yok"
+grep -q 'force-recreate --no-deps unbound' "$PROJECT_DIR/scripts/pi/adguard-tune.sh" \
   || die "adguard-tune unbound recreate yok"
+grep -q 'Unbound conf taze' "$PROJECT_DIR/scripts/pi/adguard-tune.sh" \
+  || die "adguard-tune stale degilse recreate atlamıyor"
+grep -q 'unbound_conf_stale' "$PROJECT_DIR/scripts/lib/stack-health.sh" \
+  || die "stack-health unbound_conf_stale yok"
 grep -q 'AAAA' "$PROJECT_DIR/scripts/pi/diagnose-dns-bypass.sh" \
   || die "diagnose AAAA block yok"
 grep -q 'adguard-block-aaaa' "$PROJECT_DIR/scripts/pi/health-check.sh" \
@@ -175,5 +184,49 @@ grep -q 'DHCP_RANGE_START' "$PROJECT_DIR/.env.example" \
 grep -Fq 'does **not** stop the resolver' "$PROJECT_DIR/README.md" \
   || die "README LAN IP filtre INPUT yetmez notu yok"
 
-ok "dosyalar + sniff/rollout/audit/filtre/DoH/ULA/RDNSS kontratlari"
+grep -q 'combined_original_trackers.txt' "$PROJECT_DIR/config/adguard/filter-lists.json" \
+  || die "CNAME original_trackers aggressive profilde yok"
+grep -q 'combined_disguised_trackers.txt' "$PROJECT_DIR/config/adguard/filter-lists.json" \
+  && die "disguised CNAME listesi AGH icin yanlis (FP); original_trackers kullan"
+grep -q 'unbound_dnssec_ad_ok' "$PROJECT_DIR/scripts/lib/unbound-dnssec.sh" \
+  || die "unbound-dnssec AD probe yok"
+grep -F '[[:space:]]ad;' "$PROJECT_DIR/scripts/lib/unbound-dnssec.sh" \
+  || die "unbound-dnssec ADDITIONAL false-positive guard yok"
+grep -q 'dnssec-failed.org' "$PROJECT_DIR/scripts/lib/unbound-dnssec.sh" \
+  || die "unbound-dnssec sigfail probe yok"
+grep -q 'Unbound DNSSEC' "$PROJECT_DIR/scripts/pi/diagnose-dns-bypass.sh" \
+  || die "diagnose DNSSEC blogu yok"
+grep -q 'unbound-dnssec-ad' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health unbound-dnssec-ad yok"
+grep -q 'unbound-dnssec-sigfail' "$PROJECT_DIR/scripts/pi/smoke-test.sh" \
+  || die "smoke unbound-dnssec-sigfail yok"
+[[ -f "$PROJECT_DIR/scripts/pi/export-adguard-metrics.sh" ]] || die "export-adguard-metrics.sh yok"
+[[ -f "$PROJECT_DIR/scripts/lib/adguard-metrics.py" ]] || die "adguard-metrics.py yok"
+bash "$PROJECT_DIR/scripts/pi/export-adguard-metrics.sh" --self-check \
+  || die "export-adguard-metrics self-check"
+grep -q 'sudo install -m 644' "$PROJECT_DIR/scripts/pi/export-adguard-metrics.sh" \
+  || die "export-adguard-metrics sudo install yok (metrics dir root)"
+grep -q 'ARG_MAX' "$PROJECT_DIR/scripts/pi/export-adguard-metrics.sh" \
+  || die "export-adguard-metrics JSON dosyadan (ARG_MAX)"
+grep -q 'export-adguard-metrics.sh' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" \
+  || die "install-privileged export-adguard-metrics yok"
+grep -q 'unbound-dnssec.sh' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" \
+  || die "install-privileged unbound-dnssec yok"
+grep -q 'pi_gateway_adguard_blocked_ratio' "$PROJECT_DIR/config/grafana/provisioning/dashboards/json/pi-gateway.json" \
+  || die "grafana adguard blocked_ratio yok"
+grep -q 'pi_gateway_adguard_filter_rules' "$PROJECT_DIR/config/grafana/provisioning/dashboards/json/pi-gateway.json" \
+  || die "grafana adguard filter_rules yok"
+grep -q 'filter_updated_timestamp' "$PROJECT_DIR/config/grafana/provisioning/dashboards/json/pi-gateway.json" \
+  || die "grafana adguard last_updated age yok"
+grep -q 'combined_original_trackers' "$PROJECT_DIR/docs/DNS-BLOCKING.md" \
+  || die "DNS-BLOCKING CNAME original yok"
+grep -q 'dnssec-failed.org' "$PROJECT_DIR/docs/DNS-BLOCKING.md" \
+  || die "DNS-BLOCKING DNSSEC kontrat yok"
+
+grep -q 'CANARY_DNS_WAIT_SEC:-10' "$PROJECT_DIR/scripts/pi/canary-compose-update.sh" \
+  || die "canary DNS wait default 10 degil (45s yastik)"
+grep -q 'POST_DEPLOY_RESTIC' "$PROJECT_DIR/scripts/pi/post-deploy.sh" \
+  || die "post-deploy RESTIC skip yok"
+grep -q 'POST_DEPLOY_RESTIC' "$PROJECT_DIR/.env.example" \
+  || die ".env.example POST_DEPLOY_RESTIC yok"
 echo "[test-dns-blocking] Tum kontroller gecti"

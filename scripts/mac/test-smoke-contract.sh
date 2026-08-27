@@ -21,6 +21,7 @@ for needle in \
   'privileged-lib-hash' \
   'ssd-health-timer' \
   'caddy-auth-configured' \
+  'unbound-dnssec-ad' \
   'run_check'; do
   grep -q "$needle" "$SMOKE" || die "smoke eksik: $needle"
 done

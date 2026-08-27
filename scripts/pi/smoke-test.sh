@@ -72,7 +72,11 @@ elif [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
     run_check "sd-health" bash -c "REMOTE_DIR='${REMOTE_DIR}' bash '${REMOTE_DIR}/scripts/pi/check-sd-health.sh'"
   fi
 fi
+# shellcheck source=../lib/unbound-dnssec.sh
+source "$SCRIPT_DIR/../lib/unbound-dnssec.sh"
 run_check "unbound-5335" dig +time=3 +tries=1 @127.0.0.1 -p 5335 cloudflare.com A
+run_check "unbound-dnssec-ad" unbound_dnssec_ad_ok 5335
+run_check "unbound-dnssec-sigfail" unbound_dnssec_sigfail_ok 5335
 run_check "adguard-53" dig +time=3 +tries=1 @"$PI_STATIC_IP" cloudflare.com A
 run_check "adguard-block" bash -c \
   "for d in doubleclick.net googletagmanager.com pagead.l.doubleclick.net; do dig +time=3 +tries=1 @${PI_STATIC_IP} \"\$d\" A | grep -Eq '0.0.0.0|127.0.0.0|NXDOMAIN' || exit 1; done"

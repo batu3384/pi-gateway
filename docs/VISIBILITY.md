@@ -26,14 +26,14 @@ make deploy-fast
 
 - Giriş: `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` (unified login = `AGH_ADMIN_*`)
 - Caddy basic auth da geçerli (çift katman)
-- Hazır dashboard: **Pi Gateway** (SSD, CPU, backup age)
+- Hazır dashboard: **Pi Gateway** (SSD, CPU, backup age, AdGuard blocked ratio / per-list rules / last_updated age)
 
 ## Metrik kaynakları
 
 | Kaynak | Job | Not |
 |--------|-----|-----|
 | `node-exporter` | `node` | CPU, disk, host |
-| Textfile | `/var/lib/pi-gateway/metrics/*.prom` | `export-gateway-state.sh` |
+| Textfile | `/var/lib/pi-gateway/metrics/*.prom` | `export-gateway-state.sh` + `export-adguard-metrics.sh` |
 | `prometheus` | `prometheus` | Self |
 
 ## Canary güncelleme
@@ -41,8 +41,8 @@ make deploy-fast
 Deploy varsayılan: DNS önce → bekle → edge → kalan servisler.
 
 ```bash
-ENABLE_CANARY_COMPOSE_UPDATE=true   # varsayılan
-CANARY_DNS_WAIT_SEC=45
+ENABLE_CANARY_COMPOSE_UPDATE=true   # varsayılan — bu evde kapatma
+CANARY_DNS_WAIT_SEC=10
 ```
 
 `make deploy-fast` bunu kullanır. Kapatmak için `ENABLE_CANARY_COMPOSE_UPDATE=false`.

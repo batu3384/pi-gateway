@@ -12,7 +12,7 @@ source "$SCRIPT_DIR/../lib/compose-profiles.sh"
 source "$SCRIPT_DIR/../lib/stack-health.sh"
 
 log() { echo "[canary-compose] $*"; }
-DNS_WAIT_SEC="${CANARY_DNS_WAIT_SEC:-45}"
+DNS_WAIT_SEC="${CANARY_DNS_WAIT_SEC:-10}"
 SKIP_PULL="${CANARY_SKIP_PULL:-${DEPLOY_SKIP_PULL:-false}}"
 cd "$REMOTE_DIR/compose"
 mapfile -t profiles < <(compose_profiles)

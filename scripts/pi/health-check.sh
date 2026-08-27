@@ -9,6 +9,8 @@ source "${_PG_ENV_LIB:?}"
 read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 # shellcheck source=../lib/adguard-api.sh
 source "$SCRIPT_DIR/../lib/adguard-api.sh"
+# shellcheck source=../lib/unbound-dnssec.sh
+source "$SCRIPT_DIR/../lib/unbound-dnssec.sh"
 # shellcheck source=../lib/stack-health.sh
 source "$SCRIPT_DIR/../lib/stack-health.sh"
 LOG_TAG="pi-gateway-health"
@@ -96,24 +98,13 @@ else
 fi
 if ! dig +time=2 +tries=1 @127.0.0.1 -p "${UNBOUND_PORT}" cloudflare.com A >/dev/null 2>&1; then
   note_fail "unbound:${UNBOUND_PORT}"
+elif ! unbound_dnssec_ad_ok "${UNBOUND_PORT}"; then
+  note_fail "unbound-dnssec-ad"
 fi
 if ! grep -q 'forward-tls-upstream: yes' "${REMOTE_DIR}/config/unbound/unbound.conf" 2>/dev/null; then
   note_fail "unbound-dot-conf"
 fi
 # bind-mount: up -d process reload etmez; cache'li dig yaniltir. Restart AdGuard'i dusurur (depends_on).
-unbound_conf_stale() {
-  local conf="${REMOTE_DIR}/config/unbound/unbound.conf"
-  local started_rfc started_epoch conf_mtime
-  [[ -f "$conf" ]] || return 1
-  docker inspect unbound >/dev/null 2>&1 || return 1
-  started_rfc="$(docker inspect -f '{{.State.StartedAt}}' unbound 2>/dev/null || true)"
-  [[ -n "$started_rfc" ]] || return 1
-  started_epoch="$(date -d "$started_rfc" +%s 2>/dev/null || true)"
-  [[ -n "$started_epoch" ]] || return 1
-  conf_mtime="$(stat -c %Y "$conf" 2>/dev/null || true)"
-  [[ -n "$conf_mtime" ]] || return 1
-  (( conf_mtime > started_epoch + 15 ))
-}
 unbound_conf_stale && note_fail "unbound-stale-conf"
 adguard_dns_ok() {
   local aaaa
@@ -298,7 +289,7 @@ fi
 health_is_dns_only_fail() {
   local f="$1"
   case "$f" in
-    unbound:*|unbound-dot-conf|unbound-stale-conf|container\ unbound\ down|adguard-block-test|adguard-block-aaaa|adguard-rewrite-*|adguard-dns-config-drift|adguard-filter-rules-low|adguard-rewrites-low)
+    unbound:*|unbound-dot-conf|unbound-stale-conf|unbound-dnssec-ad|container\ unbound\ down|adguard-block-test|adguard-block-aaaa|adguard-rewrite-*|adguard-dns-config-drift|adguard-filter-rules-low|adguard-rewrites-low)
       return 0
       ;;
     *)

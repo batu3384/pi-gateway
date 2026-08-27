@@ -144,7 +144,27 @@ if [[ "${ENABLE_MONITORING:-true}" == "true" ]]; then
   run_step_soft "Monitoring stack restart" "$SCRIPT_DIR/restart-monitoring-stack.sh"
 fi
 if [[ "${ENABLE_RESTIC:-true}" == "true" ]]; then
-  run_step_soft "Restic yedek" "$SCRIPT_DIR/restic-backup.sh"
+  restic_has_snapshot() {
+    local r
+    for r in \
+      "${RESTIC_REPOSITORY:-}" \
+      "/mnt/ssd/pi-gateway-data/backups/restic" \
+      "${REMOTE_DIR}/data/backups/restic"; do
+      [[ -n "$r" && -d "$r/snapshots" ]] || continue
+      if find "$r/snapshots" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null | grep -q .; then
+        return 0
+      fi
+    done
+    return 1
+  }
+  if [[ "${POST_DEPLOY_RESTIC:-false}" == "true" ]]; then
+    run_step_soft "Restic yedek" "$SCRIPT_DIR/restic-backup.sh"
+  elif restic_has_snapshot; then
+    log "Restic yedek atlandi (pi-gateway-backup.timer; POST_DEPLOY_RESTIC=true zorla)"
+  else
+    log "Restic ilk snapshot — post-deploy yedek"
+    run_step_soft "Restic yedek (ilk snapshot)" "$SCRIPT_DIR/restic-backup.sh"
+  fi
 fi
 if [[ "${ENABLE_DOZZLE:-true}" == "true" ]]; then
   run_step_critical "Dozzle auth" "$SCRIPT_DIR/setup-dozzle.sh"

@@ -13,6 +13,8 @@ readlink -f ~/pi-gateway/data    # /mnt/ssd/pi-gateway-data
 docker info | grep "Docker Root Dir"   # /var/lib/docker (default) or /mnt/ssd/docker (ENABLE_DOCKER_SSD=true)
 grep '^root' /etc/containerd/config.toml   # /var/lib/containerd (default); CONTAINERD_ON_SSD=true → /mnt/ssd/containerd
 cat /var/lib/pi-gateway/state.json     # export-gateway-state (health timer)
+cat /var/lib/pi-gateway/metrics/pi_gateway.prom   # Prometheus textfile
+cat /var/lib/pi-gateway/metrics/pi_gateway_adguard.prom
 ```
 
 SSD image / hybrid boot: `scripts/mac/restore-hybrid-boot.sh`  
@@ -145,12 +147,13 @@ Health timer writes:
 
 - `/var/lib/pi-gateway/state.json` — human JSON (`make status`)
 - `/var/lib/pi-gateway/metrics/pi_gateway.prom` — Prometheus textfile
+- `/var/lib/pi-gateway/metrics/pi_gateway_adguard.prom` — AdGuard stats / per-list rules
 
 SLO PUSH heartbeats → Uptime Kuma (`docs/SLO.md`).
 
 ## Backup confidence (3-2-1)
 
-1. Pi SSD restic (encrypted) — daily timer
+1. Pi SSD restic (encrypted) — daily timer (`post-deploy` tam yedek atlar; `POST_DEPLOY_RESTIC=true` zorla)
 2. Mac `make backup-pull` — weekly cron recommended
 3. Optional B2/R2 — `RESTIC_OFFSITE_ENABLED=true` (after local backup)
 4. Monthly `make backup-restore-drill` — proves restore works

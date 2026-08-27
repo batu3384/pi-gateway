@@ -18,5 +18,7 @@ grep -q 'apply-adguard-rewrites.sh' "$ROOT/scripts/pi/canary-compose-update.sh" 
   || die "canary rewrite apply yok"
 ! grep -q 'MIN_REWRITES' "$ROOT/scripts/pi/wait-adguard-dns.sh" \
   || die "wait-adguard hala rewrite kapisi (canary deadlock)"
+grep -q 'pi_gateway_adguard_blocked_ratio' "$ROOT/config/grafana/provisioning/dashboards/json/pi-gateway.json" \
+  || die "grafana adguard blocked_ratio yok"
 [[ -f "$ROOT/docs/VISIBILITY.md" ]] || die "VISIBILITY.md yok"
 echo "[test-path-b] OK"

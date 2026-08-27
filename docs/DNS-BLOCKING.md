@@ -13,7 +13,7 @@ Result: Ads served from the same domain (YouTube `googlevideo.com`, some in-app 
 
 ## Current DNS stack
 
-Profile: `ADGUARD_FILTER_PROFILE=balanced` (default, TIF Medium) or `aggressive` (TIF Full + Fake; more RAM). Repo default stays `balanced`. Live Pi can use `aggressive`.
+Profile: `ADGUARD_FILTER_PROFILE=balanced` (default, TIF Medium) or `aggressive` (TIF Full + Fake + CNAME original; more RAM). Repo default stays `balanced`. Live Pi can use `aggressive`.
 
 HaGeZi **TIF** (threat intel) ≠ **Multi Ultimate** (ad list). TIF levels: Mini / Medium / Full. Multi Ultimate replaces Pro++ and breaks META/Xbox — not used. Do not stack TIF Full + TIF Medium.
 
@@ -25,6 +25,7 @@ HaGeZi **TIF** (threat intel) ≠ **Multi Ultimate** (ad list). TIF levels: Mini
 6. **HaGeZi Smart TV** + **native.lgwebos** — CTV / LG webOS ad domains
 7. **AWAvenue Ads Rule** — Android advertising SDKs (DNS-level; not the AdGuard browser Mobile Ads filter)
 8. **User rules** — `config/adguard/user-rules.txt` (Google Ads, mobile SDKs, TR trackers, `$important`)
+9. **AdGuard CNAME original trackers** (aggressive only) — `combined_original_trackers.txt`. AGH already follows CNAME in responses; this list is the *original* tracker hostnames AdGuard recommends for CNAME-capable resolvers. Do **not** add `combined_disguised_trackers.txt` (first-party alias names; microsite/clickthrough FP). ~4KB.
 
 OISD Big and AdGuard DNS filter (`filter_1`) omitted: duplicate Pro++; waste Pi RAM.
 AdGuard browser Mobile Ads (`filters.adtidy.org/.../11.txt`) is CSS/path — skip for AdGuard Home.
@@ -33,7 +34,11 @@ Auto-heal: `ADGUARD_AUTO_HEAL=true` (health-check drift → `ensure-adguard-bloc
 Bypass check: `ADGUARD_BYPASS_CHECK=strict` on `make diagnose-dns` (LAN clients must appear in query log).
 Custom rules: copy `config/adguard/user-rules.local.txt.example` → `user-rules.local.txt` on the Pi.
 Daily filter refresh: `pi-gateway-adguard-filters.timer` (~04:15).
-One-shot tune from Mac: `make adguard-tune`.
+One-shot tune from Mac: `make adguard-tune` (post-deploy yok). Unbound `--force-recreate` yalnız `unbound.conf` container start'tan yeni ise — filtre-only DNS deliği yok.
+
+**Grafana:** `export-adguard-metrics.sh` (health timer, textfile) → blocked ratio + per-list `rules_count` / `last_updated` age. A silent 403 on one list shows as that series going stale, not only `ADGUARD_MIN_FILTER_RULES`.
+
+**DNSSEC:** Unbound default validator. Proof (not assumption): `diagnose-dns-bypass.sh` / smoke — Unbound `:5335` AD flag on `cloudflare.com`; `dnssec-failed.org` SERVFAIL (`+time=8`, first miss can exceed 3s). Health timer checks AD only (no flaky third-party bogus domain every 2 min). AGH may copy AD to clients; contract is Unbound.
 
 Migration: `HAGEZI_TIF_FILTER_URL` removed — use `ADGUARD_FILTER_PROFILE` + `config/adguard/filter-lists.json`.
 

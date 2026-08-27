@@ -10,6 +10,8 @@ source "${_PG_ENV_LIB:?}"
 read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 # shellcheck source=../lib/adguard-api.sh
 source "$SCRIPT_DIR/../lib/adguard-api.sh"
+# shellcheck source=../lib/unbound-dnssec.sh
+source "$SCRIPT_DIR/../lib/unbound-dnssec.sh"
 # shellcheck source=../lib/dhcp-dns-offer.sh
 source "$SCRIPT_DIR/../lib/dhcp-dns-offer.sh"
 PI_IP="${PI_STATIC_IP:-}"
@@ -106,6 +108,20 @@ if test_blocked "dns.google" || test_blocked "dns.google.com"; then
   pass "DoH host (dns.google) engelleniyor"
 else
   fail "DoH host engellenmiyor — HaGeZi doh listesi eksik olabilir"
+fi
+
+echo ""
+echo "=== Unbound DNSSEC ==="
+UNBOUND_PORT="${UNBOUND_PORT:-5335}"
+if unbound_dnssec_ad_ok "$UNBOUND_PORT"; then
+  pass "Unbound :${UNBOUND_PORT} AD flag (validator)"
+else
+  fail "Unbound :${UNBOUND_PORT} AD flag yok — DNSSEC validate edilmiyor"
+fi
+if unbound_dnssec_sigfail_ok "$UNBOUND_PORT"; then
+  pass "dnssec-failed.org SERVFAIL (bogus reddi)"
+else
+  fail "dnssec-failed.org SERVFAIL yok — DNSSEC bogus kaciyor veya test domain timeout"
 fi
 
 echo ""

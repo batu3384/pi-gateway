@@ -13,6 +13,7 @@ ok "health wiring"
 
 [[ -f "$ROOT/scripts/pi/export-gateway-state.sh" ]] || die "export-gateway-state.sh yok"
 grep -q 'pi_gateway_storage_degraded' "$ROOT/scripts/pi/export-gateway-state.sh" || die "prometheus metrics yok"
+grep -q 'export-adguard-metrics.sh' "$ROOT/scripts/pi/export-gateway-state.sh" || die "export-state adguard scrape yok"
 ok "state exporter"
 
 [[ -f "$ROOT/scripts/mac/backup-restore-drill.sh" ]] || die "backup-restore-drill.sh yok"
@@ -40,6 +41,7 @@ grep -q 'setup-slo-monitors' "$ROOT/scripts/pi/post-deploy.sh" || die "post-depl
 ok "SLO monitors"
 
 grep -q 'post-deploy-integration' "$ROOT/scripts/pi/post-deploy.sh" || die "post-deploy integration yok"
+grep -q 'POST_DEPLOY_RESTIC' "$ROOT/scripts/pi/post-deploy.sh" || die "post-deploy restic skip yok"
 ok "post-deploy integration"
 
 echo "[test-roadmap] Tum kontroller gecti"

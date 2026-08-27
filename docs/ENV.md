@@ -17,7 +17,7 @@
 | `ADGUARD_MIN_FILTER_RULES` | 100000 |
 | `ADGUARD_MIN_REWRITES` | 8 |
 | `ADGUARD_BLOCKED_TTL` | 60 |
-| `ADGUARD_FILTER_PROFILE` | `balanced` (TIF Medium). `aggressive` = TIF Full + Fake; AGH ≥2GB RAM. Not Multi Ultimate. See `docs/DNS-BLOCKING.md`. |
+| `ADGUARD_FILTER_PROFILE` | `balanced` (TIF Medium). `aggressive` = TIF Full + Fake + CNAME original trackers; AGH ≥2GB RAM. Not Multi Ultimate / not disguised CNAME list. See `docs/DNS-BLOCKING.md`. |
 | `ROUTER_DNS_SECONDARY` | Yalnız `MAC_DNS_GATEWAY_FALLBACK=true` iken. **Bos** veya `LAN_GATEWAY`. Public resolver WAN `:53` drop ile ölür. |
 | `MAC_DNS_GATEWAY_FALLBACK` | `false` (varsayılan): `make mac-dns` modem `.1` eklemez; **yalnız LAN IP** olan Ethernet/Wi-Fi. Hotspot'a Pi+ULA yazmaz (`make mac-dns-clear`). `true`: Pi down yedek; modem LAN `:53` reklam kaçırır. |
 | `DHCP_RANGE_START` / `DHCP_RANGE_END` / `LAN_SUBNET_MASK` | Yalnız `NETWORK_MODE=adguard-dhcp`. Örnek: `192.168.1.100`–`200`, `255.255.255.0`. |
@@ -30,7 +30,8 @@
 | `UNIFIED_LOGIN` | `true` (default): `AGH_ADMIN_*` = Caddy + Dozzle/Kuma/NetAlertX/Grafana |
 | `SYNC_SERVICE_PASSWORDS` | `true` (default with unified): deploy sonrasi GUI sifre esitleme |
 | `ENABLE_MONITORING` | `true`: Prometheus + Grafana + node-exporter (`grafana.home`) |
-| `ENABLE_CANARY_COMPOSE_UPDATE` | `true`: deploy DNS-once, wait, then edge + apps |
+| `ENABLE_CANARY_COMPOSE_UPDATE` | `true`: deploy DNS-once, wait, then edge + apps. Bu evde kapatma — Unbound recreate + WAN `:53` drop. |
+| `CANARY_DNS_WAIT_SEC` | `10` (`wait_dns_core` sonrası yastık; eski varsayılan 45). `wait-adguard-dns` zaten `MIN_FILTER_RULES` bekler. |
 | `UFW_ADMIN_EXPOSURE` | `full` or `caddy-only` |
 | `TELEGRAM_BOT_TOKEN` | @BotFather token (notify outbox + panel; Hermes also keeps copy in `~/.hermes/.env`) |
 | `TELEGRAM_CHAT_ID` | Notify / panel hedef chat veya numeric user id |
@@ -82,6 +83,7 @@ Experimental `ssd-root`: `docs/SSD-ROOT.md` + `scripts/mac/migrate-sd-boot-ssd-r
 | Variable | Description |
 |----------|-------------|
 | `ENABLE_RESTIC` | true/false |
+| `POST_DEPLOY_RESTIC` | `false`: post-deploy tam yedek atlar (timer). Repo boşsa yine ilk snapshot. `true` = her deploy yedekler. |
 | `RESTIC_PASSWORD` | Repo password |
 | `RESTIC_REPOSITORY` | Path on SSD (not offsite by itself) |
 | `MAC_BACKUP_DEST` | Mac `backup-pull` destination |

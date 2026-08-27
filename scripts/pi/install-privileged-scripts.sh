@@ -24,6 +24,9 @@ SCRIPTS=(
   scripts/lib/ssd-alive.sh
   scripts/lib/compose-profiles.sh
   scripts/pi/export-gateway-state.sh
+  scripts/pi/export-adguard-metrics.sh
+  scripts/lib/adguard-metrics.py
+  scripts/lib/unbound-dnssec.sh
   scripts/lib/gateway-probes.py
   scripts/lib/netalert-devices.py
   scripts/lib/notify.sh
