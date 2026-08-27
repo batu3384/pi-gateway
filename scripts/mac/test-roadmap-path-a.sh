@@ -23,6 +23,9 @@ ok "restore drill"
 
 [[ -f "$ROOT/scripts/pi/check-ssd-smart.sh" ]] || die "check-ssd-smart.sh yok"
 [[ -f "$ROOT/host/systemd/pi-gateway-ssd-smart.timer" ]] || die "ssd-smart timer yok"
+grep -q 'smartmontools' "$ROOT/scripts/pi/setup-ssd-smart-timer.sh" || die "setup-ssd-smart-timer smartmontools yok"
+grep -q '/usr/sbin/smartctl' "$ROOT/scripts/pi/check-ssd-smart.sh" || die "check-ssd-smart sbin PATH yok"
+grep -q 'pi-gateway-ssd-smart.timer' "$ROOT/docs/OPERATIONS.md" || die "OPERATIONS SMART runbook yok"
 ok "SMART timer"
 
 [[ -f "$ROOT/scripts/pi/restic-offsite-copy.sh" ]] || die "restic-offsite-copy yok"

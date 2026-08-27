@@ -19,7 +19,6 @@ Tracked work lives here and in [GitHub Issues](https://github.com/batu3384/pi-ga
 | Item | Status | Notes |
 |------|--------|-------|
 | ADR/docs Docker SSD matrix | Next | Audit CA-002 (`docs/adr/001-storage-hybrid.md`) — document `ENABLE_DOCKER_SSD` restore paths |
-| SSD SMART wear visibility | Next | `pi-ssd-smart.timer` + operator runbook tie-in |
 | Issue triage backlog | Next | Use GitHub Issues for bugs; no open issues baseline Aug 2026 |
 
 ## Later
@@ -34,6 +33,7 @@ Tracked work lives here and in [GitHub Issues](https://github.com/batu3384/pi-ga
 
 | Item | Status | Notes |
 |------|--------|-------|
+| SSD SMART wear visibility | Done | `pi-gateway-ssd-smart.timer` + smartmontools; runbook OPERATIONS.md |
 | Hybrid storage FSM + degraded core-dns | Done | ADR-001, `ssd-hotplug-handler`, Aug 2025–2026 |
 | SSD recovery hardening CA-001..007 | Done | notify split, xhci auto on dropout, ghost block, Aug 2026 |
 | Path B monitoring | Done | Prometheus, Grafana, gateway widget — `docs/VISIBILITY.md` |

@@ -22,9 +22,17 @@ if is_ssd_root_mode || ! needs_ssd_storage; then
   exit 0
 fi
 
-if ! command -v smartctl >/dev/null 2>&1; then
-  log "smartctl yok — apt install smartmontools"
-  exit 0
+SMARTCTL="${SMARTCTL:-}"
+if [[ -z "$SMARTCTL" ]]; then
+  if command -v smartctl >/dev/null 2>&1; then
+    SMARTCTL="$(command -v smartctl)"
+  elif [[ -x /usr/sbin/smartctl ]]; then
+    SMARTCTL=/usr/sbin/smartctl
+  fi
+fi
+if [[ -z "$SMARTCTL" ]]; then
+  log "HATA: smartctl yok — setup-ssd-smart-timer.sh smartmontools kurmali"
+  exit 1
 fi
 
 ssd_dev=""
@@ -32,11 +40,6 @@ if mountpoint -q /mnt/ssd 2>/dev/null; then
   src="$(findmnt -n -o SOURCE /mnt/ssd 2>/dev/null || true)"
   if [[ -n "$src" && -b "$src" ]]; then
     ssd_dev="$src"
-    ssd_dev="${ssd_dev%/}" # sda1 -> keep partition for NVMe/SATA
-    if [[ "$ssd_dev" =~ ^/dev/(sd[a-z]|nvme[0-9]+n[0-9]+)p[0-9]+$ ]]; then
-      ssd_dev="$(echo "$ssd_dev" | sed -E 's/p?[0-9]+$//')"
-      [[ -b "${ssd_dev}" ]] || ssd_dev="$(findmnt -n -o SOURCE /mnt/ssd)"
-    fi
   fi
 fi
 if [[ -z "$ssd_dev" ]]; then
@@ -46,18 +49,36 @@ fi
   log "SSD block bulunamadi — atlaniyor"
   exit 0
 }
+# SMART disk'e gider; mount partition (sdb1 / nvme0n1p1)
+if [[ "$ssd_dev" =~ ^/dev/nvme[0-9]+n[0-9]+p[0-9]+$ ]]; then
+  ssd_dev="${ssd_dev%p*}"
+elif [[ "$ssd_dev" =~ ^/dev/sd[a-z][0-9]+$ ]]; then
+  ssd_dev="${ssd_dev%%[0-9]*}"
+fi
+[[ -b "$ssd_dev" ]] || {
+  log "SSD disk bulunamadi — atlaniyor"
+  exit 0
+}
 
-run_smart() {
+smartctl_bin() {
   if [[ "$(id -u)" -eq 0 ]]; then
-    smartctl -H -d auto "$ssd_dev" 2>/dev/null
-    smartctl -A -d auto "$ssd_dev" 2>/dev/null || true
+    "$SMARTCTL" "$@"
   else
-    sudo smartctl -H -d auto "$ssd_dev" 2>/dev/null
-    sudo smartctl -A -d auto "$ssd_dev" 2>/dev/null || true
+    sudo "$SMARTCTL" "$@"
   fi
 }
 
-health_out="$(run_smart 2>/dev/null || true)"
+run_smart() {
+  local dtype="${1:-auto}"
+  smartctl_bin -H -d "$dtype" "$ssd_dev" 2>/dev/null || true
+  smartctl_bin -A -d "$dtype" "$ssd_dev" 2>/dev/null || true
+}
+
+health_out="$(run_smart auto 2>/dev/null || true)"
+# JMicron USB bridge: -d auto often empty; SAT passthrough
+if ! echo "$health_out" | grep -qiE 'PASSED|OK'; then
+  health_out="$(run_smart sat 2>/dev/null || true)"
+fi
 if ! echo "$health_out" | grep -qiE 'PASSED|OK'; then
   log "WARN: SMART health FAIL veya okunamadi ($ssd_dev)"
   # shellcheck source=../lib/notify.sh

@@ -26,7 +26,7 @@ Optional env:
 
 ## What gets synced
 
-Wiki page links use the `.md` suffix (`[FAQ](FAQ.md)`) so in-repo checkers and Gollum both resolve.
+Wiki page links use the `.md` suffix (`[FAQ](FAQ.md)`) so in-repo checkers and Gollum both resolve. The published copy lives on the GitHub Wiki remote (`owner/repo.wiki.git`) — that remote is not a file in this tree.
 
 - All `wiki/*.md` except `README.md`
 - Sidebar source: `wiki/_Sidebar.md`

@@ -7,6 +7,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../lib/env-file.sh
 source "$SCRIPT_DIR/../lib/env-file.sh"
 read_remote_dotenv || { echo "[ssd-smart-timer] HATA: .env dotenv parser hatasi" >&2; exit 1; }
+smartctl_ok() {
+  command -v smartctl >/dev/null 2>&1 || [[ -x /usr/sbin/smartctl ]]
+}
+if ! smartctl_ok; then
+  log "smartmontools kuruluyor"
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq smartmontools
+fi
+smartctl_ok || { log "HATA: smartctl yok"; exit 1; }
 for unit in pi-gateway-ssd-smart.service pi-gateway-ssd-smart.timer; do
   [[ -f "$REMOTE_DIR/host/systemd/$unit" ]] || { log "HATA: $unit yok"; exit 1; }
   sudo cp "$REMOTE_DIR/host/systemd/$unit" "/etc/systemd/system/$unit"

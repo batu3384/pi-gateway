@@ -30,6 +30,12 @@ Experimental ssd-root: `docs/SSD-ROOT.md`
 
 Manual trigger: `REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/ssd-health.sh`
 
+### SSD SMART (wear)
+
+Weekly timer `pi-gateway-ssd-smart.timer` (Sun 04:30) → `check-ssd-smart.sh`. Needs `smartmontools` (`setup-ssd-smart-timer.sh` installs). Journal: `journalctl -t pi-gateway-ssd-smart`. Wear ≥90% or realloc ≥10 → `notify_disk_warn`. JMicron USB: SMART via `-d sat` if `-d auto` empty. Hardware flap (`152d:0583`) ≠ SMART wear — enclosure still ops decision (`docs/SSD-JMICRON-FIX.md`).
+
+Manual: `REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/check-ssd-smart.sh`
+
 ## Quick access (Mac)
 
 | Command | Description |

@@ -130,6 +130,8 @@ ok "C12 Restic corrupt-repo gate"
 grep -q 'rsync.*--delete.*--ignore-errors' "$pull" && \
   die "C13: destructive rsync ignore-errors"
 ok "C13 backup-pull destructive delete guarded"
+grep -q "adguard/AdGuardHome.yaml" "$pull" \
+  || die "C13b: backup-pull AGH runtime yaml exclude yok"
 
 # C14: restore-check remote path must match STORAGE_TYPE/RESTIC_REPOSITORY
 grep -q 'RESTIC_REMOTE' "$restore" || die "C14: restore remote path variable yok"
