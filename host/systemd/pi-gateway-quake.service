@@ -1,5 +1,5 @@
 [Unit]
-Description=Pi Gateway AFAD earthquake poll
+Description=Pi Gateway earthquake poll (AFAD+Kandilli → Telegram outbox; no Hermes)
 After=network-online.target
 Wants=network-online.target
 
@@ -11,6 +11,8 @@ WorkingDirectory=/home/PI_USER/pi-gateway
 Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
 Environment=HOME=/home/PI_USER
 ExecStart=/home/PI_USER/pi-gateway/scripts/pi/quake-alert.sh
+# Poll 10s; HTTP 5s×2 paralel + notify — asılı kalırsa birikmesin
+TimeoutStartSec=25
 Nice=10
 StandardOutput=journal
 StandardError=journal

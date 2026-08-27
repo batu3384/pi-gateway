@@ -1,10 +1,10 @@
 [Unit]
-Description=Pi Gateway earthquake poll every 5 minutes
+Description=Pi Gateway earthquake poll every 10s (AFAD+Kandilli; outbox bot, no Hermes)
 
 [Timer]
-OnBootSec=2min
-OnUnitActiveSec=5min
-AccuracySec=30s
+OnBootSec=15s
+OnUnitActiveSec=10s
+AccuracySec=1s
 
 [Install]
 WantedBy=timers.target

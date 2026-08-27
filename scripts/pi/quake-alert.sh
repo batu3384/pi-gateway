@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Deprem P1 — AFAD; Telegram yalnız eşik+filtre sonrası
+# Deprem Telegram — AFAD+Kandilli HTTP poll → notify.sh (Bot API outbox).
+# Hermes/ajan YOK. EEW/saniye YOK. Gecikme ≈ yayın + poll (10s).
 set -euo pipefail
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -20,12 +21,16 @@ fi
 
 notify_enabled || exit 0
 export QUAKE_STATE="${QUAKE_STATE:-/var/lib/pi-gateway/quake-state.json}"
-out="$(python3 "$PY" 2>/dev/null || true)"
+LOCK="${QUAKE_LOCK:-/var/lib/pi-gateway/quake.lock}"
+mkdir -p "$(dirname "$LOCK")" "$(dirname "$QUAKE_STATE")"
+# Önceki poll bitmeden yenisi → çift Telegram / state yarışı yok
+exec 9>"$LOCK"
+flock -n 9 || exit 0
+# stderr journal'a kalsın (AFAD 500 vb.); stdout yalnız mesaj blokları
+out="$(python3 "$PY" 2> >(logger -t pi-gateway-quake -p user.warning) || true)"
 [[ -n "${out// }" ]] || exit 0
-n=0
 while IFS= read -r block; do
   [[ -n "${block// }" ]] || continue
-  n=$((n + 1))
   notify_send_message "$(printf '⚠️ Pi Gateway · Deprem\n\n%s' "$block")" || true
 done < <(printf '%s\n' "$out" | awk 'BEGIN{RS="---\n"} {gsub(/^[ \t\n]+|[ \t\n]+$/,""); if(length($0)) print}')
 exit 0

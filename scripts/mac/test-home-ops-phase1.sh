@@ -54,7 +54,17 @@ ok "A5 B2 B3 panolar"
 
 [[ -f "$ROOT/host/systemd/pi-gateway-kuma-report.timer" ]] || die "kuma timer yok"
 [[ -f "$ROOT/host/systemd/pi-gateway-speedtest.timer" ]] || die "speedtest timer yok"
-[[ -f "$ROOT/host/systemd/pi-gateway-quake.timer" ]] || die "quake timer yok"
+grep -q 'OnUnitActiveSec=10s' "$ROOT/host/systemd/pi-gateway-quake.timer" \
+  || die "quake timer 10s degil"
+grep -q 'fetch_kandilli\|Kandilli' "$ROOT/scripts/lib/quake-alert.py" \
+  || die "kandilli kaynagi yok"
+grep -q 'bootstrapped' "$ROOT/scripts/lib/quake-alert.py" \
+  || die "quake bootstrap yok"
+grep -q 'ThreadPoolExecutor\|flock' "$ROOT/scripts/lib/quake-alert.py" \
+  "$ROOT/scripts/pi/quake-alert.sh" \
+  || die "quake parallel/flock yok"
+grep -q 'TimeoutStartSec' "$ROOT/host/systemd/pi-gateway-quake.service" \
+  || die "quake TimeoutStartSec yok"
 grep -q 'setup-home-ops-timers.sh' "$ROOT/scripts/pi/post-deploy.sh" \
   || die "post-deploy home-ops timers yok"
 grep -q 'pi-gateway-quake.timer' "$ROOT/scripts/pi/bootstrap.sh" || die "bootstrap quake yok"

@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
-"""AFAD deprem — çift eşik, artçı + saat tavanı + gece sıkı. Telegram P1."""
+"""Deprem Telegram — AFAD + Kandilli poll (yayın sonrası). EEW/saniye değil.
+
+Hermes yok: systemd timer → bu script → notify.sh Bot API.
+Gecikme ≈ kaynak yayın + poll (varsayılan 10s).
+"""
 from __future__ import annotations
 
 import json
 import math
 import os
+import re
+import sys
 import time
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -22,8 +29,17 @@ AFTERSHOCK_H = float(os.environ.get("QUAKE_AFTERSHOCK_H", "6"))
 HOUR_CAP = int(os.environ.get("QUAKE_HOUR_CAP", "3"))
 HOUR_CAP_BYPASS = float(os.environ.get("QUAKE_HOUR_CAP_BYPASS_MAG", "5.5"))
 NIGHT_LOCAL_MAG = float(os.environ.get("QUAKE_NIGHT_LOCAL_MAG", "4.0"))
+# Yalnız son N sn içindeki olaylar Telegram’a (eski liste spam engeli)
+MAX_EVENT_AGE_SEC = int(os.environ.get("QUAKE_MAX_EVENT_AGE_SEC", "1200"))  # 20 dk
+# Poll 10s → HTTP kısa tut; AFAD+Kandilli paralel
+HTTP_TIMEOUT_SEC = float(os.environ.get("QUAKE_HTTP_TIMEOUT_SEC", "5"))
+FP_BUCKET_SEC = int(os.environ.get("QUAKE_FP_BUCKET_SEC", "180"))  # 3 dk
 STATE_PATH = Path(os.environ.get("QUAKE_STATE", "/var/lib/pi-gateway/quake-state.json"))
 AFAD = "https://deprem.afad.gov.tr/apiv2/event/filter"
+KANDILLI = os.environ.get(
+    "QUAKE_KANDILLI_URL",
+    "http://www.koeri.boun.edu.tr/scripts/lst0.asp",
+)
 
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -49,14 +65,6 @@ def _mag(ev: dict[str, Any]) -> float:
     return 0.0
 
 
-def _id(ev: dict[str, Any]) -> str:
-    for k in ("eventID", "eventId", "id"):
-        v = ev.get(k)
-        if v is not None and str(v).strip():
-            return str(v).strip()
-    return ""
-
-
 def _latlon(ev: dict[str, Any]) -> tuple[float, float] | None:
     try:
         lat = float(ev.get("latitude") if ev.get("latitude") is not None else ev.get("lat"))
@@ -64,6 +72,40 @@ def _latlon(ev: dict[str, Any]) -> tuple[float, float] | None:
         return lat, lon
     except (TypeError, ValueError):
         return None
+
+
+def _parse_event_time(raw: str) -> datetime | None:
+    raw = raw.strip()
+    if not raw:
+        return None
+    candidates = [
+        raw[:19],
+        raw[:19].replace("T", " "),
+    ]
+    for s in candidates:
+        for fmt in ("%Y.%m.%d %H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
+            try:
+                dt = datetime.strptime(s, fmt)
+                return dt.replace(tzinfo=timezone(timedelta(hours=3)))
+            except ValueError:
+                continue
+    return None
+
+
+def _event_ts(ev: dict[str, Any]) -> float | None:
+    dt = _parse_event_time(str(ev.get("date") or ev.get("eventDate") or ""))
+    return dt.timestamp() if dt else None
+
+
+def fingerprint(ev: dict[str, Any]) -> str:
+    """Kaynaklar arası tek olay — yaklaşık zaman + konum + büyüklük."""
+    loc = _latlon(ev)
+    mag = round(_mag(ev), 1)
+    ts = _event_ts(ev)
+    if loc is None:
+        return f"fp:nomap:{mag}:{ev.get('eventID') or ev.get('date') or ''}"
+    bucket = int((ts or 0) // FP_BUCKET_SEC)  # AFAD/Kandilli saat farkı
+    return f"fp:{bucket}:{loc[0]:.2f}:{loc[1]:.2f}:{mag:.1f}"
 
 
 def qualifies(ev: dict[str, Any], *, night: bool = False) -> bool:
@@ -128,6 +170,7 @@ def format_msg(ev: dict[str, Any]) -> str:
     loc = _latlon(ev)
     place = str(ev.get("location") or ev.get("place") or "konum yok")
     when = str(ev.get("date") or ev.get("eventDate") or "")
+    src = str(ev.get("source") or "AFAD")
     dist = ""
     if loc:
         km = haversine_km(HOME_LAT, HOME_LON, loc[0], loc[1])
@@ -135,27 +178,153 @@ def format_msg(ev: dict[str, Any]) -> str:
     return (
         f"Büyüklük M{mag:.1f} — {place}{dist}\n"
         f"Zaman: {when}\n"
-        "Kaynak: AFAD"
+        f"Kaynak: {src}"
     )
 
 
-def fetch_events() -> list[dict[str, Any]]:
+def _http_get(url: str, timeout: float | None = None) -> bytes:
+    req = urllib.request.Request(url, headers={"User-Agent": "pi-gateway-quake/2"})
+    with urllib.request.urlopen(req, timeout=timeout or HTTP_TIMEOUT_SEC) as resp:  # noqa: S310
+        return resp.read()
+
+
+def fetch_afad() -> list[dict[str, Any]]:
     end = datetime.now(timezone.utc)
     start = end - timedelta(hours=6)
     url = (
         f"{AFAD}?start={start.strftime('%Y-%m-%d')}&end={end.strftime('%Y-%m-%d')}"
         f"&minMag={min(LOCAL_MAG, 3.0)}"
     )
-    req = urllib.request.Request(url, headers={"User-Agent": "pi-gateway-quake/1"})
-    with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310
-        data = json.loads(resp.read().decode("utf-8"))
+    data = json.loads(_http_get(url).decode("utf-8"))
+    rows: list[Any]
     if isinstance(data, list):
-        return data
-    if isinstance(data, dict):
-        for k in ("data", "result", "events"):
-            if isinstance(data.get(k), list):
-                return data[k]
-    return []
+        rows = data
+    elif isinstance(data, dict):
+        rows = next(
+            (data[k] for k in ("data", "result", "events") if isinstance(data.get(k), list)),
+            [],
+        )
+    else:
+        rows = []
+    out: list[dict[str, Any]] = []
+    for ev in rows:
+        if not isinstance(ev, dict):
+            continue
+        item = dict(ev)
+        item["source"] = "AFAD"
+        if not item.get("eventID") and item.get("eventId"):
+            item["eventID"] = item["eventId"]
+        out.append(item)
+    return out
+
+
+def parse_kandilli_line(line: str) -> dict[str, Any] | None:
+    """Kandilli lst0 sabit sütun: tarih saat lat lon derinlik MD ML Mw yer …"""
+    parts = line.split()
+    if len(parts) < 9:
+        return None
+    try:
+        when = f"{parts[0]} {parts[1]}"
+        lat = float(parts[2])
+        lon = float(parts[3])
+        # parts[4]=depth; [5]=MD [6]=ML [7]=Mw — ML yoksa Mw/MD
+        mag = None
+        for idx in (6, 7, 5):
+            tok = parts[idx]
+            if tok in ("-.-", "", "None"):
+                continue
+            mag = float(tok)
+            break
+        if mag is None:
+            return None
+        place = " ".join(parts[8:])
+        for junk in ("İlksel", "Ilksel", "REVIZE01", "REVIZE"):
+            place = place.replace(junk, "")
+        place = place.strip() or "konum yok"
+    except (ValueError, IndexError):
+        return None
+    return {
+        "eventID": f"kandilli:{when}:{lat:.3f}:{lon:.3f}:{mag:.1f}",
+        "magnitude": mag,
+        "latitude": lat,
+        "longitude": lon,
+        "location": place,
+        "date": when,
+        "source": "Kandilli",
+    }
+
+
+def fetch_kandilli() -> list[dict[str, Any]]:
+    raw = _http_get(KANDILLI)
+    text = None
+    for enc in ("windows-1254", "iso-8859-9", "utf-8", "latin-1"):
+        try:
+            text = raw.decode(enc)
+            break
+        except UnicodeDecodeError:
+            continue
+    if text is None:
+        return []
+    pre = re.search(r"<pre[^>]*>(.*?)</pre>", text, re.I | re.S)
+    block = pre.group(1) if pre else text
+    out: list[dict[str, Any]] = []
+    for line in block.splitlines():
+        if not re.match(r"^\d{4}\.\d{2}\.\d{2}", line.strip()):
+            continue
+        ev = parse_kandilli_line(line)
+        if ev and _mag(ev) > 0:
+            out.append(ev)
+    return out
+
+
+def _source_set(raw: Any) -> set[str]:
+    if not isinstance(raw, str) or not raw.strip():
+        return set()
+    return {p for p in raw.split("+") if p}
+
+
+def merge_events(*batches: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Aynı parmak izi → tek kayıt; kaynakları birleştir (hangisi önce geldiyse kalsın)."""
+    by_fp: dict[str, dict[str, Any]] = {}
+    order: list[str] = []
+    for batch in batches:
+        for ev in batch:
+            fp = fingerprint(ev)
+            if fp not in by_fp:
+                by_fp[fp] = dict(ev)
+                by_fp[fp]["eventID"] = fp
+                order.append(fp)
+            else:
+                cur = by_fp[fp]
+                srcs = _source_set(cur.get("source")) | _source_set(ev.get("source"))
+                cur["source"] = "+".join(sorted(srcs))
+                if _mag(ev) > _mag(cur):
+                    cur["magnitude"] = _mag(ev)
+                if not cur.get("location") and ev.get("location"):
+                    cur["location"] = ev["location"]
+    return [by_fp[fp] for fp in order]
+
+
+def fetch_events() -> list[dict[str, Any]]:
+    afad: list[dict[str, Any]] = []
+    kandilli: list[dict[str, Any]] = []
+    errors: list[str] = []
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        fut_a = pool.submit(fetch_afad)
+        fut_k = pool.submit(fetch_kandilli)
+        try:
+            afad = fut_a.result()
+        except (OSError, TimeoutError, json.JSONDecodeError, urllib.error.URLError, ValueError) as exc:
+            errors.append(f"AFAD:{exc}")
+        try:
+            kandilli = fut_k.result()
+        except (OSError, TimeoutError, urllib.error.URLError, ValueError) as exc:
+            errors.append(f"Kandilli:{exc}")
+    if errors and not afad and not kandilli:
+        raise RuntimeError("; ".join(errors))
+    if errors:
+        print(f"[quake] kısmi: {'; '.join(errors)}", file=sys.stderr)
+    return merge_events(afad, kandilli)
 
 
 def due_events(events: list[dict[str, Any]], state: dict[str, Any], now_ts: float) -> list[dict[str, Any]]:
@@ -163,10 +332,26 @@ def due_events(events: list[dict[str, Any]], state: dict[str, Any], now_ts: floa
     sent_ts = [float(x) for x in (state.get("sent_ts") or [])]
     last = state.get("last") if isinstance(state.get("last"), dict) else None
     night = is_night(datetime.fromtimestamp(now_ts).astimezone())
+
+    # İlk koşu: mevcut listeyi "görüldü" say — tarihî deprem spam’i yok
+    if not state.get("bootstrapped"):
+        for ev in events:
+            seen.add(fingerprint(ev))
+        state["seen"] = list(seen)[-800:]
+        state["sent_ts"] = sent_ts
+        state["last"] = last
+        state["bootstrapped"] = True
+        return []
+
     due: list[dict[str, Any]] = []
     for ev in events:
-        eid = _id(ev)
+        eid = fingerprint(ev)
         if not eid or eid in seen:
+            continue
+        # Yeni olay işaretle (eşik altı da) — sonra tekrar bakma
+        seen.add(eid)
+        ets = _event_ts(ev)
+        if ets is not None and now_ts - ets > MAX_EVENT_AGE_SEC:
             continue
         if not qualifies(ev, night=night):
             continue
@@ -175,13 +360,13 @@ def due_events(events: list[dict[str, Any]], state: dict[str, Any], now_ts: floa
         if hour_blocked(sent_ts, now_ts, _mag(ev)):
             continue
         due.append(ev)
-        seen.add(eid)
         sent_ts.append(now_ts)
         loc = _latlon(ev) or (0.0, 0.0)
         last = {"mag": _mag(ev), "ts": now_ts, "lat": loc[0], "lon": loc[1]}
-    state["seen"] = list(seen)[-400:]
+    state["seen"] = list(seen)[-800:]
     state["sent_ts"] = [t for t in sent_ts if now_ts - t < 86400][-50:]
     state["last"] = last
+    state["bootstrapped"] = True
     return due
 
 
@@ -202,23 +387,65 @@ def self_check() -> None:
     assert is_aftershock(artci, last, time.time())
     assert hour_blocked([time.time() - 10] * 3, time.time(), 3.6)
     assert not hour_blocked([time.time() - 10] * 3, time.time(), 5.6)
+    sample = (
+        "2026.08.27 14:16:09  40.8050   28.0587       10.2      -.-  2.7  -.-   "
+        "MARMARA DENIZI                                    İlksel"
+    )
+    k = parse_kandilli_line(sample)
+    assert k and abs(_mag(k) - 2.7) < 0.01 and k["source"] == "Kandilli", k
+    a = {
+        "magnitude": 2.7,
+        "latitude": 40.80,
+        "longitude": 28.06,
+        "date": "2026.08.27 14:16:09",
+        "source": "AFAD",
+        "eventID": "x",
+    }
+    merged = merge_events([a], [k])
+    assert len(merged) == 1, merged
+    assert merged[0]["source"] == "AFAD+Kandilli", merged[0]["source"]
+    # tekrar merge: kaynak şişmesin
+    again = merge_events(merged, [a])
+    assert again[0]["source"] == "AFAD+Kandilli", again[0]["source"]
+    # bootstrap: ilk tur boş due
+    st: dict[str, Any] = {}
+    now = time.time()
+    fresh = {
+        "magnitude": 3.6,
+        "latitude": 40.8,
+        "longitude": 28.5,
+        "date": datetime.fromtimestamp(now, tz=timezone(timedelta(hours=3))).strftime(
+            "%Y.%m.%d %H:%M:%S"
+        ),
+        "source": "Kandilli",
+        "eventID": "fresh",
+    }
+    assert due_events([fresh], st, now) == []
+    assert st.get("bootstrapped") is True
+    # ikinci tur: yeni fp → uyarı
+    fresh2 = dict(fresh)
+    fresh2["latitude"] = 40.81
+    fresh2["longitude"] = 28.51
+    due2 = due_events([fresh2], st, now)
+    assert len(due2) == 1, due2
     print("[quake-alert] self-check OK")
 
 
 def main() -> int:
-    import sys
-
     if "--self-check" in sys.argv:
         self_check()
         return 0
     try:
         events = fetch_events()
-    except (OSError, TimeoutError, json.JSONDecodeError, urllib.error.URLError, ValueError) as exc:
+    except (OSError, TimeoutError, json.JSONDecodeError, urllib.error.URLError, ValueError, RuntimeError) as exc:
         print(f"[quake] fetch fail: {exc}", file=sys.stderr)
         return 0
     state = load_state(STATE_PATH)
     due = due_events(events, state, time.time())
-    save_state(STATE_PATH, state)
+    try:
+        save_state(STATE_PATH, state)
+    except OSError as exc:
+        print(f"[quake] state yazilamadi: {exc}", file=sys.stderr)
     for ev in due:
         print(format_msg(ev))
         print("---")
