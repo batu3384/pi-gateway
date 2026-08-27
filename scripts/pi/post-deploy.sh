@@ -196,7 +196,13 @@ run_step_soft "Hermes gateway" "$SCRIPT_DIR/setup-hermes-gateway.sh"
 run_step_soft "Hermes env" "$SCRIPT_DIR/ensure-hermes-env.sh"
 run_step_soft "Hermes config" "$SCRIPT_DIR/patch-hermes-config-pi.sh"
 run_step_soft "Hermes cron" "$SCRIPT_DIR/setup-hermes-cron.sh"
+run_step_soft "Hermes identity" "$SCRIPT_DIR/setup-hermes-identity.sh"
 run_step_soft "Hermes menu skill" "$SCRIPT_DIR/setup-hermes-menu-skill.sh"
+if systemctl is-active --quiet hermes-gateway 2>/dev/null; then
+  sudo systemctl restart hermes-gateway 2>/dev/null \
+    && log "hermes-gateway restart (SOUL/ops)" \
+    || log "WARN: hermes-gateway restart"
+fi
 run_step_soft "Compose orphan cleanup" "$SCRIPT_DIR/cleanup-compose-orphans.sh"
 run_step_soft "Gateway systemd cleanup" "$SCRIPT_DIR/../lib/reset-gateway-units.sh"
 run_step_soft "Restic repair" "$SCRIPT_DIR/restic-repair.sh"

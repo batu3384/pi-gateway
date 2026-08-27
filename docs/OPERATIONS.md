@@ -210,6 +210,7 @@ When `HERMES_TELEGRAM_GATEWAY=true` in Pi `.env`:
 
 - **Inbox:** `hermes-gateway.service` (Nous Hermes) owns `getUpdates` — chat + commands.
 - **Outbox:** `notify.sh` keeps using the same `TELEGRAM_BOT_TOKEN` via `sendMessage`.
+- **Identity:** deploy kopyalar `config/hermes/SOUL.md` → `~/.hermes/SOUL.md` + skill `pi-gateway-ops` (Forgejo/Syncthing yok). Ölü skill’ler (`imessage`, `findmy`, `comfyui`, `vllm`…) `skills.disabled`. Script: `setup-hermes-identity.sh`.
 - **Panel menu:** `telegram-menu.sh` (Mac/outbox) or Hermes `/menu` skill → `hermes-menu.sh`.
 - Secrets: `GLM_API_KEY` + Telegram token live in `~/.hermes/.env` (chmod 600). Coding Plan base URL: `https://api.z.ai/api/coding/paas/v4`. Default model: **`glm-5.3`** (`provider: zai` in `~/.hermes/config.yaml`).
 - Browser (Pi aarch64): system Chromium (`apt install chromium`) + `agent-browser`; set `AGENT_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium` (Chrome-for-Testing ARM64 yok).

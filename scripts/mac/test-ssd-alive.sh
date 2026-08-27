@@ -176,6 +176,21 @@ grep -q 'name: menu' "$PROJECT_DIR/config/hermes/skills/menu/SKILL.md" \
   || die "hermes menu skill name=menu yok"
 grep -q 'config/hermes/skills/menu' "$PROJECT_DIR/scripts/pi/setup-hermes-menu-skill.sh" \
   || die "setup-hermes-menu-skill menu path yok"
+grep -q 'Pi Gateway Asistan' "$PROJECT_DIR/config/hermes/SOUL.md" \
+  || die "hermes SOUL.md Pi Gateway kimlik yok"
+grep -q 'Forgejo / Syncthing yok' "$PROJECT_DIR/config/hermes/SOUL.md" \
+  || die "hermes SOUL Forgejo yok notu eksik"
+grep -q 'name: pi-gateway-ops' "$PROJECT_DIR/config/hermes/skills/pi-gateway-ops/SKILL.md" \
+  || die "pi-gateway-ops skill yok"
+grep -q 'Forgejo, Syncthing' "$PROJECT_DIR/config/hermes/skills/pi-gateway-ops/SKILL.md" \
+  || die "pi-gateway-ops yok listesi eksik"
+grep -q 'skills.disabled' "$PROJECT_DIR/scripts/pi/setup-hermes-identity.sh" \
+  || die "setup-hermes-identity skills.disabled yok"
+grep -q 'setup-hermes-identity.sh' "$PROJECT_DIR/scripts/pi/post-deploy-code.sh" \
+  || die "code deploy hermes identity yok"
+grep -q 'setup-hermes-identity.sh' "$PROJECT_DIR/scripts/pi/post-deploy.sh" \
+  || die "full deploy hermes identity yok"
+ok "hermes identity SOUL+ops"
 grep -q 'hermes_owns_inbox' "$PROJECT_DIR/scripts/pi/telegram-menu.sh" \
   || die "telegram-menu Hermes setMyCommands korumasi yok"
 grep -q 'BotCommandScope\|scope.*chat\|type.: .chat' "$PROJECT_DIR/scripts/pi/telegram-menu.sh" \

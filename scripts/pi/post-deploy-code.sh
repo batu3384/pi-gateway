@@ -57,9 +57,16 @@ if [[ "${HERMES_TELEGRAM_GATEWAY:-}" == "true" ]]; then
   soft "Hermes cron patch" "$SCRIPT_DIR/patch-hermes-cron-pi.sh"
   soft "Hermes config" "$SCRIPT_DIR/patch-hermes-config-pi.sh"
   soft "Hermes cron jobs" "$SCRIPT_DIR/setup-hermes-cron.sh"
+  # SOUL + ops skill + ölü skill disable (her code deploy)
+  soft "Hermes identity" "$SCRIPT_DIR/setup-hermes-identity.sh"
   # Menu skill + durum kartı: full deploy / DEPLOY_CODE_MENU=true
   if [[ "${DEPLOY_CODE_MENU:-false}" == "true" ]]; then
     soft "Hermes menu skill" "$SCRIPT_DIR/setup-hermes-menu-skill.sh"
+  fi
+  if systemctl is-active --quiet hermes-gateway 2>/dev/null; then
+    sudo systemctl restart hermes-gateway 2>/dev/null \
+      && log "hermes-gateway restart (SOUL/ops)" \
+      || log "WARN: hermes-gateway restart"
   fi
 fi
 
