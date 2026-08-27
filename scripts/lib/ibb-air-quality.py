@@ -142,6 +142,13 @@ def render_prom(up: int, station: dict[str, Any], sample: dict[str, Any] | None)
     return "\n".join(lines) + "\n"
 
 
+def query_window(now: datetime) -> tuple[str, str]:
+    """İBB DateTime ParseExact: dd.MM.yyyy HH:mm:ss. Saat başı dışı start → boş AQI satırları."""
+    start = (now - timedelta(days=1)).strftime("%d.%m.%Y 00:00:00")
+    end = now.strftime("%d.%m.%Y 23:59:59")
+    return start, end
+
+
 def write_atomic(path: str, text: str) -> None:
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     tmp = path + ".tmp"
@@ -190,6 +197,9 @@ def self_check() -> None:
     assert "pi_gateway_ibb_up 0" in render_prom(0, {"Name": "x", "Id": "y"}, None)
     d = haversine_km(41.0, 29.0, 41.0, 29.0)
     assert d < 0.01
+    s, e = query_window(datetime(2026, 8, 27, 17, 29, 43, tzinfo=IST))
+    assert s == "26.08.2026 00:00:00"
+    assert e == "27.08.2026 23:59:59"
     print("[ibb-air-quality] self-check OK")
 
 
@@ -218,8 +228,7 @@ def main() -> int:
             print("status=fail reason=no-station")
             return 0
         now = datetime.now(IST)
-        start = (now - timedelta(hours=30)).strftime("%d.%m.%Y %H:%M:%S")
-        end = (now + timedelta(hours=2)).strftime("%d.%m.%Y %H:%M:%S")
+        start, end = query_window(now)
         sid = str(st.get("Id") or "")
         q = (
             f"{BY_ID_URL}?StationId={urllib.parse.quote(sid)}"

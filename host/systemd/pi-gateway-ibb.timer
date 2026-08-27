@@ -2,8 +2,8 @@
 Description=Pi Gateway İBB HKI every 30 minutes
 
 [Timer]
-OnBootSec=2min
-OnUnitActiveSec=30min
+OnBootSec=90s
+OnCalendar=*:0/30
 Persistent=true
 AccuracySec=1min
 

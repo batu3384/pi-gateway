@@ -67,8 +67,8 @@ grep -q 'pi-gateway-ibb.timer' "$ROOT/scripts/pi/setup-home-ops-timers.sh" \
   || die "home-ops ibb timer yok"
 grep -q 'sudo install -m 644' "$ROOT/scripts/pi/ibb-air-quality.sh" \
   || die "ibb metrics sudo install yok"
-grep -q 'OnUnitActiveSec=30min' "$ROOT/host/systemd/pi-gateway-ibb.timer" \
-  || die "ibb timer 30min degil"
+grep -qF 'OnCalendar=*:0/30' "$ROOT/host/systemd/pi-gateway-ibb.timer" \
+  || die "ibb timer 30dk calendar yok"
 grep -q 'setup-home-ops-timers.sh' "$ROOT/scripts/pi/post-deploy-code.sh" \
   || die "code deploy home-ops timers yok"
 grep -q 'OnUnitActiveSec=10s' "$ROOT/host/systemd/pi-gateway-quake.timer" \
