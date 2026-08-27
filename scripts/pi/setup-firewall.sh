@@ -180,7 +180,17 @@ setup_ufw() {
     # DNS UDP asil; 53'u TCP dongusune ekleme. Global NS = Pi 100.x (LAN :53 kurali 100.x kaynagi tutmaz).
     sudo ufw allow in on tailscale0 to any port 53 proto udp comment 'pi-gateway tailscale-53'
     sudo ufw allow in on tailscale0 to any port 53 proto tcp comment 'pi-gateway tailscale-53'
-    log "Tailscale bagli — tailscale0: 22/80/443/53 (panel TCP; DNS UDP+TCP)"
+    if [[ "${TS_PANEL_DIRECT_PORTS:-true}" == "true" ]]; then
+      for port in 3001 "${DOZZLE_PORT:-9999}" "${ADGUARD_WEB_PORT:-8080}" "${N8N_PORT:-5678}" "${GRAFANA_PORT:-3030}"; do
+        sudo ufw allow in on tailscale0 to any port "$port" proto tcp comment "pi-gateway tailscale-$port"
+      done
+      if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
+        sudo ufw allow in on tailscale0 to any port "${NETALERTX_PORT:-20211}" proto tcp comment 'pi-gateway tailscale-20211'
+      fi
+      log "Tailscale bagli — :53 UDP+TCP + :22/80/443 + TS_PANEL TCP"
+    else
+      log "Tailscale bagli — tailscale0: 22/80/443/53 (TS_PANEL kapali)"
+    fi
   else
     log "Tailscale bagli degil — tailscale0 kurali eklenmedi"
   fi

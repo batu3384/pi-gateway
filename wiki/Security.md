@@ -15,7 +15,7 @@ Summary of repo [`docs/SECURITY.md`](https://github.com/batu3384/pi-gateway/blob
 | Network | UFW (LAN-scoped admin), CrowdSec (SSH) |
 | Threat intel | CrowdSec + UFW bouncer (optional) |
 | Application | Per-service passwords; unified login option |
-| DNS | AdGuard filters + Unbound recursion |
+| DNS | AdGuard filters + Unbound DoT forward (`:853`) |
 | Remote | Tailscale (optional), no public SSH by default |
 | TLS | mkcert `*.home` default; HTTP requires `WEAK_TLS_OK=yes` |
 

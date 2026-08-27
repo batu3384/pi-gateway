@@ -73,7 +73,7 @@ make telegram-menu   # or on Pi: scripts/pi/telegram-menu.sh
 REMOTE_DIR=~/pi-gateway bash scripts/pi/diagnose-remote-access.sh
 ```
 
-**Security:** admin panels via Caddy on Tailscale `80/443`. DNS `:53` on `tailscale0` is AdGuard (filter), not the admin UI. Do not open AdGuard `:8080` / NetAlertX `:20211` on `tailscale0`. ACL: `group:owners` / `tag:owner-device` only.
+**Security:** Caddy `100.x:80/443` (path `/p/`) ve `TS_PANEL_DIRECT_PORTS=true` (default) ile `100.x:PORT` DNAT. Panel TCP UFW `tailscale0` + ACL `tag:pi-gateway:3001,3030,5678,8080,9999,20211` — yalnız `group:owners`. DNS `:53` AdGuard, admin UI değil. ACL kapısı tek auth (Caddy basic_auth 100.x Caddy bloğunda yok).
 
 **Auth tradeoff:** `http://100.x.x.x` Caddy block has **no basic_auth** (Telegram in-app browser cannot do Basic Auth). LAN `192.x` keeps basic_auth. Anyone on your tailnet who can reach the Pi can open panels without a password — **ACL is the only gate**. Do not invite untrusted devices.
 
@@ -101,4 +101,4 @@ ssh "$PI_USER@100.x.x.x"
 
 ## Security note
 
-UFW on `tailscale0`: `22/80/443` TCP (panels/SSH) and `:53` UDP+TCP (AdGuard). WAN `:53` stays closed.
+UFW on `tailscale0`: `22/80/443` TCP, `:53` UDP+TCP (AdGuard), and if `TS_PANEL_DIRECT_PORTS=true` the Telegram panel TCP ports. WAN `:53` stays closed.

@@ -88,15 +88,39 @@ if ! echo "$health_out" | grep -qiE 'PASSED|OK'; then
 fi
 
 wear_pct=""
-if echo "$health_out" | grep -qi nvme; then
-  wear_pct="$(echo "$health_out" | awk -F: '/Percentage Used/{gsub(/[^0-9]/,"",$2); print $2; exit}')"
-elif echo "$health_out" | grep -qi 'Wear_Leveling_Count\|Media_Wearout_Indicator'; then
-  wear_pct="$(echo "$health_out" | awk -F: '/Wear_Leveling_Count|Media_Wearout_Indicator/{gsub(/[^0-9]/,"",$2); v=$2; exit} END{print v}')"
-  if [[ -n "$wear_pct" && "$wear_pct" =~ ^[0-9]+$ && "$wear_pct" -le 100 ]]; then
-    wear_pct=$((100 - wear_pct))
-  fi
-fi
-realloc="$(echo "$health_out" | awk -F: '/Reallocated_Sector_Ct/{gsub(/[^0-9]/,"",$2); print $2; exit}')"
+realloc=""
+# smartctl -A kolonlu (VALUE=4, RAW=son alan); NVMe "Percentage Used: N%"
+eval "$(printf '%s\n' "$health_out" | python3 -c '
+import re, sys
+text = sys.stdin.read()
+wear = realloc = None
+m = re.search(r"Percentage Used:\s*(\d+)", text, re.I)
+if m:
+    wear = int(m.group(1))
+for line in text.splitlines():
+    p = line.split()
+    if len(p) < 10 or not p[0].isdigit():
+        continue
+    name, value, raw = p[1], p[3], p[-1]
+    if name in ("Wear_Leveling_Count", "Media_Wearout_Indicator") and wear is None:
+        try:
+            v = int(re.sub(r"[^0-9]", "", value) or "0")
+        except ValueError:
+            continue
+        wear = (100 - v) if v <= 100 else None
+    if name == "Reallocated_Sector_Ct":
+        try:
+            realloc = int(re.sub(r"[^0-9]", "", raw) or "0")
+        except ValueError:
+            realloc = None
+def emit(k, v):
+    if v is None:
+        print(f"{k}=")
+    else:
+        print(f"{k}={v}")
+emit("wear_pct", wear)
+emit("realloc", realloc)
+')"
 
 if [[ -n "$wear_pct" && "$wear_pct" =~ ^[0-9]+$ ]] && (( wear_pct >= SSD_WEAR_WARN_PCT )); then
   log "WARN: SSD wear ${wear_pct}% >= ${SSD_WEAR_WARN_PCT}%"

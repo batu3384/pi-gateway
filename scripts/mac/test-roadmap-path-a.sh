@@ -25,6 +25,8 @@ ok "restore drill"
 [[ -f "$ROOT/host/systemd/pi-gateway-ssd-smart.timer" ]] || die "ssd-smart timer yok"
 grep -q 'smartmontools' "$ROOT/scripts/pi/setup-ssd-smart-timer.sh" || die "setup-ssd-smart-timer smartmontools yok"
 grep -q '/usr/sbin/smartctl' "$ROOT/scripts/pi/check-ssd-smart.sh" || die "check-ssd-smart sbin PATH yok"
+grep -q 'Percentage Used' "$ROOT/scripts/pi/check-ssd-smart.sh" || die "check-ssd-smart wear kolon parse yok"
+grep -q 'Unbound DoT' "$ROOT/wiki/Security.md" || die "wiki Security Unbound recursion yalan"
 grep -q 'pi-gateway-ssd-smart.timer' "$ROOT/docs/OPERATIONS.md" || die "OPERATIONS SMART runbook yok"
 ok "SMART timer"
 

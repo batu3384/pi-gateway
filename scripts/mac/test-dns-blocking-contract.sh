@@ -31,6 +31,8 @@ grep -q 'in on tailscale0 to any port 53 proto udp' "$PROJECT_DIR/scripts/pi/set
   || die "UFW tailscale0 :53/udp yok (global NS)"
 grep -q 'in on tailscale0 to any port 53 proto tcp' "$PROJECT_DIR/scripts/pi/setup-firewall.sh" \
   || die "UFW tailscale0 :53/tcp yok"
+grep -q 'TS_PANEL_DIRECT_PORTS' "$PROJECT_DIR/scripts/pi/setup-firewall.sh" \
+  || die "UFW TS_PANEL portlari yok"
 if grep -q 'for port in 22 80 443 53' "$PROJECT_DIR/scripts/pi/setup-firewall.sh"; then
   die "UFW :53 TCP dongusunde — UDP ayri sart"
 fi

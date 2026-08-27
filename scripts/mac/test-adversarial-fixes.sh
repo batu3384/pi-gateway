@@ -132,6 +132,8 @@ grep -q 'rsync.*--delete.*--ignore-errors' "$pull" && \
 ok "C13 backup-pull destructive delete guarded"
 grep -q "adguard/AdGuardHome.yaml" "$pull" \
   || die "C13b: backup-pull AGH runtime yaml exclude yok"
+grep -q "caddy/certs" "$pull" \
+  || die "C13c: backup-pull TLS key dir exclude yok"
 
 # C14: restore-check remote path must match STORAGE_TYPE/RESTIC_REPOSITORY
 grep -q 'RESTIC_REMOTE' "$restore" || die "C14: restore remote path variable yok"
@@ -209,6 +211,8 @@ grep -q 'YOUR_TAILSCALE_LAN_SUBNET:53,80,443' "$tailscale_acl" \
   || die "C21: Tailscale LAN port allowlist yok"
 grep -q 'tag:pi-gateway:53' "$tailscale_acl" \
   || die "C21: Tailscale Pi :53 (global NS) yok"
+grep -q 'tag:pi-gateway:8080' "$tailscale_acl" \
+  || die "C21: ACL TS_PANEL :8080 yok (UFW+DNAT ile hiza)"
 grep -q '"src": \["group:owners", "tag:owner-device"\]' "$tailscale_acl" \
   || die "C21: ACL src group:owners (tagsiz telefon) yok"
 grep -c '"src": \["group:owners", "tag:owner-device"\]' "$tailscale_acl" | grep -qE '^[23]$' \

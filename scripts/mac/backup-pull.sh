@@ -95,6 +95,7 @@ if ! rsync -avz \
   --exclude 'homepage/logs/**' \
   --exclude 'crowdsec/bouncer/local_api_credentials.yaml' \
   --exclude 'adguard/AdGuardHome.yaml' \
+  --exclude 'caddy/certs' \
   "$PI_USER@$PI_HOST:$REMOTE_DIR/config/" \
   "$stage_config/"; then
   die "config snapshot basarisiz — .last-success yazilmiyor"
