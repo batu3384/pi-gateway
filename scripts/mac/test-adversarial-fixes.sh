@@ -209,6 +209,12 @@ grep -q 'tag:pi-gateway:53' "$tailscale_acl" \
   || die "C21: Tailscale Pi :53 (global NS) yok"
 grep -q '"src": \["group:owners", "tag:owner-device"\]' "$tailscale_acl" \
   || die "C21: ACL src group:owners (tagsiz telefon) yok"
+grep -c '"src": \["group:owners", "tag:owner-device"\]' "$tailscale_acl" | grep -qE '^[23]$' \
+  || die "C21: ACL src group:owners en az 2 kuralda (pi ports + LAN/ssh)"
+grep -q 'tailnet/-' "$ROOT/scripts/pi/setup-tailscale-dns.sh" \
+  || die "C21: DNS API tailnet/- (email kesme 404) yok"
+grep -q 'tag:pi-gateway' "$ROOT/scripts/pi/setup-tailscale-dns.sh" \
+  || die "C21: DNS script Pi tag:pi-gateway yok"
 if grep -q 'for port in 22 80 443 53' "$firewall"; then
   die "C21: DNS 53 TCP dongusunde — UDP ayri kural sart"
 fi

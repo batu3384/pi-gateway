@@ -40,11 +40,19 @@ Do **not** flip Override first. Same lesson as WAN `:53` drop: listen + ACL + pr
 
    Expect block (`0.0.0.0` / NXDOMAIN) for `doubleclick.net`.
 
-4. Admin → [DNS](https://login.tailscale.com/admin/dns):
-   - **Global nameserver** = Pi Tailscale IPv4 (`100.x`). **Not** LAN `.112` (source is `100.x`; LAN UFW rule does not match; post-deploy also wipes `ts-subnet` FORWARD)
-   - Keep split DNS `home` → same `100.x` (devices with Override off)
-   - **No second global NS** (Tailscale queries in parallel; ads leak)
-   - **Override DNS servers** — only after step 3 is green
+4. Admin → [DNS](https://login.tailscale.com/admin/dns) **or** automate:
+
+   ```bash
+   # Pi .env once: TAILSCALE_API_KEY=tskey-api-…  (Keys → Generate API access token; AUTHKEY yetmez)
+   make tailscale-dns
+   ```
+
+   Manual equivalent:
+   - **Global nameserver** = Pi Tailscale IPv4 (`100.x`). **Not** LAN `.112`
+   - Keep split DNS `home` → same `100.x`
+   - **No second global NS**
+   - **Override DNS servers** on
+
 5. Cellular: Wi-Fi off, `doubleclick.net` blocked; AdGuard query log shows client `100.x`
 6. Pi `/etc/resolv.conf` stays `127.0.0.1`. Health-check does **not** fail the house if Tailscale is down.
 

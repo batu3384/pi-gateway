@@ -48,14 +48,8 @@ Path(out).write_text(text, encoding="utf-8")
 PY
 ACL_FILE="$ACL_LOCAL"
 if [[ -n "$API_KEY" ]]; then
-  tailnet="$(tailscale status --json 2>/dev/null | python3 -c "
-import json,sys
-d=json.load(sys.stdin)
-name=d.get('CurrentTailnet',{}).get('Name','')
-print(name.split('@')[0] if '@' in name else name.replace('.ts.net',''))
-" 2>/dev/null || true)"
-  [[ -n "$tailnet" ]] || { log "HATA: tailnet adi alinamadi (tailscale status)"; exit 1; }
-  log "API ile gonderiliyor (tailnet: $tailnet)..."
+  tailnet="-"
+  log "API ile gonderiliyor (tailnet: -)..."
   if curl -fsS -X POST "https://api.tailscale.com/api/v2/tailnet/${tailnet}/acl" \
     -u "${API_KEY}:" \
     -H "Content-Type: application/json" \

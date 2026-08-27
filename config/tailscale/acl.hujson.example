@@ -23,7 +23,7 @@
     // "dst": ["tag:pi-gateway:3001", "tag:pi-gateway:8080", "tag:pi-gateway:9999", "tag:pi-gateway:5678", "tag:pi-gateway:20211"]
     {
       "action": "accept",
-      "src": ["tag:owner-device"],
+      "src": ["group:owners", "tag:owner-device"],
       "dst": ["YOUR_TAILSCALE_LAN_SUBNET:53,80,443"]
     }
   ],
@@ -37,7 +37,7 @@
   "ssh": [
     {
       "action": "accept",
-      "src": ["tag:owner-device"],
+      "src": ["group:owners", "tag:owner-device"],
       "dst": ["tag:pi-gateway"],
       "users": ["autogroup:nonroot"]
     }

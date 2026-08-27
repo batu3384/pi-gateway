@@ -23,6 +23,14 @@
 | `DHCP_RANGE_START` / `DHCP_RANGE_END` / `LAN_SUBNET_MASK` | Yalnız `NETWORK_MODE=adguard-dhcp`. Örnek: `192.168.1.50`–`200`, `255.255.255.0`. |
 | `MODEM_IPV6_DNS_LL` | `fe80::1`. radvd RFC 8106 lifetime 0 (modem RDNSS un-advertise). |
 
+## Tailscale
+
+| Variable | Description |
+|----------|-------------|
+| `TAILSCALE_AUTHKEY` | Device join (bootstrap). Admin DNS/ACL için yetmez. |
+| `TAILSCALE_ACL_OWNER` | Tailscale login e-posta — ACL template. |
+| `TAILSCALE_API_KEY` | `tskey-api-…` ([Keys](https://login.tailscale.com/admin/settings/keys)). `make tailscale-dns` → global NS=Pi `100.x` + Override + ACL publish. |
+
 ## Security
 
 | Variable | Description |

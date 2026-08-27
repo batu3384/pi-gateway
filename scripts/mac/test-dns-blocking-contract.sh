@@ -35,6 +35,12 @@ if grep -q 'for port in 22 80 443 53' "$PROJECT_DIR/scripts/pi/setup-firewall.sh
 fi
 grep -q -- '--accept-dns=false' "$PROJECT_DIR/scripts/pi/setup-tailscale-remote.sh" \
   || die "tailscale-remote accept-dns=false yok"
+grep -q 'overrideLocalDNS' "$PROJECT_DIR/scripts/pi/setup-tailscale-dns.sh" \
+  || die "setup-tailscale-dns overrideLocalDNS yok"
+grep -q 'tskey-api-' "$PROJECT_DIR/scripts/pi/setup-tailscale-dns.sh" \
+  || die "setup-tailscale-dns API key gate yok"
+grep -q 'setup-tailscale-dns.sh' "$PROJECT_DIR/scripts/pi/post-deploy.sh" \
+  || die "post-deploy Tailscale DNS yok"
 grep -q 'Uzak kanit' "$PROJECT_DIR/scripts/pi/diagnose-remote-access.sh" \
   || die "diagnose uzak kanit (Mac dig @100.x) yok"
 grep -q 'pi-gateway tailscale-53' "$PROJECT_DIR/scripts/pi/diagnose-remote-access.sh" \
