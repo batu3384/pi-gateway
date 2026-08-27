@@ -165,11 +165,11 @@ def menu_text(panels: list[dict[str, Any]], mode: str = "all") -> str:
         f"Giriş <code>{u}</code>",
     ]
     if remote_mode == "ts-http" and remote_base:
-        lines.append(f"<code>{html.escape(remote_base)}</code> · Tailscale açık")
+        lines.append(f"<code>{html.escape(remote_base)}</code> · uzak erişim açık")
     elif remote_mode == "lan":
         pi_ip = os.environ.get("PI_STATIC_IP", "").strip()
         if pi_ip:
-            lines.append(f"Ev Wi‑Fi <code>{html.escape(pi_ip)}</code>")
+            lines.append(f"Ev ağı <code>{html.escape(pi_ip)}</code>")
 
     if mode != "all":
         lines.append("")
@@ -177,7 +177,7 @@ def menu_text(panels: list[dict[str, Any]], mode: str = "all") -> str:
 
     lines.append("")
     lines.append(
-        "<i>Buton → … → Safari’de Aç. Telegram içi tarayıcı kırık. "
+        "<i>Buton → … → Safari’de Aç. Telegram içi tarayıcı kullanma. "
         "Kart: <code>/menu</code>.</i>"
     )
     return "\n".join(lines)

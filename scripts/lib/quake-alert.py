@@ -131,10 +131,10 @@ def format_msg(ev: dict[str, Any]) -> str:
     dist = ""
     if loc:
         km = haversine_km(HOME_LAT, HOME_LON, loc[0], loc[1])
-        dist = f" · ev {km:.0f} km"
+        dist = f" · evden ~{km:.0f} km"
     return (
-        f"M{mag:.1f} {place}{dist}\n"
-        f"{when}\n"
+        f"Büyüklük M{mag:.1f} — {place}{dist}\n"
+        f"Zaman: {when}\n"
         "Kaynak: AFAD"
     )
 

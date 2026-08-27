@@ -94,11 +94,11 @@ def build_card_text() -> str:
     panel_ms = st.get("panel_latency_ms")
 
     if dns_up and not degraded:
-        head = f"🟢 DNS ayakta · {_clock()}"
+        head = f"🟢 DNS çalışıyor · {_clock()}"
     else:
-        head = f"🔴 DNS düştü · {_clock()}"
+        head = f"🔴 DNS sorunlu · {_clock()}"
 
-    ssd_line = "SSD yok — degraded" if degraded or not ssd_ok else "SSD tamam"
+    ssd_line = "Veri diski yok — kısıtlı mod" if degraded or not ssd_ok else "Veri diski tamam"
     parts = [ssd_line, _mem_line()]
     lat: list[str] = []
     if isinstance(dns_ms, (int, float)) and dns_ms >= 0:
@@ -120,18 +120,18 @@ def build_card_text() -> str:
         user = os.environ.get("AGH_ADMIN_USER") or os.environ.get("CADDY_AUTH_USER") or "admin"
         lines.append(f"Giriş <code>{html.escape(user)}</code>")
         if remote_mode == "ts-http" and remote_base:
-            lines.append(f"<code>{html.escape(remote_base)}</code> · Tailscale açık")
+            lines.append(f"<code>{html.escape(remote_base)}</code> · uzak erişim açık")
         elif remote_mode == "lan":
             pi_ip = os.environ.get("PI_STATIC_IP", "").strip()
             if pi_ip:
-                lines.append(f"Ev Wi‑Fi <code>{html.escape(pi_ip)}</code>")
+                lines.append(f"Ev ağı <code>{html.escape(pi_ip)}</code>")
     except Exception:
         pass
 
     lines.append("")
     lines.append(
-        "<i>Buton → … → Safari’de Aç. Telegram içi tarayıcı kırık. "
-        "Kart sabit — durum sorma.</i>"
+        "<i>Buton → … → Safari’de Aç. Telegram içi tarayıcı kullanma. "
+        "Bu kart otomatik güncellenir.</i>"
     )
     return "\n".join(lines)
 
@@ -252,7 +252,7 @@ def _send_reply_kb(chat: str) -> None:
         {
             "chat_id": chat,
             "parse_mode": "HTML",
-            "text": "Altta <b>Paneller</b> — kartı yenile: /menu",
+            "text": "Altta <b>Paneller</b> menüsü. Kartı yenilemek için: /menu",
             "reply_markup": kb,
             "disable_web_page_preview": "true",
         },

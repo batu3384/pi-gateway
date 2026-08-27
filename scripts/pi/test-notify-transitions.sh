@@ -41,8 +41,19 @@ grep -q '/var/lib/pi-gateway/notify' "$SCRIPT_DIR/../lib/notify.sh" \
 grep -q 'notify_touch_alive' "$SCRIPT_DIR/../lib/notify.sh" || fail "notify_touch_alive yok"
 grep -q 'notify_boot_up' "$SCRIPT_DIR/../lib/notify.sh" || fail "notify_boot_up yok"
 [[ -f "$SCRIPT_DIR/boot-notify.sh" ]] || fail "boot-notify.sh yok"
+grep -q 'notify_hermes_inbox_up' "$SCRIPT_DIR/../lib/notify.sh" || fail "notify_hermes_inbox_up yok"
+[[ -f "$SCRIPT_DIR/hermes-inbox-up-notify.sh" ]] || fail "hermes-inbox-up-notify.sh yok"
+grep -q 'hermes-inbox-up-notify' "$SCRIPT_DIR/patch-hermes-telegram-pi.sh" \
+  || fail "patch ExecStartPost hermes-up yok"
 grep -q '_notify_stack_ok\|notify_stack_recovered' "$SCRIPT_DIR/recover-readonly-root.sh" \
   || fail "recover-readonly stack notify yok"
+grep -q 'Pi Gateway · Asistan' "$SCRIPT_DIR/../lib/notify.sh" \
+  || fail "asistan basligi yok"
+! grep -qiE 'Inbox geri|Telegram inbox|getUpdates|stack ayağa|degraded mod|P2 —|saatte en fazla|Yedek SLA|· Yavaş|· Opsiyonel|· Stack' \
+  "$SCRIPT_DIR/../lib/notify.sh" \
+  || fail "kullaniciya jargon kalmis"
+grep -q 'Sunucu:' "$SCRIPT_DIR/../lib/notify.sh" \
+  || fail "notify_html_alert Sunucu satiri yok"
 ok "boot+persist+stack recover wiring"
 
 rm -rf "$NOTIFY_STATE_DIR"

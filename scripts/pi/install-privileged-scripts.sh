@@ -31,6 +31,7 @@ SCRIPTS=(
   scripts/lib/netalert-devices.py
   scripts/lib/notify.sh
   scripts/pi/boot-notify.sh
+  scripts/pi/hermes-inbox-up-notify.sh
   scripts/lib/bulletin-slo.py
   scripts/lib/hermes-token-slo.py
   scripts/lib/hermes-session-hygiene.py

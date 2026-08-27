@@ -59,12 +59,14 @@ assert "6 web_search" in night["prompt"]
 PY
 ok "cron template format/prompt"
 
-grep -q 'cron failure v6' "$patch" || die "hermes-cron-patch v6 yok"
-grep -q 'if not job.get("no_agent")' "$patch" || die "v6 no_agent timeout kapısı yok"
-grep -q 'Piyasa 18:55' "$patch" || die "v6 piyasa fallback yok"
-grep -q 'http 400' "$patch" || die "v6 HTTP 400 yok"
+grep -q 'cron failure v7' "$patch" || die "hermes-cron-patch v7 yok"
+grep -q 'if not job.get("no_agent")' "$patch" || die "v7 no_agent timeout kapısı yok"
+grep -q 'Piyasa özeti 18:55' "$patch" || die "v7 piyasa fallback yok"
+grep -q 'http 400' "$patch" || die "v7 HTTP 400 yok"
 grep -q 'bulletin post helper' "$patch" || die "hermes-cron-patch bulletin post yok"
-ok "cron patch v6"
+! grep -q 'Firecrawl 403\|patch-hermes-config-pi\|Ağ Gözcüsü' "$patch" \
+  || die "v7 jargon/betik adi kalmis"
+ok "cron patch v7"
 
 post="$ROOT/scripts/lib/bulletin-post.py"
 python3 "$post" --self-check || die "bulletin-post self-check"
@@ -186,10 +188,10 @@ cat >"$tmp" <<'STUB'
     )
 STUB
 python3 "$patch" "$tmp" >/dev/null
-grep -q 'cron failure v6' "$tmp" || die "v3->v6 patch uygulanmadi"
+grep -q 'cron failure v7' "$tmp" || die "v3->v7 patch uygulanmadi"
 grep -q 'no_agent skip wrap' "$tmp" || die "wrap patch yok"
 grep -q 'failure nudge tr' "$tmp" || die "nudge patch yok"
-ok "v3->v6 patch"
+ok "v3->v7 patch"
 
 cat >"$tmp4" <<'STUB4'
     # pi-gateway: cron failure v4
@@ -205,9 +207,9 @@ cat >"$tmp4" <<'STUB4'
     )
 STUB4
 python3 "$patch" "$tmp4" >/dev/null
-grep -q 'cron failure v6' "$tmp4" || die "v4->v6 patch uygulanmadi"
+grep -q 'cron failure v7' "$tmp4" || die "v4->v7 patch uygulanmadi"
 ! grep -q 'cron failure v4' "$tmp4" || die "v4 marker kaldi"
-ok "v4->v6 patch"
+ok "v4->v7 patch"
 
 tmp5="$(mktemp)"
 trap 'rm -rf "$tmpd" "$tmp" "$tmp4" "$tmp5"' EXIT
@@ -221,15 +223,31 @@ cat >"$tmp5" <<'STUB5'
     return "nudge"
 STUB5
 python3 "$patch" "$tmp5" >/dev/null
-grep -q 'cron failure v6' "$tmp5" || die "v5->v6 patch uygulanmadi"
-grep -q 'if not job.get("no_agent")' "$tmp5" || die "v6 no_agent kapısı yazilmadi"
+grep -q 'cron failure v7' "$tmp5" || die "v5->v7 patch uygulanmadi"
+grep -q 'if not job.get("no_agent")' "$tmp5" || die "v7 no_agent kapısı yazilmadi"
 ! grep -q 'cron failure v5' "$tmp5" || die "v5 marker kaldi"
-ok "v5->v6 patch"
+ok "v5->v7 patch"
+
+tmp6="$(mktemp)"
+trap 'rm -rf "$tmpd" "$tmp" "$tmp4" "$tmp5" "$tmp6"' EXIT
+cat >"$tmp6" <<'STUB6'
+    # pi-gateway: cron failure v6
+    return f"⚠️ Cron '{job_name}' failed: {cleaned}"
+    # pi-gateway: no_agent skip wrap
+    if wrap_response and not job.get("no_agent"):
+        pass
+    # pi-gateway: failure nudge tr
+    return "nudge"
+STUB6
+python3 "$patch" "$tmp6" >/dev/null
+grep -q 'cron failure v7' "$tmp6" || die "v6->v7 patch uygulanmadi"
+! grep -q 'cron failure v6' "$tmp6" || die "v6 marker kaldi"
+ok "v6->v7 patch"
 
 tmpb="$(mktemp)"
-trap 'rm -rf "$tmpd" "$tmp" "$tmp4" "$tmp5" "$tmpb"' EXIT
+trap 'rm -rf "$tmpd" "$tmp" "$tmp4" "$tmp5" "$tmp6" "$tmpb"' EXIT
 cat >"$tmpb" <<'STUBB'
-    # pi-gateway: cron failure v6
+    # pi-gateway: cron failure v7
     return f"⚠️ Cron '{job_name}' failed: {cleaned}"
     # pi-gateway: no_agent skip wrap
     if wrap_response and not job.get("no_agent"):

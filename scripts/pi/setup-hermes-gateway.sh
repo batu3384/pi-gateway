@@ -40,16 +40,18 @@ _alert_inbox_down() {
   source "${SCRIPT_DIR}/../lib/notify.sh" 2>/dev/null || return 0
   load_telegram_from_hermes 2>/dev/null || true
   notify_enabled || return 0
-  notify_send_message "🚨 Pi Gateway · Hermes inbox DOWN
+  notify_send_message "🚨 Pi Gateway · Asistan
+
+Sohbet asistanı şu an kapalı.
 
 ${reason}
 
-Kurtarma:
-  journalctl -u ${unit} -n 80 --no-pager
-  sudo systemctl restart ${unit}
-  REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/setup-hermes-gateway.sh
+Ne yapmalı?
+• journalctl -u ${unit} -n 80 --no-pager
+• sudo systemctl restart ${unit}
+• REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/setup-hermes-gateway.sh
 
-Outbox (notify) calisabilir; inbox (getUpdates) su an yok." || true
+Alarm bildirimleri çalışabilir; sohbet şu an yok." || true
 }
 
 if [[ "${HERMES_TELEGRAM_GATEWAY:-}" != "true" ]]; then

@@ -184,7 +184,7 @@ def self_check() -> None:
     assert not has_skeleton("sadece metin")
     titles = extract_titles("1) Alfa haber\n2) Beta")
     assert titles == ["Alfa haber", "Beta"], titles
-    long = "📋 Pi Gateway · Bülten\n─────────\n" + ("haber " * 800) + "\n─────────\nPi Gateway · otomatik bülten"
+    long = "📋 Pi Gateway · Bülten\n─────────\n" + ("haber " * 800) + "\n─────────\nPi Gateway"
     parts = split_parts(long, limit=400)
     assert len(parts) >= 2, len(parts)
     assert parts[0].startswith("(1/")

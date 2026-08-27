@@ -7,7 +7,7 @@ import sys
 
 _FAILURE_END = '    return f"⚠️ Cron \'{job_name}\' failed: {cleaned}"'
 
-_FAILURE_V6 = '''    # pi-gateway: cron failure v6
+_FAILURE_V7 = '''    # pi-gateway: cron failure v7
     if not job.get("no_agent"):
         if "timed out after" in lower or "non-streaming api" in lower or (
             "stale" in lower and "timeout" in lower
@@ -15,17 +15,17 @@ _FAILURE_V6 = '''    # pi-gateway: cron failure v6
             return (
                 "📋 Pi Gateway · Bülten\\n\\n"
                 f"Görev: {job_name}\\n"
-                "Sorun: Model yanıtı zaman aşımı.\\n"
-                "Bülten bu tur üretilemedi. Sonraki planlı tur otomatik dener.\\n"
-                "Piyasa 18:55 ayrı kanaldan gider."
+                "Sorun: Model yanıtı zaman aşımına uğradı.\\n"
+                "Bu tur üretilemedi. Sonraki planlı tur otomatik dener.\\n"
+                "Piyasa özeti 18:55 ayrı gider."
             )
         if "firecrawl" in lower and ("403" in lower or "forbidden" in lower):
             return (
                 "📋 Pi Gateway · Bülten\\n\\n"
                 f"Görev: {job_name}\\n"
-                "Sorun: Web arama (Firecrawl 403).\\n"
-                "Bülten bu tur üretilemedi. Sonraki tur otomatik dener.\\n"
-                "Çözüm: patch-hermes-config-pi.sh — web.search_backend=ddgs."
+                "Sorun: Web arama hizmeti erişimi reddetti.\\n"
+                "Bu tur üretilemedi. Sonraki tur otomatik dener.\\n"
+                "Ne yapmalı? Arama motoru ayarını (ddgs) kontrol edin."
             )
         if (
             "http 400" in lower
@@ -35,24 +35,24 @@ _FAILURE_V6 = '''    # pi-gateway: cron failure v6
             return (
                 "📋 Pi Gateway · Bülten\\n\\n"
                 f"Görev: {job_name}\\n"
-                "Sorun: Model sağlayıcı güvenlik filtresi (HTTP 400).\\n"
-                "Bülten bu tur üretilemedi. Sonraki planlı tur otomatik dener.\\n"
-                "Piyasa 18:55 ayrı kanaldan gider."
+                "Sorun: Model sağlayıcı güvenlik filtresi.\\n"
+                "Bu tur üretilemedi. Sonraki planlı tur otomatik dener.\\n"
+                "Piyasa özeti 18:55 ayrı gider."
             )
         if "http 429" in lower or "rate limit" in lower:
             return (
                 "📋 Pi Gateway · Bülten\\n\\n"
                 f"Görev: {job_name}\\n"
-                "Sorun: API hız limiti (HTTP 429).\\n"
-                "Bülten bu tur üretilemedi. Sonraki tur otomatik dener."
+                "Sorun: API hız limiti aşıldı.\\n"
+                "Bu tur üretilemedi. Sonraki tur otomatik dener."
             )
     if job.get("no_agent"):
         if "script path resolves outside" in lower or "blocked: script path" in lower:
             return (
                 "📋 Pi Gateway · Zamanlanmış görev\\n\\n"
                 f"Görev: {job_name}\\n"
-                "Sorun: Betik güvenlik dizini dışında (~/.hermes/scripts gerekli).\\n"
-                "Çözüm: setup-hermes-cron-scripts.sh + setup-hermes-cron.sh"
+                "Sorun: Betik güvenli dizin dışında.\\n"
+                "Ne yapmalı? Zamanlanmış görev kurulumunu yeniden çalıştırın."
             )
         if lower.startswith("script not found"):
             return (
@@ -70,10 +70,10 @@ _FAILURE_V6 = '''    # pi-gateway: cron failure v6
             "operationalerror" in lower and "database" in lower
         ):
             return (
-                "📋 Pi Gateway · Ağ Gözcüsü\\n\\n"
+                "📋 Pi Gateway · Ağ\\n\\n"
                 f"Görev: {job_name}\\n"
-                "Sorun: NetAlertX veritabanı okunamıyor (dosya izni).\\n"
-                "Çözüm: bash scripts/pi/ensure-netalert-db-access.sh"
+                "Sorun: Ağ cihaz veritabanı okunamıyor (dosya izni).\\n"
+                "Ne yapmalı? NetAlert veritabanı erişimini düzeltin."
             )
         if "traceback" in lower:
             hint = ""
@@ -94,7 +94,7 @@ _FAILURE_V6 = '''    # pi-gateway: cron failure v6
                 s = line.strip()
                 if "[netalert" in s.lower():
                     return (
-                        "📋 Pi Gateway · Ağ Gözcüsü\\n\\n"
+                        "📋 Pi Gateway · Ağ\\n\\n"
                         f"Görev: {job_name}\\n"
                         f"Sorun: {s[:220]}"
                     )
@@ -110,11 +110,11 @@ _FAILURE_V6 = '''    # pi-gateway: cron failure v6
 
 
 def patch_failure_summary(text: str) -> str:
-    marker_v6 = "# pi-gateway: cron failure v6"
-    if marker_v6 in text:
+    if "# pi-gateway: cron failure v7" in text:
         return text
 
     for start_marker in (
+        "    # pi-gateway: cron failure v6",
         "    # pi-gateway: cron failure v5",
         "    # pi-gateway: cron failure v4",
         "    # pi-gateway: cron failure v3",
@@ -124,7 +124,7 @@ def patch_failure_summary(text: str) -> str:
         if start_marker in text:
             start = text.index(start_marker)
             end = text.index(_FAILURE_END, start) + len(_FAILURE_END)
-            return text[:start] + _FAILURE_V6 + text[end:]
+            return text[:start] + _FAILURE_V7 + text[end:]
 
     raise SystemExit("VERIFY_FAIL: failure block missing")
 

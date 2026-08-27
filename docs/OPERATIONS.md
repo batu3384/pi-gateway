@@ -207,6 +207,8 @@ When `HERMES_TELEGRAM_GATEWAY=true` in Pi `.env`:
 
 **Cutover fail:** if Connected check fails, unit stays **enabled** (`Restart=always`) and Telegram outbox alert fires (`_alert_inbox_down`). Fix: `journalctl -u hermes-gateway` → `setup-hermes-gateway.sh` again.
 
+**Lifecycle Telegram:** Asistan kapanış → “kısa süre kapanıyor / yeniden başlatılıyor”. Asistan geri → “Sohbet asistanı yeniden aktif” (`hermes-inbox-up-notify.sh`). Pi reboot → “Açıldı” (`boot-notify.sh`). Crash-loop: `NOTIFY_HERMES_UP_COOLDOWN_SEC=120`.
+
 **Token rotate:** update both `~/pi-gateway/.env` and `~/.hermes/.env`, then `systemctl restart hermes-gateway`.
 
 **DM test:** Telegram’da `@RaspberryPi3384_bot` → allowlist user id ile mesaj. Outbox: `make telegram-test`.

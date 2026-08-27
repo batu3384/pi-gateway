@@ -413,13 +413,12 @@ def _plain_footer(*, offline: bool) -> list[str]:
     blocks: list[str] = ["", "Ne yapmalı?"]
     if offline:
         if panel:
-            blocks.append(f"• Panel: {panel}")
+            blocks.append(f"• Durum: {panel}")
         blocks.append("• Beklenen cihazsa sorun yok; tanımıyorsan incele.")
     else:
-        blocks.append("• Tanımıyorsan NetAlertX panosundan incele.")
+        blocks.append("• Tanımıyorsan ağ cihazları panelinden incele.")
         if panel:
-            blocks.append(f"• Panel: {panel}")
-    blocks.extend(["", "Events tabanlı — işlenmiş olay tekrar bildirilmez."])
+            blocks.append(f"• Durum: {panel}")
     return blocks
 
 
@@ -428,9 +427,9 @@ def format_new_plain(devices: list[dict[str, Any]]) -> str:
         return ""
     n = len(devices)
     headline = (
-        "Ev ağında yeni cihaz tespit edildi."
+        "Ev ağında yeni cihaz görüldü."
         if n == 1
-        else f"{n} yeni cihaz tespit edildi — ev ağı."
+        else f"Ev ağında {n} yeni cihaz görüldü."
     )
     blocks: list[str] = _plain_header() + [headline, ""]
     for i, d in enumerate(devices, 1):
@@ -460,9 +459,9 @@ def format_offline_plain(devices: list[dict[str, Any]]) -> str:
         return ""
     n = len(devices)
     headline = (
-        "Ev ağında cihaz offline oldu."
+        "Ev ağında bir cihaz yanıt vermiyor."
         if n == 1
-        else f"{n} cihaz offline — ev ağı."
+        else f"Ev ağında {n} cihaz yanıt vermiyor."
     )
     blocks: list[str] = _plain_header() + [headline, ""]
     for i, d in enumerate(devices, 1):
@@ -615,7 +614,7 @@ def _self_check() -> None:
 
         off = build_envelope(db, state, "offline")
         assert off["count"] == 1, off
-        assert "offline" in off["plain"].lower() or "Offline" in off["plain"]
+        assert "yanıt vermiyor" in off["plain"].lower() or "çevrimdışı" in off["plain"].lower()
 
         bad = os.path.join(td, "bad.json")
         with open(bad, "w", encoding="utf-8") as fh:

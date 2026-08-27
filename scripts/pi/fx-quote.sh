@@ -195,7 +195,7 @@ if isinstance(gold, dict):
 
 if ok:
     lines.append("─────────")
-    lines.append("Pi Gateway · otomatik bülten")
+    lines.append("Pi Gateway")
     save_close(today, cur, prev_rates if prev_rates else cur)
 
 text = "📊 Piyasa verisi alınamadı — bu tur atlandı." if ok == 0 else "\n".join(lines)

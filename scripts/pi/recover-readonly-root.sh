@@ -127,7 +127,7 @@ enter_degraded_mode() {
   fi
   # shellcheck source=../lib/notify.sh
   source "$SCRIPT_DIR/../lib/notify.sh"
-  notify_ssd_degraded "$(hostname -s)" "SSD mount yok — core DNS SD uzerinde"
+  notify_ssd_degraded "$(hostname -s)" "Veri diski bağlı değil — DNS SD karttan devam ediyor."
   RECOVER_DID_WORK=1
 }
 run_compose_recover() {
@@ -143,7 +143,7 @@ _notify_stack_ok() {
   [[ "${RECOVER_DID_WORK:-0}" -eq 1 ]] || return 0
   # shellcheck source=../lib/notify.sh
   source "$SCRIPT_DIR/../lib/notify.sh"
-  notify_stack_recovered "$(hostname -s)" "${1:-stack recover OK}"
+  notify_stack_recovered "$(hostname -s)" "${1:-Kurtarma tamamlandı.}"
 }
 main() {
   if ! ensure_root_rw; then
@@ -230,21 +230,21 @@ main() {
     clear_storage_degraded || log "WARN: degraded flag temizlenemedi"
     log "OK stack ayakta (adguard, unbound, caddy, gateway)"
     apply_adguard_rewrites_best_effort "$REMOTE_DIR"
-    _notify_stack_ok "adguard/unbound/caddy/gateway"
+    _notify_stack_ok "Çekirdek servisler ayakta (DNS + panel)."
     recover_lock_release
     exit 0
   fi
   if storage_degraded && stack_dns_core_ok && root_rw_ok; then
     log "OK degraded DNS core ayakta (gateway/caddy eksik olabilir)"
     apply_adguard_rewrites_best_effort "$REMOTE_DIR"
-    _notify_stack_ok "degraded DNS core"
+    _notify_stack_ok "Kısıtlı mod: DNS ayakta (veri diski yok)."
     recover_lock_release
     exit 0
   fi
   if ! storage_restore_pending && stack_fully_healthy && root_rw_ok && docker_ssd_root_ok; then
     log "OK stack_fully_healthy"
     apply_adguard_rewrites_best_effort "$REMOTE_DIR"
-    _notify_stack_ok "stack_fully_healthy"
+    _notify_stack_ok "Tüm servisler sağlıklı."
     recover_lock_release
     exit 0
   fi

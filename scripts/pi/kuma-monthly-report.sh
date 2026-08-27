@@ -73,9 +73,13 @@ if err and not rows:
     print("Kuma DB şema okunamadı.")
     raise SystemExit(0)
 stamp = datetime.now().astimezone().strftime("%d.%m.%Y")
-lines = [f"📋 Pi Gateway · Kuma 30g — {stamp}"]
+lines = [
+    f"📋 Pi Gateway · İzleme (30 gün) — {stamp}",
+    "Son 30 günün uptime özeti:",
+    "",
+]
 if not rows:
-    lines.append("Heartbeat yok.")
+    lines.append("Henüz heartbeat kaydı yok.")
 else:
     for name, pct, n in rows[:20]:
         mark = "🟢" if float(pct) >= 99 else ("🟡" if float(pct) >= 95 else "🔴")

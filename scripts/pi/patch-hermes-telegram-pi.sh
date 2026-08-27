@@ -152,6 +152,9 @@ done
   echo 'Environment=HERMES_TELEGRAM_DISABLE_FALLBACK_IPS=1'
   echo 'Environment=HERMES_TELEGRAM_HTTP_POOL_SIZE=8'
   echo 'Environment=HERMES_TELEGRAM_INIT_TIMEOUT=30'
+  echo "Environment=REMOTE_DIR=${REMOTE_DIR}"
+  # dash = notify fail gateway'i dusurmesin; kapatılıyor mesajinin cifti
+  echo "ExecStartPost=-/usr/local/lib/pi-gateway/scripts/pi/hermes-inbox-up-notify.sh"
   if [[ -n "$chrome" ]]; then
     echo "Environment=AGENT_BROWSER_EXECUTABLE_PATH=$chrome"
     echo "Environment=PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=$chrome"
