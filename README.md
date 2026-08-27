@@ -66,7 +66,8 @@ make doctor      # local prerequisite checks
 make validate    # render + contract tests (Pi can be offline)
 make test        # alias for validate (CI / runtime-check)
 make discover    # network discovery → writes .env
-make deploy      # push stack to Pi
+make deploy      # full stack to Pi (bootstrap+compose+post+smoke)
+make deploy-code # daily: rsync + privileged + Hermes (alias: deploy-fast)
 make dns-test    # DNS checks from Mac
 make backup-pull # offsite restic copy to Mac
 make restore-check # restic check (Pi + Mac offsite)

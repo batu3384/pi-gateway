@@ -6,7 +6,8 @@ Do not treat every `scripts/**/*.sh` as equal. Prefer `make` targets.
 
 | Area | Scripts |
 |------|---------|
-| Mac pipeline | `install.sh`, `doctor.sh`, `discover-remote.sh`, `render-config.sh`, `validate.sh`, `deploy.sh`, `deploy-fast.sh`, `pre-deploy-check.sh`, `restore-check.sh`, `backup-restore-drill.sh`, `config-drift-check.sh`, `test-smoke-contract.sh` |
+| Mac pipeline | `install.sh`, `doctor.sh`, `discover-remote.sh`, `render-config.sh`, `validate.sh`, `deploy.sh` (`DEPLOY_MODE=full|code`), `deploy-fast.sh` (=code), `pre-deploy-check.sh`, `restore-check.sh`, `backup-restore-drill.sh`, `config-drift-check.sh`, `test-smoke-contract.sh` |
+| Pi post-deploy | `post-deploy.sh` (full), `post-deploy-code.sh` (code) |
 | Pi lifecycle | `bootstrap.sh`, `post-deploy.sh`, `smoke-test.sh`, `health-check.sh` → `recover-stack.sh`, `export-gateway-state.sh`, `export-adguard-metrics.sh`, `ssd-health.sh`, `ssd-hotplug-handler.sh`, `check-ssd-smart.sh` |
 | Lib | `common.sh`, `stack-health.sh`, `ssd-alive.sh`, `notify.sh`, `adguard-api.sh`, `password-policy.sh`, `compose-profiles.sh`, `telegram-panels.py` + diğer `scripts/lib/*.py` (bash CLI; py relative import yok) |
 | Security | `setup-firewall.sh`, `harden-host.sh` |

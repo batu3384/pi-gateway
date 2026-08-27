@@ -460,6 +460,16 @@ grep -q 'wait_ssh' "$PROJECT_DIR/scripts/mac/deploy.sh" \
   || die "deploy.sh wait_ssh yok (dhcpcd sonrasi)"
 grep -q 'ssh-copy-id' "$PROJECT_DIR/scripts/mac/deploy.sh" \
   || die "deploy wait_ssh SSH key mesaji yok"
+grep -q 'DEPLOY_MODE' "$PROJECT_DIR/scripts/mac/deploy.sh" \
+  || die "deploy.sh DEPLOY_MODE yok"
+grep -q 'post-deploy-code.sh' "$PROJECT_DIR/scripts/mac/deploy.sh" \
+  || die "deploy.sh code path yok"
+[[ -f "$PROJECT_DIR/scripts/pi/post-deploy-code.sh" ]] \
+  || die "post-deploy-code.sh yok"
+grep -q 'DEPLOY_MODE=code' "$PROJECT_DIR/scripts/mac/deploy-fast.sh" \
+  || die "deploy-fast code mode degil"
+grep -q 'deploy-code' "$PROJECT_DIR/Makefile" \
+  || die "Makefile deploy-code yok"
 ok "deploy SSH retry after bootstrap"
 
 grep -q 'fresh_no_ssd\|fresh_no_repo' "$PROJECT_DIR/scripts/mac/pre-deploy-check.sh" \

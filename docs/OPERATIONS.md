@@ -100,12 +100,25 @@ Remote access (telefon): Tailscale **Connected** — paneller `http://100.x/p/�
 ## Deploy
 
 ```bash
-make render && make validate && make deploy
-# or fast (no pull):
-make deploy-fast
+# Full: bootstrap + compose canary + post-deploy + smoke (~dakikalar)
+make deploy
+
+# Code: rsync + privileged + Hermes/notify (günlük script/metin)
+make deploy-code   # alias: make deploy-fast
+
+# Full ama imaj pull yok
+DEPLOY_SKIP_PULL=true make deploy
+
+# Code + smoke
+DEPLOY_SMOKE=true make deploy-code
 ```
 
-Order: pre-check → rsync (excluding data) → bootstrap → docker compose → post-deploy → smoke test.
+| Mode | Ne yapar | Ne atlar |
+|------|----------|----------|
+| `full` (default) | validate → rsync → bootstrap → canary → post-deploy → smoke | — |
+| `code` | validate → rsync → `post-deploy-code` | bootstrap, compose recreate, UFW/n8n/Kuma/CrowdSec |
+
+Order (full): pre-check → rsync (excluding data) → bootstrap → docker compose → post-deploy → smoke test.
 
 If deploy fails: run `make verify-data` to check `data/` symlink; `data/` must never be deleted by rsync.
 

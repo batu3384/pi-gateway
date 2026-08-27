@@ -7,6 +7,7 @@ Home server (Raspberry Pi 4B): AdGuard DNS, Unbound, Caddy, n8n.
 - validate / test: `./scripts/mac/validate.sh` or `make test`
 - smoke: `ssh $PI_USER@${PI_DEPLOY_HOST:-$PI_STATIC_IP} 'REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/smoke-test.sh'`
 - runtime: `ssh $PI_USER@${PI_DEPLOY_HOST:-$PI_STATIC_IP} 'REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/health-check.sh'`
+- deploy code (daily): `make deploy-code` — full stack: `make deploy`
 - shell: `shellcheck -S warning scripts/pi/*.sh scripts/mac/*.sh scripts/lib/*.sh`
 
 ## Skill routing

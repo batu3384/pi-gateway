@@ -17,7 +17,7 @@ Tek bakışta durum + geçmiş grafikleri.
 # .env
 ENABLE_MONITORING=true   # varsayılan: prometheus + grafana + node-exporter
 GRAFANA_ADMIN_PASSWORD=  # bos -> UNIFIED_LOGIN ile AGH_ADMIN_PASSWORD
-make deploy-fast
+make deploy-code   # monitoring ilk kurulum / compose için: make deploy
 ```
 
 `ENABLE_MONITORING=false` → monitoring profile kapalı (Pi RAM tasarrufu).
@@ -38,14 +38,15 @@ make deploy-fast
 
 ## Canary güncelleme
 
-Deploy varsayılan: DNS önce → bekle → edge → kalan servisler.
+**Full deploy** varsayılan: DNS önce → bekle → edge → kalan servisler. `make deploy-code` canary atlar.
 
 ```bash
 ENABLE_CANARY_COMPOSE_UPDATE=true   # varsayılan — bu evde kapatma
 CANARY_DNS_WAIT_SEC=10
+make deploy
 ```
 
-`make deploy-fast` bunu kullanır. Kapatmak için `ENABLE_CANARY_COMPOSE_UPDATE=false`.
+Kapatmak için full’da `ENABLE_CANARY_COMPOSE_UPDATE=false`.
 
 ## Chaos / FSM
 

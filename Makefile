@@ -12,7 +12,7 @@ PI_USER ?= pi
 REMOTE_DIR ?= /home/$(PI_USER)/pi-gateway
 PI_SSH_HOST ?= $(if $(PI_DEPLOY_HOST),$(PI_DEPLOY_HOST),$(PI_STATIC_IP))
 
-.PHONY: setup validate test render deploy deploy-fast install discover mac-dns mac-dns-clear harden status dns-test test-remote backup-pull backup-cron backup-restore-drill restore-check verify-data config-drift pi-access trust-ca tls-certs telegram-menu firewall sync-configs docker-ssd check-pi-env doctor diagnose-remote diagnose-dns audit-dns adguard-tune recover-stack chaos-drill tailscale-acl tailscale-dns
+.PHONY: setup validate test render deploy deploy-code deploy-fast install discover mac-dns mac-dns-clear harden status dns-test test-remote backup-pull backup-cron backup-restore-drill restore-check verify-data config-drift pi-access trust-ca tls-certs telegram-menu firewall sync-configs docker-ssd check-pi-env doctor diagnose-remote diagnose-dns audit-dns adguard-tune recover-stack chaos-drill tailscale-acl tailscale-dns
 
 check-pi-env:
 	@test -n "$(PI_SSH_HOST)" || (echo "PI_STATIC_IP or PI_DEPLOY_HOST required — edit .env or run make discover" && exit 1)
@@ -40,6 +40,9 @@ discover:
 
 deploy:
 	@./scripts/mac/deploy.sh
+
+deploy-code:
+	@DEPLOY_MODE=code ./scripts/mac/deploy.sh
 
 deploy-fast:
 	@chmod +x scripts/mac/deploy-fast.sh 2>/dev/null || true
