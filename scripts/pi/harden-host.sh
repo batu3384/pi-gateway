@@ -63,11 +63,49 @@ mask_headless_noise() {
   fi
 }
 
+harden_sudo() {
+  local user="${PI_USER:-${SUDO_USER:-}}"
+  local file="/etc/sudoers.d/99-pi-gateway-password"
+  if [[ -z "$user" || "$user" == "root" ]]; then
+    user="$(basename "$(dirname "$REMOTE_DIR")")"
+  fi
+  [[ -n "$user" && "$user" != "root" ]] || {
+    log "HATA: sudo sahibi belirlenemedi"
+    return 1
+  }
+  printf '%s ALL=(ALL:ALL) PASSWD: ALL\n' "$user" \
+    | sudo tee "$file" >/dev/null
+  sudo chmod 440 "$file"
+  sudo visudo -cf "$file" >/dev/null
+  log "sudo NOPASSWD kapatildi ($file)"
+}
+
 main() {
+  case "${1:-final}" in
+    --prepare)
+      disable_rpcbind
+      fix_adguard_config_perms
+      harden_ssh_password || log "WARN: SSH harden atlandi"
+      mask_headless_noise
+      log "Hazirlik sertlestirmesi tamamlandi"
+      return 0
+      ;;
+    --sudo-only)
+      harden_sudo
+      return 0
+      ;;
+    ""|--final)
+      ;;
+    *)
+      log "HATA: bilinmeyen mod: $1"
+      return 2
+      ;;
+  esac
   disable_rpcbind
   fix_adguard_config_perms
   harden_ssh_password || log "WARN: SSH harden atlandi"
   mask_headless_noise
+  harden_sudo
   # UFW post-deploy sonunda uygulanir (caddy-only kurallari ezilmesin)
   log "Tamamlandi"
 }

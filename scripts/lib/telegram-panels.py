@@ -161,7 +161,7 @@ def menu_text(panels: list[dict[str, Any]], mode: str = "all") -> str:
     u = html.escape(user)
 
     lines = [
-        "<b>Pi Gateway</b>",
+        "<b>Paneller</b>",
         f"Giriş <code>{u}</code>",
     ]
     if remote_mode == "ts-http" and remote_base:

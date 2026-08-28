@@ -20,6 +20,7 @@ SCRIPTS=(
   scripts/pi/health-check.sh
   scripts/pi/check-sd-health.sh
   scripts/pi/setup-docker-fallback.sh
+  scripts/pi/setup-docker-ssd.sh
   scripts/pi/ssd-hotplug-handler.sh
   scripts/pi/setup-ssd-data.sh
   scripts/lib/stack-health.sh

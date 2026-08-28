@@ -67,7 +67,7 @@ users:
     shell: /bin/bash
     lock_passwd: false
     passwd: '${hash}'
-    sudo: ALL=(ALL) NOPASSWD:ALL
+    sudo: ALL=(ALL) ALL
 
 enable_ssh: true
 ssh_pwauth: true

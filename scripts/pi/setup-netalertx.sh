@@ -60,6 +60,8 @@ _ensure_netalert_host_gid && _netalert_gid_changed=1 || true
 
 [[ "${ENABLE_NETALERTX:-true}" == "true" ]] || { log "NetAlertX kapali"; exit 0; }
 [[ -n "${NETALERTX_PASSWORD:-}" ]] || { log "HATA: NETALERTX_PASSWORD veya AGH_ADMIN_PASSWORD gerekli"; exit 1; }
+[[ "${#NETALERTX_PASSWORD}" -ge 12 ]] \
+  || { log "HATA: NETALERTX_PASSWORD en az 12 karakter olmali"; exit 1; }
 [[ -n "${AGH_ADMIN_PASSWORD:-}" ]] || { log "HATA: AGH_ADMIN_PASSWORD gerekli (ADGUARDIMP)"; exit 1; }
 docker ps --format '{{.Names}}' | grep -q '^netalertx$' || { log "HATA: netalertx container yok"; exit 1; }
 case "${N8N_WEBHOOK_SECRET:-}" in
@@ -138,6 +140,7 @@ if notify_via != "telegram":
 webhook = "''"
 webhook_run = "'off'"
 password = os.environ["NETALERTX_PASSWORD"]
+# NetAlertX upstream contract: SETPWD_password is SHA-256, no alternate KDF.
 password_hash = __import__("hashlib").sha256(password.encode()).hexdigest()
 agh_user = os.environ.get("AGH_ADMIN_USER", "admin")
 agh_pass = os.environ["AGH_ADMIN_PASSWORD"]

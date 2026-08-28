@@ -31,6 +31,36 @@ notify_transition_commit "t" "ok"
 notify_transition_peek "t" "ok" && fail "ok->ok peek susturulmali"
 ok "recover"
 
+NOTIFY_REPEAT_SEC=3600
+export TELEGRAM_BOT_TOKEN=test-token TELEGRAM_CHAT_ID=test-chat
+notify_send_message() { return 1; }
+notify_telegram "Başarısız gönderim" "" "send-fail"
+[[ ! -f "${NOTIFY_STATE_DIR}/send-fail" ]] || fail "başarısız gönderim cooldown tüketti"
+notify_send_message() { return 0; }
+notify_telegram "Başarılı gönderim" "" "send-fail"
+[[ -f "${NOTIFY_STATE_DIR}/send-fail" ]] || fail "başarılı gönderim cooldown yazmadı"
+unset -f notify_send_message
+ok "send-failure cooldown"
+
+escaped="$(notify_html_alert 'a < b & c')"
+[[ "$escaped" == *'a &lt; b &amp; c'* ]] || fail "HTML detail escape yok"
+[[ "$(notify_html_alert_raw '<b>güvenli</b>')" == '<b>güvenli</b>' ]] \
+  || fail "HTML raw fragment bozuldu"
+captured=""
+notify_send_message() { captured="$1"; return 0; }
+notify_send_with_transition "title-escape" "fail" "A & B" "" "HTML"
+[[ "$captured" == '<b>A &amp; B</b>' ]] || fail "HTML title escape yok"
+unset -f notify_send_message
+source "$SCRIPT_DIR/../lib/notify.sh"
+curl() { printf '{"ok":false,"description":"test"}'; }
+if notify_send_message "HTTP 200 false"; then
+  fail "Telegram ok=false basarili sayildi"
+fi
+curl() { printf '{"ok":true,"result":{"message_id":1}}'; }
+notify_send_message "HTTP 200 true" || fail "Telegram ok=true basarisiz sayildi"
+unset -f curl
+ok "HTML detail contract"
+
 NOTIFY_REPEAT_SEC=0
 notify_transition_peek "t" "fail" || fail "repeat fail peek"
 ok "repeat fail"
@@ -56,6 +86,12 @@ grep -q 'notify_ssd_restored' "$SCRIPT_DIR/../lib/notify.sh" \
   || fail "notify_ssd_restored yok"
 grep -q 'notify_ssd_degraded' "$SCRIPT_DIR/../lib/notify.sh" \
   || fail "notify_ssd_degraded yok"
+grep -q 'notify_ssd_fail_closed' "$SCRIPT_DIR/../lib/notify.sh" \
+  || fail "notify_ssd_fail_closed yok"
+grep -q 'notify_rate_commit' "$SCRIPT_DIR/../lib/notify.sh" \
+  || fail "notify_rate_commit yok"
+grep -q 'notify_slo_ops' "$SCRIPT_DIR/../lib/notify.sh" \
+  || fail "notify_slo_ops yok"
 ok "boot+persist+stack recover wiring"
 
 rm -rf "$NOTIFY_STATE_DIR"

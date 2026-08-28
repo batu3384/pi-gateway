@@ -99,7 +99,10 @@ if ssd_mount_healthy; then
     fi
   fi
   if ! REMOTE_DIR="$REMOTE_DIR" SKIP_RECOVER_LOCK=true bash "$(recover_script_path "$REMOTE_DIR")"; then
-    log "HATA: recover basarisiz — degraded flag korunuyor, notify yok"
+    log "HATA: recover basarisiz — degraded flag korunuyor"
+    # shellcheck source=../lib/notify.sh
+    source "$SCRIPT_DIR/../lib/notify.sh"
+    notify_ssd_recovery_failed "$(hostname -s)" "SSD bağlı; tam servis kurtarma başarısız."
     recover_lock_release
     exit 1
   fi
@@ -118,9 +121,7 @@ if ssd_mount_healthy; then
   run_root mkdir -p "$(dirname "$SSD_HOTPLUG_STATE_FILE")" 2>/dev/null || true
   run_root touch "$SSD_HOTPLUG_STATE_FILE" 2>/dev/null || true
   mark_stack_recover_cooldown
-  # shellcheck source=../lib/notify.sh
-  source "$SCRIPT_DIR/../lib/notify.sh"
-  notify_ssd_restored "$(hostname -s)"
+  # SSD recovery notification is owned by recover-readonly-root.sh.
   ssd_usb_reset_clear 2>/dev/null || true
   recover_lock_release
   exit 0
@@ -140,7 +141,7 @@ if ! dns_degraded_on_ssd_loss; then
   log "HATA: DNS_DEGRADED_ON_SSD_LOSS=false — degraded moda gecilmiyor (fail-closed)"
   # shellcheck source=../lib/notify.sh
   source "$SCRIPT_DIR/../lib/notify.sh"
-  notify_ssd_degraded "$(hostname -s)" "SSD kopma — fail-closed (DNS_DEGRADED_ON_SSD_LOSS=false)"
+  notify_ssd_degraded "$(hostname -s)" "SSD kopma — DNS korumalı kapatma politikası etkin"
   exit 1
 fi
 log "DNS degraded moda gecis (core-dns SD)"
@@ -162,11 +163,23 @@ if ! REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/setup-docker-fallback.sh"; then
 fi
 # shellcheck source=../lib/notify.sh
 source "$SCRIPT_DIR/../lib/notify.sh"
-notify_ssd_degraded "$(hostname -s)" "USB SSD kopma — DNS degraded (Unbound+AdGuard SD)"
+compose_rc=0
 if [[ -d "$REMOTE_DIR/compose" ]]; then
-  COMPOSE_RECOVER_MODE=core-dns run_compose_up "$REMOTE_DIR" "$(pi_user_from_remote_dir "$REMOTE_DIR")" \
-    || log "WARN: core-dns compose basarisiz"
+  if COMPOSE_RECOVER_MODE=core-dns run_compose_up \
+    "$REMOTE_DIR" "$(pi_user_from_remote_dir "$REMOTE_DIR")"; then
+    :
+  else
+    compose_rc=$?
+    log "HATA: core-dns compose basarisiz (exit $compose_rc)"
+  fi
 fi
+if [[ "$compose_rc" -ne 0 ]]; then
+  notify_ssd_degraded "$(hostname -s)" \
+    "USB SSD kopma — çekirdek DNS compose kurtarması başarısız"
+  recover_lock_release
+  exit "$compose_rc"
+fi
+notify_ssd_degraded "$(hostname -s)" "USB SSD kopma — DNS SD karttan devam ediyor"
 mark_stack_recover_cooldown
 recover_lock_release
 # shellcheck source=../lib/reset-gateway-units.sh

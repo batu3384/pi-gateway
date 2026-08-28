@@ -125,9 +125,6 @@ enter_degraded_mode() {
   if [[ -x "$SCRIPT_DIR/setup-docker-fallback.sh" ]]; then
     REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/setup-docker-fallback.sh" || log "WARN: docker SD fallback basarisiz"
   fi
-  # shellcheck source=../lib/notify.sh
-  source "$SCRIPT_DIR/../lib/notify.sh"
-  notify_ssd_degraded "$(hostname -s)" "Veri diski bağlı değil — DNS SD karttan devam ediyor."
   RECOVER_DID_WORK=1
 }
 run_compose_recover() {
@@ -160,6 +157,7 @@ main() {
     exit 0
   fi
   local recover_mode="full"
+  local compose_rc=0
   if needs_ssd; then
     if ensure_ssd_mounted; then
       :
@@ -211,12 +209,41 @@ main() {
   if ! stack_core_ok; then
     if [[ -d "$REMOTE_DIR/compose" ]]; then
       log "docker compose up -d (mode=$recover_mode)"
-      if ! run_compose_recover "$recover_mode"; then
+      if run_compose_recover "$recover_mode"; then
+        :
+      else
+        compose_rc=$?
         log "WARN: compose up basarisiz — ikinci deneme"
         sleep 2
-        run_compose_recover "$recover_mode" || log "WARN: compose up basarisiz"
+        if run_compose_recover "$recover_mode"; then
+          compose_rc=0
+        else
+          compose_rc=$?
+          log "HATA: compose up ikinci denemede de basarisiz (exit $compose_rc)"
+        fi
       fi
       sleep 10
+    fi
+  fi
+  if [[ "$compose_rc" -ne 0 ]]; then
+    # DNS'in gerçekten ayakta olduğunu doğrulamadan "aktif" bildirimi gönderme.
+    # shellcheck source=../lib/notify.sh
+    source "$SCRIPT_DIR/../lib/notify.sh"
+    if stack_dns_core_ok; then
+      notify_ssd_degraded "$(hostname -s)" "SSD yok — DNS SD karttan devam ediyor"
+    else
+      notify_ssd_recovery_failed "$(hostname -s)" "SSD yok; çekirdek DNS kurtarılamadı."
+    fi
+    recover_lock_release
+    exit "$compose_rc"
+  fi
+  if [[ "$recover_mode" == "core-dns" ]]; then
+    # shellcheck source=../lib/notify.sh
+    source "$SCRIPT_DIR/../lib/notify.sh"
+    if stack_dns_core_ok; then
+      notify_ssd_degraded "$(hostname -s)" "SSD yok — DNS SD karttan devam ediyor"
+    else
+      notify_ssd_recovery_failed "$(hostname -s)" "SSD yok; çekirdek DNS doğrulanamadı."
     fi
   fi
   local was_degraded=0
@@ -243,9 +270,8 @@ main() {
     exit 0
   fi
   if storage_degraded && stack_dns_core_ok && root_rw_ok; then
-    log "OK degraded DNS core ayakta (gateway/caddy eksik olabilir)"
+    log "OK degraded DNS core ayakta (gateway/caddy eksik olabilir; SSD recovery bekleniyor)"
     apply_adguard_rewrites_best_effort "$REMOTE_DIR"
-    _notify_stack_ok "Kısıtlı mod: DNS ayakta (veri diski yok)."
     recover_lock_release
     exit 0
   fi
@@ -257,6 +283,11 @@ main() {
     exit 0
   fi
   log "WARN: stack eksik — adguard/unbound/caddy veya gateway erisimi yok"
+  if storage_degraded; then
+    # shellcheck source=../lib/notify.sh
+    source "$SCRIPT_DIR/../lib/notify.sh"
+    notify_ssd_recovery_failed "$(hostname -s)" "SSD yok; çekirdek DNS doğrulanamadı."
+  fi
   recover_lock_release
   exit 1
 }

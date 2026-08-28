@@ -294,6 +294,10 @@ grep -q 'apply-adguard-dns.sh' "$PROJECT_DIR/scripts/pi/install-privileged-scrip
   || die "install-privileged apply-adguard-dns yok"
 grep -q 'ensure-adguard-blocking.sh' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" \
   || die "install-privileged ensure-adguard-blocking yok"
+grep -q 'json.dumps' "$PROJECT_DIR/scripts/lib/adguard-api.sh" \
+  || die "AdGuard login JSON encoder yok"
+grep -q -- '--data-binary @-' "$PROJECT_DIR/scripts/lib/adguard-api.sh" \
+  || die "AdGuard login encoded payload pipe yok"
 grep -q 'apply-adguard-filters.sh' "$PROJECT_DIR/scripts/pi/post-deploy-code.sh" \
   || die "post-deploy-code apply-adguard-filters yok"
 grep -q 'pi_gateway_adguard_blocked_ratio' "$PROJECT_DIR/config/grafana/provisioning/dashboards/json/pi-gateway.json" \
@@ -310,6 +314,10 @@ grep -q 'Popup Hosts' "$PROJECT_DIR/docs/DNS-BLOCKING.md" \
   || die "DNS-BLOCKING Popup Hosts not stacked notu yok"
 grep -q 'REMOTE_DIR/scripts/pi/' "$PROJECT_DIR/docs/DNS-BLOCKING.md" \
   || die "DNS-BLOCKING health home SSOT yok"
+grep -q 'PI_IPV6_ULA=' "$PROJECT_DIR/scripts/pi/discover-network.sh" \
+  || die "discover-network PI_IPV6_ULA uretmiyor"
+! grep -q 'source "\$ENV_FILE"' "$PROJECT_DIR/scripts/mac/discover-remote.sh" \
+  || die "discover-remote generated .env shell-eval ediyor"
 
 grep -q 'CANARY_DNS_WAIT_SEC:-10' "$PROJECT_DIR/scripts/pi/canary-compose-update.sh" \
   || die "canary DNS wait default 10 degil (45s yastik)"

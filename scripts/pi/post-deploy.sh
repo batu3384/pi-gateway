@@ -186,8 +186,8 @@ if [[ -n "${PI_STATIC_IP:-}" && -f "${REMOTE_DIR}/config/caddy/Caddyfile" ]]; th
 fi
 if command -v tailscale >/dev/null 2>&1 && tailscale status >/dev/null 2>&1; then
   run_step_optional "Tailscale uzaktan erisim" "$SCRIPT_DIR/setup-tailscale-remote.sh"
-  run_step_optional "Tailscale panel HTTPS" "$SCRIPT_DIR/setup-tailscale-serve.sh"
   run_step_optional "Tailscale ACL" "$SCRIPT_DIR/setup-tailscale-acl.sh"
+  run_step_optional "Tailscale panel HTTPS" "$SCRIPT_DIR/setup-tailscale-serve.sh"
   run_step_optional "Tailscale global DNS" "$SCRIPT_DIR/setup-tailscale-dns.sh"
   # caddy-lan'dan SONRA — UFW ts-panel-* kurallari kalir
   run_step_optional "Tailscale panel portlari" "$SCRIPT_DIR/setup-ts-panel-ports-unit.sh"

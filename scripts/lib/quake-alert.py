@@ -409,7 +409,7 @@ def self_check() -> None:
     assert again[0]["source"] == "AFAD+Kandilli", again[0]["source"]
     # bootstrap: ilk tur boş due
     st: dict[str, Any] = {}
-    now = time.time()
+    now = datetime(2026, 8, 25, 12, tzinfo=timezone.utc).timestamp()
     fresh = {
         "magnitude": 3.6,
         "latitude": 40.8,

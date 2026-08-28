@@ -146,8 +146,7 @@ usd = get("https://open.er-api.com/v6/latest/USD")
 gold = get("https://finans.truncgil.com/today.json")
 
 lines = [
-    "📋 Pi Gateway · Bülten",
-    f"📈 Piyasa — {now_dt.strftime('%d.%m.%Y')}",
+    f"📊 Piyasa — {now_dt.strftime('%d.%m.%Y')}",
     "─────────",
 ]
 ok = 0
@@ -195,7 +194,6 @@ if isinstance(gold, dict):
 
 if ok:
     lines.append("─────────")
-    lines.append("Pi Gateway")
     save_close(today, cur, prev_rates if prev_rates else cur)
 
 text = "📊 Piyasa verisi alınamadı — bu tur atlandı." if ok == 0 else "\n".join(lines)

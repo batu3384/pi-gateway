@@ -29,24 +29,9 @@ jobs:
           chmod +x scripts/mac/ci-compose-config.sh
           ./scripts/mac/ci-compose-config.sh
 
-      - name: Public-repo + static contracts
+      - name: Full local validation
         run: |
-          chmod +x scripts/mac/validate-public-repo.sh scripts/mac/validate-stack-health.sh
-          ./scripts/mac/validate-public-repo.sh
-          ./scripts/mac/validate-stack-health.sh
-          if [[ -f scripts/mac/validate-recovery-contract.sh ]]; then
-            chmod +x scripts/mac/validate-recovery-contract.sh
-            ./scripts/mac/validate-recovery-contract.sh
-          fi
-          if [[ -f scripts/mac/test-hybrid-contract.sh ]]; then
-            chmod +x scripts/mac/test-hybrid-contract.sh
-            ./scripts/mac/test-hybrid-contract.sh
-          fi
-          if [[ -f scripts/mac/test-smoke-contract.sh ]]; then
-            chmod +x scripts/mac/test-smoke-contract.sh
-            ./scripts/mac/test-smoke-contract.sh
-          fi
-          if [[ -f scripts/pi/test-notify-transitions.sh ]]; then
-            chmod +x scripts/pi/test-notify-transitions.sh scripts/lib/notify.sh
-            bash scripts/pi/test-notify-transitions.sh
-          fi
+          cp .github/ci.env.fixture .env
+          trap 'rm -f .env' EXIT
+          chmod +x scripts/mac/validate.sh
+          ./scripts/mac/validate.sh

@@ -126,7 +126,7 @@ If deploy fails: run `make verify-data` to check `data/` symlink; `data/` must n
 
 - **UFW:** `caddy-only` — admin panels only via `*.home` (ports 80/443)
 - **Passwords:** per-service (`.env`, not in git). `.env` mode 600. Restic şifresi `.env` içinde (aynı disk; ciphertext tek başına açılmaz)
-- **SSH:** key-only (`/etc/ssh/sshd_config.d/00-pi-gateway-ssh.conf`, sshd first-wins vs cloud-init). `pi` sudo NOPASSWD:ALL bilinçli (whitelist yok)
+- **SSH:** key-only (`/etc/ssh/sshd_config.d/00-pi-gateway-ssh.conf`, sshd first-wins vs cloud-init). `pi` sudo parola ister; ilk bootstrap/post-deploy SSH PTY ile çalışır.
 - **Prometheus:** Grafana scrape. Uyarı = health-check + Kuma + Telegram — Alertmanager yok
 - **Tailscale:** UFW `tailscale0` `22/80/443` TCP + `:53` UDP+TCP (AdGuard). ACL `group:owners` / `tag:owner-device`. WAN `:53` kapalı.
 
@@ -135,7 +135,7 @@ SSH şifre geri (key kaybı): Pi HDMI/konsol veya SD `userconf`; sonra `sudo rm 
 Reapply firewall (Pi):
 
 ```bash
-ssh pi 'REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/setup-firewall.sh'
+ssh -tt pi 'REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/setup-firewall.sh'
 ```
 
 ## After Pi reboot

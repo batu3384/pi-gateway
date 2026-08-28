@@ -13,7 +13,7 @@ _FAILURE_V7 = '''    # pi-gateway: cron failure v7
             "stale" in lower and "timeout" in lower
         ):
             return (
-                "📋 Pi Gateway · Bülten\\n\\n"
+                "📋 Bülten\\n\\n"
                 f"Görev: {job_name}\\n"
                 "Sorun: Model yanıtı zaman aşımına uğradı.\\n"
                 "Bu tur üretilemedi. Sonraki planlı tur otomatik dener.\\n"
@@ -21,7 +21,7 @@ _FAILURE_V7 = '''    # pi-gateway: cron failure v7
             )
         if "firecrawl" in lower and ("403" in lower or "forbidden" in lower):
             return (
-                "📋 Pi Gateway · Bülten\\n\\n"
+                "📋 Bülten\\n\\n"
                 f"Görev: {job_name}\\n"
                 "Sorun: Web arama hizmeti erişimi reddetti.\\n"
                 "Bu tur üretilemedi. Sonraki tur otomatik dener.\\n"
@@ -33,7 +33,7 @@ _FAILURE_V7 = '''    # pi-gateway: cron failure v7
             or "sensitive content" in lower
         ):
             return (
-                "📋 Pi Gateway · Bülten\\n\\n"
+                "📋 Bülten\\n\\n"
                 f"Görev: {job_name}\\n"
                 "Sorun: Model sağlayıcı güvenlik filtresi.\\n"
                 "Bu tur üretilemedi. Sonraki planlı tur otomatik dener.\\n"
@@ -41,7 +41,7 @@ _FAILURE_V7 = '''    # pi-gateway: cron failure v7
             )
         if "http 429" in lower or "rate limit" in lower:
             return (
-                "📋 Pi Gateway · Bülten\\n\\n"
+                "📋 Bülten\\n\\n"
                 f"Görev: {job_name}\\n"
                 "Sorun: API hız limiti aşıldı.\\n"
                 "Bu tur üretilemedi. Sonraki tur otomatik dener."
@@ -49,20 +49,20 @@ _FAILURE_V7 = '''    # pi-gateway: cron failure v7
     if job.get("no_agent"):
         if "script path resolves outside" in lower or "blocked: script path" in lower:
             return (
-                "📋 Pi Gateway · Zamanlanmış görev\\n\\n"
+                "📋 Zamanlanmış görev\\n\\n"
                 f"Görev: {job_name}\\n"
                 "Sorun: Betik güvenli dizin dışında.\\n"
                 "Ne yapmalı? Zamanlanmış görev kurulumunu yeniden çalıştırın."
             )
         if lower.startswith("script not found"):
             return (
-                "📋 Pi Gateway · Zamanlanmış görev\\n\\n"
+                "📋 Zamanlanmış görev\\n\\n"
                 f"Görev: {job_name}\\n"
                 "Sorun: Betik dosyası bulunamadı."
             )
         if lower.startswith("script timed out"):
             return (
-                "📋 Pi Gateway · Zamanlanmış görev\\n\\n"
+                "📋 Zamanlanmış görev\\n\\n"
                 f"Görev: {job_name}\\n"
                 "Sorun: Betik süre aşımına uğradı."
             )
@@ -70,7 +70,7 @@ _FAILURE_V7 = '''    # pi-gateway: cron failure v7
             "operationalerror" in lower and "database" in lower
         ):
             return (
-                "📋 Pi Gateway · Ağ\\n\\n"
+                "📋 Ağ\\n\\n"
                 f"Görev: {job_name}\\n"
                 "Sorun: Ağ cihaz veritabanı okunamıyor (dosya izni).\\n"
                 "Ne yapmalı? NetAlert veritabanı erişimini düzeltin."
@@ -85,7 +85,7 @@ _FAILURE_V7 = '''    # pi-gateway: cron failure v7
             if not hint:
                 hint = "Betik hata ile çıktı (ayrıntı sunucu logunda)."
             return (
-                "📋 Pi Gateway · Zamanlanmış görev\\n\\n"
+                "📋 Zamanlanmış görev\\n\\n"
                 f"Görev: {job_name}\\n"
                 f"Sorun: {hint}"
             )
@@ -94,19 +94,19 @@ _FAILURE_V7 = '''    # pi-gateway: cron failure v7
                 s = line.strip()
                 if "[netalert" in s.lower():
                     return (
-                        "📋 Pi Gateway · Ağ\\n\\n"
+                        "📋 Ağ\\n\\n"
                         f"Görev: {job_name}\\n"
                         f"Sorun: {s[:220]}"
                     )
     if cleaned:
         kind = "Bülten" if job.get("prompt") and not job.get("no_agent") else "Zamanlanmış görev"
         return (
-            f"📋 Pi Gateway · {kind}\\n\\n"
+            f"📋 {kind}\\n\\n"
             f"Görev: {job_name}\\n"
             f"Sorun: {cleaned[:280]}\\n"
             "Bu tur tamamlanamadı. Sonraki planlı tur otomatik dener."
         )
-    return f"⚠️ Cron '{job_name}' failed: {cleaned}"'''
+    return f"⚠️ Zamanlanmış görev '{job_name}' başarısız oldu: {cleaned or 'Ayrıntı yok.'}"'''
 
 
 def patch_failure_summary(text: str) -> str:

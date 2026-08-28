@@ -15,7 +15,14 @@ NETALERTX_PORT="${NETALERTX_PORT:-20211}"
 NETALERTX_LISTEN_ADDR="${NETALERTX_LISTEN_ADDR:-172.17.0.1}"
 CADDYFILE="${REMOTE_DIR}/config/caddy/Caddyfile"
 MARKER="${REMOTE_DIR}/config/caddy/.tailscale-serve-block"
+ACL_APPLIED_MARKER="${TAILSCALE_ACL_APPLIED_MARKER:-/var/lib/pi-gateway/tailscale-acl-applied}"
 log() { echo "[tailscale-serve] $*"; }
+if [[ "${TS_SERVE_REQUIRE_ACL:-true}" == "true" \
+  && "${TS_SERVE_ALLOW_UNVERIFIED_ACL:-false}" != "true" \
+  && ! -f "$ACL_APPLIED_MARKER" ]]; then
+  log "ACL uygulama kanıtı yok — Serve atlandı (API publish veya TS_SERVE_ALLOW_UNVERIFIED_ACL=true gerekli)"
+  exit 0
+fi
 command -v tailscale >/dev/null 2>&1 || { log "tailscale yok"; exit 0; }
 if ! tailscale status --json 2>/dev/null | python3 -c \
   "import json,sys; sys.exit(0 if json.load(sys.stdin).get('BackendState')=='Running' else 1)"; then

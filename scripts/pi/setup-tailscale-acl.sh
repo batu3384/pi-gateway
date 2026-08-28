@@ -13,6 +13,7 @@ ACL_LOCAL="${REMOTE_DIR}/config/tailscale/acl.hujson"
 ACL_OWNER="${TAILSCALE_ACL_OWNER:-}"
 ACL_LAN_SUBNET="${TAILSCALE_LAN_SUBNET:-${LAN_SUBNET_CIDR:-}}"
 API_KEY="${TAILSCALE_API_KEY:-}"
+ACL_APPLIED_MARKER="${TAILSCALE_ACL_APPLIED_MARKER:-/var/lib/pi-gateway/tailscale-acl-applied}"
 log() { echo "[tailscale-acl] $*"; }
 command -v tailscale >/dev/null 2>&1 || { log "tailscale yok"; exit 0; }
 if [[ -z "$ACL_OWNER" || "$ACL_OWNER" == CHANGE_ME* ]]; then
@@ -54,6 +55,8 @@ if [[ -n "$API_KEY" ]]; then
     -u "${API_KEY}:" \
     -H "Content-Type: application/json" \
     --data-binary @"$ACL_FILE"; then
+    sudo install -d -m 755 "$(dirname "$ACL_APPLIED_MARKER")"
+    printf '%s\n' "$(date -Iseconds)" | sudo tee "$ACL_APPLIED_MARKER" >/dev/null
     log "ACL uygulandi"
     exit 0
   fi

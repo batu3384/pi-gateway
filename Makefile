@@ -3,6 +3,7 @@ env_val = $(shell awk -F= -v k='$(1)' '$$1 == k { sub(/^[^=]*=/, ""); print; exi
 
 ifneq (,$(wildcard .env))
   PI_USER ?= $(call env_val,PI_USER)
+  PI_HOST ?= $(call env_val,PI_HOST)
   PI_STATIC_IP ?= $(call env_val,PI_STATIC_IP)
   PI_DEPLOY_HOST ?= $(call env_val,PI_DEPLOY_HOST)
   REMOTE_DIR ?= $(call env_val,REMOTE_DIR)
@@ -10,7 +11,7 @@ endif
 
 PI_USER ?= pi
 REMOTE_DIR ?= /home/$(PI_USER)/pi-gateway
-PI_SSH_HOST ?= $(if $(PI_DEPLOY_HOST),$(PI_DEPLOY_HOST),$(PI_STATIC_IP))
+PI_SSH_HOST ?= $(if $(PI_DEPLOY_HOST),$(PI_DEPLOY_HOST),$(if $(PI_HOST),$(PI_HOST),$(PI_STATIC_IP)))
 
 .PHONY: setup validate test render deploy deploy-code deploy-fast install discover mac-dns mac-dns-clear harden status dns-test test-remote backup-pull backup-cron backup-restore-drill restore-check verify-data config-drift pi-access trust-ca tls-certs telegram-menu firewall sync-configs docker-ssd check-pi-env doctor diagnose-remote diagnose-dns audit-dns adguard-tune recover-stack chaos-drill tailscale-acl tailscale-dns
 
@@ -71,7 +72,7 @@ dns-fallback:
 	@./scripts/mac/setup-dns-fallback.sh
 
 harden: check-pi-env
-	@ssh "$(PI_USER)@$(PI_SSH_HOST)" "REMOTE_DIR='$(REMOTE_DIR)' bash -s" < ./scripts/pi/harden-host.sh
+	@ssh -tt "$(PI_USER)@$(PI_SSH_HOST)" "REMOTE_DIR='$(REMOTE_DIR)' bash -s" < ./scripts/pi/harden-host.sh
 
 status:
 	@chmod +x scripts/mac/status.sh 2>/dev/null || true
@@ -82,7 +83,7 @@ dns-test:
 	@./scripts/mac/dns-test.sh
 
 test-remote: check-pi-env
-	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/health-check.sh" && REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/smoke-test.sh"'
+	@ssh -tt "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/health-check.sh" && REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/smoke-test.sh"'
 
 telegram-test: check-pi-env
 	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/test-telegram.sh"'
@@ -144,30 +145,30 @@ adguard-tune: check-pi-env
 	@rsync -az scripts/lib/dhcp-dns-offer.sh scripts/lib/env-file.sh scripts/lib/adguard-api.sh scripts/lib/unbound-dnssec.sh scripts/lib/adguard-metrics.py scripts/lib/stack-health.sh scripts/lib/ssd-alive.sh "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/scripts/lib/"
 	@rsync -az scripts/pi/apply-adguard-dns.sh scripts/pi/apply-adguard-filters.sh scripts/pi/diagnose-dns-bypass.sh scripts/pi/audit-dns-coverage.sh scripts/pi/ensure-adguard-blocking.sh scripts/pi/ensure-ipv6-ula.sh scripts/pi/setup-rdnss-ra.sh scripts/pi/setup-adguard-timers.sh scripts/pi/setup-firewall.sh scripts/pi/health-check.sh scripts/pi/wait-dns-rollout.sh scripts/pi/canary-compose-update.sh scripts/pi/export-adguard-metrics.sh scripts/pi/export-gateway-state.sh scripts/pi/adguard-tune.sh "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/scripts/pi/"
 	@rsync -az host/systemd/pi-gateway-adguard-filters.service host/systemd/pi-gateway-adguard-filters.timer host/systemd/pi-gateway-ipv6-ula.service "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/host/systemd/"
-	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'chmod +x "$(REMOTE_DIR)/scripts/lib/dhcp-dns-offer.sh" "$(REMOTE_DIR)/scripts/pi/"*.sh && REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/adguard-tune.sh"'
+	@ssh -tt "$(PI_USER)@$(PI_SSH_HOST)" 'chmod +x "$(REMOTE_DIR)/scripts/lib/dhcp-dns-offer.sh" "$(REMOTE_DIR)/scripts/pi/"*.sh && REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/adguard-tune.sh"'
 
 recover-stack: check-pi-env
-	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/recover-stack.sh"'
+	@ssh -tt "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/recover-stack.sh"'
 
 chaos-drill: check-pi-env
 	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'CHAOS_DRY_RUN=true REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/chaos-storage-drill.sh"'
 
 firewall: check-pi-env
-	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-firewall.sh"'
+	@ssh -tt "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-firewall.sh"'
 
 docker-ssd: check-pi-env
 	@scp scripts/pi/setup-docker-ssd.sh "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/scripts/pi/setup-docker-ssd.sh"
-	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-docker-ssd.sh"'
+	@ssh -tt "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-docker-ssd.sh"'
 
 tailscale-acl: check-pi-env
 	@chmod +x scripts/pi/setup-tailscale-acl.sh 2>/dev/null || true
-	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-tailscale-acl.sh"'
+	@ssh -tt "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-tailscale-acl.sh"'
 
 # Global NS=Pi 100.x + Override. Requires TAILSCALE_API_KEY=tskey-api-… in Pi .env
 tailscale-dns: check-pi-env
 	@rsync -az scripts/pi/setup-tailscale-dns.sh "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/scripts/pi/"
-	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'chmod +x "$(REMOTE_DIR)/scripts/pi/setup-tailscale-dns.sh" && REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-tailscale-dns.sh"'
-	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-tailscale-acl.sh"'
+	@ssh -tt "$(PI_USER)@$(PI_SSH_HOST)" 'chmod +x "$(REMOTE_DIR)/scripts/pi/setup-tailscale-dns.sh" && REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-tailscale-dns.sh"'
+	@ssh -tt "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-tailscale-acl.sh"'
 
 n8n-workflows: check-pi-env
 	@chmod +x scripts/pi/setup-n8n-workflows.sh 2>/dev/null || true

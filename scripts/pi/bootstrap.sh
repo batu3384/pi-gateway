@@ -67,7 +67,7 @@ fi
 if [[ -f "$REMOTE_DIR/scripts/pi/harden-host.sh" ]]; then
   echo "[bootstrap] Host sertlestirme..."
   export REMOTE_DIR
-  bash "$REMOTE_DIR/scripts/pi/harden-host.sh" || {
+  bash "$REMOTE_DIR/scripts/pi/harden-host.sh" --prepare || {
     echo "[bootstrap] HATA: harden-host basarisiz"
     exit 1
   }
@@ -185,6 +185,18 @@ if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
         echo "[bootstrap] WARN: SSD yok/hazirlanamadi — DNS degraded (SD data) ile devam"
         touch /run/pi-gateway/storage-degraded 2>/dev/null || \
           sudo mkdir -p /run/pi-gateway && sudo touch /run/pi-gateway/storage-degraded || true
+        if [[ -d "$REMOTE_DIR/compose" ]]; then
+          sudo docker compose -f "$REMOTE_DIR/compose/docker-compose.yml" \
+            --env-file "$REMOTE_DIR/.env" stop \
+            n8n uptime-kuma crowdsec dozzle netalertx \
+            prometheus grafana node-exporter 2>/dev/null || true
+        fi
+        if [[ -f "$REMOTE_DIR/scripts/pi/setup-docker-fallback.sh" ]]; then
+          sudo env REMOTE_DIR="$REMOTE_DIR" bash \
+            "$REMOTE_DIR/scripts/pi/setup-docker-fallback.sh" || {
+            echo "[bootstrap] WARN: Docker SD fallback basarisiz"
+          }
+        fi
       else
         echo "[bootstrap] HATA: SSD veri diski hazirlanamadi (disk takili mi?)"
         exit 1
@@ -241,4 +253,8 @@ sudo mkdir -p /run/pi-gateway/notify 2>/dev/null || true
 sudo chown "$USER:$USER" /run/pi-gateway/notify 2>/dev/null || true
 sudo chmod 775 /run/pi-gateway/notify 2>/dev/null || true
 chmod +x "$REMOTE_DIR"/scripts/pi/*.sh "$REMOTE_DIR"/scripts/lib/*.sh 2>/dev/null || true
+bash "$REMOTE_DIR/scripts/pi/harden-host.sh" --sudo-only || {
+  echo "[bootstrap] HATA: sudo sertlestirmesi basarisiz"
+  exit 1
+}
 echo "[bootstrap] complete"

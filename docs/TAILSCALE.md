@@ -73,9 +73,9 @@ make telegram-menu   # or on Pi: scripts/pi/telegram-menu.sh
 REMOTE_DIR=~/pi-gateway bash scripts/pi/diagnose-remote-access.sh
 ```
 
-**Security:** Caddy `100.x:80/443` (path `/p/`) ve `TS_PANEL_DIRECT_PORTS=true` (default) ile `100.x:PORT` DNAT. Panel TCP UFW `tailscale0` + ACL `tag:pi-gateway:3001,3030,5678,8080,9999,20211` — yalnız `group:owners`. DNS `:53` AdGuard, admin UI değil. ACL kapısı tek auth (Caddy basic_auth 100.x Caddy bloğunda yok).
+**Security:** Caddy `100.x:80/443` (path `/p/`) ve isteğe bağlı `TS_PANEL_DIRECT_PORTS=true` ile `100.x:PORT` DNAT. Direct port default **false**. Panel TCP UFW `tailscale0` + ACL `tag:pi-gateway:3001,3030,5678,8080,9999,20211` — yalnız `group:owners`. DNS `:53` AdGuard, admin UI değil. ACL kapısı tek auth (Caddy basic_auth 100.x Caddy bloğunda yok).
 
-**Auth tradeoff:** `http://100.x.x.x` Caddy block has **no basic_auth** (Telegram in-app browser cannot do Basic Auth). LAN `192.x` keeps basic_auth. Anyone on your tailnet who can reach the Pi can open panels without a password — **ACL is the only gate**. Do not invite untrusted devices.
+**Auth tradeoff:** `http://100.x.x.x` Caddy block has **no basic_auth** (Telegram in-app browser cannot do Basic Auth). LAN `192.x` keeps basic_auth. Anyone on your tailnet who can reach the Pi can open panels without a password — **ACL is the only gate**. Direct port/Serve setup, ACL publish kanıtı olmadan varsayılan olarak engellenir. Do not invite untrusted devices.
 
 Phone tips: Tailscale **Connected**; open links in **Safari** (Telegram in-app browser often breaks).
 
@@ -84,6 +84,8 @@ Diagnostics: `bash scripts/pi/diagnose-remote-access.sh`
 ## ACL (recommended)
 
 `make tailscale-acl` — requires `TAILSCALE_ACL_OWNER` in `.env` (Tailscale email).
+Serve, API ile ACL publish edildiğini gösteren marker olmadan varsayılan olarak açılmaz.
+Manuel ACL sonrası bilinçli geçiş için `.env` içinde `TS_SERVE_ALLOW_UNVERIFIED_ACL=true` kullanılır.
 Template: `config/tailscale/acl.hujson.example` → local `config/tailscale/acl.hujson` (gitignored, do not commit).
 
 Manual: copy template to [Access Controls](https://login.tailscale.com/admin/acls).

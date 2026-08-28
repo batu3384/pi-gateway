@@ -18,5 +18,8 @@ sudo sed -i \
 sudo systemctl daemon-reload
 sudo systemctl enable --now "$unit"
 # Apply immediately (unit RemainAfterExit; also run script for live rules)
-bash "$REMOTE_DIR/scripts/pi/setup-tailscale-panel-ports.sh" || true
+bash "$REMOTE_DIR/scripts/pi/setup-tailscale-panel-ports.sh" || {
+  log "HATA: Tailscale panel portlari uygulanamadi"
+  exit 1
+}
 log "Aktif: $unit"

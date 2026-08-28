@@ -264,6 +264,11 @@ _run_hermes_py() {
   out="$("$@" 2>&1)" || ec=$?
   if (( ec != 0 )); then
     logger -t "$LOG_TAG" "WARN ${kind} fail(${ec}): ${out:-exit}"
+    case "$kind" in
+      bulletin-slo|hermes-token-slo|hermes-session-hygiene)
+        slo_note "${kind}-failed"
+        ;;
+    esac
     return 0
   fi
   while IFS= read -r line || [[ -n "${line:-}" ]]; do
@@ -328,7 +333,7 @@ elif [[ ${#FAILURES[@]} -gt 0 ]]; then
   exit_code=0
   for f in "${FAILURES[@]}"; do
     case "$f" in
-      optional-*|offsite-*|backup-restore-drill*|bulletin-*|hermes-session-*) ;;
+      optional-*|offsite-*|backup-restore-drill*|bulletin-*|hermes-session-*|hermes-token-*) ;;
       *) exit_code=1; break ;;
     esac
   done
@@ -345,12 +350,14 @@ elif [[ ${#FAILURES[@]} -eq 0 ]]; then
   # Çekirdek DNS: OnFailure (notify_health_systemd_*) — health-dns çift bubble yok
   notify_optional_recovered || true
   notify_slo_backup_ok || true
+  notify_slo_ops_ok || true
 else
   details="${FAILURES[*]}"
   has_ssd=0
   has_core=0
   has_optional=0
   has_slo=0
+  has_ops_slo=0
   for f in "${FAILURES[@]}"; do
     case "$f" in
       ssd-unmounted|ssd-unhealthy|storage-degraded*|data-ssd-symlink*|data-native-missing)
@@ -362,7 +369,8 @@ else
       offsite-*|backup-restore-drill*)
         has_slo=1
         ;;
-      bulletin-*|hermes-session-*)
+      bulletin-*|hermes-session-*|hermes-token-*)
+        has_ops_slo=1
         ;;
       *)
         has_core=1
@@ -387,6 +395,17 @@ else
     notify_slo_backup "$host" "${slo_details[*]}"
   else
     notify_slo_backup_ok || true
+  fi
+  if [[ "$has_ops_slo" -eq 1 ]]; then
+    ops_slo_details=()
+    for f in "${FAILURES[@]}"; do
+      case "$f" in
+        bulletin-*|hermes-session-*|hermes-token-*) ops_slo_details+=("$f") ;;
+      esac
+    done
+    notify_slo_ops "$host" "${ops_slo_details[*]}"
+  else
+    notify_slo_ops_ok || true
   fi
 fi
 if [[ "$exit_code" -eq 0 ]]; then
@@ -435,7 +454,8 @@ if [[ -x "$_card" ]]; then
     || logger -t "$LOG_TAG" "WARN telegram-status-card failed"
 fi
 if [[ -x "$SCRIPT_DIR/push-slo-heartbeat.sh" ]]; then
-  REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/push-slo-heartbeat.sh" >/dev/null 2>&1 || true
+  REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/push-slo-heartbeat.sh" >/dev/null 2>&1 \
+    || logger -t "$LOG_TAG" "WARN SLO heartbeat push failed"
 fi
 # Boot downtime hesabı — her tick (fail olsa da canlılık)
 notify_touch_alive || true

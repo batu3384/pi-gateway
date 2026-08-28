@@ -14,7 +14,7 @@ from pathlib import Path
 
 TG_LIMIT = 4096
 SEP = "─────────"
-SKELETON_MARKERS = ("Pi Gateway · Bülten", SEP)
+SKELETON_MARKERS = ("📋 Bülten", SEP)
 TITLE_RE = re.compile(r"^(?:[0-9]+[).]|[🤖💻🔬🚀⚡📌])\s+(.+)$")
 
 
@@ -180,11 +180,11 @@ def prepare(text: str, job_name: str = "", *, send_rest: bool = True) -> dict:
 
 
 def self_check() -> None:
-    assert has_skeleton("📋 Pi Gateway · Bülten\n─────────\nMerhaba\n─────────")
+    assert has_skeleton("📋 Bülten\n─────────\nMerhaba\n─────────")
     assert not has_skeleton("sadece metin")
     titles = extract_titles("1) Alfa haber\n2) Beta")
     assert titles == ["Alfa haber", "Beta"], titles
-    long = "📋 Pi Gateway · Bülten\n─────────\n" + ("haber " * 800) + "\n─────────\nPi Gateway"
+    long = "📋 Bülten\n─────────\n" + ("haber " * 800) + "\n─────────\n"
     parts = split_parts(long, limit=400)
     assert len(parts) >= 2, len(parts)
     assert parts[0].startswith("(1/")

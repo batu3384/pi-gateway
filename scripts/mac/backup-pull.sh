@@ -44,6 +44,22 @@ count_snapshots() {
     <<<"$out" 2>/dev/null || echo 0
 }
 
+check_restic_repo() {
+  local repo="$1"
+  local timeout_sec="${RESTIC_PULL_CHECK_TIMEOUT_SEC:-600}"
+  if command -v restic >/dev/null 2>&1; then
+    timeout "$timeout_sec" env RESTIC_PASSWORD="$RESTIC_PASSWORD" \
+      restic -r "$repo" check >/dev/null
+  elif command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+    timeout "$timeout_sec" docker run --rm --network none \
+      -e RESTIC_PASSWORD \
+      -v "${repo}:/repo:ro" \
+      "$RESTIC_IMAGE" -r "local:/repo" check >/dev/null
+  else
+    return 1
+  fi
+}
+
 # Reinit / shrink gate: --delete eski offsite'i silmesin
 if ssh -o ConnectTimeout=15 -o BatchMode=yes "$PI_USER@$PI_HOST" \
   "test -f '$RESTIC_REINIT_MARKER'" 2>/dev/null; then
@@ -72,6 +88,10 @@ fi
 if [[ "$remote_n" -eq 0 ]]; then
   die "Pi restic repo bos veya okunamadi — offsite ezilmez"
 fi
+
+log "Restic repository check"
+check_restic_repo "$remote_tmp/restic" \
+  || die "Restic repository check basarisiz — .last-success yazilmiyor"
 
 log "Restic repo: $PI_USER@$PI_HOST:$RESTIC_REMOTE -> $LOCAL_DEST/restic"
 if ! rsync -a "$remote_tmp/restic/" "$stage_restic/"; then

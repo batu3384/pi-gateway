@@ -97,12 +97,19 @@ containerd_ssd_populated() {
   [[ -d "${CONTAINERD_SSD_ROOT}/io.containerd.content.v1.content" ]] \
     || [[ -d "${CONTAINERD_SSD_ROOT}/io.containerd.snapshotter.v1.overlayfs" ]]
 }
+docker_ssd_has_payload() {
+  sudo find "$DOCKER_SSD_ROOT" -type f -print -quit 2>/dev/null | grep -q .
+}
+containerd_ssd_has_payload() {
+  sudo find "$CONTAINERD_SSD_ROOT" -type f -print -quit 2>/dev/null | grep -q .
+}
 migrate_containerd() {
   [[ "$CONTAINERD_ON_SSD" == "true" ]] || return 0
   if containerd_ssd_populated; then
     log "containerd hedef zaten dolu — rsync atlandi"
     return 0
   fi
+  containerd_ssd_has_payload && die "containerd SSD hedefi kismen dolu — otomatik birlestirme yok"
   if [[ -d "$CONTAINERD_LEGACY_ROOT" ]] && [[ "$(sudo ls -A "$CONTAINERD_LEGACY_ROOT" 2>/dev/null)" ]]; then
     log "Tasima: ${CONTAINERD_LEGACY_ROOT} -> ${CONTAINERD_SSD_ROOT} (tar pipe)"
     sudo mkdir -p "$CONTAINERD_SSD_ROOT"
@@ -113,6 +120,7 @@ migrate_containerd() {
 migrate_data() {
   if [[ -d "$DOCKER_LEGACY" ]] && [[ "$(sudo ls -A "$DOCKER_LEGACY" 2>/dev/null)" ]]; then
     if [[ ! -d "${DOCKER_SSD_ROOT}/image" ]] && [[ ! -f "${DOCKER_SSD_ROOT}/engine-id" ]]; then
+      docker_ssd_has_payload && die "Docker SSD hedefi kismen dolu — otomatik birlestirme yok"
       log "Tasima: ${DOCKER_LEGACY} -> ${DOCKER_SSD_ROOT}"
       sudo mkdir -p "$DOCKER_SSD_ROOT"
       sudo rsync -aHAX --delete "${DOCKER_LEGACY}/" "${DOCKER_SSD_ROOT}/"

@@ -46,7 +46,8 @@ _alert_inbox_down() {
     "• Pi: <code>journalctl -u ${unit} -n 50</code>
 • Yeniden başlat: <code>sudo systemctl restart ${unit}</code>" \
     "Alarm bildirimleri devrede; asistan sohbeti geçici olarak kapalı.")"
-  notify_send_message "$(printf '<b>⚠️ Asistan Sohbeti Kesildi</b>\n\n%s' "$body")" "HTML" || true
+  notify_send_with_transition \
+    "hermes-inbox" "fail" "⚠️ Asistan Sohbeti Kesildi" "$body" "HTML"
 }
 
 if [[ "${HERMES_TELEGRAM_GATEWAY:-}" != "true" ]]; then

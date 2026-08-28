@@ -109,7 +109,7 @@ def build_card_text() -> str:
         parts.append(" · ".join(lat))
 
     lines = [
-        "<b>Pi Gateway · Durum</b>",
+        "<b>Durum</b>",
         html.escape(head),
         html.escape(" · ".join(parts)),
     ]
@@ -263,7 +263,7 @@ def self_check() -> int:
     os.environ.setdefault("PI_GATEWAY_HEALTH_OK", "1")
     os.environ.setdefault("LAN_DOMAIN", "home")
     text = build_card_text()
-    assert "Pi Gateway · Durum" in text, text
+    assert "<b>Durum</b>" in text, text
     assert "DNS" in text, text
     h = card_hash(text, "{}")
     assert len(h) == 64

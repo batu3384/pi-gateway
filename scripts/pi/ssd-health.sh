@@ -51,15 +51,12 @@ if storage_degraded; then
     if ssd_mount_healthy; then
       log "SSD geri — hotplug restore"
       ssd_usb_reset_clear
-      run_hotplug
-      hp_rc=$?
-      if [[ "$hp_rc" -eq 0 ]]; then
+      if run_hotplug; then
         exit 0
+      else
+        hp_rc=$?
       fi
-      if stack_dns_core_ok 2>/dev/null; then
-        log "WARN: hotplug exit $hp_rc — DNS core ayakta"
-        exit 0
-      fi
+      log "HATA: hotplug restore exit $hp_rc — SSD recovery tamamlanmadi"
       exit "$hp_rc"
     fi
   fi
@@ -89,18 +86,32 @@ ssd_usb_disable_autosuspend || true
 if ssd_block_present && ssd_try_remount; then
   log "remount OK — hotplug restore"
   ssd_usb_reset_clear
-  run_hotplug
-  exit 0
+  if run_hotplug; then
+    exit 0
+  else
+    hp_rc=$?
+  fi
+  log "HATA: hotplug restore exit $hp_rc"
+  exit "$hp_rc"
 fi
 log "SSD sagliksiz — soft-reset"
 if ssd_usb_soft_reset && ssd_mount_healthy; then
   log "soft-reset OK — hotplug restore"
   ssd_usb_reset_clear
-  run_hotplug
-  exit 0
+  if run_hotplug; then
+    exit 0
+  else
+    hp_rc=$?
+  fi
+  log "HATA: hotplug restore exit $hp_rc"
+  exit "$hp_rc"
 fi
 log "soft-reset yetersiz — hotplug degraded yolu"
-run_hotplug
+if run_hotplug; then
+  hp_rc=0
+else
+  hp_rc=$?
+fi
 if ssd_mount_healthy; then
   ssd_usb_reset_clear
   exit 0
@@ -117,6 +128,8 @@ if storage_degraded; then
   else
     log "hala degraded — beklenen FSM (timer OK)"
   fi
-  exit 0
+  [[ "$hp_rc" -eq 0 ]] && exit 0
+  exit "$hp_rc"
 fi
-exit 1
+[[ "$hp_rc" -eq 0 ]] && exit 1
+exit "$hp_rc"

@@ -86,6 +86,10 @@ ensure_tree_on() {
   done < <(data_tree_dirs)
 }
 
+ssd_data_has_payload() {
+  find "${DATA_ROOT}" -type f -print -quit 2>/dev/null | grep -q .
+}
+
 # Degraded SD agacini kenara al — SSD uzerine rsync YOK
 discard_ephemeral_sd_data() {
   local local_data="${REMOTE_DIR}/data"
@@ -116,6 +120,7 @@ repair_symlink() {
       discard_ephemeral_sd_data
     elif [[ -n "$(ls -A "${REMOTE_DIR}/data" 2>/dev/null)" ]]; then
       # Ilk kurulum / legacy: SD'de gercek veri kalintisi — SSD'ye tasi
+      ssd_data_has_payload && die "SSD hedefi veri iceriyor — legacy SD migration otomatik birlestirilmiyor"
       log "SD karttaki kalici data SSD'ye tasiniyor -> ${DATA_ROOT}"
       rsync -a "${REMOTE_DIR}/data/" "${DATA_ROOT}/"
       run_as_needed rm -rf "${REMOTE_DIR}/data"

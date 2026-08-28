@@ -13,12 +13,20 @@ read_remote_dotenv || { echo "[${PG_SCRIPT_NAME}] HATA: .env dotenv parser hatas
 
 log() { echo "[ts-panel-ports] $*"; }
 
-TS_PANEL_DIRECT_PORTS="${TS_PANEL_DIRECT_PORTS:-true}"
+TS_PANEL_DIRECT_PORTS="${TS_PANEL_DIRECT_PORTS:-false}"
 if [[ "$TS_PANEL_DIRECT_PORTS" != "true" ]]; then
-  log "TS_PANEL_DIRECT_PORTS!=true — :PORT DNAT atlandi (Caddy/Serve kullan)"
-  exit 0
+  log "TS_PANEL_DIRECT_PORTS!=true — eski :PORT DNAT kurallari temizlenecek"
+else
+  log "WARN: :PORT erisim Caddy basic_auth bypass — tailnet ACL siki olmali (docs/TAILSCALE.md)"
 fi
-log "WARN: :PORT erisim Caddy basic_auth bypass — tailnet ACL siki olmali (docs/TAILSCALE.md)"
+ACL_APPLIED_MARKER="${TAILSCALE_ACL_APPLIED_MARKER:-/var/lib/pi-gateway/tailscale-acl-applied}"
+if [[ "$TS_PANEL_DIRECT_PORTS" == "true" \
+  && "${TS_SERVE_REQUIRE_ACL:-true}" == "true" \
+  && "${TS_SERVE_ALLOW_UNVERIFIED_ACL:-false}" != "true" \
+  && ! -f "$ACL_APPLIED_MARKER" ]]; then
+  log "ACL uygulama kaniti yok — direct panel portlari kapatiliyor"
+  TS_PANEL_DIRECT_PORTS=false
+fi
 
 TS_IP=""
 wait_ts() {
@@ -104,6 +112,11 @@ apply_one() {
 }
 
 clear_old
+if [[ "$TS_PANEL_DIRECT_PORTS" != "true" ]]; then
+  sudo rm -f "$MARKER" "${MARKER}.tsip"
+  log "Direct panel portlari kapali — Caddy/Serve kullan"
+  exit 0
+fi
 tmp="$(mktemp)"
 ports_ufw=()
 for entry in "${PORT_MAP[@]}"; do

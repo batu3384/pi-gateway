@@ -28,6 +28,5 @@ while IFS='=' read -r key value; do
 done <<< "$DISCOVERY"
 
 rm -f "$ENV_FILE.bak"
-# shellcheck disable=SC1090
-source "$ENV_FILE"
-log "Updated .env with discovered network (static IP candidate: $PI_STATIC_IP)"
+discovered_ip="$(awk -F= '$1 == "PI_STATIC_IP" {print substr($0, index($0, "=") + 1); exit}' "$ENV_FILE")"
+log "Updated .env with discovered network (static IP candidate: ${discovered_ip:-unknown})"

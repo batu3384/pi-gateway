@@ -17,7 +17,7 @@ PI_HOST="${PI_HOST:-}"
 REMOTE_DIR="${REMOTE_DIR:-/home/$PI_USER/pi-gateway}"
 STORAGE_TYPE="${STORAGE_TYPE:-hybrid}"
 PI_DEPLOY_HOST="${PI_DEPLOY_HOST:-}"
-SSH_HOST="${PI_DEPLOY_HOST:-$PI_HOST}"
+SSH_HOST="${PI_DEPLOY_HOST:-${PI_HOST:-${PI_STATIC_IP:-}}}"
 DEPLOY_MODE="${DEPLOY_MODE:-full}"
 export PI_DEPLOY_HOST
 [[ -n "$SSH_HOST" ]] || die "PI_HOST or PI_DEPLOY_HOST required"
@@ -128,7 +128,7 @@ finish_urls() {
 # --- code path: no bootstrap / canary / full post-deploy ---
 if [[ "$DEPLOY_MODE" == "code" ]]; then
   log "Code path: privileged + Hermes/notify (bootstrap/canary/UFW skip)"
-  ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" \
+  ssh -tt -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" \
     "chmod +x '$REMOTE_DIR/scripts/pi/post-deploy-code.sh' && REMOTE_DIR='$REMOTE_DIR' bash '$REMOTE_DIR/scripts/pi/post-deploy-code.sh'"
   if [[ "${DEPLOY_SMOKE:-false}" == "true" ]]; then
     ssh "$PI_USER@$DEPLOY_HOST" "REMOTE_DIR='$REMOTE_DIR' bash '$REMOTE_DIR/scripts/pi/smoke-test.sh'"
@@ -140,7 +140,7 @@ if [[ "$DEPLOY_MODE" == "code" ]]; then
 fi
 
 # --- full path ---
-ssh "$PI_USER@$SSH_HOST" "REMOTE_DIR='$REMOTE_DIR' bash '$REMOTE_DIR/scripts/pi/bootstrap.sh'"
+ssh -tt "$PI_USER@$SSH_HOST" "REMOTE_DIR='$REMOTE_DIR' bash '$REMOTE_DIR/scripts/pi/bootstrap.sh'"
 wait_ssh() {
   local host="$1" tries="${2:-24}" i
   for ((i = 1; i <= tries; i++)); do
@@ -232,6 +232,6 @@ echo "[settle] timeout ${max}s — devam"
 SETTLE_EOF
 fi
 
-ssh "$PI_USER@$DEPLOY_HOST" "REMOTE_DIR='$REMOTE_DIR' bash '$REMOTE_DIR/scripts/pi/post-deploy.sh'"
+ssh -tt "$PI_USER@$DEPLOY_HOST" "REMOTE_DIR='$REMOTE_DIR' bash '$REMOTE_DIR/scripts/pi/post-deploy.sh'"
 ssh "$PI_USER@$DEPLOY_HOST" "REMOTE_DIR='$REMOTE_DIR' bash '$REMOTE_DIR/scripts/pi/smoke-test.sh'"
 finish_urls

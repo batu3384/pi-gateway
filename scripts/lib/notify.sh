@@ -64,6 +64,28 @@ notify_ensure_dir() {
   fi
 }
 
+notify_send_lock_acquire() {
+  notify_ensure_dir
+  command -v flock >/dev/null 2>&1 || return 0
+  exec {NOTIFY_LOCK_FD}>"${NOTIFY_STATE_DIR}/send.lock" || {
+    unset NOTIFY_LOCK_FD
+    return 0
+  }
+  flock -x "$NOTIFY_LOCK_FD" || {
+    exec {NOTIFY_LOCK_FD}>&-
+    unset NOTIFY_LOCK_FD
+    return 1
+  }
+}
+
+notify_send_lock_release() {
+  local fd="${NOTIFY_LOCK_FD:-}"
+  [[ -n "$fd" ]] || return 0
+  flock -u "$fd" 2>/dev/null || true
+  exec {NOTIFY_LOCK_FD}>&-
+  unset NOTIFY_LOCK_FD
+}
+
 # Health timer her tick — reboot downtime hesabı için.
 notify_touch_alive() {
   local now
@@ -99,7 +121,7 @@ notify_hermes_inbox_up() {
   local host="${1:-$(hostname -s)}"
   local body gateway
   gateway="$(panel_url gateway)"
-  body="$(notify_html_alert "Kısa kesinti sona erdi; mesaj gönderebilirsiniz." "" "Durum: $(notify_escape_html "$gateway")")"
+  body="$(notify_html_alert "Yeni mesajları gönderebilirsiniz." "" "Durum: $(notify_escape_html "$gateway")")"
   notify_ensure_dir
   echo fail > "${NOTIFY_STATE_DIR}/hermes-inbox.state" 2>/dev/null || true
   notify_send_with_transition "hermes-inbox" "ok" "✅ Asistan Sohbeti Aktif" "$body" "HTML"
@@ -126,8 +148,13 @@ notify_rate_ok() {
   if (( now - last < cooldown )); then
     return 1
   fi
-  echo "$now" > "${NOTIFY_STATE_DIR}/${key}" 2>/dev/null || return 0
   return 0
+}
+
+notify_rate_commit() {
+  local key="$1"
+  notify_ensure_dir
+  date +%s > "${NOTIFY_STATE_DIR}/${key}" 2>/dev/null || true
 }
 
 notify_transition_peek() {
@@ -174,7 +201,11 @@ notify_send_with_transition() {
   local parse_mode="${5:-}"
 
   notify_enabled || return 0
-  notify_transition_peek "$key" "$new_state" || return 0
+  notify_send_lock_acquire || return 0
+  if ! notify_transition_peek "$key" "$new_state"; then
+    notify_send_lock_release
+    return 0
+  fi
 
   local text
   local title_fmt="$title"
@@ -189,38 +220,42 @@ notify_send_with_transition() {
   if notify_send_message "$text" "$parse_mode"; then
     notify_transition_commit "$key" "$new_state"
   fi
+  notify_send_lock_release
 }
 
 notify_escape_html() {
   local text="$1"
-  text="${text//&/&amp;}"
-  text="${text//</&lt;}"
-  text="${text//>/&gt;}"
-  text="${text//\'/&#39;}"
+  text="${text//&/\&amp;}"
+  text="${text//</\&lt;}"
+  text="${text//>/\&gt;}"
+  text="${text//\'/\&#39;}"
   printf '%s' "$text"
 }
 
 notify_send_message() {
   local text="$1"
   local parse_mode="${2:-}"
-  local err
+  local response=""
 
   if [[ -n "$parse_mode" ]]; then
-    if err="$(curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+    response="$(curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
       -d "chat_id=${TELEGRAM_CHAT_ID}" \
       -d "parse_mode=${parse_mode}" \
       --data-urlencode "text=${text}" \
-      -d "disable_web_page_preview=true" 2>&1)"; then
-      return 0
-    fi
-  elif err="$(curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+      -d "disable_web_page_preview=true" 2>&1)" || true
+  else
+    response="$(curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
     -d "chat_id=${TELEGRAM_CHAT_ID}" \
     --data-urlencode "text=${text}" \
-    -d "disable_web_page_preview=true" 2>&1)"; then
-    return 0
+    -d "disable_web_page_preview=true" 2>&1)" || true
   fi
 
-  echo "[notify] Telegram gonderilemedi: ${err:-bilinmeyen hata}" >&2
+  if [[ -n "$response" ]] && python3 -c \
+    'import json,sys; d=json.load(sys.stdin); raise SystemExit(0 if d.get("ok") is True else 1)' \
+    <<<"$response" 2>/dev/null; then
+    return 0
+  fi
+  echo "[notify] Telegram gonderilemedi: ${response:-bilinmeyen hata}" >&2
   return 1
 }
 
@@ -233,7 +268,11 @@ notify_telegram() {
   cooldown="$(notify_repeat_sec_for "$key")"
 
   notify_enabled || return 0
-  notify_rate_ok "$key" "$cooldown" || return 0
+  notify_send_lock_acquire || return 0
+  if ! notify_rate_ok "$key" "$cooldown"; then
+    notify_send_lock_release
+    return 0
+  fi
 
   local text
   local title_fmt="$title"
@@ -245,21 +284,20 @@ notify_telegram() {
   else
     text="$(printf '<b>%s</b>' "$title_fmt")"
   fi
-  notify_send_message "$text" "$parse_mode" || true
+  if notify_send_message "$text" "$parse_mode"; then
+    notify_rate_commit "$key"
+  fi
+  notify_send_lock_release
 }
 
-# HTML: detay → (aksiyon) → (dipnot)
-notify_html_alert() {
+# HTML: güvenilir raw fragment → (aksiyon) → (dipnot)
+notify_html_alert_raw() {
   local detail="${1:-}"
   local action="${2:-}"
   local footnote="${3:-}"
   local lines=""
   if [[ -n "$detail" ]]; then
-    if [[ "$detail" == *"<"* || "$detail" == *"•"* ]]; then
-      lines="$detail"
-    else
-      lines="$(notify_escape_html "$detail")"
-    fi
+    lines="$detail"
   fi
   if [[ -n "$action" ]]; then
     if [[ -n "$lines" ]]; then
@@ -276,6 +314,13 @@ notify_html_alert() {
     fi
   fi
   printf '%s' "$lines"
+}
+
+notify_html_alert() {
+  local detail="${1:-}"
+  local action="${2:-}"
+  local footnote="${3:-}"
+  notify_html_alert_raw "$(notify_escape_html "$detail")" "$action" "$footnote"
 }
 
 notify_dns_fail() {
@@ -298,7 +343,7 @@ notify_dns_recovered() {
   gateway="$(panel_url gateway)"
   esc_gw="$(notify_escape_html "$gateway")"
   body="$(notify_html_alert \
-    "Ev DNS ve çekirdek servisler normale döndü; tüm kontroller geçti." \
+    "Çekirdek DNS kontrolleri yeniden geçiyor; AdGuard ve Unbound yanıt veriyor." \
     "" \
     "Durum: ${esc_gw}")"
   notify_send_with_transition "health-dns" "ok" "✅ Ev DNS Normale Döndü" "$body" "HTML"
@@ -315,14 +360,15 @@ notify_optional_warn() {
 }
 
 notify_optional_recovered() {
-  notify_transition_peek "health-optional" "ok" || return 0
-  notify_transition_commit "health-optional" "ok"
+  notify_send_with_transition \
+    "health-optional" "ok" "✅ İkincil Servisler Normal" \
+    "Önceki ikincil servis uyarısı sona erdi; kontroller tekrar geçiyor." "HTML"
 }
 
 notify_backup_ok() {
   local stamp="$1"
   local body
-  body="$(notify_html_alert "Yedekleme başarıyla tamamlandı (Zaman: $(notify_escape_html "$stamp")).")"
+  body="$(notify_html_alert "Son başarılı yedek zaman damgası: $(notify_escape_html "$stamp").")"
   notify_transition_commit "restic-fail" "ok" 2>/dev/null || true
   notify_telegram "✅ Yedekleme Tamamlandı" "$body" "restic-ok" "HTML"
 }
@@ -354,8 +400,7 @@ notify_health_systemd_fail() {
     )"
   fi
 
-  human="$(notify_escape_html "$details")"
-  human="${human//failures=/Sorunlar: }"
+  human="${details//failures=/Sorunlar: }"
   human="${human//exit_code=1/Kontrol başarısız}"
   human="${human//; /$'\n'• }"
   [[ "$human" == •* ]] || human="• ${human}"
@@ -367,8 +412,9 @@ notify_health_systemd_fail() {
 }
 
 notify_health_systemd_ok() {
-  notify_transition_peek "health-systemd" "ok" || return 0
-  notify_transition_commit "health-systemd" "ok"
+  notify_send_with_transition \
+    "health-systemd" "ok" "✅ Sistem Sağlık Kontrolü Düzeldi" \
+    "Önceki çekirdek sağlık uyarısı sona erdi." "HTML"
 }
 
 notify_slo_backup() {
@@ -376,24 +422,45 @@ notify_slo_backup() {
   local details="$2"
   local body
   body="$(notify_html_alert \
-    "Uzak yedek veya geri yükleme denemesi gecikti — ev DNS etkilenmez. Detay: ${details}" \
+    "Beklenen yedekleme veya geri yükleme aralığı aşıldı; ev DNS etkilenmez. Detay: ${details}" \
     "• Mac: <code>make backup-pull</code>
 • Deneme: <code>make backup-restore-drill</code>")"
   notify_send_with_transition "health-slo-backup" "fail" "📋 Uzak Yedek Gecikti" "$body" "HTML"
 }
 
 notify_slo_backup_ok() {
-  notify_transition_peek "health-slo-backup" "ok" || return 0
-  notify_transition_commit "health-slo-backup" "ok"
+  notify_send_with_transition \
+    "health-slo-backup" "ok" "✅ Uzak Yedek Güncel" \
+    "Yedek ve geri yükleme denemesi yeniden izin verilen aralıkta." "HTML"
+}
+
+notify_slo_ops() {
+  local host="$1"
+  local details="${2:-}"
+  local body esc_details
+  esc_details="$(notify_escape_html "$details")"
+  body="$(notify_html_alert \
+    "Bakım ve otomasyon kontrollerinden biri beklenen zamanda tamamlanmadı." \
+    "• Ayrıntı: ${esc_details}
+• İlgili zamanlayıcı ve servis günlüklerini kontrol edin.")"
+  notify_send_with_transition \
+    "health-slo-ops" "fail" "⚠️ Operasyon Kontrolü Gecikti" "$body" "HTML"
+}
+
+notify_slo_ops_ok() {
+  notify_send_with_transition \
+    "health-slo-ops" "ok" "✅ Operasyon Kontrolleri Güncel" \
+    "Önceki bakım ve otomasyon gecikmesi sona erdi." "HTML"
 }
 
 notify_disk_warn() {
   local mount="$1"
   local detail="$2"
+  local subject="${3:-Bağlantı noktası: ${mount}}"
   local key="disk-${mount//\//-}"
   local body
   body="$(notify_html_alert \
-    "Bağlantı noktası: ${mount}\n${detail}" \
+    "${subject}: ${detail}" \
     "• Pi: <code>df -hP ${mount}</code> · <code>free -m</code>")"
   notify_send_with_transition "$key" "fail" "📋 Disk Doluluk Uyarısı" "$body" "HTML"
 }
@@ -443,9 +510,26 @@ notify_stack_recovered() {
   notify_send_with_transition "stack-recovered" "ok" "✅ Otomatik Kurtarma Tamamlandı" "$body" "HTML"
 }
 
+notify_ssd_fail_closed() {
+  local host="$1"
+  local details="${2:-}"
+  local body
+  body="$(notify_html_alert \
+    "SSD erişilemedi. Korumalı kapatma politikası nedeniyle DNS ve bağlı servisler otomatik olarak kapatıldı." \
+    "• SSD/USB güç ve bağlantısını kontrol edin.
+• Bağlantı düzeldikten sonra otomatik kurtarma yeniden denenecek." \
+    "${details:+Teknik detay: $(notify_escape_html "$details")}")"
+  notify_send_with_transition "ssd-degraded" "fail" "⚠️ Veri Diski Koptu — DNS Kapatıldı" "$body" "HTML"
+}
+
 notify_ssd_degraded() {
   local host="$1"
   local details="${2:-}"
+  if [[ "${DNS_DEGRADED_ON_SSD_LOSS:-true}" != "true" \
+    && "${STORAGE_FALLBACK_SD:-false}" != "true" ]]; then
+    notify_ssd_fail_closed "$host" "$details"
+    return
+  fi
   local body
   local detail_text="• <b>DNS & İnternet:</b> Kesintisiz aktif (AdGuard ve Unbound SD karta alındı).
 • <b>İkincil Servisler:</b> Veri güvenliği için geçici durduruldu (n8n, paneller).
@@ -456,11 +540,24 @@ notify_ssd_degraded() {
 • <b>Teknik Detay:</b> $(notify_escape_html "$details")"
   fi
 
-  body="$(notify_html_alert \
+  body="$(notify_html_alert_raw \
     "$detail_text" \
     "• Fiziksel müdahale gerekmez; otomatik kurtarma bekleniyor.
 • Sorun devam ederse USB bağlantısını kontrol edin.")"
   notify_send_with_transition "ssd-degraded" "fail" "⚠️ Veri Diski (SSD) Koptu — Korumalı Mod" "$body" "HTML"
+}
+
+notify_ssd_recovery_failed() {
+  local host="$1"
+  local details="${2:-}"
+  local body
+  body="$(notify_html_alert \
+    "SSD bağlantısı geri geldi; ancak tüm servislerin sağlığı doğrulanamadı." \
+    "• Sistem kısmi çalışıyor olabilir; DNS ve panel durumunu kontrol edin.
+• Bir sonraki sağlık döngüsü kurtarmayı yeniden deneyecek." \
+    "${details:+Teknik detay: $(notify_escape_html "$details")}")"
+  notify_send_with_transition \
+    "ssd-degraded" "fail" "⚠️ SSD Kurtarma Tamamlanamadı" "$body" "HTML"
 }
 
 notify_ssd_restored() {
@@ -479,7 +576,7 @@ notify_ssd_restored() {
   fi
 
   local body
-  body="$(notify_html_alert \
+  body="$(notify_html_alert_raw \
     "$detail_text" \
     "" \
     "Durum: ${esc_gw}")"
@@ -497,8 +594,9 @@ notify_latency_slow() {
 }
 
 notify_latency_ok() {
-  notify_transition_peek "health-latency" "ok" || return 0
-  notify_transition_commit "health-latency" "ok"
+  notify_send_with_transition \
+    "health-latency" "ok" "✅ Gecikme Normale Döndü" \
+    "DNS ve panel yanıt süreleri yeniden eşik içinde." "HTML"
 }
 
 notify_ibb_hki_warn() {
@@ -514,7 +612,7 @@ notify_ibb_hki_warn() {
 
 notify_ibb_hki_ok() {
   local body
-  body="$(notify_html_alert "Hava kalitesi indeksi (HKI) tekrar iyi bandına indi.")"
+  body="$(notify_html_alert "Ölçüm yeniden iyi bandı içinde.")"
   notify_send_with_transition "ibb-hki" "ok" "✅ Hava Kalitesi Normale Döndü" "$body" "HTML"
 }
 

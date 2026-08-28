@@ -11,10 +11,10 @@ _SHUTDOWN_V2 = '''        # pi-gateway: shutdown msg tr v2
                 "Devam eden görev kesilecek. "
                 "Yeniden açılınca bir mesaj gönder."
             )
-            msg = f"⚠️ Pi Gateway yeniden başlatılıyor — {hint}"
+            msg = f"⚠️ Gateway yeniden başlatılıyor — {hint}"
         else:
             msg = (
-                "⚠️ Pi Gateway kısa süre kapanıyor (güncelleme). "
+                "⚠️ Gateway kısa süre kapanıyor (güncelleme). "
                 "Devam eden görev varsa kesilir."
             )'''
 
@@ -24,9 +24,9 @@ _SHUTDOWN_V1 = '''        # pi-gateway: shutdown msg tr
                 "Devam eden görev kesilecek. "
                 "Yeniden başladıktan sonra mesaj gönder."
             )
-            msg = f"⚠️ Pi Gateway yeniden başlatılıyor — {hint}"
+            msg = f"⚠️ Gateway yeniden başlatılıyor — {hint}"
         else:
-            msg = "⚠️ Pi Gateway kapatılıyor — kısa kesinti (cron/deploy). Devam eden AI görevi varsa kesilir."'''
+            msg = "⚠️ Gateway kapatılıyor — kısa kesinti (cron/deploy). Devam eden AI görevi varsa kesilir."'''
 
 _SHUTDOWN_UPSTREAM = '''        hint = (
             "Your current task will be interrupted. "

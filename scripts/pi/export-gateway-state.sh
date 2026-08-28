@@ -12,6 +12,7 @@ OFFSITE_COPY_MARKER="${OFFSITE_COPY_MARKER:-/var/lib/pi-gateway/last-restic-offs
 # shellcheck source=../lib/env-file.sh
 source "$SCRIPT_DIR/../lib/env-file.sh"
 read_remote_dotenv || { echo "[export-state] HATA: .env dotenv parser hatasi" >&2; exit 1; }
+STATE_OWNER="${PI_USER:-${SUDO_USER:-${USER:-pi}}}"
 # shellcheck source=../lib/stack-health.sh
 source "$SCRIPT_DIR/../lib/stack-health.sh"
 
@@ -138,9 +139,9 @@ else
 fi
 rm -f "$json_tmp"
 if [[ "$(id -u)" -eq 0 ]]; then
-  chown "${USER}:${USER}" "$STATE_JSON" "$METRICS_FILE" 2>/dev/null || true
+  chown "${STATE_OWNER}:${STATE_OWNER}" "$STATE_JSON" "$METRICS_FILE" 2>/dev/null || true
 else
-  run_as_needed chown "${USER}:${USER}" "$STATE_JSON" "$METRICS_FILE" 2>/dev/null || true
+  run_as_needed chown "${STATE_OWNER}:${STATE_OWNER}" "$STATE_JSON" "$METRICS_FILE" 2>/dev/null || true
 fi
 _agh_export="${SCRIPT_DIR}/export-adguard-metrics.sh"
 [[ -x "$_agh_export" ]] || _agh_export="${REMOTE_DIR}/scripts/pi/export-adguard-metrics.sh"

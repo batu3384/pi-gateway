@@ -6,7 +6,7 @@ LAN device inventory and Telegram alert on new MAC.
 
 | URL | Description |
 |-----|-------------|
-| https://devices.home | NetAlertX UI (Caddy auth) |
+| https://devices.home | NetAlertX UI (NetAlertX uygulama parolası; Caddy basic_auth yok) |
 
 `.env`:
 

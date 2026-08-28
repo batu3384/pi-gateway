@@ -25,6 +25,12 @@ grep -q 'containerd-root.sh' "$ROOT/scripts/pi/setup-docker-fallback.sh" \
   || die "C31b: fallback containerd helper yok"
 ok "C31b containerd SSD migrate"
 
+# C31c: systemd privileged recovery includes Docker SSD restore
+grep -q 'scripts/pi/setup-docker-ssd.sh' \
+  "$ROOT/scripts/pi/install-privileged-scripts.sh" \
+  || die "C31c: setup-docker-ssd privileged install yok"
+ok "C31c privileged Docker SSD restore"
+
 # C32: recover-ro docker SSD fail-closed (no warn-only)
 grep -A12 'setup-docker-ssd.sh' "$recover" | grep -q 'SKIP_COMPOSE_UP=true' \
   || die "C32: recover-ro SKIP_COMPOSE_UP yok"
@@ -41,10 +47,12 @@ grep -B6 'clear_storage_degraded' "$recover" | grep -q 'docker_ssd_root_ok' \
   || die "C33: clear gate docker_ssd_root_ok icermiyor"
 grep -q 'docker_ssd_root_ok()' "$stack_health" || die "C33: stack-health docker_ssd_root_ok yok"
 ok "C33 docker_ssd_root_ok gate"
+grep -q 'compose_rc' "$recover" || die "C33b: compose recovery failure gate yok"
+ok "C33b compose recovery exit propagate"
 
 # C34: hotplug acquires recover lock before restore mutations
 grep -q 'recover_lock_acquire' "$hotplug" || die "C34: hotplug recover_lock_acquire yok"
-hp_restore="$(awk '/SSD mount OK — tam stack restore/,/notify_ssd_restored/' "$hotplug")"
+hp_restore="$(awk '/SSD mount OK — tam stack restore/,/mark_stack_recover_cooldown/' "$hotplug")"
 echo "$hp_restore" | grep -q 'recover_lock_acquire' || die "C34: restore dalinda lock yok"
 lock_line="$(echo "$hp_restore" | grep -n 'recover_lock_acquire' | head -1 | cut -d: -f1)"
 symlink_line="$(echo "$hp_restore" | grep -n 'ensure-data-symlink' | head -1 | cut -d: -f1)"
@@ -69,6 +77,10 @@ ok "C36 prune data-root aware"
 run_hotplug_fn="$(grep -A3 '^run_hotplug()' "$ssd_health")"
 echo "$run_hotplug_fn" | grep -q 'ssd-hotplug-handler.sh' || die "C37: run_hotplug handler yok"
 echo "$run_hotplug_fn" | grep -q '|| true' && die "C37: run_hotplug hala || true"
+grep -q 'HATA: hotplug restore exit' "$ssd_health" \
+  || die "C37: hotplug restore failure log yok"
+! grep -q 'hotplug exit .*DNS core ayakta' "$ssd_health" \
+  || die "C37: hotplug failure DNS ile green yapiliyor"
 ok "C37 ssd-health hotplug exit propagate"
 
 # C38: hotplug docker SSD fail-closed + SKIP_COMPOSE_UP
@@ -78,6 +90,8 @@ if grep -A6 'setup-docker-ssd.sh' "$hotplug" | grep -q 'WARN: docker SSD restore
   die "C38: hotplug warn-only docker SSD"
 fi
 ok "C38 hotplug docker SSD fail-closed"
+grep -q 'compose_rc' "$hotplug" || die "C38b: degraded compose failure gate yok"
+ok "C38b degraded compose exit propagate"
 
 # C39: degraded hotplug path also takes recover lock
 hp_deg="$(awk '/DNS degraded moda gecis/,/recover_lock_release/' "$hotplug")"

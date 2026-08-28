@@ -17,12 +17,13 @@ export BACKUP_DRILL_MAX_AGE_DAYS="${BACKUP_DRILL_MAX_AGE_DAYS:-30}"
 source "$TOKEN_FILE"
 
 python3 <<'PY'
-import json, os, urllib.parse, urllib.request
+import json, os, sys, urllib.parse, urllib.request
 from pathlib import Path
 
 state = json.loads(Path(os.environ["STATE_JSON"]).read_text(encoding="utf-8"))
 offsite_max = int(os.environ.get("OFFSITE_BACKUP_MAX_AGE_DAYS", "7") or 0)
 drill_max = int(os.environ.get("BACKUP_DRILL_MAX_AGE_DAYS", "30") or 0)
+failures = []
 
 def push(env_key: str, status: str, msg: str) -> None:
     url = os.environ.get(env_key, "").strip()
@@ -32,8 +33,9 @@ def push(env_key: str, status: str, msg: str) -> None:
     full = f"{url}{sep}status={status}&msg={urllib.parse.quote(msg)}"
     try:
         urllib.request.urlopen(full, timeout=10).read()
-    except Exception:
-        pass
+    except Exception as exc:
+        print(f"[slo-heartbeat] FAIL {env_key}: {type(exc).__name__}", file=sys.stderr)
+        failures.append(env_key)
 
 if state.get("storage_degraded") == 1 or state.get("ssd_mount_healthy") != 1:
     push("UPTIME_KUMA_PUSH_STORAGE", "down", "storage degraded or ssd unhealthy")
@@ -51,4 +53,7 @@ if drill_max > 0 and (dage < 0 or dage > drill_max):
     push("UPTIME_KUMA_PUSH_DRILL", "down", f"drill age {dage}d")
 else:
     push("UPTIME_KUMA_PUSH_DRILL", "up", f"drill age {dage}d")
+
+if failures:
+    raise SystemExit(f"heartbeat push failed: {', '.join(sorted(set(failures)))}")
 PY

@@ -4,6 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+makefile="$ROOT/Makefile"
 die() { echo "[test-adversarial] HATA: $*" >&2; exit 1; }
 ok() { echo "[test-adversarial] OK: $*"; }
 
@@ -20,18 +21,24 @@ restore="$ROOT/scripts/mac/restore-check.sh"
 smoke="$ROOT/scripts/pi/smoke-test.sh"
 firewall="$ROOT/scripts/pi/setup-firewall.sh"
 install_priv="$ROOT/scripts/pi/install-privileged-scripts.sh"
+flash="$ROOT/scripts/mac/flash-ssd.sh"
+harden="$ROOT/scripts/pi/harden-host.sh"
 sync_cfg="$ROOT/scripts/mac/sync-rendered-configs.sh"
 predeploy="$ROOT/scripts/mac/pre-deploy-check.sh"
 ssd_setup="$ROOT/scripts/pi/setup-ssd-data.sh"
+docker_ssd="$ROOT/scripts/pi/setup-docker-ssd.sh"
 docker_fallback="$ROOT/scripts/pi/setup-docker-fallback.sh"
 prune_sd_space="$ROOT/scripts/pi/prune-sd-space.sh"
 backup_snapshot="$ROOT/scripts/pi/backup.sh"
+heartbeat="$ROOT/scripts/pi/push-slo-heartbeat.sh"
 env_loader="$ROOT/scripts/lib/env-file.sh"
 health_unit="$ROOT/host/systemd/pi-gateway-health.service"
 compose="$ROOT/compose/docker-compose.yml"
 tailscale_acl="$ROOT/config/tailscale/acl.hujson.example"
 tailscale_acl_script="$ROOT/scripts/pi/setup-tailscale-acl.sh"
 tailscale_remote="$ROOT/scripts/pi/setup-tailscale-remote.sh"
+tailscale_serve="$ROOT/scripts/pi/setup-tailscale-serve.sh"
+tailscale_ports="$ROOT/scripts/pi/setup-tailscale-panel-ports.sh"
 
 # C1: force-recreate fail must not finish_ok / cooldown
 tail_force="$(tail -n 25 "$compose_up")"
@@ -48,6 +55,7 @@ grep -A25 'repo kurtarilamadi' "$restic" | grep -q 'notify_backup_ok' \
 grep -q 'restic-reinit\|RESTIC_REINIT' "$restic" || die "C2: reinit marker yok"
 grep -q 'stage_root\|atomic' "$pull" || die "C2: backup-pull staging yok"
 grep -q 'snapshot\|refuse\|REINIT\|fewer\|az' "$pull" || die "C2: pull shrink/reinit gate yok"
+grep -q 'check_restic_repo' "$pull" || die "C2: backup-pull restic check yok"
 ok "C2 restic reinit + pull gate"
 
 # C3: ensure_ssd_mounted no clear on mountpoint alone
@@ -59,13 +67,13 @@ fi
 ok "C3 ensure_ssd_mounted no premature clear"
 
 # C4: hotplug clear only after successful recover
-hp="$(grep -n 'clear_storage_degraded\|notify_ssd_restored\|recover_script_path\|recover-readonly' "$hotplug")"
+hp="$(grep -n 'clear_storage_degraded\|recover_script_path\|recover-readonly' "$hotplug")"
 clear_line="$(echo "$hp" | grep clear_storage_degraded | head -1 | cut -d: -f1)"
 recover_line="$(echo "$hp" | grep -E 'recover_script_path|recover-readonly' | head -1 | cut -d: -f1)"
-notify_line="$(echo "$hp" | grep notify_ssd_restored | head -1 | cut -d: -f1)"
 [[ -n "$clear_line" && -n "$recover_line" ]] || die "C4: clear/recover satir bulunamadi"
 (( clear_line > recover_line )) || die "C4: clear_storage_degraded recover'dan once"
-[[ -n "$notify_line" ]] && (( notify_line > clear_line )) || die "C4: notify clear'dan once"
+! grep -q 'notify_ssd_restored' "$hotplug" \
+  || die "C4: SSD restore bildirimi iki yerde uretiliyor"
 ok "C4 hotplug clear-after-recover"
 
 # C5: CrowdSec/ACL not run_step_soft
@@ -87,6 +95,12 @@ grep -A12 '^repair_symlink()' "$symlink" | grep -qE 'STORAGE_DEGRADED_FLAG|clear
 grep -q 'SYMLINK_LOCK_FILE\|flock.*SYMLINK_LOCK' "$symlink" \
   || die "C6: symlink writer lock yok"
 ok "C6 symlink no dual-writer degrade"
+
+# C6b: migration must reject partially populated destinations
+grep -q 'ssd_data_has_payload' "$symlink" || die "C6b: SSD data destination gate yok"
+grep -q 'docker_ssd_has_payload\|containerd_ssd_has_payload' "$docker_ssd" \
+  || die "C6b: Docker destination gate yok"
+ok "C6b migration destination gate"
 
 # C7: degraded state must not be treated as full healthy before restore
 grep -q '! storage_restore_pending && stack_fully_healthy' "$recover" \
@@ -236,6 +250,17 @@ grep -q 'LC_ALL=C' "$tailscale_acl_script" \
   || die "C21: Tailscale ACL regex locale sabit degil"
 ok "C21 Tailscale least privilege"
 
+# C21b: Serve requires evidence of published ACL by default
+grep -q 'TS_SERVE_REQUIRE_ACL' "$tailscale_serve" \
+  || die "C21b: Tailscale Serve ACL gate yok"
+grep -q 'ACL_APPLIED_MARKER' "$tailscale_acl_script" \
+  || die "C21b: ACL publish marker yok"
+grep -q 'ACL_APPLIED_MARKER' "$tailscale_ports" \
+  || die "C21b: direct port ACL gate yok"
+grep -q 'eski :PORT DNAT kurallari temizlenecek' "$tailscale_ports" \
+  || die "C21b: direct port kapatma temizligi yok"
+ok "C21b Tailscale Serve ACL gate"
+
 # C22: backup service must expose Restic failure to systemd
 grep -q 'restic_failed=1\|exit "\$restic_failed"' "$backup_snapshot" \
   || die "C22: backup Restic failure swallowed"
@@ -247,6 +272,11 @@ grep -q 'source install sirasinda degisti\|group/world-writable' "$install_priv"
 grep -q 'after=.*sha256sum\|install hash uyusmazligi' "$install_priv" \
   || die "C23: installed hash verification yok"
 ok "C23 privileged install integrity"
+
+# C23b: flashed images and host hardening require sudo authentication
+! grep -q 'NOPASSWD:ALL' "$flash" || die "C23b: flash hâlâ NOPASSWD:ALL veriyor"
+grep -q 'PASSWD: ALL' "$harden" || die "C23b: harden sudo PASSWD policy yok"
+ok "C23b sudo password gate"
 
 # C24: Restic helper image is immutable by default
 grep -q 'restic/restic@sha256:' "$restic" "$pull" "$restore" \
@@ -264,6 +294,9 @@ for deploy_script in "$deploy" "$predeploy" "$sync_cfg"; do
   grep -q 'PI_DEPLOY_HOST' "$deploy_script" \
     || die "C26: Tailscale deploy host override yok: $deploy_script"
 done
+grep -q 'PI_HOST ?=' "$makefile" || die "C26: Makefile PI_HOST yuklemiyor"
+grep -q 'PI_SSH_HOST.*PI_DEPLOY_HOST.*PI_HOST' "$makefile" \
+  || die "C26: Makefile host fallback sirasi bozuk"
 ok "C26 deploy host override"
 
 # C27: dotenv identifier regex must be locale-stable on the Pi
@@ -289,6 +322,11 @@ ok "W3 deploy remove-orphans"
 grep -q 'die\|exit 1' "$restore" || die "W5: restore-check die yok"
 grep -A3 'repo yok' "$restore" | grep -q 'exit 0' && die "W5: repo yok hala exit 0"
 ok "W5 restore-check fail-closed"
+
+# W5b: Kuma heartbeat HTTP failures remain observable
+grep -q 'heartbeat push failed' "$health" || die "W5b: heartbeat failure log yok"
+grep -q 'failures.append' "$heartbeat" || die "W5b: heartbeat HTTP failure yutuluyor"
+ok "W5b heartbeat failure visibility"
 
 # W7: env merge preserve Pi keys
 grep -q 'N8N_ENCRYPTION_KEY\|merge\|preserve' "$deploy" "$sync_cfg" \
