@@ -97,7 +97,7 @@ main() {
     ""|--final)
       ;;
     *)
-      log "HATA: bilinmeyen mod: $1"
+      log "HATA: bilinmeyen mod: ${1:-}"
       return 2
       ;;
   esac

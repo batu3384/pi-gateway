@@ -51,19 +51,19 @@
     },
     "https://adguardteam.github.io/HostlistsRegistry/assets/filter_67.txt": {
       "category": "apple-tracking",
-      "min_rules": 1000,
+      "min_rules": 50,
       "max_rules": 500000,
       "max_age_hours": 168
     },
     "https://adguardteam.github.io/HostlistsRegistry/assets/filter_63.txt": {
       "category": "windows-tracking",
-      "min_rules": 1000,
+      "min_rules": 100,
       "max_rules": 500000,
       "max_age_hours": 168
     },
     "https://adguardteam.github.io/HostlistsRegistry/assets/filter_61.txt": {
       "category": "samsung-tracking",
-      "min_rules": 1000,
+      "min_rules": 50,
       "max_rules": 500000,
       "max_age_hours": 168
     },
@@ -75,7 +75,7 @@
     },
     "https://adguardteam.github.io/HostlistsRegistry/assets/filter_53.txt": {
       "category": "ads-tracking",
-      "min_rules": 1000,
+      "min_rules": 100,
       "max_rules": 1000000,
       "max_age_hours": 168
     },
@@ -87,7 +87,7 @@
     },
     "https://raw.githubusercontent.com/AdguardTeam/cname-trackers/master/data/combined_original_trackers.txt": {
       "category": "cname-tracking",
-      "min_rules": 1000,
+      "min_rules": 50,
       "max_rules": 1000000,
       "max_age_hours": 168
     }
