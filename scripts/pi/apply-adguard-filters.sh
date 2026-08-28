@@ -32,8 +32,11 @@ if [[ "$ADGUARD_FILTER_PROFILE" == "aggressive" ]]; then
 fi
 export BASE COOKIE REMOTE_DIR ADGUARD_FILTER_PROFILE
 python3 - <<'PY'
-import hashlib, json, os, subprocess, sys
+import hashlib, json, os, re, subprocess, sys, time
+from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import quote
+from urllib.request import Request, urlopen
 
 base = os.environ["BASE"]
 cookie = os.environ["COOKIE"]
@@ -52,7 +55,23 @@ profiles = data.get("profiles", {})
 if profile not in profiles:
     print(f"[adguard-filters] HATA: bilinmeyen profil {profile!r}", file=sys.stderr)
     sys.exit(1)
-desired = [(name, url) for name, url in profiles[profile]]
+metadata = data.get("metadata") or {}
+regression = data.get("regression") or {}
+desired = []
+seen_urls = set()
+for entry in profiles[profile]:
+    if not isinstance(entry, list) or len(entry) != 2:
+        print(f"[adguard-filters] HATA: gecersiz liste girdisi: {entry!r}", file=sys.stderr)
+        sys.exit(1)
+    name, url = (str(entry[0]).strip(), str(entry[1]).strip())
+    if not name or not url.startswith("https://") or url in seen_urls:
+        print(f"[adguard-filters] HATA: liste adi/URL gecersiz veya tekrarli: {entry!r}", file=sys.stderr)
+        sys.exit(1)
+    if url not in metadata:
+        print(f"[adguard-filters] HATA: metadata eksik: {url}", file=sys.stderr)
+        sys.exit(1)
+    seen_urls.add(url)
+    desired.append((name, url))
 desired_urls = {url for _, url in desired}
 
 rules = []
@@ -64,6 +83,27 @@ for fname in ("user-rules.txt", "user-rules.local.txt"):
         line = line.strip()
         if line and not line.startswith("#"):
             rules.append(line)
+
+def preflight_url(url):
+    request = Request(
+        url,
+        headers={"User-Agent": "Pi-Gateway filter preflight", "Range": "bytes=0-131071"},
+    )
+    with urlopen(request, timeout=int(os.environ.get("ADGUARD_FILTER_PREFLIGHT_TIMEOUT_SEC", "20"))) as response:
+        sample = response.read(131072).decode("utf-8", "replace")
+    if not sample.strip() or re.search(r"(?i)<(?:!doctype|html|head|body)\b", sample):
+        raise RuntimeError("empty or HTML response")
+    if not re.search(r"(?m)^\s*(?:!|#|0\.0\.0\.0|127\.0\.0\.1|::|@@?\|\||\|\|)", sample):
+        raise RuntimeError("filter syntax marker not found")
+
+if os.environ.get("ADGUARD_FILTER_PREFLIGHT", "true") == "true":
+    for _, url in desired:
+        try:
+            preflight_url(url)
+            print(f"[adguard-filters] preflight OK: {url}")
+        except (OSError, RuntimeError) as exc:
+            print(f"[adguard-filters] HATA preflight: {url} ({exc})", file=sys.stderr)
+            sys.exit(1)
 
 def api(path, method="GET", payload=None):
     cmd = ["curl", "-fsS", "--max-time", "300", "-b", cookie, "-X", method, f"{base}{path}"]
@@ -79,6 +119,38 @@ def api(path, method="GET", payload=None):
     if first in ("ok", "true"):
         return {}
     raise RuntimeError(f"AGH non-JSON: {out[:200]}")
+
+missing_regression = [
+    rule for rule in regression.get("must_allow", []) + regression.get("must_block", [])
+    if rule not in rules
+]
+if missing_regression:
+    print(
+        f"[adguard-filters] HATA: kritik user-rule eksik: {', '.join(missing_regression)}",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+def check_host(host):
+    return api(f"/control/filtering/check_host?name={quote(host, safe='')}")
+
+def check_regressions():
+    for host in regression.get("must_block_hosts", []):
+        result = check_host(host)
+        reason = str(result.get("reason") or "").lower()
+        if "filtered" not in reason or "notfiltered" in reason:
+            raise RuntimeError(f"beklenen block yok: {host} ({reason or 'bos'})")
+    for host in regression.get("must_not_block_hosts", []):
+        result = check_host(host)
+        reason = str(result.get("reason") or "").lower()
+        if "filtered" in reason and "notfiltered" not in reason:
+            raise RuntimeError(f"medya block: {host} ({reason})")
+
+try:
+    check_regressions()
+except (subprocess.CalledProcessError, RuntimeError, json.JSONDecodeError) as exc:
+    print(f"[adguard-filters] HATA: kritik regression ({exc})", file=sys.stderr)
+    sys.exit(1)
 
 status = api("/control/filtering/status")
 current = {f.get("url"): f for f in status.get("filters", []) if f.get("url")}
@@ -158,11 +230,133 @@ else:
             print(f"[adguard-filters] WARN cache_clear: {exc}", file=sys.stderr)
 
 print(f"[adguard-filters] profil={profile}")
-if added or removed:
+force_refresh = os.environ.get("ADGUARD_FILTER_FORCE_REFRESH", "false") == "true"
+if added or removed or force_refresh:
     api("/control/filtering/refresh", "POST", {"whitelist": False})
-    print("[adguard-filters] filtreler yenilendi")
+    print("[adguard-filters] filtreler yenileme istendi")
 else:
     print("[adguard-filters] filtre seti degismedi")
+
+def _epoch(value):
+    if value in (None, "", 0, "0"):
+        return None
+    try:
+        number = float(value)
+        return number / 1000 if number > 100000000000 else number
+    except (TypeError, ValueError):
+        try:
+            return datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            return None
+
+def _int_or_zero(value):
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+def validate_filter_status(filter_status):
+    live = {item.get("url"): item for item in filter_status.get("filters", []) if item.get("url")}
+    errors = []
+    warnings = []
+    now = datetime.now(timezone.utc).timestamp()
+    for name, url in desired:
+        item = live.get(url)
+        if not item:
+            errors.append(f"{name}: status yok")
+            continue
+        if item.get("enabled") is not True:
+            errors.append(f"{name}: disabled")
+        count = _int_or_zero(item.get("rules_count"))
+        meta = metadata[url]
+        minimum = _int_or_zero(meta.get("min_rules"))
+        maximum = _int_or_zero(meta.get("max_rules"))
+        if count < minimum:
+            errors.append(f"{name}: {count} < min {minimum}")
+        if maximum and count > maximum:
+            errors.append(f"{name}: {count} > max {maximum}")
+        updated = _epoch(item.get("last_updated"))
+        if updated is None:
+            warnings.append(f"{name}: last_updated yok")
+        else:
+            max_age = _int_or_zero(meta.get("max_age_hours")) * 3600
+            if max_age and now - updated > max_age:
+                errors.append(f"{name}: liste yasi > {meta['max_age_hours']}h")
+    return errors, warnings
+
+# AGH refresh is asynchronous on some versions; poll status before declaring green.
+status_after = status
+validation_errors, validation_warnings = validate_filter_status(status_after)
+if added or removed or force_refresh or validation_errors:
+    for _ in range(4):
+        if validation_errors and not (added or removed or force_refresh):
+            api("/control/filtering/refresh", "POST", {"whitelist": False})
+            print("[adguard-filters] gecersiz liste durumu — refresh istendi")
+        time.sleep(2)
+        status_after = api("/control/filtering/status")
+        validation_errors, validation_warnings = validate_filter_status(status_after)
+        if not validation_errors:
+            break
+if validation_warnings:
+    for warning in validation_warnings:
+        print(f"[adguard-filters] WARN: {warning}")
+if validation_errors:
+    for error in validation_errors:
+        print(f"[adguard-filters] HATA: {error}", file=sys.stderr)
+    failed.append("filter-governance")
+total_rules = sum(
+    _int_or_zero(item.get("rules_count"))
+    for item in status_after.get("filters", [])
+    if item.get("url") in desired_urls
+)
+print(f"[adguard-filters] toplam aktif profil kurali={total_rules}")
+try:
+    with open("/proc/meminfo", encoding="utf-8") as meminfo:
+        available_kb = next(
+            int(line.split()[1])
+            for line in meminfo
+            if line.startswith("MemAvailable:")
+        )
+except (OSError, StopIteration, ValueError):
+    available_kb = 0
+if profile == "aggressive" and available_kb and available_kb < 409600:
+    print(
+        f"[adguard-filters] WARN post-check MemAvailable={available_kb}kB — "
+        "TIF Full OOM riski"
+    )
+
+try:
+    check_regressions()
+except (subprocess.CalledProcessError, RuntimeError, json.JSONDecodeError) as exc:
+    print(f"[adguard-filters] HATA: refresh sonrasi kritik regression ({exc})", file=sys.stderr)
+    failed.append("filter-regression")
+
+state_file = Path(os.environ.get("ADGUARD_FILTER_STATE_PATH", "/var/lib/pi-gateway/adguard-filter-state.json"))
+state_payload = {
+    "schema_version": 1,
+    "checked_at": datetime.now(timezone.utc).isoformat(),
+    "profile": profile,
+    "mem_available_mib": round(available_kb / 1024) if available_kb else None,
+    "total_rules": total_rules,
+    "manifest_sha256": hashlib.sha256(manifest.read_bytes()).hexdigest(),
+    "filters": [
+        {
+            "name": name,
+            "url": url,
+            "category": metadata[url].get("category", "unknown"),
+            "enabled": next((item.get("enabled") for item in status_after.get("filters", []) if item.get("url") == url), False),
+            "rules_count": next((item.get("rules_count", 0) for item in status_after.get("filters", []) if item.get("url") == url), 0),
+            "last_updated": next((item.get("last_updated") for item in status_after.get("filters", []) if item.get("url") == url), None),
+        }
+        for name, url in desired
+    ],
+}
+try:
+    state_file.parent.mkdir(parents=True, exist_ok=True)
+    state_file.write_text(json.dumps(state_payload, ensure_ascii=False, indent=2) + "\n")
+except OSError as exc:
+    print(f"[adguard-filters] WARN: governance state yazilamadi ({exc})", file=sys.stderr)
+
 if failed:
     print(f"[adguard-filters] HATA: {len(failed)} islem basarisiz", file=sys.stderr)
     sys.exit(1)

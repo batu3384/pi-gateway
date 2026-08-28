@@ -20,6 +20,7 @@ STREAMS = {
     "new_device": "New Device",
     "offline": "Disconnected",
 }
+MODEM_INVENTORY_STALE_SEC = 900
 
 
 def _ts_local(ts: int | float | str | None) -> str:
@@ -78,6 +79,82 @@ def suggest_display_name(
     if dtype:
         return f"{dtype} ({ip})" if ip else dtype
     return f"Cihaz {ip}" if ip else "Bilinmeyen cihaz"
+
+
+def _usable_external_name(value: str | None) -> str:
+    name = (value or "").strip()
+    if (
+        not name
+        or name in BAD_NAMES
+        or name.lower() in {"unknown", "unknown device", "n/a", "-"}
+        or name.startswith("192.168.")
+    ):
+        return ""
+    if len(name.split(":")) == 6:
+        try:
+            if all(len(part) == 2 and int(part, 16) >= 0 for part in name.split(":")):
+                return ""
+        except ValueError:
+            pass
+    return name[:128]
+
+
+def load_modem_inventory(remote_dir: str = "") -> dict[str, Any]:
+    """Read last atomic ZTE snapshot; malformed/stale data is never fatal."""
+    path = os.environ.get("MODEM_INVENTORY_PATH") or os.path.join(
+        remote_dir or os.path.expanduser("~/pi-gateway"),
+        "data",
+        "modem-inventory.json",
+    )
+    try:
+        with open(path, encoding="utf-8") as handle:
+            data = json.load(handle)
+        fetched = datetime.fromisoformat(
+            str(data.get("fetched_at", "")).replace("Z", "+00:00")
+        )
+        age = max(0.0, datetime.now(timezone.utc).timestamp() - fetched.timestamp())
+        try:
+            stale_sec = int(
+                os.environ.get("MODEM_INVENTORY_STALE_SEC", MODEM_INVENTORY_STALE_SEC)
+            )
+        except (TypeError, ValueError):
+            stale_sec = MODEM_INVENTORY_STALE_SEC
+        stale_sec = max(0, stale_sec)
+        devices = data.get("devices")
+        if data.get("schema_version") != 1 or not isinstance(devices, list):
+            return {"by_mac": {}, "by_ip": {}, "fresh": False}
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return {"by_mac": {}, "by_ip": {}, "fresh": False}
+
+    by_mac: dict[str, str] = {}
+    by_ip: dict[str, str] = {}
+    for device in devices:
+        if not isinstance(device, dict):
+            continue
+        name = _usable_external_name(device.get("name") or device.get("label"))
+        if not name:
+            continue
+        mac = str(device.get("mac") or "").strip().lower()
+        ip = str(device.get("ip") or "").strip()
+        if mac:
+            by_mac[mac] = name
+        if ip:
+            by_ip[ip] = name
+    return {"by_mac": by_mac, "by_ip": by_ip, "fresh": age <= stale_sec}
+
+
+def _modem_name(
+    inventory: dict[str, Any],
+    mac: str | None,
+    ip: str | None,
+) -> str:
+    by_mac = inventory.get("by_mac") or {}
+    by_ip = inventory.get("by_ip") or {}
+    return (
+        by_mac.get((mac or "").strip().lower())
+        or (by_ip.get((ip or "").strip()) if inventory.get("fresh") else "")
+        or ""
+    )
 
 
 def _is_noise_mac(mac: str, *, new_device: bool = False) -> bool:
@@ -212,6 +289,7 @@ def commit_rowid(state_path: str, stream: str, max_rowid: int) -> None:
 def online_devices(db_path: str, *, recency_sec: int = 900) -> list[dict[str, str]]:
     """Homepage/Grafana kim-evde — Telegram yok."""
     con = _open_db(db_path)
+    modem_inventory = load_modem_inventory(os.environ.get("REMOTE_DIR", ""))
     try:
         cols = {row[1] for row in con.execute("PRAGMA table_info(Devices)")}
         where = "COALESCE(devIsArchived, 0)=0"
@@ -233,13 +311,15 @@ def online_devices(db_path: str, *, recency_sec: int = 900) -> list[dict[str, st
             mac_s = (mac or "").strip().lower()
             if _is_noise_mac(mac_s):
                 continue
-            display = suggest_display_name(name, vendor, dtype, ip, mac_s)
+            modem_name = _modem_name(modem_inventory, mac_s, ip)
+            display = suggest_display_name(modem_name or name, vendor, dtype, ip, mac_s)
             out.append(
                 {
                     "mac": mac_s,
                     "name": display,
                     "ip": (ip or "").strip(),
                     "vendor": (vendor or "").strip() or "?",
+                    "name_source": "zte-h3600p" if modem_name else "netalertx",
                 }
             )
         return out
@@ -260,13 +340,17 @@ def fetch_device(con: sqlite3.Connection, mac: str) -> dict[str, str] | None:
     if not row:
         return None
     name, vendor, dtype, ip, source, first_ts, last_ts, fqdn = row
-    display = suggest_display_name(name, vendor, dtype, ip, mac)
+    modem_name = _modem_name(
+        load_modem_inventory(os.environ.get("REMOTE_DIR", "")), mac, ip
+    )
+    display = suggest_display_name(modem_name or name, vendor, dtype, ip, mac)
     return {
         "name": display,
         "vendor": (vendor or "").strip() or "?",
         "type": (dtype or "").strip() or "?",
         "ip": (ip or "").strip() or "?",
         "source": (source or "").strip() or "?",
+        "name_source": "zte-h3600p" if modem_name else "netalertx",
         "first_seen": _ts_local(first_ts),
         "last_seen": _ts_local(last_ts),
         "fqdn": (fqdn or "").strip(),
@@ -565,7 +649,7 @@ def _self_check() -> None:
         now = time.time()
         con.execute(
             "INSERT INTO Devices VALUES (?,?,?,?,?,?,?,?,?,0)",
-            ("aa:bb:cc:dd:ee:01", "?", "Apple, Inc.", "Phone", "192.168.1.50",
+            ("aa:bb:cc:dd:ee:01", "?", "Apple, Inc.", "Phone", "192.0.2.50",
              "ARPSCAN", now - 60, now, None),
         )
         con.execute(
@@ -574,7 +658,7 @@ def _self_check() -> None:
         )
         con.execute(
             "INSERT INTO Events VALUES (?,?,?,?,?)",
-            ("aa:bb:cc:dd:ee:01", "192.168.1.50", now, "New Device", "(Unknown)"),
+            ("aa:bb:cc:dd:ee:01", "192.0.2.50", now, "New Device", "(Unknown)"),
         )
         con.commit()
         con.close()
@@ -622,8 +706,33 @@ def _self_check() -> None:
         st, err = load_state(bad)
         assert st is None and err
 
+        os.environ["REMOTE_DIR"] = td
+        os.environ["MODEM_INVENTORY_PATH"] = os.path.join(
+            td, "data", "modem-inventory.json"
+        )
+        os.makedirs(os.path.join(td, "data"), exist_ok=True)
+        with open(os.path.join(td, "data", "modem-inventory.json"), "w", encoding="utf-8") as fh:
+            json.dump(
+                {
+                    "schema_version": 1,
+                    "fetched_at": datetime.now(timezone.utc).isoformat(),
+                    "devices": [
+                        {
+                            "mac": "aa:bb:cc:dd:ee:01",
+                            "ip": "192.0.2.50",
+                            "name": "M2003J15SC",
+                        }
+                    ],
+                },
+                fh,
+            )
         home = online_devices(db)
-        assert any(d["mac"] == "aa:bb:cc:dd:ee:01" for d in home), home
+        assert any(
+            d["mac"] == "aa:bb:cc:dd:ee:01"
+            and d["name"] == "M2003J15SC"
+            and d["name_source"] == "zte-h3600p"
+            for d in home
+        ), home
 
     print("[netalert-devices] self-check OK")
 

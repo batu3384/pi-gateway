@@ -16,13 +16,14 @@ UNBOUND_PORT="${UNBOUND_PORT:-5335}"
 BASE="http://127.0.0.1:${ADGUARD_WEB_PORT}"
 [[ -n "$AGH_ADMIN_PASSWORD" ]] || { echo "[adguard-dns] AGH_ADMIN_PASSWORD bos"; exit 1; }
 COOKIE="$(mktemp)"
-trap 'rm -f "$COOKIE"' EXIT
+DNS_INFO="$(mktemp)"
+trap 'rm -f "$COOKIE" "$DNS_INFO"' EXIT
 log() { echo "[adguard-dns] $*"; }
 agh_login "$BASE" "$COOKIE" "$AGH_ADMIN_USER" "$AGH_ADMIN_PASSWORD" || {
   log "AdGuard login basarisiz"
   exit 1
 }
-curl -fsS -b "$COOKIE" "${BASE}/control/dns_info" > /tmp/agh-dns-info.json
+curl -fsS -b "$COOKIE" "${BASE}/control/dns_info" > "$DNS_INFO"
 BLOCKED_TTL="${ADGUARD_BLOCKED_TTL:-60}"
 UPSTREAM_TIMEOUT="${ADGUARD_UPSTREAM_TIMEOUT:-5}"
 # Tailscale Override / LAN burst: 20 dusuk kalabilir (SERVFAIL). Dusurme.
@@ -31,7 +32,7 @@ CACHE_SIZE="${ADGUARD_CACHE_SIZE:-16777216}"
 # AGH API: gun (integer). YAML template 168h ile uyumlu.
 QUERYLOG_DAYS="${ADGUARD_QUERYLOG_INTERVAL_DAYS:-7}"
 STATS_DAYS="${ADGUARD_STATS_INTERVAL_DAYS:-7}"
-export BLOCKED_TTL UPSTREAM_TIMEOUT RATELIMIT CACHE_SIZE QUERYLOG_DAYS STATS_DAYS BASE COOKIE UNBOUND_PORT
+export BLOCKED_TTL UPSTREAM_TIMEOUT RATELIMIT CACHE_SIZE QUERYLOG_DAYS STATS_DAYS BASE COOKIE UNBOUND_PORT DNS_INFO
 python3 - <<'PY'
 import json, os, subprocess, sys
 
@@ -52,7 +53,7 @@ if querylog_days < 1 or querylog_days > 90 or stats_days < 1 or stats_days > 90:
     print("[adguard-dns] HATA: querylog/stats interval 1..90 gun", file=sys.stderr)
     sys.exit(1)
 
-with open("/tmp/agh-dns-info.json") as f:
+with open(os.environ["DNS_INFO"]) as f:
     current = json.load(f)
 desired = dict(current)
 desired["upstream_dns"] = [

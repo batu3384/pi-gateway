@@ -24,6 +24,8 @@ while (( SECONDS < deadline )); do
   status="rc=${rc}"
   if grep -qE 'COVERAGE_FAIL:[0-9]+' /tmp/pi-gateway-dns-rollout.log; then
     status="kapsam %$(grep -oE 'COVERAGE_FAIL:[0-9]+' /tmp/pi-gateway-dns-rollout.log | tail -1 | cut -d: -f2)"
+  elif grep -qE 'COVERAGE_UNKNOWN|UNKNOWN_DEVICES:' /tmp/pi-gateway-dns-rollout.log; then
+    status="envanter/cihaz UNKNOWN"
   elif grep -qE 'MISSING_DEVICES:' /tmp/pi-gateway-dns-rollout.log; then
     status="bypass $(grep -oE 'MISSING_DEVICES:[^[:space:]]+' /tmp/pi-gateway-dns-rollout.log | tail -1 | cut -d: -f2-)"
   fi

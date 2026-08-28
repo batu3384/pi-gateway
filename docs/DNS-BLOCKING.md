@@ -37,6 +37,15 @@ Custom rules: copy `config/adguard/user-rules.local.txt.example` → `user-rules
 Daily filter refresh: `pi-gateway-adguard-filters.timer` (~04:15).
 One-shot tune from Mac: `make adguard-tune` (post-deploy yok). Unbound `--force-recreate` yalnız `unbound.conf` container start'tan yeni ise — filtre-only DNS deliği yok.
 
+**Liste governance:** `filter-lists.json` her URL için kategori, minimum/maksimum kural
+bütçesi ve maksimum yaş taşır. `apply-adguard-filters.sh` değişiklikten önce HTTPS/ilk
+syntax preflight, sonra her listenin `enabled`, `rules_count`, `last_updated` ve
+kritik medya regression setini kontrol eder; sonucu
+`/var/lib/pi-gateway/adguard-filter-state.json` içine yazar. `@latest` listeleri
+otomatik manifest değişikliği değildir: `ADGUARD_FILTER_FORCE_REFRESH=true` yalnız
+kontrollü yenileme penceresinde kullanılmalı. `googlevideo.com`, `ytimg.com`,
+Instagram CDN, WhatsApp medya alan adları korunur; yeni mega-list eklenmez.
+
 **DNS knobs** (`apply-adguard-dns.sh`, env): `ADGUARD_RATELIMIT=50` (Tailscale burst; düşürme), `ADGUARD_CACHE_SIZE=16777216` (16MiB), `ADGUARD_QUERYLOG_INTERVAL_DAYS=7` + `ADGUARD_STATS_INTERVAL_DAYS=7`. Fresh install template aynı. TLD/IDN blanket block yok (FP). Kaçan reklam: manuel “reklam şimdi” + querylog — otomatik haftalık LLM rapor yok.
 
 **Grafana:** `export-adguard-metrics.sh` (health timer, textfile) → blocked ratio, top clients / blocked domains, per-list `rules_count` / `last_updated` age. A silent 403 on one list shows as that series going stale, not only `ADGUARD_MIN_FILTER_RULES`.
@@ -62,6 +71,13 @@ Modem panelinde DNS ayari **tek basina tum cihazlari otomatik Pi'ye baglamaz**.
 **DoH kilidi:** HaGeZi Encrypted DNS Bypass listesi (`adblock/doh.txt`) — bilinen DoH/DoT hostlari engeller. Ozel/unknown DoH host yine kacabilir.
 
 **Modem ikincil DNS:** ZTE H3600P (Superonline) DNS2 panelde boş/`0.0.0.0` veya **Pi** olsa bile DHCP OFFER'a gateway (`.1`) ekler. Panel DNS2 kabloyu değiştirmez. `.1` modem **INPUT** resolver reklam engellemez (WAN dest:53 ve LAN-ingress dest `.1:53` FORWARD; modem kendi `:53` cevaplar). Canlı: `dig @192.168.1.1 doubleclick.net` gerçek IP. Bu ZTE'de DHCP relay LAN DISCOVER yutuyor — `adguard-dhcp` ev IP keser; kilit = modem DHCP açık + DNS1=Pi + `make mac-dns` (yalnız LAN). IPv6: aşağıdaki RDNSS lifetime 0.
+
+**Cihaz envanteri:** H3600P panelindeki DHCP/WLAN adları için
+`MODEM_INVENTORY_ENABLED=true` yapın ve `/etc/pi-gateway/modem-inventory.env`
+dosyasını root `0600` olarak oluşturun. `pi-gateway-modem-inventory.timer` her 5
+dakikada bir read-only snapshot üretir; MAC eşleşmesi IP'den önceliklidir.
+Snapshot yok/eski ise audit `UNKNOWN`/`STALE` üretir, eski ARP kaydını kesin bypass
+saymaz. Elle kontrol: `make modem-inventory`.
 
 **H3600P Force DNS yok.** 78 menüde NAT 53 / DNS hijack yok. Yakın çare: **WAN → Güvenlik → Filtre Kriterleri → IP Filtresi** — Hedef=Düşür, dest port 53, proto 257, `IPVersion=-1`. Dest IP **boş** = tüm public `:53` (1.0.0.1, 9.9.9.9, IPv6 resolver). CHAIN1 WAN; LAN→Pi `:53` düşmez. **Sıra:** Unbound DoT (`forward-tls-upstream`, Quad9/CF `:853`) **önce** — recursive UDP 53 drop Unbound'u öldürür. Custom conf: `port: 5335` + `forward-zone` (klutchell `tls-cert-bundle` imajda; default port 53). Deploy `canary-compose-update.sh` Unbound'u `--force-recreate` eder; health `StartedAt` vs conf mtime stale ise fail (restart AdGuard'ı düşürür). Unbound compose healthcheck **kapalı** (`unbound-host` recursive `:53` WAN drop ile forever unhealthy → auto-recover döngüsü). AdGuard `depends_on: service_started`. Host `dig :5335` gerçek probe. 3 slot tavan; boş dest tek kural yeter. `/32` yedek olabilir. Yeni Madde spam'i mevcut kuralı ezer — mevcut instance düzenle. DROP ≠ redirect.
 

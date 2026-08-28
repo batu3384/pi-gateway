@@ -23,5 +23,95 @@
       ["HaGeZi LG webOS Tracker", "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/native.lgwebos.txt"],
       ["AdGuard CNAME original trackers", "https://raw.githubusercontent.com/AdguardTeam/cname-trackers/master/data/combined_original_trackers.txt"]
     ]
+  },
+  "metadata": {
+    "https://adguardteam.github.io/HostlistsRegistry/assets/filter_51.txt": {
+      "category": "ads-tracking",
+      "min_rules": 10000,
+      "max_rules": 2000000,
+      "max_age_hours": 168
+    },
+    "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/tif.medium.txt": {
+      "category": "threat-intelligence",
+      "min_rules": 10000,
+      "max_rules": 1000000,
+      "max_age_hours": 168
+    },
+    "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/tif.txt": {
+      "category": "threat-intelligence",
+      "min_rules": 500000,
+      "max_rules": 4000000,
+      "max_age_hours": 168
+    },
+    "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/doh.txt": {
+      "category": "encrypted-dns",
+      "min_rules": 1000,
+      "max_rules": 500000,
+      "max_age_hours": 168
+    },
+    "https://adguardteam.github.io/HostlistsRegistry/assets/filter_67.txt": {
+      "category": "apple-tracking",
+      "min_rules": 1000,
+      "max_rules": 500000,
+      "max_age_hours": 168
+    },
+    "https://adguardteam.github.io/HostlistsRegistry/assets/filter_63.txt": {
+      "category": "windows-tracking",
+      "min_rules": 1000,
+      "max_rules": 500000,
+      "max_age_hours": 168
+    },
+    "https://adguardteam.github.io/HostlistsRegistry/assets/filter_61.txt": {
+      "category": "samsung-tracking",
+      "min_rules": 1000,
+      "max_rules": 500000,
+      "max_age_hours": 168
+    },
+    "https://adguardteam.github.io/HostlistsRegistry/assets/filter_7.txt": {
+      "category": "smart-tv",
+      "min_rules": 100,
+      "max_rules": 250000,
+      "max_age_hours": 168
+    },
+    "https://adguardteam.github.io/HostlistsRegistry/assets/filter_53.txt": {
+      "category": "ads-tracking",
+      "min_rules": 1000,
+      "max_rules": 1000000,
+      "max_age_hours": 168
+    },
+    "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/native.lgwebos.txt": {
+      "category": "lg-webos",
+      "min_rules": 100,
+      "max_rules": 250000,
+      "max_age_hours": 168
+    },
+    "https://raw.githubusercontent.com/AdguardTeam/cname-trackers/master/data/combined_original_trackers.txt": {
+      "category": "cname-tracking",
+      "min_rules": 1000,
+      "max_rules": 1000000,
+      "max_age_hours": 168
+    }
+  },
+  "regression": {
+    "must_allow": [
+      "@@||dit.whatsapp.net^",
+      "@@||graph.instagram.com^",
+      "@@||graph-fallback.instagram.com^",
+      "@@||mdp-appconf-tr.heytapdl.com^",
+      "@@||cloudconf-app-tr.heytapmobile.com^"
+    ],
+    "must_block": [
+      "||videooplayer.xyz^$important"
+    ],
+    "must_block_hosts": [
+      "videooplayer.xyz"
+    ],
+    "must_not_block_hosts": [
+      "googlevideo.com",
+      "ytimg.com",
+      "cdninstagram.com",
+      "instagram.fna.fbcdn.net",
+      "whatsapp.net"
+    ]
   }
 }

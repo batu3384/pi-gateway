@@ -24,6 +24,8 @@ for needle in \
   'ssd-health-timer' \
   'caddy-auth-configured' \
   'unbound-dnssec-ad' \
+  'modem-inventory-timer' \
+  'modem-inventory-snapshot' \
   'run_check'; do
   grep -q "$needle" "$SMOKE" || die "smoke eksik: $needle"
 done

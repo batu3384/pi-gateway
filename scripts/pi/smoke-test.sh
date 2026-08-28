@@ -16,6 +16,7 @@ DOZZLE_PORT="${DOZZLE_PORT:-9999}"
 NETALERTX_PORT="${NETALERTX_PORT:-20211}"
 NETALERTX_LISTEN_ADDR="${NETALERTX_LISTEN_ADDR:-172.17.0.1}"
 UFW_ADMIN_EXPOSURE="${UFW_ADMIN_EXPOSURE:-caddy-only}"
+MODEM_INVENTORY_PATH="${MODEM_INVENTORY_PATH:-${REMOTE_DIR}/data/modem-inventory.json}"
 checks=0
 pass=0
 run_check() {
@@ -205,6 +206,10 @@ fi
 if [[ "${NETWORK_MODE:-router-dns}" == "adguard-dhcp" ]]; then
   run_check "adguard-dhcp-config" bash -c \
     'grep -A5 "^dhcp:" "'"${REMOTE_DIR}"'/config/adguard/AdGuardHome.yaml" | grep -q "enabled: true"'
+fi
+if [[ "${MODEM_INVENTORY_ENABLED:-false}" == "true" ]]; then
+  run_check "modem-inventory-timer" systemctl is-active pi-gateway-modem-inventory.timer
+  run_check "modem-inventory-snapshot" test -s "$MODEM_INVENTORY_PATH"
 fi
 if [[ "${ENABLE_UFW:-true}" == "true" ]] && [[ -x /usr/sbin/ufw ]]; then
   run_check "ufw-active" bash -c 'sudo -n /usr/sbin/ufw status | grep -q "Status: active"'

@@ -15,9 +15,15 @@ need "$PROJECT_DIR/scripts/pi/ensure-adguard-blocking.sh"
 need "$PROJECT_DIR/scripts/pi/wait-dns-rollout.sh"
 need "$PROJECT_DIR/scripts/pi/apply-adguard-dns.sh"
 need "$PROJECT_DIR/scripts/pi/apply-adguard-filters.sh"
+need "$PROJECT_DIR/scripts/lib/zte-h3600p.py"
+need "$PROJECT_DIR/scripts/pi/sync-modem-inventory.sh"
+need "$PROJECT_DIR/scripts/pi/observe-rdnss-ra.sh"
+need "$PROJECT_DIR/scripts/pi/diagnose-video-path.sh"
 need "$PROJECT_DIR/config/adguard/filter-lists.json"
 need "$PROJECT_DIR/config/adguard/user-rules.txt"
 need "$PROJECT_DIR/host/systemd/pi-gateway-adguard-filters.timer"
+need "$PROJECT_DIR/host/systemd/pi-gateway-modem-inventory.service"
+need "$PROJECT_DIR/host/systemd/pi-gateway-modem-inventory.timer"
 
 grep -q 'check_dhcp_dns_offer' "$PROJECT_DIR/scripts/lib/dhcp-dns-offer.sh" \
   || die "check_dhcp_dns_offer yok"
@@ -54,8 +60,30 @@ grep -q 'set +e' "$PROJECT_DIR/scripts/pi/wait-dns-rollout.sh" \
   || die "rollout audit rc yakalama yok"
 grep -q 'dhcp-dns-offer.sh' "$PROJECT_DIR/scripts/pi/diagnose-dns-bypass.sh" \
   || die "diagnose dhcp sniff bagli degil"
+grep -q 'observe-rdnss-ra.sh' "$PROJECT_DIR/scripts/pi/diagnose-dns-bypass.sh" \
+  || die "diagnose gercek RA/RDNSS gozlemi yok"
 grep -q 'REACHABLE/DELAY\|online_ips' "$PROJECT_DIR/scripts/pi/audit-dns-coverage.sh" \
   || die "audit ARP state ayrimi yok"
+grep -q 'USING_PI_DNS\|POSSIBLE_BYPASS\|STALE\|UNKNOWN' "$PROJECT_DIR/scripts/pi/audit-dns-coverage.sh" \
+  || die "audit durum siniflari yok"
+grep -q 'MODEM_INVENTORY_ENABLED\|MODEM_INVENTORY_STALE_SEC\|MODEM_INVENTORY_REQUIRED' "$PROJECT_DIR/scripts/pi/audit-dns-coverage.sh" \
+  || die "audit modem snapshot stale/required politikasi yok"
+grep -q 'LoadCredential=modem' "$PROJECT_DIR/host/systemd/pi-gateway-modem-inventory.service" \
+  || die "modem credential systemd LoadCredential yok"
+grep -q 'Environment=REMOTE_DIR=' "$PROJECT_DIR/host/systemd/pi-gateway-modem-inventory.service" \
+  || die "modem inventory service REMOTE_DIR yok"
+grep -q 'OnUnitActiveSec=5min' "$PROJECT_DIR/host/systemd/pi-gateway-modem-inventory.timer" \
+  || die "modem inventory periyodik timer yok"
+grep -q 'pi-gateway-modem-inventory.timer' "$PROJECT_DIR/scripts/pi/setup-home-ops-timers.sh" \
+  || die "modem inventory timer kuruluma bagli degil"
+grep -q 'must_not_block_hosts\|max_age_hours\|min_rules' "$PROJECT_DIR/config/adguard/filter-lists.json" \
+  || die "filter governance metadata/regression yok"
+python3 -m json.tool "$PROJECT_DIR/config/adguard/filter-lists.json" >/dev/null \
+  || die "filter-lists.json gecersiz JSON"
+python3 "$PROJECT_DIR/scripts/lib/zte-h3600p.py" --self-check \
+  || die "zte-h3600p self-check"
+python3 "$PROJECT_DIR/scripts/lib/netalert-devices.py" --self-check \
+  || die "netalert-devices modem isim self-check"
 grep -q 'balanced' "$PROJECT_DIR/config/adguard/filter-lists.json" \
   || die "filter-lists balanced profil yok"
 grep -q 'aggressive' "$PROJECT_DIR/config/adguard/filter-lists.json" \

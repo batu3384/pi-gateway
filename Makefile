@@ -13,7 +13,7 @@ PI_USER ?= pi
 REMOTE_DIR ?= /home/$(PI_USER)/pi-gateway
 PI_SSH_HOST ?= $(if $(PI_DEPLOY_HOST),$(PI_DEPLOY_HOST),$(if $(PI_HOST),$(PI_HOST),$(PI_STATIC_IP)))
 
-.PHONY: setup validate test render deploy deploy-code deploy-fast install discover mac-dns mac-dns-clear harden status dns-test test-remote backup-pull backup-cron backup-restore-drill restore-check verify-data config-drift pi-access trust-ca tls-certs telegram-menu firewall sync-configs docker-ssd check-pi-env doctor diagnose-remote diagnose-dns audit-dns adguard-tune recover-stack chaos-drill tailscale-acl tailscale-dns
+.PHONY: setup validate test render deploy deploy-code deploy-fast install discover mac-dns mac-dns-clear harden status dns-test test-remote backup-pull backup-cron backup-restore-drill restore-check verify-data config-drift pi-access trust-ca tls-certs telegram-menu firewall sync-configs docker-ssd check-pi-env doctor diagnose-remote diagnose-dns audit-dns modem-inventory diagnose-video adguard-tune recover-stack chaos-drill tailscale-acl tailscale-dns
 
 check-pi-env:
 	@test -n "$(PI_SSH_HOST)" || (echo "PI_STATIC_IP or PI_DEPLOY_HOST required — edit .env or run make discover" && exit 1)
@@ -135,6 +135,13 @@ diagnose-dns: check-pi-env
 audit-dns: check-pi-env
 	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/audit-dns-coverage.sh"'
 
+modem-inventory: check-pi-env
+	@ssh -tt "$(PI_USER)@$(PI_SSH_HOST)" 'sudo systemctl start pi-gateway-modem-inventory.service; rc=$$?; sudo systemctl --no-pager --full status pi-gateway-modem-inventory.service || true; exit $$rc'
+
+diagnose-video: check-pi-env
+	@test -n "$(VIDEO_TEST_IP)" || (echo "VIDEO_TEST_IP gerekli (ornek: 192.168.1.x)" && exit 1)
+	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" VIDEO_TEST_IP="$(VIDEO_TEST_IP)" bash "$(REMOTE_DIR)/scripts/pi/diagnose-video-path.sh"'
+
 rollout-dns-wait: check-pi-env
 	@rsync -az scripts/pi/wait-dns-rollout.sh scripts/pi/audit-dns-coverage.sh "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/scripts/pi/"
 	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'chmod +x "$(REMOTE_DIR)/scripts/pi/wait-dns-rollout.sh" && REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/wait-dns-rollout.sh"'
@@ -142,9 +149,9 @@ rollout-dns-wait: check-pi-env
 adguard-tune: check-pi-env
 	@rsync -az --exclude 'AdGuardHome.yaml' config/adguard/ "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/config/adguard/"
 	@rsync -az config/unbound/unbound.conf "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/config/unbound/unbound.conf"
-	@rsync -az scripts/lib/dhcp-dns-offer.sh scripts/lib/env-file.sh scripts/lib/adguard-api.sh scripts/lib/unbound-dnssec.sh scripts/lib/adguard-metrics.py scripts/lib/stack-health.sh scripts/lib/ssd-alive.sh "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/scripts/lib/"
-	@rsync -az scripts/pi/apply-adguard-dns.sh scripts/pi/apply-adguard-filters.sh scripts/pi/diagnose-dns-bypass.sh scripts/pi/audit-dns-coverage.sh scripts/pi/ensure-adguard-blocking.sh scripts/pi/ensure-ipv6-ula.sh scripts/pi/setup-rdnss-ra.sh scripts/pi/setup-adguard-timers.sh scripts/pi/setup-firewall.sh scripts/pi/health-check.sh scripts/pi/wait-dns-rollout.sh scripts/pi/canary-compose-update.sh scripts/pi/export-adguard-metrics.sh scripts/pi/export-gateway-state.sh scripts/pi/adguard-tune.sh "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/scripts/pi/"
-	@rsync -az host/systemd/pi-gateway-adguard-filters.service host/systemd/pi-gateway-adguard-filters.timer host/systemd/pi-gateway-ipv6-ula.service "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/host/systemd/"
+	@rsync -az scripts/lib/dhcp-dns-offer.sh scripts/lib/env-file.sh scripts/lib/adguard-api.sh scripts/lib/unbound-dnssec.sh scripts/lib/adguard-metrics.py scripts/lib/stack-health.sh scripts/lib/ssd-alive.sh scripts/lib/zte-h3600p.py "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/scripts/lib/"
+	@rsync -az scripts/pi/apply-adguard-dns.sh scripts/pi/apply-adguard-filters.sh scripts/pi/diagnose-dns-bypass.sh scripts/pi/audit-dns-coverage.sh scripts/pi/sync-modem-inventory.sh scripts/pi/diagnose-video-path.sh scripts/pi/ensure-adguard-blocking.sh scripts/pi/ensure-ipv6-ula.sh scripts/pi/setup-rdnss-ra.sh scripts/pi/observe-rdnss-ra.sh scripts/pi/setup-adguard-timers.sh scripts/pi/setup-firewall.sh scripts/pi/health-check.sh scripts/pi/wait-dns-rollout.sh scripts/pi/canary-compose-update.sh scripts/pi/export-adguard-metrics.sh scripts/pi/export-gateway-state.sh scripts/pi/adguard-tune.sh "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/scripts/pi/"
+	@rsync -az host/systemd/pi-gateway-adguard-filters.service host/systemd/pi-gateway-adguard-filters.timer host/systemd/pi-gateway-ipv6-ula.service host/systemd/pi-gateway-modem-inventory.service host/systemd/pi-gateway-modem-inventory.timer "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/host/systemd/"
 	@ssh -tt "$(PI_USER)@$(PI_SSH_HOST)" 'chmod +x "$(REMOTE_DIR)/scripts/lib/dhcp-dns-offer.sh" "$(REMOTE_DIR)/scripts/pi/"*.sh && REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/adguard-tune.sh"'
 
 recover-stack: check-pi-env

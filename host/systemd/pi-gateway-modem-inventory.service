@@ -1,0 +1,21 @@
+[Unit]
+Description=ZTE H3600P device inventory snapshot
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=/etc/pi-gateway/modem-inventory.env
+
+[Service]
+Type=oneshot
+User=PI_USER
+Group=PI_USER
+WorkingDirectory=/home/PI_USER/pi-gateway
+Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
+LoadCredential=modem:/etc/pi-gateway/modem-inventory.env
+ExecStart=/bin/bash /home/PI_USER/pi-gateway/scripts/pi/sync-modem-inventory.sh
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/PI_USER/pi-gateway/data /mnt/ssd/pi-gateway-data /var/lib/pi-gateway
+RestrictAddressFamilies=AF_INET AF_INET6
+UMask=0027

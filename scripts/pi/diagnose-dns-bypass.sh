@@ -148,6 +148,13 @@ elif dig +time=2 +tries=1 @"$ULA" cloudflare.com A >/dev/null 2>&1; then
   else
     warn "radvd yok — LAN cihazlari IPv6 DNS olarak modem fe80::1 kullanabilir (setup-rdnss-ra.sh)"
   fi
+  if [[ -f "$SCRIPT_DIR/observe-rdnss-ra.sh" ]]; then
+    if bash "$SCRIPT_DIR/observe-rdnss-ra.sh"; then
+      pass "Gercek RA/RDNSS gozlemi calisti (sonuc best-effort olabilir)"
+    else
+      warn "Gercek RA/RDNSS gozlemi basarisiz — IPv6 enforcement iddia edilmiyor"
+    fi
+  fi
 else
   fail "ULA $ULA DNS cevap vermiyor (ufw/AdGuard IPv6)"
 fi

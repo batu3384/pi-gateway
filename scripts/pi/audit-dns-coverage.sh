@@ -26,6 +26,18 @@ MIN_COVERAGE="${ADGUARD_MIN_COVERAGE_PERCENT:-50}"
 BYPASS_CHECK="${ADGUARD_BYPASS_CHECK:-strict}"
 AGH_ADMIN_USER="${AGH_ADMIN_USER:-admin}"
 AGH_ADMIN_PASSWORD="${AGH_ADMIN_PASSWORD:-}"
+MODEM_INVENTORY_PATH="${MODEM_INVENTORY_PATH:-${REMOTE_DIR}/data/modem-inventory.json}"
+MODEM_INVENTORY_STALE_SEC="${MODEM_INVENTORY_STALE_SEC:-900}"
+MODEM_INVENTORY_REQUIRED="${MODEM_INVENTORY_REQUIRED:-false}"
+NETALERTX_RECENCY_SEC="${NETALERTX_RECENCY_SEC:-900}"
+[[ "$MODEM_INVENTORY_STALE_SEC" =~ ^[0-9]+$ ]] || {
+  echo "[${PG_SCRIPT_NAME}] HATA: MODEM_INVENTORY_STALE_SEC sayi olmali" >&2
+  exit 1
+}
+[[ "$NETALERTX_RECENCY_SEC" =~ ^[0-9]+$ ]] || {
+  echo "[${PG_SCRIPT_NAME}] HATA: NETALERTX_RECENCY_SEC sayi olmali" >&2
+  exit 1
+}
 fail=0
 note_fail() { echo "[FAIL] $*"; fail=1; }
 note_ok() { echo "[OK] $*"; }
@@ -44,10 +56,13 @@ trap 'rm -f "$COOKIE"' EXIT
 agh_login "http://127.0.0.1:${ADGUARD_WEB_PORT}" "$COOKIE" "$AGH_ADMIN_USER" "$AGH_ADMIN_PASSWORD" \
   || { note_fail "AdGuard API login"; exit 1; }
 
-export COOKIE PI_IP GATEWAY_IP LAN_NET_PREFIX QUERY_LIMIT MIN_QUERIES MIN_COVERAGE BYPASS_CHECK ADGUARD_WEB_PORT REMOTE_DIR
+export COOKIE PI_IP GATEWAY_IP LAN_NET_PREFIX QUERY_LIMIT MIN_QUERIES MIN_COVERAGE BYPASS_CHECK ADGUARD_WEB_PORT REMOTE_DIR MODEM_INVENTORY_PATH MODEM_INVENTORY_STALE_SEC MODEM_INVENTORY_REQUIRED NETALERTX_RECENCY_SEC
+set +e
 python3 - <<'PY'
+import ipaddress
 import json, os, subprocess, sys
-from collections import Counter
+from collections import Counter, defaultdict
+from datetime import datetime, timezone
 
 pi_ip = os.environ["PI_IP"]
 gateway = os.environ["GATEWAY_IP"]
@@ -58,6 +73,13 @@ min_cov = int(os.environ["MIN_COVERAGE"])
 bypass_check = os.environ.get("BYPASS_CHECK", "strict")
 port = os.environ["ADGUARD_WEB_PORT"]
 cookie_file = os.environ["COOKIE"]
+modem_path = os.environ["MODEM_INVENTORY_PATH"]
+modem_stale_sec = int(os.environ["MODEM_INVENTORY_STALE_SEC"])
+modem_required = (
+    os.environ.get("MODEM_INVENTORY_REQUIRED", "false") == "true"
+    or os.environ.get("MODEM_INVENTORY_ENABLED", "false") == "true"
+)
+netalert_recency_sec = int(os.environ["NETALERTX_RECENCY_SEC"])
 
 def curl_api(path):
     return subprocess.check_output(
@@ -65,133 +87,236 @@ def curl_api(path):
         text=True,
     )
 
-# LAN cihazlari (ARP) — gateway haric; REACHABLE/DELAY = aktif, STALE = idle
 def parse_neigh():
-    online, idle = set(), set()
-    for line in subprocess.check_output(["ip", "neigh", "show"], text=True).splitlines():
+    online, idle, macs = set(), set(), {}
+    try:
+        lines = subprocess.check_output(["ip", "neigh", "show"], text=True).splitlines()
+    except (OSError, subprocess.CalledProcessError):
+        return online, idle, macs
+    for line in lines:
         parts = line.split()
-        if len(parts) < 5:
+        if len(parts) < 2:
             continue
         ip, state = parts[0], parts[-1]
         if not ip.startswith(lan_prefix) or ip in (pi_ip, gateway):
             continue
+        if "lladdr" in parts:
+            macs[ip] = parts[parts.index("lladdr") + 1].lower()
         if state in ("REACHABLE", "DELAY"):
             online.add(ip)
         elif state in ("STALE", "PROBE"):
             idle.add(ip)
-    return online, idle
+    return online, idle, macs
 
-online_ips, idle_ips = parse_neigh()
-for ip in sorted(online_ips | idle_ips):
-    subprocess.run(
-        ["ping", "-c1", "-W1", ip],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-online_ips, idle_ips = parse_neigh()
-lan_ips = online_ips | idle_ips
+online_ips, idle_ips, neigh_macs = parse_neigh()
 
-def probe_ok(ip):
-    return subprocess.run(
-        ["ping", "-c1", "-W1", ip],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    ).returncode == 0
+def load_modem_snapshot():
+    empty = {
+        "present": os.path.isfile(modem_path),
+        "fresh": False,
+        "age": None,
+        "by_ip": {},
+        "by_mac": {},
+        "mac_by_ip": {},
+        "ips": set(),
+        "devices": [],
+    }
+    try:
+        with open(modem_path, encoding="utf-8") as handle:
+            data = json.load(handle)
+        if data.get("schema_version") != 1 or not isinstance(data.get("devices"), list):
+            return empty
+        fetched = datetime.fromisoformat(
+            str(data.get("fetched_at", "")).replace("Z", "+00:00")
+        )
+        age = max(0, int(datetime.now(timezone.utc).timestamp() - fetched.timestamp()))
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return empty
+    snapshot = dict(empty, present=True, age=age, devices=data["devices"])
+    snapshot["fresh"] = age <= modem_stale_sec
+    for device in data["devices"]:
+        if not isinstance(device, dict) or device.get("active") is False:
+            continue
+        ip = str(device.get("ip") or "").strip()
+        mac = str(device.get("mac") or "").strip().lower()
+        name = str(device.get("name") or device.get("label") or "").strip()
+        if not ip.startswith(lan_prefix) or ip in (pi_ip, gateway):
+            continue
+        snapshot["ips"].add(ip)
+        if mac:
+            snapshot["mac_by_ip"][ip] = mac
+        if name:
+            snapshot["by_ip"][ip] = name
+            if mac:
+                snapshot["by_mac"][mac] = name
+    return snapshot
+
+modem = load_modem_snapshot()
 
 def mac_for(ip):
-    try:
-        out = subprocess.check_output(["ip", "neigh", "show", ip], text=True, stderr=subprocess.DEVNULL).strip()
-    except subprocess.CalledProcessError:
-        return "?"
-    parts = out.split()
-    if "lladdr" in parts:
-        return parts[parts.index("lladdr") + 1]
-    return "?"
+    return neigh_macs.get(ip) or modem["mac_by_ip"].get(ip, "?")
 
 def load_names():
-    by_ip, by_mac = {}, {}
+    agh_ip, agh_mac = {}, {}
     try:
-        clients = json.loads(curl_api("/control/clients"))
+        clients_data = json.loads(curl_api("/control/clients"))
         for bucket in ("clients", "auto_clients"):
-            for c in clients.get(bucket) or []:
-                n = (c.get("name") or "").strip()
-                if not n:
+            for client in clients_data.get(bucket) or []:
+                name = (client.get("name") or "").strip()
+                if not name:
                     continue
-                for ident in c.get("ids") or []:
+                for ident in client.get("ids") or []:
                     ident = str(ident).strip()
                     if ident.count(".") == 3:
-                        by_ip.setdefault(ident, n)
+                        agh_ip.setdefault(ident, name)
                     elif ":" in ident:
-                        by_mac.setdefault(ident.lower(), n)
-                ip = str(c.get("ip") or "").strip()
+                        agh_mac.setdefault(ident.lower(), name)
+                ip = str(client.get("ip") or "").strip()
                 if ip.count(".") == 3:
-                    by_ip.setdefault(ip, n)
+                    agh_ip.setdefault(ip, name)
     except (subprocess.CalledProcessError, json.JSONDecodeError, TypeError):
         pass
+    db_ip, db_mac, netalert_seen = {}, {}, {}
     db = os.path.join(os.environ.get("REMOTE_DIR", ""), "data/netalertx/db/app.db")
     if os.path.isfile(db):
         try:
             import sqlite3
             con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
-            for ip, name, mac in con.execute("SELECT devLastIP, devName, devMac FROM Devices"):
-                n = (name or "").strip()
-                if ip and n:
-                    by_ip[ip] = n
-                if mac and n:
-                    by_mac[mac.lower()] = n
+            db_cols = {row[1] for row in con.execute("PRAGMA table_info(Devices)")}
+            last_seen_column = "devLastConnection" if "devLastConnection" in db_cols else "NULL"
+            for ip, name, mac, last_seen in con.execute(
+                f"SELECT devLastIP, devName, devMac, {last_seen_column} FROM Devices"
+            ):
+                name = (name or "").strip()
+                if ip and name:
+                    db_ip[ip] = name
+                if mac and name:
+                    db_mac[mac.lower()] = name
+                if ip and last_seen:
+                    try:
+                        seen_value = float(last_seen)
+                        netalert_seen[ip] = seen_value / 1000 if seen_value > 100000000000 else seen_value
+                    except (TypeError, ValueError):
+                        pass
             con.close()
         except Exception:
             pass
-    return by_ip, by_mac
+    return agh_ip, agh_mac, db_ip, db_mac, netalert_seen
 
-by_ip_name, by_mac_name = load_names()
+agh_ip, agh_mac, db_ip, db_mac, netalert_seen = load_names()
 
 def host_label(ip):
-    n = by_ip_name.get(ip) or by_mac_name.get(mac_for(ip).lower(), "")
-    return f" {n}" if n else ""
+    mac = mac_for(ip).lower()
+    name = (
+        modem["by_mac"].get(mac)
+        or (modem["by_ip"].get(ip) if modem["fresh"] else "")
+        or db_mac.get(mac)
+        or db_ip.get(ip)
+        or agh_mac.get(mac)
+        or agh_ip.get(ip)
+        or ""
+    )
+    return f" {name}" if name else ""
+
+def seen_label(ip):
+    seen = netalert_seen.get(ip)
+    if seen is None:
+        return "last_seen=?"
+    return f"last_seen={max(0, int(now_ts - seen))}s"
 
 ql = json.loads(curl_api(f"/control/querylog?older_than=&limit={query_limit}"))
-clients = Counter()
-blocked = Counter()
+clients, blocked = Counter(), Counter()
+protocols = defaultdict(Counter)
+ipv6_query_clients = Counter()
 for row in ql.get("data", []):
-    ip = row.get("client", "")
-    if not ip.startswith(lan_prefix) or ip == pi_ip:
+    ip = str(row.get("client_ip") or row.get("client") or "")
+    try:
+        parsed_ip = ipaddress.ip_address(ip)
+    except ValueError:
+        parsed_ip = None
+    if parsed_ip is not None and parsed_ip.version == 6:
+        ipv6_query_clients[ip] += 1
+        continue
+    if not ip.startswith(lan_prefix) or ip in (pi_ip, gateway):
         continue
     clients[ip] += 1
+    proto = str(
+        row.get("client_proto")
+        or row.get("protocol")
+        or row.get("proto")
+        or "api-unknown"
+    )
+    protocols[ip][proto] += 1
     reason = str(row.get("reason", ""))
     if reason and reason not in ("NotFilteredNotFound", "NotFilteredWhiteList"):
         blocked[ip] += 1
 
-verified_active = {ip for ip in online_ips if probe_ok(ip)}
-# REACHABLE/DELAY = online say; ICMP kapali olsa bile 0 sorgu = BYPASS (false OK engelle)
-strict_ips = set(online_ips) | {ip for ip in lan_ips if clients.get(ip, 0) > 0}
+query_ips = set(clients)
+observed_ips = online_ips | idle_ips
+now_ts = datetime.now(timezone.utc).timestamp()
+recent_netalert_ips = {
+    ip for ip, seen in netalert_seen.items()
+    if 0 <= now_ts - seen <= netalert_recency_sec
+}
+if modem["fresh"]:
+    modem_ips = set(modem["ips"])
+    active_ips = modem_ips & (online_ips | query_ips | recent_netalert_ips)
+    unknown_ips = sorted((online_ips | query_ips) - modem_ips)
+    stale_ips = sorted(
+        ip for ip in (modem_ips | idle_ips)
+        if ip not in active_ips and ip not in recent_netalert_ips
+    )
+else:
+    modem_ips = set()
+    active_ips = online_ips | query_ips | recent_netalert_ips
+    unknown_ips = []
+    stale_ips = sorted(
+        ip for ip in idle_ips
+        if clients.get(ip, 0) == 0 and ip not in recent_netalert_ips
+    )
 
-active = {ip for ip in lan_ips if clients.get(ip, 0) >= min_queries}
-strict_active = {ip for ip in strict_ips if clients.get(ip, 0) >= min_queries}
-missing_strict = sorted(ip for ip in strict_ips if clients.get(ip, 0) == 0)
-missing_idle = sorted(ip for ip in idle_ips if clients.get(ip, 0) == 0 and ip not in strict_ips)
-low = sorted(ip for ip in lan_ips if 0 < clients.get(ip, 0) < min_queries)
-
-total = len(lan_ips)
-using = len(active)
-strict_total = len(strict_ips)
+using_ips = {ip for ip in active_ips if clients.get(ip, 0) >= min_queries}
+low = sorted(ip for ip in active_ips if 0 < clients.get(ip, 0) < min_queries)
+possible_bypass = sorted(ip for ip in active_ips if clients.get(ip, 0) == 0)
+unverified = sorted(set(low) | set(possible_bypass))
+report_ips = observed_ips | modem_ips | query_ips
+total = len(report_ips)
+using = len(using_ips)
+strict_total = len(active_ips)
 cov = round(100 * using / max(1, total))
-strict_cov = round(100 * len(strict_active) / max(1, strict_total)) if strict_total else 100
+strict_cov = round(100 * using / strict_total) if strict_total else 100
 
-print(f"LAN cihaz (ARP, gateway haric): {total} (REACHABLE/DELAY: {len(online_ips)}, ping-ok: {len(verified_active)}, idle STALE: {len(idle_ips)})")
-if lan_ips:
-    print("  " + ", ".join(f"{ip}{host_label(ip)}" for ip in sorted(lan_ips)))
-print(f"Pi DNS aktif (>={min_queries} sorgu): {using}/{total} (%{cov}) | aktif cihaz: {len(strict_active)}/{strict_total} (%{strict_cov})")
-for ip in sorted(active):
-    print(f"  [OK] {ip}{host_label(ip)}: {clients[ip]} sorgu, {blocked.get(ip, 0)} engel")
+if modem["fresh"]:
+    inventory_state = f"fresh ({modem['age']}s)"
+elif modem["present"]:
+    inventory_state = f"stale ({modem['age']}s > {modem_stale_sec}s)"
+else:
+    inventory_state = "missing"
+print(f"Modem envanter: {inventory_state} — {modem_path}")
+print(f"LAN cihaz (ARP, gateway haric): {total} (REACHABLE/DELAY: {len(online_ips)}, idle STALE: {len(idle_ips)})")
+if report_ips:
+    print("  " + ", ".join(f"{ip}{host_label(ip)}" for ip in sorted(report_ips)))
+print(f"Pi DNS dogrulanan (>={min_queries} sorgu): {using}/{total} (%{cov}) | aktif: {using}/{strict_total} (%{strict_cov})")
+for ip in sorted(using_ips):
+    proto = ",".join(sorted(protocols[ip])) or "api-unknown"
+    print(f"  [USING_PI_DNS] {ip}{host_label(ip)} ({seen_label(ip)}): {clients[ip]} sorgu, {blocked.get(ip, 0)} engel, protokol={proto}")
 for ip in low:
-    tag = "IDLE" if ip in idle_ips else "WARN"
-    print(f"  [{tag}] {ip}{host_label(ip)}: {clients[ip]} sorgu (cok az — DHCP yenile veya Private DNS kapat)")
-for ip in missing_strict:
-    icmp = "ping-ok" if ip in verified_active else "ICMP-kapali/filtre"
-    print(f"  [BYPASS] {ip}{host_label(ip)} ({mac_for(ip)}, {icmp}): ARP aktif, Pi DNS yok")
-for ip in missing_idle:
-    print(f"  [IDLE] {ip}{host_label(ip)} ({mac_for(ip)}): STALE ARP, query logda yok")
+    print(f"  [POSSIBLE_BYPASS] {ip}{host_label(ip)} ({mac_for(ip)}, {seen_label(ip)}): {clients[ip]} sorgu — esik altinda")
+for ip in possible_bypass:
+    print(f"  [POSSIBLE_BYPASS] {ip}{host_label(ip)} ({mac_for(ip)}, {seen_label(ip)}): aktif gorunuyor, Pi DNS sorgusu yok")
+for ip in stale_ips:
+    print(f"  [STALE] {ip}{host_label(ip)} ({mac_for(ip)}, {seen_label(ip)}): aktiflik kaniti yok")
+for ip in unknown_ips:
+    print(f"  [UNKNOWN] {ip}{host_label(ip)} ({mac_for(ip)}, {seen_label(ip)}): modem snapshot'ta yok")
+if ipv6_query_clients:
+    print(
+        "  [IPV6_DNS_QUERY] "
+        + ", ".join(f"{ip} ({count} sorgu)" for ip, count in sorted(ipv6_query_clients.items()))
+    )
+else:
+    print("  [UNKNOWN] IPv6 istemci query logu görünmedi; RDNSS kaynağı ayrı doğrulanmalı")
+if any("api-unknown" in values for values in protocols.values()):
+    print("  [UNKNOWN] AdGuard query log protokol alanı vermiyor; DoH/DoT/DoQ sonucu bu API'den çıkarılamaz")
 
 print("")
 print("=== Olası nedenler (modem DNS tek basina yetmez) ===")
@@ -201,6 +326,7 @@ print("  3. Cihazlar eski DHCP lease — Wi-Fi kapat/ac veya reboot")
 print("  4. Android Ozel DNS / iOS Private Relay kapali olmali")
 print("  5. IPv6 DNS (modem RDNSS) Pi yerine baska sunucu verebilir")
 print("  6. TV/konsol sabit DNS kullanabilir — elle Pi IP gir")
+print("  7. [POSSIBLE_BYPASS] yalnızca ARP/query kaniti var; modem snapshot yoksa kesin bypass denmez")
 print("")
 print("=== Cozum secenekleri ===")
 print("  A) Modem: DHCP DNS1={} DNS2=BOS + tum cihaz reboot".format(pi_ip))
@@ -211,27 +337,42 @@ print("  D) IPv6: radvd 3–4s + modem LL lifetime 0; modem RA 900s last-RA. Anl
 if bypass_check == "off":
     print("COVERAGE_OK")
     sys.exit(0)
-if bypass_check == "warn":
-    if missing_strict or (strict_total and strict_cov < min_cov):
-        print(f"[WARN] aktif kapsam %{strict_cov} — bypass: {', '.join(missing_strict) or 'yok'}")
-    print("COVERAGE_OK")
-    sys.exit(0)
+inventory_unknown = (modem_required or modem["present"]) and not modem["fresh"]
+if inventory_unknown:
+    print("COVERAGE_UNKNOWN: modem snapshot missing or stale")
+    sys.exit(12)
+if unknown_ips:
+    print("UNKNOWN_DEVICES:" + ",".join(unknown_ips))
+    sys.exit(12)
 if strict_total and strict_cov < min_cov:
     print(f"COVERAGE_FAIL:{strict_cov}")
     sys.exit(10)
-if missing_strict:
-    print("MISSING_DEVICES:" + ",".join(missing_strict))
+if unverified:
+    print("MISSING_DEVICES:" + ",".join(unverified))
     sys.exit(11)
 print("COVERAGE_OK")
 PY
 rc=$?
+set -e
 case "$rc" in
   0)
     note_ok "DNS kapsami yeterli"
     ;;
   10|11)
-    note_fail "DNS kapsami dusuk — bazi cihazlar Pi DNS kullanmiyor"
-    fail=1
+    if [[ "$BYPASS_CHECK" == "warn" ]]; then
+      note_warn "DNS kapsami dusuk — bazi cihazlar Pi DNS kullanmiyor"
+    else
+      note_fail "DNS kapsami dusuk — bazi cihazlar Pi DNS kullanmiyor"
+      fail=1
+    fi
+    ;;
+  12)
+    if [[ "$BYPASS_CHECK" == "warn" ]]; then
+      note_warn "DNS kapsami kesinlestirilemedi — modem envanteri veya cihaz gorunurlugu eksik"
+    else
+      note_fail "DNS kapsami kesinlestirilemedi — modem snapshot/cihaz kaydi UNKNOWN"
+      fail=1
+    fi
     ;;
   *)
     note_fail "audit script hatasi (exit $rc)"

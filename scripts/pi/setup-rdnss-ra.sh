@@ -22,7 +22,10 @@ log() { echo "[rdnss] $*"; }
 
 if ! command -v radvd >/dev/null 2>&1; then
   log "radvd kuruluyor..."
-  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq radvd
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq radvd ndisc6
+elif ! command -v rdisc6 >/dev/null 2>&1; then
+  log "ndisc6/rdisc6 kuruluyor..."
+  sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ndisc6
 fi
 
 sudo tee /etc/radvd.conf >/dev/null <<EOF
@@ -55,3 +58,7 @@ else
   exit 1
 fi
 log "Cihaz RFC 8106 anlarsa modem IPv6 DNS duser. Modem RA 900s tekrar basar — radvd 3–4s last-RA. Daemon ${MODEM_LL}:53 hâlâ cevaplar."
+if [[ -f "$SCRIPT_DIR/observe-rdnss-ra.sh" ]]; then
+  REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/observe-rdnss-ra.sh" || \
+    log "WARN: gerçek RA/RDNSS gözlemi başarısız — best-effort varsayımı korunuyor"
+fi

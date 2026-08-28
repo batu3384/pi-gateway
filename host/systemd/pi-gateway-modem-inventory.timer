@@ -1,0 +1,11 @@
+[Unit]
+Description=Periodic ZTE H3600P device inventory snapshot
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+RandomizedDelaySec=30s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

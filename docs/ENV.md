@@ -18,10 +18,28 @@
 | `ADGUARD_MIN_REWRITES` | 8 |
 | `ADGUARD_BLOCKED_TTL` | 60 |
 | `ADGUARD_FILTER_PROFILE` | `balanced` (TIF Medium). `aggressive` = TIF Full + CNAME original trackers; AGH ≥2GB RAM. Fake **and** Popup Hosts not stacked (inside Pro++). TIF Full: `apply-adguard-filters` WARNs if MemAvailable <400MiB — switch `balanced`. Not Multi Ultimate / not disguised CNAME list. See `docs/DNS-BLOCKING.md`. |
+| `ADGUARD_FILTER_PREFLIGHT` / `ADGUARD_FILTER_PREFLIGHT_TIMEOUT_SEC` | `true` / `20`; liste URL'si HTTP ve ilk blok syntax kontrolü |
+| `ADGUARD_FILTER_FORCE_REFRESH` | `false`; `true` yalnız kontrollü manuel yenileme için |
+| `ADGUARD_FILTER_STATE_PATH` | Boşsa `/var/lib/pi-gateway/adguard-filter-state.json` |
 | `ROUTER_DNS_SECONDARY` | Yalnız `MAC_DNS_GATEWAY_FALLBACK=true` iken. **Bos** veya `LAN_GATEWAY`. Public resolver WAN `:53` drop ile ölür. |
 | `MAC_DNS_GATEWAY_FALLBACK` | `false` (varsayılan): `make mac-dns` modem `.1` eklemez; **yalnız LAN IP** olan Ethernet/Wi-Fi. Hotspot'a Pi+ULA yazmaz (`make mac-dns-clear`). `true`: Pi down yedek; modem LAN `:53` reklam kaçırır. |
 | `DHCP_RANGE_START` / `DHCP_RANGE_END` / `LAN_SUBNET_MASK` | Yalnız `NETWORK_MODE=adguard-dhcp`. Örnek: `192.168.1.50`–`200`, `255.255.255.0`. |
 | `MODEM_IPV6_DNS_LL` | `fe80::1`. radvd RFC 8106 lifetime 0 (modem RDNSS un-advertise). |
+| `MODEM_INVENTORY_ENABLED` | `false` (önerilen: modem credential dosyası hazırlandıktan sonra `true`) |
+| `MODEM_URL` | `http://192.168.1.1` |
+| `MODEM_INVENTORY_PATH` | Boşsa `${REMOTE_DIR}/data/modem-inventory.json` |
+| `MODEM_INVENTORY_STALE_SEC` | `900`; bu süreden eski snapshot IP eşleştirmesinde kullanılmaz |
+| `MODEM_INVENTORY_REQUIRED` | `false`; `true` iken (veya inventory enabled iken) snapshot yok/eskiyse strict audit `UNKNOWN` döner |
+| `NETALERTX_RECENCY_SEC` | `900`; NetAlertX `devLastConnection` aktiflik kanıtı penceresi |
+
+ZTE H3600P credential'ları repo `.env` içine konmaz. `/etc/pi-gateway/modem-inventory.env`
+dosyasını root sahipli `0600` oluşturun (`MODEM_USERNAME=...`, `MODEM_PASSWORD=...`);
+systemd bunu `LoadCredential` ile servise aktarır. Adapter yalnızca GET veri endpoint'leri
+ve login/logout çağrısı kullanır; response/session hatasında eski snapshot korunur.
+Kurulum: `sudo install -d -m 755 /etc/pi-gateway` → `sudoedit
+/etc/pi-gateway/modem-inventory.env` → `sudo chown root:root ...` ve `sudo chmod
+600 ...`. Sonra `.env` içinde inventory'yi açıp `make modem-inventory` çalıştırın;
+ilk doğrulamadan sonra modem parolasını rotate edin.
 
 ## Tailscale
 
