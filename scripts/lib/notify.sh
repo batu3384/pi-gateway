@@ -73,40 +73,36 @@ notify_touch_alive() {
 }
 
 # Telegram sesi (kullanıcıya):
-#   Başlık: emoji + "Pi Gateway · KısaTürkçe"
+#   Başlık: emoji + Net/Profesyonel Türkçe Başlık (Pi Gateway spam yok)
 #   Gövde: ne oldu (insan dili). Eng/ops jargon yok (inbox, stack, SLA, P2…).
-#   Detay: teknik kanıt (code). Aksiyon: ne yapmalı. Sunucu satırı en altta.
+#   Detay: teknik durum / servis tablosu (HTML bullets). Aksiyon: ne yapmalı.
 notify_boot_up() {
   local host="$1"
   local down_sec="${2:-0}"
-  local mins body detail
+  local mins body detail gateway
+  gateway="$(panel_url gateway)"
   mins=$(( (down_sec + 59) / 60 ))
   if (( down_sec <= 0 )); then
-    detail="Kesinti süresi bilinmiyor (ilk açılış veya kayıt yok)."
+    detail="Sunucu yeniden başlatıldı; DNS ve çekirdek servisler devrede."
   else
-    detail="Yaklaşık ${mins} dk kapalıydı (${down_sec}s)."
+    detail="Yaklaşık ${mins} dk kapalı kaldı (${down_sec}s). Servisler devrede."
   fi
-  body="$(notify_html_alert "$host" \
-    "Sunucu açıldı; servisler başlıyor." \
-    "$detail" \
-    "DNS 1–3 dk içinde düzelir. Durum: $(notify_escape_html "$(panel_url gateway)")")"
+  body="$(notify_html_alert "$detail" "" "Durum: $(notify_escape_html "$gateway")")"
   notify_ensure_dir
   # Her boot ayrı olay: önceki state fail gibi (ok→ok susturulmasın).
   echo fail > "${NOTIFY_STATE_DIR}/boot-lifecycle.state" 2>/dev/null || true
-  notify_send_with_transition "boot-lifecycle" "ok" "✅ Pi Gateway · Açıldı" "$body" "HTML"
+  notify_send_with_transition "boot-lifecycle" "ok" "✅ Sistem Başlatıldı" "$body" "HTML"
 }
 
 # Asistan sohbeti yeniden aktif — kapanış mesajının çifti
 notify_hermes_inbox_up() {
   local host="${1:-$(hostname -s)}"
-  local body
-  body="$(notify_html_alert "$host" \
-    "Sohbet asistanı yeniden aktif." \
-    "Kısa kesinti bitti; mesaj gönderebilirsin." \
-    "Durum: $(notify_escape_html "$(panel_url gateway)")")"
+  local body gateway
+  gateway="$(panel_url gateway)"
+  body="$(notify_html_alert "Kısa kesinti sona erdi; mesaj gönderebilirsiniz." "" "Durum: $(notify_escape_html "$gateway")")"
   notify_ensure_dir
   echo fail > "${NOTIFY_STATE_DIR}/hermes-inbox.state" 2>/dev/null || true
-  notify_send_with_transition "hermes-inbox" "ok" "✅ Pi Gateway · Asistan" "$body" "HTML"
+  notify_send_with_transition "hermes-inbox" "ok" "✅ Asistan Sohbeti Aktif" "$body" "HTML"
 }
 
 notify_repeat_sec_for() {
@@ -174,14 +170,22 @@ notify_send_with_transition() {
   local key="$1"
   local new_state="$2"
   local title="$3"
-  local body="$4"
+  local body="${4:-}"
   local parse_mode="${5:-}"
 
   notify_enabled || return 0
   notify_transition_peek "$key" "$new_state" || return 0
 
   local text
-  text="$(printf '%s\n\n%s' "$title" "$body")"
+  local title_fmt="$title"
+  if [[ "$parse_mode" == "HTML" ]]; then
+    title_fmt="$(notify_escape_html "$title")"
+  fi
+  if [[ -n "$body" ]]; then
+    text="$(printf '<b>%s</b>\n\n%s' "$title_fmt" "$body")"
+  else
+    text="$(printf '<b>%s</b>' "$title_fmt")"
+  fi
   if notify_send_message "$text" "$parse_mode"; then
     notify_transition_commit "$key" "$new_state"
   fi
@@ -222,7 +226,7 @@ notify_send_message() {
 
 notify_telegram() {
   local title="$1"
-  local body="$2"
+  local body="${2:-}"
   local key="${3:-alert}"
   local parse_mode="${4:-}"
   local cooldown
@@ -232,30 +236,44 @@ notify_telegram() {
   notify_rate_ok "$key" "$cooldown" || return 0
 
   local text
-  text="$(printf '%s\n\n%s' "$title" "$body")"
+  local title_fmt="$title"
+  if [[ "$parse_mode" == "HTML" ]]; then
+    title_fmt="$(notify_escape_html "$title")"
+  fi
+  if [[ -n "$body" ]]; then
+    text="$(printf '<b>%s</b>\n\n%s' "$title_fmt" "$body")"
+  else
+    text="$(printf '<b>%s</b>' "$title_fmt")"
+  fi
   notify_send_message "$text" "$parse_mode" || true
 }
 
-# HTML: özet → detay → aksiyon → (dipnot) → Sunucu
+# HTML: detay → (aksiyon) → (dipnot)
 notify_html_alert() {
-  local host="$1"
-  local headline="$2"
-  local detail="$3"
-  local action="${4:-}"
-  local footnote="${5:-}"
-  local lines
-  lines="$(printf '<b>%s</b>' "$(notify_escape_html "$headline")")"
+  local detail="${1:-}"
+  local action="${2:-}"
+  local footnote="${3:-}"
+  local lines=""
   if [[ -n "$detail" ]]; then
-    lines="$(printf '%s\n\n<code>%s</code>' "$lines" "$(notify_escape_html "$detail")")"
+    if [[ "$detail" == *"<"* || "$detail" == *"•"* ]]; then
+      lines="$detail"
+    else
+      lines="$(notify_escape_html "$detail")"
+    fi
   fi
   if [[ -n "$action" ]]; then
-    lines="$(printf '%s\n\n<b>Ne yapmalı?</b>\n%s' "$lines" "$action")"
+    if [[ -n "$lines" ]]; then
+      lines="$(printf '%s\n\n<b>Ne yapmalı?</b>\n%s' "$lines" "$action")"
+    else
+      lines="$(printf '<b>Ne yapmalı?</b>\n%s' "$action")"
+    fi
   fi
   if [[ -n "$footnote" ]]; then
-    lines="$(printf '%s\n\n<i>%s</i>' "$lines" "$footnote")"
-  fi
-  if [[ -n "$host" ]]; then
-    lines="$(printf '%s\n\n<i>Sunucu: %s</i>' "$lines" "$(notify_escape_html "$host")")"
+    if [[ -n "$lines" ]]; then
+      lines="$(printf '%s\n\n<i>%s</i>' "$lines" "$footnote")"
+    else
+      lines="$(printf '<i>%s</i>' "$footnote")"
+    fi
   fi
   printf '%s' "$lines"
 }
@@ -266,33 +284,34 @@ notify_dns_fail() {
   local gateway body esc_gw
   gateway="$(panel_url gateway)"
   esc_gw="$(notify_escape_html "$gateway")"
-  body="$(notify_html_alert "$host" \
-    "Ev DNS veya çekirdek servisler yanıt vermiyor." \
+  body="$(notify_html_alert \
     "$details" \
     "• Pi güç ve ağ bağlantısını kontrol edin
-• Geçici çözüm: router DNS → 8.8.8.8
-• Durum: ${esc_gw}")"
-  notify_send_with_transition "health-dns" "fail" "⚠️ Pi Gateway · DNS" "$body" "HTML"
+• Geçici çözüm: router DNS → 8.8.8.8" \
+    "Durum: ${esc_gw}")"
+  notify_send_with_transition "health-dns" "fail" "⚠️ Ev DNS Kesintisi" "$body" "HTML"
 }
 
 notify_dns_recovered() {
   local host="$1"
-  local body
-  body="$(notify_html_alert "$host" \
-    "Ev DNS ve çekirdek servisler normale döndü." \
-    "Tüm kontroller geçti.")"
-  notify_send_with_transition "health-dns" "ok" "✅ Pi Gateway · DNS" "$body" "HTML"
+  local gateway body esc_gw
+  gateway="$(panel_url gateway)"
+  esc_gw="$(notify_escape_html "$gateway")"
+  body="$(notify_html_alert \
+    "Ev DNS ve çekirdek servisler normale döndü; tüm kontroller geçti." \
+    "" \
+    "Durum: ${esc_gw}")"
+  notify_send_with_transition "health-dns" "ok" "✅ Ev DNS Normale Döndü" "$body" "HTML"
 }
 
 notify_optional_warn() {
   local host="$1"
   local details="$2"
   local body
-  body="$(notify_html_alert "$host" \
-    "Yan servisler kapalı — ev DNS etkilenmez." \
+  body="$(notify_html_alert \
     "$details" \
-    "Acil değil. Uygun zamanda ilgili servis loglarına bakın.")"
-  notify_send_with_transition "health-optional" "fail" "📋 Pi Gateway · Yan servis" "$body" "HTML"
+    "• İkincil servis loglarını inceleyin (DNS etkilenmez).")"
+  notify_send_with_transition "health-optional" "fail" "📋 İkincil Servis Uyarısı" "$body" "HTML"
 }
 
 notify_optional_recovered() {
@@ -303,22 +322,20 @@ notify_optional_recovered() {
 notify_backup_ok() {
   local stamp="$1"
   local body
-  body="$(printf '<b>Yedekleme tamamlandı</b>\n<b>Zaman:</b> %s' \
-    "$(notify_escape_html "$stamp")")"
+  body="$(notify_html_alert "Yedekleme başarıyla tamamlandı (Zaman: $(notify_escape_html "$stamp")).")"
   notify_transition_commit "restic-fail" "ok" 2>/dev/null || true
-  notify_telegram "✅ Pi Gateway · Yedek" "$body" "restic-ok" "HTML"
+  notify_telegram "✅ Yedekleme Tamamlandı" "$body" "restic-ok" "HTML"
 }
 
 notify_backup_fail() {
   local details="$1"
   local body
-  body="$(notify_html_alert "$(hostname -s 2>/dev/null || echo pi-gateway)" \
-    "Yerel yedekleme başarısız veya atlandı." \
+  body="$(notify_html_alert \
     "$details" \
     "• Veri diski (SSD) takılı ve bağlı mı?
 • <code>ENABLE_RESTIC=true</code> ayarı açık mı?
 • Pi: <code>journalctl -u pi-gateway-backup -n 30</code>")"
-  notify_send_with_transition "restic-fail" "fail" "⚠️ Pi Gateway · Yedek" "$body" "HTML"
+  notify_send_with_transition "restic-fail" "fail" "⚠️ Yedekleme Başarısız" "$body" "HTML"
 }
 
 notify_health_systemd_fail() {
@@ -331,7 +348,7 @@ notify_health_systemd_fail() {
       journalctl -t pi-gateway-health -n 30 --no-pager 2>/dev/null \
         | grep -E ' FAIL ' \
         | tail -5 \
-        | sed -E 's/^[^ ]+ [^ ]+ [^ ]+ [^ ]+ //; s/^pi-gateway-health\[[0-9]+\]: FAIL //' \
+        | sed -E 's/^[^ ]+ [^ ]+ [^ ]+ //; s/^pi-gateway-health\[[0-9]+\]: FAIL //' \
         | tr '\n' '; ' \
         | sed 's/; $//' || true
     )"
@@ -345,11 +362,8 @@ notify_health_systemd_fail() {
 
   action="• Pi: <code>journalctl -t pi-gateway-health -n 30</code>
 • Durmuş kaplar: <code>docker ps --filter status=exited</code>"
-  body="$(notify_html_alert "$host" \
-    "Sağlık kontrolü başarısız — DNS veya çekirdek servisler." \
-    "$human" \
-    "$action")"
-  notify_send_with_transition "health-systemd" "fail" "⚠️ Pi Gateway · Sağlık" "$body" "HTML"
+  body="$(notify_html_alert "$human" "$action")"
+  notify_send_with_transition "health-systemd" "fail" "⚠️ Sistem Sağlık Uyarısı" "$body" "HTML"
 }
 
 notify_health_systemd_ok() {
@@ -361,12 +375,11 @@ notify_slo_backup() {
   local host="$1"
   local details="$2"
   local body
-  body="$(notify_html_alert "$host" \
-    "Uzak yedek veya geri yükleme denemesi gecikti — ev DNS etkilenmez." \
-    "$details" \
-    "Mac: <code>make backup-pull</code>
-Deneme: <code>make backup-restore-drill</code>")"
-  notify_send_with_transition "health-slo-backup" "fail" "📋 Pi Gateway · Uzak yedek" "$body" "HTML"
+  body="$(notify_html_alert \
+    "Uzak yedek veya geri yükleme denemesi gecikti — ev DNS etkilenmez. Detay: ${details}" \
+    "• Mac: <code>make backup-pull</code>
+• Deneme: <code>make backup-restore-drill</code>")"
+  notify_send_with_transition "health-slo-backup" "fail" "📋 Uzak Yedek Gecikti" "$body" "HTML"
 }
 
 notify_slo_backup_ok() {
@@ -377,43 +390,41 @@ notify_slo_backup_ok() {
 notify_disk_warn() {
   local mount="$1"
   local detail="$2"
-  local headline="${3:-Disk doluluk uyarısı: ${mount}}"
   local key="disk-${mount//\//-}"
   local body
-  body="$(notify_html_alert "$(hostname -s 2>/dev/null || echo pi-gateway)" \
-    "$headline" \
-    "$detail" \
-    "Pi: <code>df -hP ${mount}</code> · <code>df -iP ${mount}</code> · <code>free -m</code>")"
-  notify_send_with_transition "$key" "fail" "📋 Pi Gateway · Disk" "$body" "HTML"
+  body="$(notify_html_alert \
+    "Bağlantı noktası: ${mount}\n${detail}" \
+    "• Pi: <code>df -hP ${mount}</code> · <code>free -m</code>")"
+  notify_send_with_transition "$key" "fail" "📋 Disk Doluluk Uyarısı" "$body" "HTML"
 }
 
 notify_sd_warn() {
   local host="$1"
   local details="$2"
   local recovered="${3:-0}"
-  local headline action
+  local action
   if [[ "$recovered" == "1" ]]; then
-    headline="SD kart / sistem diski hâlâ sorunlu — otomatik kurtarma yetmedi."
-    action="• Güvenli kapatıp açın
-• SD kart sağlığını kontrol edin
-• Uzun vadede SSD’den boot düşünün"
+    action="• Otomatik kurtarma yetersiz kaldı; sistemi güvenli yeniden başlatın.
+• SD kart sağlığını kontrol edin."
   else
-    headline="SD kart salt okunur veya sistem diski yazılamıyor."
-    action="• Pi’yi yeniden başlatın
-• Tekrar olursa SD kartı değiştirin"
+    action="• Pi’yi yeniden başlatın.
+• Tekrar ederse SD kartı değiştirin."
   fi
   local body
-  body="$(notify_html_alert "$host" "$headline" "$details" "$action")"
-  notify_send_with_transition "sd-health" "fail" "⚠️ Pi Gateway · SD kart" "$body" "HTML"
+  body="$(notify_html_alert "$details" "$action")"
+  notify_send_with_transition "sd-health" "fail" "⚠️ SD Kart Sağlık Uyarısı" "$body" "HTML"
 }
 
 notify_sd_recovered() {
   local host="$1"
-  local body
-  body="$(notify_html_alert "$host" \
-    "Sistem diski salt okunurdu — otomatik kurtarma uygulandı." \
-    "Servisler yeniden başlatıldı.")"
-  notify_send_with_transition "sd-health" "ok" "✅ Pi Gateway · SD kart" "$body" "HTML"
+  local gateway body esc_gw
+  gateway="$(panel_url gateway)"
+  esc_gw="$(notify_escape_html "$gateway")"
+  body="$(notify_html_alert \
+    "Salt okunur mod giderildi; servisler yeniden başlatıldı." \
+    "" \
+    "Durum: ${esc_gw}")"
+  notify_send_with_transition "sd-health" "ok" "✅ Sistem Diski Kurtarıldı" "$body" "HTML"
 }
 
 notify_stack_recovered() {
@@ -422,45 +433,67 @@ notify_stack_recovered() {
   local gateway body esc_gw
   gateway="$(panel_url gateway)"
   esc_gw="$(notify_escape_html "$gateway")"
-  body="$(notify_html_alert "$host" \
-    "Otomatik kurtarma tamamlandı." \
-    "$(notify_escape_html "$details")" \
+  body="$(notify_html_alert \
+    "$details" \
+    "" \
     "Durum: ${esc_gw}")"
   notify_ensure_dir
   # Recover her zaman "ok" — önceki state fail gibi görünsün ki peek açılsın.
   echo fail > "${NOTIFY_STATE_DIR}/stack-recovered.state" 2>/dev/null || true
-  notify_send_with_transition "stack-recovered" "ok" "✅ Pi Gateway · Kurtarma" "$body" "HTML"
+  notify_send_with_transition "stack-recovered" "ok" "✅ Otomatik Kurtarma Tamamlandı" "$body" "HTML"
 }
 
 notify_ssd_degraded() {
   local host="$1"
-  local details="$2"
+  local details="${2:-}"
   local body
-  body="$(notify_html_alert "$host" \
-    "Veri diski (SSD) yok — DNS SD karttan devam ediyor." \
-    "$details" \
-    "Disk takılınca tam servisler otomatik geri yüklenir.")"
-  notify_send_with_transition "ssd-degraded" "fail" "⚠️ Pi Gateway · Veri diski" "$body" "HTML"
+  local detail_text="• <b>DNS & İnternet:</b> Kesintisiz aktif (AdGuard ve Unbound SD karta alındı).
+• <b>İkincil Servisler:</b> Veri güvenliği için geçici durduruldu (n8n, paneller).
+• <b>Otomatik Kurtarma:</b> Sistem arka planda USB bağlantısını yeniden kurmayı deniyor."
+
+  if [[ -n "$details" && "$details" != *"DNS degraded"* && "$details" != *"Veri diski bağlı değil"* ]]; then
+    detail_text="${detail_text}
+• <b>Teknik Detay:</b> $(notify_escape_html "$details")"
+  fi
+
+  body="$(notify_html_alert \
+    "$detail_text" \
+    "• Fiziksel müdahale gerekmez; otomatik kurtarma bekleniyor.
+• Sorun devam ederse USB bağlantısını kontrol edin.")"
+  notify_send_with_transition "ssd-degraded" "fail" "⚠️ Veri Diski (SSD) Koptu — Korumalı Mod" "$body" "HTML"
 }
 
 notify_ssd_restored() {
   local host="$1"
+  local details="${2:-}"
+  local gateway esc_gw
+  gateway="$(panel_url gateway)"
+  esc_gw="$(notify_escape_html "$gateway")"
+  local detail_text="• <b>Depolama:</b> SSD (/mnt/ssd) mount edildi, veri dizini senkronize.
+• <b>Docker & Servisler:</b> Caddy, n8n, NetAlertX ve izleme panelleri tam kapasite devrede.
+• <b>DNS:</b> Normal çalışma düzenine alındı."
+
+  if [[ -n "$details" ]]; then
+    detail_text="${detail_text}
+• <b>Kurtarma Notu:</b> $(notify_escape_html "$details")"
+  fi
+
   local body
-  body="$(notify_html_alert "$host" \
-    "Veri diski yeniden bağlandı — tam servisler başlatılıyor." \
-    "Kısıtlı moddan çıkılıyor.")"
-  notify_send_with_transition "ssd-degraded" "ok" "✅ Pi Gateway · Veri diski" "$body" "HTML"
+  body="$(notify_html_alert \
+    "$detail_text" \
+    "" \
+    "Durum: ${esc_gw}")"
+  notify_send_with_transition "ssd-degraded" "ok" "✅ Veri Diski & Servisler Kurtarıldı" "$body" "HTML"
 }
 
 notify_latency_slow() {
   local host="$1"
   local details="$2"
   local body
-  body="$(notify_html_alert "$host" \
-    "DNS veya panel yanıtı yavaş — hizmet ayakta, gecikme yüksek." \
-    "$details" \
-    "Durum kartında ms güncellenir. Sürerse Unbound / AdGuard / WAN bakın.")"
-  notify_send_with_transition "health-latency" "fail" "📋 Pi Gateway · Gecikme" "$body" "HTML"
+  body="$(notify_html_alert \
+    "Gecikme süresi yükseldi (${details}). Hizmet ayakta." \
+    "• Durum kartında ms güncellenir. Sürerse Unbound / AdGuard / WAN bakın.")"
+  notify_send_with_transition "health-latency" "fail" "📋 Ağ / DNS Gecikme Uyarısı" "$body" "HTML"
 }
 
 notify_latency_ok() {
@@ -472,27 +505,22 @@ notify_ibb_hki_warn() {
   local detail="$1"
   local body graf
   graf="$(notify_escape_html "$(notify_panel_url grafana)")"
-  body="$(notify_html_alert "$(hostname -s 2>/dev/null || echo pi-gateway)" \
-    "İstanbul hava kalitesi eşik üstü (HKI)." \
-    "$detail" \
-    "Hassas gruplar dışarıda temkinli olsun.
-Grafik: ${graf}
-Kaynak: İBB açık veri (istasyon ölçümü, ev bahçesi değil).")"
-  notify_send_with_transition "ibb-hki" "fail" "📋 Pi Gateway · Hava" "$body" "HTML"
+  body="$(notify_html_alert \
+    "İBB açık veri istasyon ölçümü eşik üstü (${detail})." \
+    "• Hassas gruplar dışarıda temkinli olsun." \
+    "Grafik: ${graf}")"
+  notify_send_with_transition "ibb-hki" "fail" "📋 Hava Kalitesi Uyarısı (HKI)" "$body" "HTML"
 }
 
 notify_ibb_hki_ok() {
   local body
-  body="$(notify_html_alert "$(hostname -s 2>/dev/null || echo pi-gateway)" \
-    "İstanbul hava kalitesi eşiğin altına indi." \
-    "HKI tekrar iyi bandında.")"
-  notify_send_with_transition "ibb-hki" "ok" "✅ Pi Gateway · Hava" "$body" "HTML"
+  body="$(notify_html_alert "Hava kalitesi indeksi (HKI) tekrar iyi bandına indi.")"
+  notify_send_with_transition "ibb-hki" "ok" "✅ Hava Kalitesi Normale Döndü" "$body" "HTML"
 }
 
 notify_test() {
   local gateway body
   gateway="$(panel_url gateway)"
-  body="$(printf '<b>Bildirim kanalı çalışıyor.</b>\n\n<b>Durum:</b> %s\n<b>Menü:</b> <code>/menu</code>' \
-    "$(notify_escape_html "$gateway")")"
-  notify_telegram "✅ Pi Gateway · Test" "$body" "test-once" "HTML"
+  body="$(notify_html_alert "Bildirim kanalı ve servisler aktif." "" "Durum: $(notify_escape_html "$gateway")")"
+  notify_telegram "✅ Bildirim Testi" "$body" "test-once" "HTML"
 }

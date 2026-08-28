@@ -74,8 +74,7 @@ if err and not rows:
     raise SystemExit(0)
 stamp = datetime.now().astimezone().strftime("%d.%m.%Y")
 lines = [
-    f"📋 Pi Gateway · İzleme (30 gün) — {stamp}",
-    "Son 30 günün uptime özeti:",
+    f"📋 Servis İzleme Raporu (30 gün) — {stamp}",
     "",
 ]
 if not rows:

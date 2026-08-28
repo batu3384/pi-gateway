@@ -47,13 +47,15 @@ grep -q 'hermes-inbox-up-notify' "$SCRIPT_DIR/patch-hermes-telegram-pi.sh" \
   || fail "patch ExecStartPost hermes-up yok"
 grep -q '_notify_stack_ok\|notify_stack_recovered' "$SCRIPT_DIR/recover-readonly-root.sh" \
   || fail "recover-readonly stack notify yok"
-grep -q 'Pi Gateway · Asistan' "$SCRIPT_DIR/../lib/notify.sh" \
+grep -q 'Asistan Sohbeti Aktif' "$SCRIPT_DIR/../lib/notify.sh" \
   || fail "asistan basligi yok"
 ! grep -qiE 'Inbox geri|Telegram inbox|getUpdates|stack ayağa|degraded mod|P2 —|saatte en fazla|Yedek SLA|· Yavaş|· Opsiyonel|· Stack' \
   "$SCRIPT_DIR/../lib/notify.sh" \
   || fail "kullaniciya jargon kalmis"
-grep -q 'Sunucu:' "$SCRIPT_DIR/../lib/notify.sh" \
-  || fail "notify_html_alert Sunucu satiri yok"
+grep -q 'notify_ssd_restored' "$SCRIPT_DIR/../lib/notify.sh" \
+  || fail "notify_ssd_restored yok"
+grep -q 'notify_ssd_degraded' "$SCRIPT_DIR/../lib/notify.sh" \
+  || fail "notify_ssd_degraded yok"
 ok "boot+persist+stack recover wiring"
 
 rm -rf "$NOTIFY_STATE_DIR"

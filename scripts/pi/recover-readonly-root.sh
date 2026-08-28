@@ -219,6 +219,8 @@ main() {
       sleep 10
     fi
   fi
+  local was_degraded=0
+  storage_degraded && was_degraded=1
   # Full stack (SSD saglikli + DNS + caddy + gateway): degraded bayragini burada temizle
   if root_rw_ok \
     && (! needs_ssd || { declare -F ssd_mount_healthy >/dev/null 2>&1 && ssd_mount_healthy; }) \
@@ -230,7 +232,13 @@ main() {
     clear_storage_degraded || log "WARN: degraded flag temizlenemedi"
     log "OK stack ayakta (adguard, unbound, caddy, gateway)"
     apply_adguard_rewrites_best_effort "$REMOTE_DIR"
-    _notify_stack_ok "Çekirdek servisler ayakta (DNS + panel)."
+    if [[ "$was_degraded" -eq 1 ]]; then
+      # shellcheck source=../lib/notify.sh
+      source "$SCRIPT_DIR/../lib/notify.sh"
+      notify_ssd_restored "$(hostname -s)" "Yazılımsal kurtarma tamamlandı; tam servisler geri yüklendi."
+    else
+      _notify_stack_ok "Çekirdek servisler ayakta (DNS + panel)."
+    fi
     recover_lock_release
     exit 0
   fi

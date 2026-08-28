@@ -402,7 +402,7 @@ def _devices_panel_url() -> str:
 
 def _plain_header() -> list[str]:
     return [
-        "📋 Pi Gateway · Ağ",
+        "📋 Ağ Bildirimi",
         datetime.now().strftime("%d.%m.%Y %H:%M"),
         "",
     ]

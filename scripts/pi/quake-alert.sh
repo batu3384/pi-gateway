@@ -31,6 +31,6 @@ out="$(python3 "$PY" 2> >(logger -t pi-gateway-quake -p user.warning) || true)"
 [[ -n "${out// }" ]] || exit 0
 while IFS= read -r block; do
   [[ -n "${block// }" ]] || continue
-  notify_send_message "$(printf '⚠️ Pi Gateway · Deprem\n\n%s' "$block")" || true
+  notify_send_message "$(printf '⚠️ Deprem Uyarısı\n\n%s' "$block")" || true
 done < <(printf '%s\n' "$out" | awk 'BEGIN{RS="---\n"} {gsub(/^[ \t\n]+|[ \t\n]+$/,""); if(length($0)) print}')
 exit 0

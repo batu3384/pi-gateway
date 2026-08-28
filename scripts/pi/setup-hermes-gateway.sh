@@ -40,18 +40,13 @@ _alert_inbox_down() {
   source "${SCRIPT_DIR}/../lib/notify.sh" 2>/dev/null || return 0
   load_telegram_from_hermes 2>/dev/null || true
   notify_enabled || return 0
-  notify_send_message "🚨 Pi Gateway · Asistan
-
-Sohbet asistanı şu an kapalı.
-
-${reason}
-
-Ne yapmalı?
-• journalctl -u ${unit} -n 80 --no-pager
-• sudo systemctl restart ${unit}
-• REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/setup-hermes-gateway.sh
-
-Alarm bildirimleri çalışabilir; sohbet şu an yok." || true
+  local body
+  body="$(notify_html_alert \
+    "${reason}" \
+    "• Pi: <code>journalctl -u ${unit} -n 50</code>
+• Yeniden başlat: <code>sudo systemctl restart ${unit}</code>" \
+    "Alarm bildirimleri devrede; asistan sohbeti geçici olarak kapalı.")"
+  notify_send_message "$(printf '<b>⚠️ Asistan Sohbeti Kesildi</b>\n\n%s' "$body")" "HTML" || true
 }
 
 if [[ "${HERMES_TELEGRAM_GATEWAY:-}" != "true" ]]; then
