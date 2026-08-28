@@ -22,6 +22,14 @@ login() {
   agh_login "$BASE" "$COOKIE" "$AGH_ADMIN_USER" "$AGH_ADMIN_PASSWORD"
 }
 login || { log "AdGuard login basarisiz"; exit 1; }
+# ponytail: TIF Full ~2.1M rules. Ceiling ~400MiB Available; upgrade: ADGUARD_FILTER_PROFILE=balanced.
+if [[ "$ADGUARD_FILTER_PROFILE" == "aggressive" ]]; then
+  _avail_kb="$(awk '/MemAvailable:/ {print $2; exit}' /proc/meminfo 2>/dev/null || echo 0)"
+  if [[ "${_avail_kb:-0}" -gt 0 && "${_avail_kb}" -lt 409600 ]]; then
+    log "WARN MemAvailable ${_avail_kb}kB — TIF Full OOM risk; set ADGUARD_FILTER_PROFILE=balanced"
+  fi
+  unset _avail_kb
+fi
 export BASE COOKIE REMOTE_DIR ADGUARD_FILTER_PROFILE
 python3 - <<'PY'
 import hashlib, json, os, subprocess, sys

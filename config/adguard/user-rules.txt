@@ -55,6 +55,10 @@
 ||an.yandex.ru^$important
 # JW Player / pirat dizi player reklam CDN (çift-o videooplayer; sniper 2026-08)
 ||videooplayer.xyz^$important
-# First-party app (Pro++ native leftovers — WhatsApp/Instagram kırılmasın)
+# First-party app (Pro++ native leftovers — WhatsApp/Instagram/ColorOS kırılmasın)
 @@||dit.whatsapp.net^
 @@||graph.instagram.com^
+@@||graph-fallback.instagram.com^
+# ColorOS appconf (not blanket heytap.com)
+@@||mdp-appconf-tr.heytapdl.com^
+@@||cloudconf-app-tr.heytapmobile.com^

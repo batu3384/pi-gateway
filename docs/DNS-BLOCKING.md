@@ -13,24 +13,25 @@ Result: Ads served from the same domain (YouTube `googlevideo.com`, some in-app 
 
 ## Current DNS stack
 
-Profile: `ADGUARD_FILTER_PROFILE=balanced` (default, TIF Medium) or `aggressive` (TIF Full + CNAME original; more RAM). Repo default stays `balanced`. Live Pi can use `aggressive`. Fake list **not** stacked — Pro++ already includes it.
+Profile: `ADGUARD_FILTER_PROFILE=balanced` (default, TIF Medium) or `aggressive` (TIF Full + CNAME original; more RAM). Repo default stays `balanced`. Live Pi can use `aggressive`. Fake list **not** stacked — Pro++ already includes it. **AdGuard DNS Popup Hosts** (`filter_59`) **not** stacked — Pro++ already covers popups.
 
-HaGeZi **TIF** (threat intel) ≠ **Multi Ultimate** (ad list). TIF levels: Mini / Medium / Full. Multi Ultimate replaces Pro++ and breaks META/Xbox — not used. Do not stack TIF Full + TIF Medium.
+HaGeZi **TIF** (threat intel) ≠ **Multi Ultimate** (ad list). TIF levels: Mini / Medium / Full. Multi Ultimate replaces Pro++ and breaks META/Xbox — not used. Do not stack TIF Full + TIF Medium. TIF Full: apply script WARNs if `MemAvailable` < 400MiB — switch to `balanced` (TIF Medium), do not add more lists.
 
-1. **HaGeZi Pro++** — primary ad/tracker list (OISD and others already included)
+1. **HaGeZi Pro++** — primary ad/tracker list (OISD, popup hosts, and others already included)
 2. **HaGeZi TIF Medium** (balanced) or **TIF Full** (`adblock/tif.txt`, aggressive; AGH ≥2GB RAM) — malware/phishing. `tif.full.txt` yok; jsDelivr o isimde 403 verir.
 3. **HaGeZi DoH/DoT Bypass** — known encrypted-DNS hosts
-4. **AdGuard DNS Popup Hosts** — popup hosts
-5. **Apple / Windows / Samsung tracker** — device telemetry
-6. **Perflyst/Dandelion Smart TV** (`filter_7`) + **native.lgwebos** — CTV / LG webOS. Not HaGeZi Multi.
-7. **AWAvenue Ads Rule** — Android advertising SDKs (DNS-level; not the AdGuard browser Mobile Ads filter)
-8. **User rules** — `config/adguard/user-rules.txt` (`$important` pins + sniper; `@@` allowlist for WhatsApp/Instagram). Apply compares disk **and** AGH `user_rules` (hash-only skip dropped rules). `set_rules` then `cache_clear`.
-9. **AdGuard CNAME original trackers** (aggressive only) — `combined_original_trackers.txt`. AGH already follows CNAME in responses; this list is the *original* tracker hostnames AdGuard recommends for CNAME-capable resolvers. Do **not** add `combined_disguised_trackers.txt` (first-party alias names; microsite/clickthrough FP). ~4KB.
+4. **Apple / Windows / Samsung tracker** — device telemetry
+5. **Perflyst/Dandelion Smart TV** (`filter_7`) + **native.lgwebos** — CTV / LG webOS. Not HaGeZi Multi.
+6. **AWAvenue Ads Rule** — Android advertising SDKs (DNS-level; not the AdGuard browser Mobile Ads filter)
+7. **User rules** — `config/adguard/user-rules.txt` (`$important` pins + sniper; `@@` allowlist for WhatsApp / Instagram graph + fallback / ColorOS appconf hosts). Apply compares disk **and** AGH `user_rules` (hash-only skip dropped rules). `set_rules` then `cache_clear`.
+8. **AdGuard CNAME original trackers** (aggressive only) — `combined_original_trackers.txt`. AGH already follows CNAME in responses; this list is the *original* tracker hostnames AdGuard recommends for CNAME-capable resolvers. Do **not** add `combined_disguised_trackers.txt` (first-party alias names; microsite/clickthrough FP). ~4KB.
 
 OISD Big and AdGuard DNS filter (`filter_1`) omitted: duplicate Pro++; waste Pi RAM.
-AdGuard browser Mobile Ads (`filters.adtidy.org/.../11.txt`) is CSS/path — skip for AdGuard Home.
+AdGuard browser Mobile Ads (`filters.adtidy.org/.../11.txt`) is CSS/path — skip for AdGuard Home. Do **not** add Multi Ultimate / NRD / abused-TLD / TIF-IP-in-DNS.
 
-Auto-heal: `ADGUARD_AUTO_HEAL=true` (health-check drift → `ensure-adguard-blocking.sh --fix-light`).
+Kaçan reklam: query log → one `user-rules.txt` sniper line. New mega-list yok.
+
+Auto-heal: `ADGUARD_AUTO_HEAL=true`. Health prefers `REMOTE_DIR/scripts/pi/` (`ensure-adguard-blocking.sh --fix-light`, `apply-adguard-filters.sh`, `apply-adguard-dns.sh`) so systemd `/usr/local/lib` snapshot cannot re-apply a stale hash-only skip. Those three are also in `install-privileged-scripts.sh` as fallback.
 Bypass check: `ADGUARD_BYPASS_CHECK=strict` on `make diagnose-dns` (LAN clients must appear in query log).
 Custom rules: copy `config/adguard/user-rules.local.txt.example` → `user-rules.local.txt` on the Pi.
 Daily filter refresh: `pi-gateway-adguard-filters.timer` (~04:15).

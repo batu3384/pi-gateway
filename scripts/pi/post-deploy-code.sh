@@ -32,6 +32,7 @@ crit() {
 }
 
 crit "Privileged scripts" "$SCRIPT_DIR/install-privileged-scripts.sh"
+soft "AdGuard filters" "$SCRIPT_DIR/apply-adguard-filters.sh"
 soft "Config izinleri" "$SCRIPT_DIR/fix-config-perms.sh"
 soft "Host sertlestirme" "$SCRIPT_DIR/harden-host.sh"
 

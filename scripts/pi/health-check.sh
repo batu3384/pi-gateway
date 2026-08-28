@@ -13,6 +13,17 @@ source "$SCRIPT_DIR/../lib/adguard-api.sh"
 source "$SCRIPT_DIR/../lib/unbound-dnssec.sh"
 # shellcheck source=../lib/stack-health.sh
 source "$SCRIPT_DIR/../lib/stack-health.sh"
+# systemd ExecStart = /usr/local/lib copy. AGH apply lived stale/missing there.
+# Home git wins when present; privileged copy is fallback.
+_pi_home_script() {
+  local name="$1"
+  local home="${REMOTE_DIR}/scripts/pi/${name}"
+  if [[ -f "$home" ]]; then
+    printf '%s\n' "$home"
+  else
+    printf '%s\n' "${SCRIPT_DIR}/${name}"
+  fi
+}
 LOG_TAG="pi-gateway-health"
 PI_STATIC_IP="${PI_STATIC_IP:-127.0.0.1}"
 LAN_DOMAIN="${LAN_DOMAIN:-home}"
@@ -118,7 +129,7 @@ adguard_dns_ok() {
 if ! adguard_dns_ok; then
   if [[ "${ADGUARD_AUTO_HEAL:-true}" == "true" ]]; then
     logger -t "$LOG_TAG" "adguard drift — auto-heal (light)"
-    if ! REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/ensure-adguard-blocking.sh" --fix-light; then
+    if ! REMOTE_DIR="$REMOTE_DIR" bash "$(_pi_home_script ensure-adguard-blocking.sh)" --fix-light; then
       logger -t "$LOG_TAG" "WARN adguard auto-heal (light) basarisiz"
     fi
   fi
@@ -164,7 +175,7 @@ print('1' if udp_ok and ptr_ok and ttl_ok else '0')
     [[ "${rules:-0}" -ge "${ADGUARD_MIN_FILTER_RULES:-100000}" ]] || {
       if [[ "${ADGUARD_AUTO_HEAL:-true}" == "true" ]]; then
         logger -t "$LOG_TAG" "adguard-filter-rules-low — auto-heal (filters)"
-        if ! REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/apply-adguard-filters.sh"; then
+        if ! REMOTE_DIR="$REMOTE_DIR" bash "$(_pi_home_script apply-adguard-filters.sh)"; then
           logger -t "$LOG_TAG" "WARN adguard filter auto-heal basarisiz"
         fi
         rules="$(curl -fsS -b "$COOKIE" "${BASE}/control/filtering/status" | python3 -c "
@@ -179,7 +190,7 @@ print(sum((f.get('rules_count') or 0) for f in d.get('filters',[])))
     [[ "$dns_ok" == "1" ]] || {
       if [[ "${ADGUARD_AUTO_HEAL:-true}" == "true" ]]; then
         logger -t "$LOG_TAG" "adguard-dns-config-drift — auto-heal"
-        if ! REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/apply-adguard-dns.sh"; then
+        if ! REMOTE_DIR="$REMOTE_DIR" bash "$(_pi_home_script apply-adguard-dns.sh)"; then
           logger -t "$LOG_TAG" "WARN adguard dns auto-heal basarisiz"
         fi
         dns_ok="$(agh_dns_info "$BASE" "$COOKIE" | python3 -c "

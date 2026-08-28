@@ -8,21 +8,31 @@ FIX_LIGHT=false
 [[ "${1:-}" == "--fix" ]] && FIX=true
 [[ "${1:-}" == "--fix-light" ]] && FIX_LIGHT=true
 
+_pi_home_script() {
+  local name="$1"
+  local home="${REMOTE_DIR}/scripts/pi/${name}"
+  if [[ -f "$home" ]]; then
+    printf '%s\n' "$home"
+  else
+    printf '%s\n' "${SCRIPT_DIR}/${name}"
+  fi
+}
+
 run_diagnose() {
   ADGUARD_SKIP_BYPASS_CHECK=true ADGUARD_BYPASS_CHECK=off \
-    REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/diagnose-dns-bypass.sh"
+    REMOTE_DIR="$REMOTE_DIR" bash "$(_pi_home_script diagnose-dns-bypass.sh)"
 }
 
 heal_light() {
   echo "[ensure-adguard] hedefli onarim (dns + filtre + rewrite)..."
-  REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/apply-adguard-dns.sh"
-  REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/apply-adguard-filters.sh"
-  REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/apply-adguard-rewrites.sh"
+  REMOTE_DIR="$REMOTE_DIR" bash "$(_pi_home_script apply-adguard-dns.sh)"
+  REMOTE_DIR="$REMOTE_DIR" bash "$(_pi_home_script apply-adguard-filters.sh)"
+  REMOTE_DIR="$REMOTE_DIR" bash "$(_pi_home_script apply-adguard-rewrites.sh)"
 }
 
 heal_full() {
   echo "[ensure-adguard] tam configure-adguard..."
-  REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/configure-adguard.sh"
+  REMOTE_DIR="$REMOTE_DIR" bash "$(_pi_home_script configure-adguard.sh)"
 }
 
 # health-check --fix-light: DNS zaten kirik; diagnose (nmap/audit) 30s+ ve .113 false FAIL.

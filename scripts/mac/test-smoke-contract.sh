@@ -18,7 +18,9 @@ for needle in \
   'adguard-dhcp-config' \
   'adguard-ui-ufw-no-lan' \
   'privileged-lib-sync' \
+  'privileged-adguard-filters-sync' \
   'privileged-lib-hash' \
+  'adguard-no-popup-stack' \
   'ssd-health-timer' \
   'caddy-auth-configured' \
   'unbound-dnssec-ad' \

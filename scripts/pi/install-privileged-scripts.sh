@@ -14,6 +14,9 @@ SCRIPTS=(
   scripts/pi/ensure-ssd-fstab.sh
   scripts/pi/ensure-data-symlink.sh
   scripts/pi/apply-adguard-rewrites.sh
+  scripts/pi/apply-adguard-filters.sh
+  scripts/pi/apply-adguard-dns.sh
+  scripts/pi/ensure-adguard-blocking.sh
   scripts/pi/health-check.sh
   scripts/pi/check-sd-health.sh
   scripts/pi/setup-docker-fallback.sh

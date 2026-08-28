@@ -228,14 +228,32 @@ grep -q 'dig @100.x' "$PROJECT_DIR/docs/TAILSCALE.md" \
 
 grep -q 'adblock/fake.txt' "$PROJECT_DIR/config/adguard/filter-lists.json" \
   && die "HaGeZi Fake Pro++ icinde — stack etme"
+grep -q 'filter_59.txt' "$PROJECT_DIR/config/adguard/filter-lists.json" \
+  && die "Popup Hosts Pro++ icinde — stack etme"
 grep -q 'videooplayer.xyz' "$PROJECT_DIR/config/adguard/user-rules.txt" \
   || die "user-rules videooplayer sniper yok"
 grep -q '@@||dit.whatsapp.net^' "$PROJECT_DIR/config/adguard/user-rules.txt" \
   || die "user-rules WhatsApp allowlist yok"
+grep -q '@@||graph-fallback.instagram.com^' "$PROJECT_DIR/config/adguard/user-rules.txt" \
+  || die "user-rules Instagram graph-fallback allowlist yok"
+grep -q '@@||mdp-appconf-tr.heytapdl.com^' "$PROJECT_DIR/config/adguard/user-rules.txt" \
+  || die "user-rules Heytap appconf allowlist yok"
+grep -q '@@||cloudconf-app-tr.heytapmobile.com^' "$PROJECT_DIR/config/adguard/user-rules.txt" \
+  || die "user-rules Heytap cloudconf allowlist yok"
 grep -q 'cache_clear' "$PROJECT_DIR/scripts/pi/apply-adguard-filters.sh" \
   || die "apply-adguard-filters cache_clear yok"
 grep -q 'agh_match' "$PROJECT_DIR/scripts/pi/apply-adguard-filters.sh" \
   || die "apply-adguard-filters AGH user_rules kiyas yok"
+grep -q 'ponytail: TIF Full' "$PROJECT_DIR/scripts/pi/apply-adguard-filters.sh" \
+  || die "apply-adguard-filters TIF Full MemAvailable tavan yok"
+grep -q '_pi_home_script apply-adguard-filters.sh' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check apply-adguard-filters home SSOT yok"
+grep -q '_pi_home_script ensure-adguard-blocking.sh' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check ensure-adguard home SSOT yok"
+grep -q '_pi_home_script apply-adguard-dns.sh' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check apply-adguard-dns home SSOT yok"
+grep -q '_pi_home_script apply-adguard-filters.sh' "$PROJECT_DIR/scripts/pi/ensure-adguard-blocking.sh" \
+  || die "ensure-adguard nested filters home SSOT yok"
 grep -q 'combined_original_trackers.txt' "$PROJECT_DIR/config/adguard/filter-lists.json" \
   || die "CNAME original_trackers aggressive profilde yok"
 grep -q 'combined_disguised_trackers.txt' "$PROJECT_DIR/config/adguard/filter-lists.json" \
@@ -252,6 +270,12 @@ grep -q 'unbound-dnssec-ad' "$PROJECT_DIR/scripts/pi/health-check.sh" \
   || die "health unbound-dnssec-ad yok"
 grep -q 'unbound-dnssec-sigfail' "$PROJECT_DIR/scripts/pi/smoke-test.sh" \
   || die "smoke unbound-dnssec-sigfail yok"
+grep -q 'privileged-adguard-filters-sync' "$PROJECT_DIR/scripts/pi/smoke-test.sh" \
+  || die "smoke privileged-adguard-filters-sync yok"
+grep -q 'adguard-no-popup-stack' "$PROJECT_DIR/scripts/pi/smoke-test.sh" \
+  || die "smoke adguard-no-popup-stack yok"
+grep -A25 'agh_no_popup_stack()' "$PROJECT_DIR/scripts/pi/smoke-test.sh" | grep -q 'trap ' \
+  && die "agh_no_popup_stack RETURN trap set -u kirar"
 [[ -f "$PROJECT_DIR/scripts/pi/export-adguard-metrics.sh" ]] || die "export-adguard-metrics.sh yok"
 [[ -f "$PROJECT_DIR/scripts/lib/adguard-metrics.py" ]] || die "adguard-metrics.py yok"
 bash "$PROJECT_DIR/scripts/pi/export-adguard-metrics.sh" --self-check \
@@ -264,6 +288,14 @@ grep -q 'export-adguard-metrics.sh' "$PROJECT_DIR/scripts/pi/install-privileged-
   || die "install-privileged export-adguard-metrics yok"
 grep -q 'unbound-dnssec.sh' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" \
   || die "install-privileged unbound-dnssec yok"
+grep -q 'apply-adguard-filters.sh' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" \
+  || die "install-privileged apply-adguard-filters yok"
+grep -q 'apply-adguard-dns.sh' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" \
+  || die "install-privileged apply-adguard-dns yok"
+grep -q 'ensure-adguard-blocking.sh' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" \
+  || die "install-privileged ensure-adguard-blocking yok"
+grep -q 'apply-adguard-filters.sh' "$PROJECT_DIR/scripts/pi/post-deploy-code.sh" \
+  || die "post-deploy-code apply-adguard-filters yok"
 grep -q 'pi_gateway_adguard_blocked_ratio' "$PROJECT_DIR/config/grafana/provisioning/dashboards/json/pi-gateway.json" \
   || die "grafana adguard blocked_ratio yok"
 grep -q 'pi_gateway_adguard_filter_rules' "$PROJECT_DIR/config/grafana/provisioning/dashboards/json/pi-gateway.json" \
@@ -274,6 +306,10 @@ grep -q 'combined_original_trackers' "$PROJECT_DIR/docs/DNS-BLOCKING.md" \
   || die "DNS-BLOCKING CNAME original yok"
 grep -q 'dnssec-failed.org' "$PROJECT_DIR/docs/DNS-BLOCKING.md" \
   || die "DNS-BLOCKING DNSSEC kontrat yok"
+grep -q 'Popup Hosts' "$PROJECT_DIR/docs/DNS-BLOCKING.md" \
+  || die "DNS-BLOCKING Popup Hosts not stacked notu yok"
+grep -q 'REMOTE_DIR/scripts/pi/' "$PROJECT_DIR/docs/DNS-BLOCKING.md" \
+  || die "DNS-BLOCKING health home SSOT yok"
 
 grep -q 'CANARY_DNS_WAIT_SEC:-10' "$PROJECT_DIR/scripts/pi/canary-compose-update.sh" \
   || die "canary DNS wait default 10 degil (45s yastik)"

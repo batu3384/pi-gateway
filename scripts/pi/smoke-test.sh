@@ -28,6 +28,27 @@ run_check() {
     echo "FAIL $name"
   fi
 }
+agh_no_popup_stack() {
+  local cookie rc=1
+  cookie="$(mktemp)"
+  if curl -fsS -c "$cookie" -X POST "http://127.0.0.1:${ADGUARD_WEB_PORT}/control/login" \
+      -H 'Content-Type: application/json' \
+      -d "{\"name\":\"${AGH_ADMIN_USER:-admin}\",\"password\":\"${AGH_ADMIN_PASSWORD}\"}" >/dev/null \
+    && curl -fsS -b "$cookie" "http://127.0.0.1:${ADGUARD_WEB_PORT}/control/filtering/status" | python3 -c '
+import json,sys
+d=json.load(sys.stdin)
+urls=[(f.get("url") or "") for f in d.get("filters",[])]
+rules=[r for r in (d.get("user_rules") or []) if isinstance(r, str)]
+if any("filter_59.txt" in u or "adblock/fake.txt" in u for u in urls):
+    sys.exit(1)
+if not any("graph-fallback.instagram.com" in r for r in rules):
+    sys.exit(1)
+'; then
+    rc=0
+  fi
+  rm -f "$cookie"
+  return "$rc"
+}
 CADDY_AUTH_USER="${CADDY_AUTH_USER:-${AGH_ADMIN_USER:-admin}}"
 CADDY_AUTH_PASSWORD="${CADDY_AUTH_PASSWORD:-${AGH_ADMIN_PASSWORD:-}}"
 run_caddy_auth_checks() {
@@ -125,6 +146,7 @@ fi
 run_check "homepage" curl -fsS "http://127.0.0.1:3040"
 run_check "uptime-kuma" curl -fsS "http://127.0.0.1:3001"
 run_check "adguard-ui" curl -fsS "http://127.0.0.1:${ADGUARD_WEB_PORT}/"
+run_check "adguard-no-popup-stack" agh_no_popup_stack
 if [[ "${ENABLE_CADDY:-true}" == "true" ]] && [[ -z "${CADDY_AUTH_PASSWORD:-}" ]]; then
   run_check "gateway-http" bash -c \
     'if [[ "${ENABLE_TLS:-false}" == "true" ]]; then code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 --resolve "gateway.'"${LAN_DOMAIN}"':443:'"${PI_STATIC_IP}"'" "https://gateway.'"${LAN_DOMAIN}"'/"); else code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 -H "Host: gateway.'"${LAN_DOMAIN}"'" "http://'"${PI_STATIC_IP}"'/"); fi; [[ "$code" == "200" || "$code" == "401" || "$code" == "302" || "$code" == "307" ]]'
@@ -155,6 +177,9 @@ run_check "privileged-lib-installed" test -x /usr/local/lib/pi-gateway/scripts/p
 run_check "privileged-lib-sync" diff -q \
   "${REMOTE_DIR}/scripts/lib/stack-health.sh" \
   /usr/local/lib/pi-gateway/scripts/lib/stack-health.sh
+run_check "privileged-adguard-filters-sync" diff -q \
+  "${REMOTE_DIR}/scripts/pi/apply-adguard-filters.sh" \
+  /usr/local/lib/pi-gateway/scripts/pi/apply-adguard-filters.sh
 run_check "privileged-lib-hash" bash -c \
   '[[ -f /usr/local/lib/pi-gateway/.installed-sha256 ]] && (cd /usr/local/lib/pi-gateway && sha256sum -c .installed-sha256 >/dev/null)'
 if [[ "$DEGRADED" -eq 0 ]]; then
