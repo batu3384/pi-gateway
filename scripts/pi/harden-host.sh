@@ -73,10 +73,16 @@ harden_sudo() {
     log "HATA: sudo sahibi belirlenemedi"
     return 1
   }
-  printf '%s ALL=(ALL:ALL) PASSWD: ALL\n' "$user" \
-    | sudo tee "$file" >/dev/null
-  sudo chmod 440 "$file"
-  sudo visudo -cf "$file" >/dev/null
+  local tmp
+  tmp="$(mktemp)"
+  printf '%s ALL=(ALL:ALL) PASSWD: ALL\n' "$user" >"$tmp"
+  if ! sudo visudo -cf "$tmp" >/dev/null; then
+    rm -f "$tmp"
+    log "HATA: sudoers doğrulaması başarısız"
+    return 1
+  fi
+  sudo install -o root -g root -m 440 "$tmp" "$file"
+  rm -f "$tmp"
   log "sudo NOPASSWD kapatildi ($file)"
 }
 

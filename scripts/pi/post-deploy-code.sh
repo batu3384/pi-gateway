@@ -34,7 +34,6 @@ crit() {
 crit "Privileged scripts" "$SCRIPT_DIR/install-privileged-scripts.sh"
 soft "AdGuard filters" "$SCRIPT_DIR/apply-adguard-filters.sh"
 soft "Config izinleri" "$SCRIPT_DIR/fix-config-perms.sh"
-soft "Host sertlestirme" "$SCRIPT_DIR/harden-host.sh"
 
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx caddy; then
   log ">> Caddy reload"
@@ -73,4 +72,5 @@ fi
 
 soft "Home ops timers" "$SCRIPT_DIR/setup-home-ops-timers.sh"
 soft "Notify transition self-check" "$SCRIPT_DIR/test-notify-transitions.sh"
+soft "Host sertlestirme" "$SCRIPT_DIR/harden-host.sh"
 log "Code post-deploy tamamlandi"

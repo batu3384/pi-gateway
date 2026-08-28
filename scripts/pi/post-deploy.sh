@@ -137,7 +137,6 @@ if [[ "${UNIFIED_LOGIN:-true}" == "true" ]]; then
 elif [[ "${SYNC_SERVICE_PASSWORDS:-false}" == "true" ]]; then
   run_step_optional "Servis sifreleri" "$SCRIPT_DIR/sync-service-passwords.sh"
 fi
-run_step_optional "Host sertlestirme" "$SCRIPT_DIR/harden-host.sh"
 if [[ "$DEPLOY_DEGRADED" -eq 0 ]]; then
 if [[ "${ENABLE_MONITORING:-true}" == "true" ]]; then
   run_step_critical "Monitoring data dirs" "$SCRIPT_DIR/ensure-monitoring-data.sh"
@@ -227,4 +226,5 @@ if [[ "$DEPLOY_DEGRADED" -eq 0 ]]; then
   run_step_optional "Home ops timers" "$SCRIPT_DIR/setup-home-ops-timers.sh"
   run_step_critical "Post-deploy integration" "$SCRIPT_DIR/post-deploy-integration.sh"
 fi
+run_step_optional "Host sertlestirme" "$SCRIPT_DIR/harden-host.sh"
 log "Post-deploy tamamlandi"
