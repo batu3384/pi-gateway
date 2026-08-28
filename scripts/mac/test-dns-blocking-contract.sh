@@ -226,6 +226,16 @@ grep -q 'Global nameserver' "$PROJECT_DIR/docs/TAILSCALE.md" \
 grep -q 'dig @100.x' "$PROJECT_DIR/docs/TAILSCALE.md" \
   || die "TAILSCALE.md uzak dig @100.x yok"
 
+grep -q 'adblock/fake.txt' "$PROJECT_DIR/config/adguard/filter-lists.json" \
+  && die "HaGeZi Fake Pro++ icinde — stack etme"
+grep -q 'videooplayer.xyz' "$PROJECT_DIR/config/adguard/user-rules.txt" \
+  || die "user-rules videooplayer sniper yok"
+grep -q '@@||dit.whatsapp.net^' "$PROJECT_DIR/config/adguard/user-rules.txt" \
+  || die "user-rules WhatsApp allowlist yok"
+grep -q 'cache_clear' "$PROJECT_DIR/scripts/pi/apply-adguard-filters.sh" \
+  || die "apply-adguard-filters cache_clear yok"
+grep -q 'agh_match' "$PROJECT_DIR/scripts/pi/apply-adguard-filters.sh" \
+  || die "apply-adguard-filters AGH user_rules kiyas yok"
 grep -q 'combined_original_trackers.txt' "$PROJECT_DIR/config/adguard/filter-lists.json" \
   || die "CNAME original_trackers aggressive profilde yok"
 grep -q 'combined_disguised_trackers.txt' "$PROJECT_DIR/config/adguard/filter-lists.json" \

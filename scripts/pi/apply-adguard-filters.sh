@@ -96,6 +96,21 @@ for name, url in desired:
         print(f"[adguard-filters] HATA eklenemedi: {name} ({exc})", file=sys.stderr)
         failed.append(name)
 
+def persist_hash(digest: str) -> None:
+    hash_file.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        hash_file.write_text(digest + "\n")
+    except PermissionError:
+        subprocess.run(
+            ["sudo", "tee", str(hash_file)],
+            input=digest + "\n",
+            text=True,
+            check=True,
+            stdout=subprocess.DEVNULL,
+        )
+        subprocess.run(["sudo", "chmod", "644", str(hash_file)], check=False)
+
+
 rules_digest = hashlib.sha256("\n".join(rules).encode()).hexdigest()
 prev_digest = ""
 if hash_file.is_file():
@@ -103,28 +118,36 @@ if hash_file.is_file():
         prev_digest = hash_file.read_text().strip()
     except OSError:
         prev_digest = ""
-if rules_digest == prev_digest:
+agh_rules = [
+    r.strip()
+    for r in (status.get("user_rules") or [])
+    if isinstance(r, str) and r.strip() and not r.strip().startswith("#")
+]
+# Hash tek basina yetmez: AGH kopyasi dusebilir, timer set_rules atlar.
+agh_match = sorted(agh_rules) == sorted(rules)
+if rules_digest == prev_digest and agh_match:
     print(f"[adguard-filters] user rules degismedi ({len(rules)} kural, set_rules atlandi)")
 else:
+    why = []
+    if rules_digest != prev_digest:
+        why.append("disk")
+    if not agh_match:
+        why.append(f"agh {len(agh_rules)}!={len(rules)}")
     try:
         api("/control/filtering/set_rules", "POST", {"rules": rules, "enabled": True})
     except (subprocess.CalledProcessError, RuntimeError) as exc:
         print(f"[adguard-filters] HATA set_rules: {exc}", file=sys.stderr)
         failed.append("set_rules")
     else:
-        hash_file.parent.mkdir(parents=True, exist_ok=True)
+        persist_hash(rules_digest)
+        print(
+            f"[adguard-filters] user rules guncellendi ({len(rules)} kural, {','.join(why) or 'apply'})"
+        )
         try:
-            hash_file.write_text(rules_digest + "\n")
-        except PermissionError:
-            subprocess.run(
-                ["sudo", "tee", str(hash_file)],
-                input=rules_digest + "\n",
-                text=True,
-                check=True,
-                stdout=subprocess.DEVNULL,
-            )
-            subprocess.run(["sudo", "chmod", "644", str(hash_file)], check=False)
-        print(f"[adguard-filters] user rules guncellendi ({len(rules)} kural)")
+            api("/control/cache_clear", "POST")
+            print("[adguard-filters] DNS cache temizlendi")
+        except (subprocess.CalledProcessError, RuntimeError) as exc:
+            print(f"[adguard-filters] WARN cache_clear: {exc}", file=sys.stderr)
 
 print(f"[adguard-filters] profil={profile}")
 if added or removed:

@@ -13,7 +13,7 @@ Result: Ads served from the same domain (YouTube `googlevideo.com`, some in-app 
 
 ## Current DNS stack
 
-Profile: `ADGUARD_FILTER_PROFILE=balanced` (default, TIF Medium) or `aggressive` (TIF Full + Fake + CNAME original; more RAM). Repo default stays `balanced`. Live Pi can use `aggressive`.
+Profile: `ADGUARD_FILTER_PROFILE=balanced` (default, TIF Medium) or `aggressive` (TIF Full + CNAME original; more RAM). Repo default stays `balanced`. Live Pi can use `aggressive`. Fake list **not** stacked — Pro++ already includes it.
 
 HaGeZi **TIF** (threat intel) ≠ **Multi Ultimate** (ad list). TIF levels: Mini / Medium / Full. Multi Ultimate replaces Pro++ and breaks META/Xbox — not used. Do not stack TIF Full + TIF Medium.
 
@@ -22,9 +22,9 @@ HaGeZi **TIF** (threat intel) ≠ **Multi Ultimate** (ad list). TIF levels: Mini
 3. **HaGeZi DoH/DoT Bypass** — known encrypted-DNS hosts
 4. **AdGuard DNS Popup Hosts** — popup hosts
 5. **Apple / Windows / Samsung tracker** — device telemetry
-6. **HaGeZi Smart TV** + **native.lgwebos** — CTV / LG webOS ad domains
+6. **Perflyst/Dandelion Smart TV** (`filter_7`) + **native.lgwebos** — CTV / LG webOS. Not HaGeZi Multi.
 7. **AWAvenue Ads Rule** — Android advertising SDKs (DNS-level; not the AdGuard browser Mobile Ads filter)
-8. **User rules** — `config/adguard/user-rules.txt` (Google Ads, mobile SDKs, TR trackers, `$important`)
+8. **User rules** — `config/adguard/user-rules.txt` (`$important` pins + sniper; `@@` allowlist for WhatsApp/Instagram). Apply compares disk **and** AGH `user_rules` (hash-only skip dropped rules). `set_rules` then `cache_clear`.
 9. **AdGuard CNAME original trackers** (aggressive only) — `combined_original_trackers.txt`. AGH already follows CNAME in responses; this list is the *original* tracker hostnames AdGuard recommends for CNAME-capable resolvers. Do **not** add `combined_disguised_trackers.txt` (first-party alias names; microsite/clickthrough FP). ~4KB.
 
 OISD Big and AdGuard DNS filter (`filter_1`) omitted: duplicate Pro++; waste Pi RAM.

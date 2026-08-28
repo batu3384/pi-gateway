@@ -55,3 +55,6 @@
 ||an.yandex.ru^$important
 # JW Player / pirat dizi player reklam CDN (çift-o videooplayer; sniper 2026-08)
 ||videooplayer.xyz^$important
+# First-party app (Pro++ native leftovers — WhatsApp/Instagram kırılmasın)
+@@||dit.whatsapp.net^
+@@||graph.instagram.com^
