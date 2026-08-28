@@ -81,7 +81,7 @@ harden_sudo() {
 }
 
 main() {
-  case "${1:-final}" in
+  case "${1:---final}" in
     --prepare)
       disable_rpcbind
       fix_adguard_config_perms
