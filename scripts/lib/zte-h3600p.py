@@ -75,7 +75,10 @@ def _text(value: Any) -> str:
 
 
 def _field_name(value: Any) -> str:
-    return re.sub(r"[^a-z0-9]", "", _text(value).lower())
+    name = re.sub(r"[^a-z0-9]", "", _text(value).lower())
+    if name.startswith("luquid"):
+        name = name[len("luquid") :]
+    return name
 
 
 def normalize_mac(value: Any) -> str:
@@ -245,6 +248,7 @@ class ZteH3600P:
         self.username = username
         self.password = password
         self.timeout = timeout
+        self.session_token = ""
         self.guid = int(time.time() * 1000)
         self.opener = urllib.request.build_opener(
             urllib.request.HTTPCookieProcessor(CookieJar())
@@ -275,6 +279,7 @@ class ZteH3600P:
                 "User-Agent": "Mozilla/5.0 Pi-Gateway modem inventory",
                 "Accept": "application/json, text/xml, */*",
                 "X-Requested-With": "XMLHttpRequest",
+                "Referer": f"{self.base_url}/",
                 "Content-Type": "application/x-www-form-urlencoded",
             },
             method="POST" if form is not None else "GET",
@@ -334,40 +339,45 @@ class ZteH3600P:
             )
         except (json.JSONDecodeError, AdapterError) as exc:
             raise AdapterError(f"login response invalid: {exc}") from exc
+        # ZTE panel JS: login_need_refresh=true → reload (success); false → DisplayLoginErrorTip.
+        if result.get("login_need_refresh") in (True, 1, "1"):
+            self.session_token = _text(result.get("sess_token")) or session_token
+            try:
+                self.request("/")
+            except AdapterError:
+                pass
+            return
         if result.get("lockingTime") not in (None, 0, "0"):
             raise AdapterError("router login rejected or locked")
-        if result.get("login_need_refresh") not in (None, 0, "0"):
-            message = _text(result.get("loginErrMsg")) or "router login rejected"
-            raise AdapterError(message)
+        message = _text(result.get("loginErrMsg")) or "router login rejected"
+        raise AdapterError(message)
 
     def logout(self) -> None:
         try:
             self.request(
                 "/",
                 params={"_type": "loginData", "_tag": "logout_entry"},
-                form={"IF_LogOff": "1"},
+                form={"IF_LogOff": "1", "_sessionTOKEN": self.session_token},
             )
         except AdapterError:
             pass
 
     def fetch_devices(self) -> list[dict[str, Any]]:
         endpoints = (
-            ("Localnet_Lan_Clinet_lua.lua", {}, "LAN"),
-            ("accessdev_landevs_lua.lua", {}, "LAN"),
-            ("accessdev_ssiddev_lua.lua", {}, "WLAN"),
-            ("wlan_status_lua.lua", {}, "WLAN"),
-            ("topo_lua.lua", {"Action": "GetALLClients"}, "TOPOLOGY"),
+            ("hiddenData", "accessdev_data", {"DeveiceType": "ALL"}, "ALL"),
+            ("hiddenData", "accessdev_data", {"DeveiceType": "WLAN"}, "WLAN"),
+            ("menuData", "Localnet_Lan_Clinet_lua.lua", {}, "LAN"),
+            ("menuData", "accessdev_landevs_lua.lua", {}, "LAN"),
+            ("menuData", "accessdev_ssiddev_lua.lua", {}, "WLAN"),
+            ("menuData", "wlan_status_lua.lua", {}, "WLAN"),
+            ("menuData", "topo_lua.lua", {"Action": "GetALLClients"}, "TOPOLOGY"),
         )
         raw: list[dict[str, Any]] = []
-        self.request(
-            "/",
-            params={"_type": "menuView", "_tag": "localNetStatus", "Menu3Location": "0"},
-        )
-        for tag, extra_params, network in endpoints:
+        for type_name, tag, extra_params, network in endpoints:
             try:
                 payload = self.request(
                     "/",
-                    params={"_type": "menuData", "_tag": tag, **extra_params},
+                    params={"_type": type_name, "_tag": tag, **extra_params},
                 )
                 raw.extend(parse_response(payload, f"{tag}:{network}"))
             except AdapterError:
@@ -420,6 +430,19 @@ def self_check() -> None:
     assert parsed[0]["name"] == "M2003J15SC"
     assert parsed[0]["mac"] == "aa:bb:cc:dd:ee:01"
     assert parsed[0]["ip"] == "192.0.2.10"
+    liquid = """
+    <ajax_response_xml_root>
+      <IF_ERRORSTR>SUCC</IF_ERRORSTR>
+      <OBJ_ACCESSDEV_ID><Instance>
+        <ParaName>_LuQUID_MACAddress</ParaName><ParaValue>AA-BB-CC-DD-EE-02</ParaValue>
+        <ParaName>_LuQUID_HostName</ParaName><ParaValue>iPhone</ParaValue>
+        <ParaName>_LuQUID_IPAddress</ParaName><ParaValue>192.0.2.20</ParaValue>
+      </Instance></OBJ_ACCESSDEV_ID>
+    </ajax_response_xml_root>
+    """
+    liquid_parsed = parse_response(liquid, "hiddenData")
+    assert liquid_parsed[0]["name"] == "iPhone"
+    assert liquid_parsed[0]["mac"] == "aa:bb:cc:dd:ee:02"
     merged = merge_devices(parsed + [{"mac": parsed[0]["mac"], "ip": "", "name": "M2003J15SC", "source": "topology"}])
     assert len(merged) == 1
     assert "last_seen" in merged[0]
