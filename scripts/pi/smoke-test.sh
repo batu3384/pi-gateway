@@ -178,6 +178,9 @@ run_check "privileged-lib-installed" test -x /usr/local/lib/pi-gateway/scripts/p
 run_check "privileged-lib-sync" diff -q \
   "${REMOTE_DIR}/scripts/lib/stack-health.sh" \
   /usr/local/lib/pi-gateway/scripts/lib/stack-health.sh
+run_check "privileged-modem-inventory-sync" diff -q \
+  "${REMOTE_DIR}/scripts/lib/modem_inventory.py" \
+  /usr/local/lib/pi-gateway/scripts/lib/modem_inventory.py
 run_check "privileged-adguard-filters-sync" diff -q \
   "${REMOTE_DIR}/scripts/pi/apply-adguard-filters.sh" \
   /usr/local/lib/pi-gateway/scripts/pi/apply-adguard-filters.sh

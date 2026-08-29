@@ -25,6 +25,7 @@ SCRIPTS=(
   scripts/pi/setup-ssd-data.sh
   scripts/lib/stack-health.sh
   scripts/lib/env-file.sh
+  scripts/lib/modem_inventory.py
   scripts/lib/ssd-alive.sh
   scripts/lib/compose-profiles.sh
   scripts/pi/export-gateway-state.sh

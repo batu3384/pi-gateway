@@ -7,10 +7,16 @@ reset_pi_gateway_failed_units() {
     cloud-init-local cloud-config cloud-init-network cloud-init-main
     rp1-test
   )
+  local can_sudo=0
+  if (( EUID != 0 )) && sudo -n true 2>/dev/null; then
+    can_sudo=1
+  fi
   for u in "${units[@]}"; do
-    systemctl reset-failed "${u}.service" 2>/dev/null \
-      || sudo systemctl reset-failed "${u}.service" 2>/dev/null \
-      || true
+    if (( EUID == 0 )); then
+      systemctl reset-failed "${u}.service" 2>/dev/null || true
+    elif (( can_sudo )); then
+      sudo -n systemctl reset-failed "${u}.service" 2>/dev/null || true
+    fi
   done
 }
 

@@ -12,6 +12,8 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
+from modem_inventory import load_modem_inventory, modem_device, modem_name
+
 STATE_VERSION = 3
 SKIP_MACS = frozenset({"internet"})
 NOISE_MAC_PREFIXES = ("01:", "33:", "ff:")
@@ -20,7 +22,6 @@ STREAMS = {
     "new_device": "New Device",
     "offline": "Disconnected",
 }
-MODEM_INVENTORY_STALE_SEC = 900
 
 
 def _ts_local(ts: int | float | str | None) -> str:
@@ -79,82 +80,6 @@ def suggest_display_name(
     if dtype:
         return f"{dtype} ({ip})" if ip else dtype
     return f"Cihaz {ip}" if ip else "Bilinmeyen cihaz"
-
-
-def _usable_external_name(value: str | None) -> str:
-    name = (value or "").strip()
-    if (
-        not name
-        or name in BAD_NAMES
-        or name.lower() in {"unknown", "unknown device", "n/a", "-"}
-        or name.startswith("192.168.")
-    ):
-        return ""
-    if len(name.split(":")) == 6:
-        try:
-            if all(len(part) == 2 and int(part, 16) >= 0 for part in name.split(":")):
-                return ""
-        except ValueError:
-            pass
-    return name[:128]
-
-
-def load_modem_inventory(remote_dir: str = "") -> dict[str, Any]:
-    """Read last atomic ZTE snapshot; malformed/stale data is never fatal."""
-    path = os.environ.get("MODEM_INVENTORY_PATH") or os.path.join(
-        remote_dir or os.path.expanduser("~/pi-gateway"),
-        "data",
-        "modem-inventory.json",
-    )
-    try:
-        with open(path, encoding="utf-8") as handle:
-            data = json.load(handle)
-        fetched = datetime.fromisoformat(
-            str(data.get("fetched_at", "")).replace("Z", "+00:00")
-        )
-        age = max(0.0, datetime.now(timezone.utc).timestamp() - fetched.timestamp())
-        try:
-            stale_sec = int(
-                os.environ.get("MODEM_INVENTORY_STALE_SEC", MODEM_INVENTORY_STALE_SEC)
-            )
-        except (TypeError, ValueError):
-            stale_sec = MODEM_INVENTORY_STALE_SEC
-        stale_sec = max(0, stale_sec)
-        devices = data.get("devices")
-        if data.get("schema_version") != 1 or not isinstance(devices, list):
-            return {"by_mac": {}, "by_ip": {}, "fresh": False}
-    except (OSError, ValueError, TypeError, json.JSONDecodeError):
-        return {"by_mac": {}, "by_ip": {}, "fresh": False}
-
-    by_mac: dict[str, str] = {}
-    by_ip: dict[str, str] = {}
-    for device in devices:
-        if not isinstance(device, dict):
-            continue
-        name = _usable_external_name(device.get("name") or device.get("label"))
-        if not name:
-            continue
-        mac = str(device.get("mac") or "").strip().lower()
-        ip = str(device.get("ip") or "").strip()
-        if mac:
-            by_mac[mac] = name
-        if ip:
-            by_ip[ip] = name
-    return {"by_mac": by_mac, "by_ip": by_ip, "fresh": age <= stale_sec}
-
-
-def _modem_name(
-    inventory: dict[str, Any],
-    mac: str | None,
-    ip: str | None,
-) -> str:
-    by_mac = inventory.get("by_mac") or {}
-    by_ip = inventory.get("by_ip") or {}
-    return (
-        by_mac.get((mac or "").strip().lower())
-        or (by_ip.get((ip or "").strip()) if inventory.get("fresh") else "")
-        or ""
-    )
 
 
 def _is_noise_mac(mac: str, *, new_device: bool = False) -> bool:
@@ -286,10 +211,10 @@ def commit_rowid(state_path: str, stream: str, max_rowid: int) -> None:
         save_state(state_path, state)
 
 
-def online_devices(db_path: str, *, recency_sec: int = 900) -> list[dict[str, str]]:
+def online_devices(db_path: str, *, recency_sec: int = 900) -> list[dict[str, Any]]:
     """Homepage/Grafana kim-evde — Telegram yok."""
     con = _open_db(db_path)
-    modem_inventory = load_modem_inventory(os.environ.get("REMOTE_DIR", ""))
+    modem_inventory = load_modem_inventory()
     try:
         cols = {row[1] for row in con.execute("PRAGMA table_info(Devices)")}
         where = "COALESCE(devIsArchived, 0)=0"
@@ -311,15 +236,20 @@ def online_devices(db_path: str, *, recency_sec: int = 900) -> list[dict[str, st
             mac_s = (mac or "").strip().lower()
             if _is_noise_mac(mac_s):
                 continue
-            modem_name = _modem_name(modem_inventory, mac_s, ip)
-            display = suggest_display_name(modem_name or name, vendor, dtype, ip, mac_s)
+            modem_record = modem_device(modem_inventory, mac_s, ip)
+            modem_label = modem_name(modem_inventory, mac_s, ip)
+            display = suggest_display_name(modem_label or name, vendor, dtype, ip, mac_s)
             out.append(
                 {
                     "mac": mac_s,
                     "name": display,
                     "ip": (ip or "").strip(),
                     "vendor": (vendor or "").strip() or "?",
-                    "name_source": "zte-h3600p" if modem_name else "netalertx",
+                    "name_source": "zte-h3600p" if modem_label else "netalertx",
+                    "inventory_source": modem_record.get("source", ""),
+                    "inventory_confidence": modem_record.get("confidence", ""),
+                    "privacy_mac": bool(modem_record.get("privacy_mac", _is_privacy_mac(mac_s))),
+                    "inventory_last_seen": modem_record.get("last_seen", ""),
                 }
             )
         return out
@@ -327,7 +257,7 @@ def online_devices(db_path: str, *, recency_sec: int = 900) -> list[dict[str, st
         con.close()
 
 
-def fetch_device(con: sqlite3.Connection, mac: str) -> dict[str, str] | None:
+def fetch_device(con: sqlite3.Connection, mac: str) -> dict[str, Any] | None:
     row = con.execute(
         """
         SELECT devName, devVendor, devType, devLastIP, devSourcePlugin,
@@ -340,17 +270,21 @@ def fetch_device(con: sqlite3.Connection, mac: str) -> dict[str, str] | None:
     if not row:
         return None
     name, vendor, dtype, ip, source, first_ts, last_ts, fqdn = row
-    modem_name = _modem_name(
-        load_modem_inventory(os.environ.get("REMOTE_DIR", "")), mac, ip
-    )
-    display = suggest_display_name(modem_name or name, vendor, dtype, ip, mac)
+    inventory = load_modem_inventory()
+    modem_record = modem_device(inventory, mac, ip)
+    modem_label = modem_name(inventory, mac, ip)
+    display = suggest_display_name(modem_label or name, vendor, dtype, ip, mac)
     return {
         "name": display,
         "vendor": (vendor or "").strip() or "?",
         "type": (dtype or "").strip() or "?",
         "ip": (ip or "").strip() or "?",
         "source": (source or "").strip() or "?",
-        "name_source": "zte-h3600p" if modem_name else "netalertx",
+        "name_source": "zte-h3600p" if modem_label else "netalertx",
+        "inventory_source": modem_record.get("source", ""),
+        "inventory_confidence": modem_record.get("confidence", ""),
+        "privacy_mac": bool(modem_record.get("privacy_mac", _is_privacy_mac(mac))),
+        "inventory_last_seen": modem_record.get("last_seen", ""),
         "first_seen": _ts_local(first_ts),
         "last_seen": _ts_local(last_ts),
         "fqdn": (fqdn or "").strip(),
@@ -378,6 +312,10 @@ def device_from_event(
         vendor = dev["vendor"]
         dtype = dev["type"]
         source = dev["source"]
+        inventory_source = dev.get("inventory_source", "")
+        inventory_confidence = dev.get("inventory_confidence", "")
+        privacy_mac = dev.get("privacy_mac", _is_privacy_mac(mac))
+        inventory_last_seen = dev.get("inventory_last_seen", "")
         first_seen = dev["first_seen"]
         last_seen = dev.get("last_seen") or "?"
         if last_seen == "?" and event_ts is not None:
@@ -388,6 +326,10 @@ def device_from_event(
         vendor = info if info and info not in ("(Unknown)",) else "?"
         dtype = "?"
         source = "?"
+        inventory_source = ""
+        inventory_confidence = ""
+        privacy_mac = _is_privacy_mac(mac)
+        inventory_last_seen = ""
         first_seen = _ts_local(event_ts)
         last_seen = first_seen
         name = suggest_display_name(None, vendor, dtype, ip, mac)
@@ -400,6 +342,10 @@ def device_from_event(
         "vendor": vendor,
         "type": dtype,
         "source": source,
+        "inventory_source": inventory_source,
+        "inventory_confidence": inventory_confidence,
+        "privacy_mac": privacy_mac,
+        "inventory_last_seen": inventory_last_seen,
         "first_seen": first_seen,
         "last_seen": last_seen,
         "fqdn": fqdn,
@@ -529,6 +475,11 @@ def format_new_plain(devices: list[dict[str, Any]]) -> str:
             lines.append(f"Üretici: {d['vendor']}")
         if d.get("source") and d["source"] != "?":
             lines.append(f"Kaynak: {d['source']}")
+        if d.get("inventory_source"):
+            confidence = d.get("inventory_confidence") or "?"
+            lines.append(f"Modem kanıtı: {d['inventory_source']} ({confidence})")
+        if d.get("privacy_mac"):
+            lines.append("Gizlilik MAC: evet")
         lines.append(f"İlk görülme: {d['first_seen']}")
         if d.get("fqdn"):
             lines.append(f"FQDN: {d['fqdn']}")
@@ -558,6 +509,11 @@ def format_offline_plain(devices: list[dict[str, Any]]) -> str:
         last_seen = d.get("last_seen") or "?"
         if last_seen != "?":
             lines.append(f"Son görülme: {last_seen}")
+        if d.get("inventory_source"):
+            confidence = d.get("inventory_confidence") or "?"
+            lines.append(f"Modem kanıtı: {d['inventory_source']} ({confidence})")
+        if d.get("privacy_mac"):
+            lines.append("Gizlilik MAC: evet")
         blocks.append("\n".join(lines))
         blocks.append("")
     blocks.extend(_plain_footer(offline=True))
@@ -579,6 +535,14 @@ def format_html_detail(devices: list[dict[str, Any]], *, offline: bool = False) 
             last_seen = d.get("last_seen") or "?"
             if last_seen != "?":
                 chunk.append(f"Son görülme: {_esc(last_seen)}")
+            if d.get("inventory_source"):
+                confidence = _esc(d.get("inventory_confidence") or "?")
+                chunk.append(
+                    "Modem kanıtı: "
+                    f"{_esc(d['inventory_source'])} ({confidence})"
+                )
+            if d.get("privacy_mac"):
+                chunk.append("Gizlilik MAC: evet")
         else:
             meta: list[str] = []
             if d.get("type") and d["type"] != "?":
@@ -589,6 +553,14 @@ def format_html_detail(devices: list[dict[str, Any]], *, offline: bool = False) 
                 chunk.append("Tür: " + " · ".join(meta))
             if d.get("source") and d["source"] != "?":
                 chunk.append(f"Kaynak: {_esc(d['source'])}")
+            if d.get("inventory_source"):
+                confidence = _esc(d.get("inventory_confidence") or "?")
+                chunk.append(
+                    "Modem kanıtı: "
+                    f"{_esc(d['inventory_source'])} ({confidence})"
+                )
+            if d.get("privacy_mac"):
+                chunk.append("Gizlilik MAC: evet")
             chunk.append(f"İlk görülme: {_esc(d['first_seen'])}")
             if d.get("fqdn"):
                 chunk.append(f"FQDN: {_esc(d['fqdn'])}")
@@ -721,6 +693,10 @@ def _self_check() -> None:
                             "mac": "aa:bb:cc:dd:ee:01",
                             "ip": "192.0.2.50",
                             "name": "M2003J15SC",
+                            "source": "topology:TOPOLOGY",
+                            "confidence": "high",
+                            "privacy_mac": False,
+                            "last_seen": datetime.now(timezone.utc).isoformat(),
                         }
                     ],
                 },
@@ -731,6 +707,10 @@ def _self_check() -> None:
             d["mac"] == "aa:bb:cc:dd:ee:01"
             and d["name"] == "M2003J15SC"
             and d["name_source"] == "zte-h3600p"
+            and d["inventory_source"] == "topology:TOPOLOGY"
+            and d["inventory_confidence"] == "high"
+            and d["privacy_mac"] is False
+            and d["inventory_last_seen"]
             for d in home
         ), home
 

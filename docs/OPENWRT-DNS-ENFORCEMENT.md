@@ -46,6 +46,23 @@ sağlanmalıdır. Bilinen DoH hostları AdGuard `doh.txt` ile engellenir. Bilinm
 HTTPS resolver, uygulamaya gömülü resolver ve MITM gerektiren trafik için tam
 garanti yoktur.
 
+## Geçiş öncesi repo kapıları
+
+Bu proje ZTE veya OpenWrt'ye yazma yapmaz. Her geçişte önce Pi üzerinde salt-okunur
+kapıları çalıştırın:
+
+```bash
+make validate
+make diagnose-dns
+make audit-dns
+```
+
+DHCP lease yenilendikten sonra `make rollout-dns-wait` ile gerçek OFFER ve modem
+snapshot'ını tekrar kontrol edin. `audit-dns` içindeki `STALE` kayıtlar coverage
+paydasına girmez; modem snapshot yok/eski veya eşleşmeyen cihaz varsa strict mod
+`UNKNOWN` döner. Bu sonuçlar temizlenmeden OpenWrt redirect/reject kuralları LAN'ın
+tamamına yayılmamalıdır.
+
 ## Geçiş doğrulama kapısı
 
 - DHCP OFFER: DNS yalnız Pi IPv4.

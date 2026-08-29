@@ -70,6 +70,15 @@ Modem panelinde DNS ayari **tek basina tum cihazlari otomatik Pi'ye baglamaz**.
 
 **DoH kilidi:** HaGeZi Encrypted DNS Bypass listesi (`adblock/doh.txt`) — bilinen DoH/DoT hostlari engeller. Ozel/unknown DoH host yine kacabilir.
 
+**Filtre governance:** Her listenin `min_rules`, `max_rules` ve `max_age_hours`
+kontrolüne ek olarak profil toplam kural bütçesi vardır. `@latest` kaynakları
+ETag/If-Modified-Since ve örnek hash ile preflight edilir; büyük örnek değişimi
+ve toplam bütçe aşımı refresh'i durdurur. Başarılı apply sonrası son iyi örnek hash'i
+saklanır. Bu, upstream kaynağı imzalamaz; hatalı küçük değişiklikler için query-log
+ve regression kontrolleri yine gereklidir. Regression seti `googlevideo.com`,
+`ytimg.com`, Instagram CDN, `whatsapp.net`, ColorOS app-config ve `lgappstv.com`
+allow; `videooplayer.xyz` ve `lgads.tv` block yönlerini birlikte doğrular.
+
 **Modem ikincil DNS:** ZTE H3600P (Superonline) DNS2 panelde boş/`0.0.0.0` veya **Pi** olsa bile DHCP OFFER'a gateway (`.1`) ekler. Panel DNS2 kabloyu değiştirmez. `.1` modem **INPUT** resolver reklam engellemez (WAN dest:53 ve LAN-ingress dest `.1:53` FORWARD; modem kendi `:53` cevaplar). Canlı: `dig @192.168.1.1 doubleclick.net` gerçek IP. Bu ZTE'de DHCP relay LAN DISCOVER yutuyor — `adguard-dhcp` ev IP keser; kilit = modem DHCP açık + DNS1=Pi + `make mac-dns` (yalnız LAN). IPv6: aşağıdaki RDNSS lifetime 0.
 
 **Cihaz envanteri:** H3600P panelindeki DHCP/WLAN adları için
@@ -77,7 +86,11 @@ Modem panelinde DNS ayari **tek basina tum cihazlari otomatik Pi'ye baglamaz**.
 dosyasını root `0600` olarak oluşturun. `pi-gateway-modem-inventory.timer` her 5
 dakikada bir read-only snapshot üretir; MAC eşleşmesi IP'den önceliklidir.
 Snapshot yok/eski ise audit `UNKNOWN`/`STALE` üretir, eski ARP kaydını kesin bypass
-saymaz. Elle kontrol: `make modem-inventory`.
+saymaz. NetAlertX ve DNS audit aynı `scripts/lib/modem_inventory.py` loader'ını
+kullanır; çıktıda `source`, `inventory_confidence`, `privacy_mac` ve
+`inventory_last_seen` kanıt alanları bulunur. Coverage yüzdesi stale cihazları
+paydadan çıkarır; stale snapshot yine strict audit'i `UNKNOWN` yapar. Elle kontrol:
+`make modem-inventory`.
 
 **H3600P Force DNS yok.** 78 menüde NAT 53 / DNS hijack yok. Yakın çare: **WAN → Güvenlik → Filtre Kriterleri → IP Filtresi** — Hedef=Düşür, dest port 53, proto 257, `IPVersion=-1`. Dest IP **boş** = tüm public `:53` (1.0.0.1, 9.9.9.9, IPv6 resolver). CHAIN1 WAN; LAN→Pi `:53` düşmez. **Sıra:** Unbound DoT (`forward-tls-upstream`, Quad9/CF `:853`) **önce** — recursive UDP 53 drop Unbound'u öldürür. Custom conf: `port: 5335` + `forward-zone` (klutchell `tls-cert-bundle` imajda; default port 53). Deploy `canary-compose-update.sh` Unbound'u `--force-recreate` eder; health `StartedAt` vs conf mtime stale ise fail (restart AdGuard'ı düşürür). Unbound compose healthcheck **kapalı** (`unbound-host` recursive `:53` WAN drop ile forever unhealthy → auto-recover döngüsü). AdGuard `depends_on: service_started`. Host `dig :5335` gerçek probe. 3 slot tavan; boş dest tek kural yeter. `/32` yedek olabilir. Yeni Madde spam'i mevcut kuralı ezer — mevcut instance düzenle. DROP ≠ redirect.
 
@@ -116,6 +129,19 @@ DNS kills third-party ad **domains** (game/app SDKs, `doubleclick.net`). Same-or
 - Safari: AdGuard for Safari / uBlock Origin Lite
 - Chrome/Firefox: uBlock Origin
 - YouTube: browser extension or SponsorBlock (DNS cannot fix this)
+
+## Video takılmasını DNS'ten ayırma
+
+```bash
+VIDEO_TEST_IP=192.168.1.x make diagnose-video
+```
+
+Komut cihazı, zaman damgasını, modem snapshot `band`/`rssi`/`channel` alanlarını;
+Pi→cihaz, gateway ve internet packet loss/RTT özetlerini ve cihazın AdGuard
+query-log medya alan adlarını birlikte çıkarır. 5 GHz ve 2.4 GHz sonuçlarını aynı
+cihazda ayrı zaman pencerelerinde karşılaştırın. Query-log'da block görünmemesi
+tek başına video transport'unun sağlıklı olduğunu kanıtlamaz; DoH/DoT/DoQ ve
+Wi-Fi radyo koşulları ayrı kanıttır.
 
 ## Update
 

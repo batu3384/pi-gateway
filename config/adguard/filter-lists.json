@@ -29,6 +29,11 @@
       ["AdGuard CNAME original trackers", "https://raw.githubusercontent.com/AdguardTeam/cname-trackers/master/data/combined_original_trackers.txt"]
     ]
   },
+  "budgets": {
+    "balanced-core": 1500000,
+    "balanced": 2500000,
+    "aggressive": 3000000
+  },
   "metadata": {
     "https://adguardteam.github.io/HostlistsRegistry/assets/filter_51.txt": {
       "category": "ads-tracking",
@@ -109,14 +114,18 @@
       "||videooplayer.xyz^$important"
     ],
     "must_block_hosts": [
-      "videooplayer.xyz"
+      "videooplayer.xyz",
+      "lgads.tv"
     ],
     "must_not_block_hosts": [
       "googlevideo.com",
       "ytimg.com",
       "cdninstagram.com",
       "instagram.fna.fbcdn.net",
-      "whatsapp.net"
+      "whatsapp.net",
+      "mdp-appconf-tr.heytapdl.com",
+      "cloudconf-app-tr.heytapmobile.com",
+      "lgappstv.com"
     ]
   }
 }

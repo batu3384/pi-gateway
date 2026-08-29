@@ -64,6 +64,9 @@ import json, os, subprocess, sys
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 
+sys.path.insert(0, os.path.join(os.environ["REMOTE_DIR"], "scripts", "lib"))
+from modem_inventory import load_modem_inventory, modem_device
+
 pi_ip = os.environ["PI_IP"]
 gateway = os.environ["GATEWAY_IP"]
 lan_prefix = os.environ["LAN_NET_PREFIX"]
@@ -110,48 +113,11 @@ def parse_neigh():
 
 online_ips, idle_ips, neigh_macs = parse_neigh()
 
-def load_modem_snapshot():
-    empty = {
-        "present": os.path.isfile(modem_path),
-        "fresh": False,
-        "age": None,
-        "by_ip": {},
-        "by_mac": {},
-        "mac_by_ip": {},
-        "ips": set(),
-        "devices": [],
-    }
-    try:
-        with open(modem_path, encoding="utf-8") as handle:
-            data = json.load(handle)
-        if data.get("schema_version") != 1 or not isinstance(data.get("devices"), list):
-            return empty
-        fetched = datetime.fromisoformat(
-            str(data.get("fetched_at", "")).replace("Z", "+00:00")
-        )
-        age = max(0, int(datetime.now(timezone.utc).timestamp() - fetched.timestamp()))
-    except (OSError, ValueError, TypeError, json.JSONDecodeError):
-        return empty
-    snapshot = dict(empty, present=True, age=age, devices=data["devices"])
-    snapshot["fresh"] = age <= modem_stale_sec
-    for device in data["devices"]:
-        if not isinstance(device, dict) or device.get("active") is False:
-            continue
-        ip = str(device.get("ip") or "").strip()
-        mac = str(device.get("mac") or "").strip().lower()
-        name = str(device.get("name") or device.get("label") or "").strip()
-        if not ip.startswith(lan_prefix) or ip in (pi_ip, gateway):
-            continue
-        snapshot["ips"].add(ip)
-        if mac:
-            snapshot["mac_by_ip"][ip] = mac
-        if name:
-            snapshot["by_ip"][ip] = name
-            if mac:
-                snapshot["by_mac"][mac] = name
-    return snapshot
-
-modem = load_modem_snapshot()
+modem = load_modem_inventory(modem_path, modem_stale_sec)
+modem["ips"] = {
+    ip for ip in modem.get("ips", set())
+    if ip.startswith(lan_prefix) and ip not in (pi_ip, gateway)
+}
 
 def mac_for(ip):
     return neigh_macs.get(ip) or modem["mac_by_ip"].get(ip, "?")
@@ -207,16 +173,26 @@ agh_ip, agh_mac, db_ip, db_mac, netalert_seen = load_names()
 
 def host_label(ip):
     mac = mac_for(ip).lower()
+    record = modem_device(modem, mac, ip)
     name = (
-        modem["by_mac"].get(mac)
-        or (modem["by_ip"].get(ip) if modem["fresh"] else "")
+        record.get("name") or record.get("label")
         or db_mac.get(mac)
         or db_ip.get(ip)
         or agh_mac.get(mac)
         or agh_ip.get(ip)
         or ""
     )
-    return f" {name}" if name else ""
+    metadata = []
+    if record.get("source"):
+        metadata.append(f"source={record['source']}")
+    if record.get("confidence"):
+        metadata.append(f"confidence={record['confidence']}")
+    if record.get("privacy_mac"):
+        metadata.append("privacy_mac=true")
+    if record.get("last_seen"):
+        metadata.append(f"last_seen={record['last_seen']}")
+    suffix = f" [{','.join(metadata)}]" if metadata else ""
+    return f" {name}{suffix}" if name else suffix
 
 def seen_label(ip):
     seen = netalert_seen.get(ip)
@@ -258,8 +234,9 @@ recent_netalert_ips = {
     ip for ip, seen in netalert_seen.items()
     if 0 <= now_ts - seen <= netalert_recency_sec
 }
+snapshot_ips = set(modem["ips"])
 if modem["fresh"]:
-    modem_ips = set(modem["ips"])
+    modem_ips = snapshot_ips
     active_ips = modem_ips & (online_ips | query_ips | recent_netalert_ips)
     unknown_ips = sorted((online_ips | query_ips) - modem_ips)
     stale_ips = sorted(
@@ -271,7 +248,7 @@ else:
     active_ips = online_ips | query_ips | recent_netalert_ips
     unknown_ips = []
     stale_ips = sorted(
-        ip for ip in idle_ips
+        ip for ip in (snapshot_ips | idle_ips)
         if clients.get(ip, 0) == 0 and ip not in recent_netalert_ips
     )
 
@@ -283,8 +260,8 @@ report_ips = observed_ips | modem_ips | query_ips
 total = len(report_ips)
 using = len(using_ips)
 strict_total = len(active_ips)
-cov = round(100 * using / max(1, total))
 strict_cov = round(100 * using / strict_total) if strict_total else 100
+cov = strict_cov
 
 if modem["fresh"]:
     inventory_state = f"fresh ({modem['age']}s)"
@@ -296,7 +273,7 @@ print(f"Modem envanter: {inventory_state} — {modem_path}")
 print(f"LAN cihaz (ARP, gateway haric): {total} (REACHABLE/DELAY: {len(online_ips)}, idle STALE: {len(idle_ips)})")
 if report_ips:
     print("  " + ", ".join(f"{ip}{host_label(ip)}" for ip in sorted(report_ips)))
-print(f"Pi DNS dogrulanan (>={min_queries} sorgu): {using}/{total} (%{cov}) | aktif: {using}/{strict_total} (%{strict_cov})")
+print(f"Pi DNS dogrulanan (>={min_queries} sorgu, stale haric): {using}/{strict_total} (%{cov}) | rapor: {using}/{total}")
 for ip in sorted(using_ips):
     proto = ",".join(sorted(protocols[ip])) or "api-unknown"
     print(f"  [USING_PI_DNS] {ip}{host_label(ip)} ({seen_label(ip)}): {clients[ip]} sorgu, {blocked.get(ip, 0)} engel, protokol={proto}")

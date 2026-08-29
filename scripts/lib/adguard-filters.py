@@ -61,7 +61,9 @@ def _int_or_zero(value: Any) -> int:
         return 0
 
 
-def load_manifest(remote_dir: str, profile: str) -> tuple[list[tuple[str, str]], dict[str, Any], dict[str, Any]]:
+def load_manifest(
+    remote_dir: str, profile: str
+) -> tuple[list[tuple[str, str]], dict[str, Any], dict[str, Any], int]:
     manifest = Path(remote_dir) / "config/adguard/filter-lists.json"
     if not manifest.is_file():
         raise RuntimeError(f"{manifest} yok")
@@ -71,6 +73,13 @@ def load_manifest(remote_dir: str, profile: str) -> tuple[list[tuple[str, str]],
         raise RuntimeError(f"bilinmeyen profil {profile!r}")
     metadata = data.get("metadata") or {}
     regression = data.get("regression") or {}
+    budgets = data.get("budgets") or {}
+    try:
+        max_total_rules = int(budgets.get(profile) or 0)
+    except (TypeError, ValueError):
+        max_total_rules = 0
+    if max_total_rules < 1:
+        raise RuntimeError(f"profil kural butcesi eksik: {profile!r}")
     desired: list[tuple[str, str]] = []
     seen_urls: set[str] = set()
     for entry in profiles[profile]:
@@ -83,7 +92,7 @@ def load_manifest(remote_dir: str, profile: str) -> tuple[list[tuple[str, str]],
             raise RuntimeError(f"metadata eksik: {url}")
         seen_urls.add(url)
         desired.append((name, url))
-    return desired, metadata, regression
+    return desired, metadata, regression, max_total_rules
 
 
 def load_user_rules(remote_dir: str) -> list[str]:
@@ -197,20 +206,47 @@ def preflight_url(url: str, cache: dict[str, Any]) -> None:
         raise RuntimeError(f"HTTP {exc.code}") from exc
     validate_source_sample(sample, url)
     digest = hashlib.sha256(sample.encode()).hexdigest()
-    old_digest = prev.get("sha256_sample")
+    old_digest = prev.get("last_good_sha256_sample") or prev.get("sha256_sample")
     if old_digest and old_digest != digest:
-        old_lines = _int_or_zero(prev.get("line_count"))
+        old_lines = _int_or_zero(
+            prev.get("last_good_line_count") or prev.get("line_count")
+        )
         new_lines = len([ln for ln in sample.splitlines() if ln.strip()])
         if old_lines and abs(new_lines - old_lines) > max(500, old_lines // 2):
-            log(f"WARN preflight delta buyuk: {url} ({old_lines}->{new_lines} satir ornegi)")
-    cache.setdefault("sources", {})[url] = {
+            raise RuntimeError(
+                f"sample delta too large: {url} ({old_lines}->{new_lines} satir)"
+            )
+    entry = {
         "etag": etag,
         "last_modified": last_modified,
         "sha256_sample": digest,
         "line_count": len([ln for ln in sample.splitlines() if ln.strip()]),
         "checked_at": datetime.now(timezone.utc).isoformat(),
     }
+    for key in (
+        "last_good_sha256_sample",
+        "last_good_line_count",
+        "last_good_etag",
+        "last_good_last_modified",
+        "last_good_at",
+    ):
+        if prev.get(key) is not None:
+            entry[key] = prev[key]
+    cache.setdefault("sources", {})[url] = entry
     log(f"preflight OK: {url}")
+
+
+def mark_source_cache_good(cache: dict[str, Any], urls: set[str]) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    for url in urls:
+        entry = (cache.get("sources") or {}).get(url)
+        if not isinstance(entry, dict) or not entry.get("sha256_sample"):
+            continue
+        entry["last_good_sha256_sample"] = entry["sha256_sample"]
+        entry["last_good_line_count"] = entry.get("line_count", 0)
+        entry["last_good_etag"] = entry.get("etag")
+        entry["last_good_last_modified"] = entry.get("last_modified")
+        entry["last_good_at"] = now
 
 
 class AguardClient:
@@ -277,6 +313,7 @@ def validate_filter_status(
     filter_status: dict[str, Any],
     desired: list[tuple[str, str]],
     metadata: dict[str, Any],
+    max_total_rules: int = 0,
 ) -> tuple[list[str], list[str]]:
     live = {item.get("url"): item for item in filter_status.get("filters", []) if item.get("url")}
     errors: list[str] = []
@@ -304,6 +341,12 @@ def validate_filter_status(
             max_age = _int_or_zero(meta.get("max_age_hours")) * 3600
             if max_age and now - updated > max_age:
                 errors.append(f"{name}: liste yasi > {meta['max_age_hours']}h")
+    total_rules = sum(
+        _int_or_zero(live.get(url, {}).get("rules_count"))
+        for _, url in desired
+    )
+    if max_total_rules and total_rules > max_total_rules:
+        errors.append(f"profil kural butcesi asildi: {total_rules} > {max_total_rules}")
     return errors, warnings
 
 
@@ -423,6 +466,7 @@ def poll_validation(
     client: AguardClient,
     desired: list[tuple[str, str]],
     metadata: dict[str, Any],
+    max_total_rules: int,
     *,
     needs_refresh: bool,
 ) -> tuple[dict[str, Any], list[str], list[str]]:
@@ -430,7 +474,9 @@ def poll_validation(
     interval = max(2, int(os.environ.get("ADGUARD_FILTER_POLL_INTERVAL_SEC", "5")))
     deadline = time.time() + poll_sec
     status_after = client.status()
-    errors, warnings = validate_filter_status(status_after, desired, metadata)
+    errors, warnings = validate_filter_status(
+        status_after, desired, metadata, max_total_rules
+    )
     while time.time() < deadline:
         if not errors:
             break
@@ -442,7 +488,9 @@ def poll_validation(
                 log(f"WARN refresh: {exc}")
         time.sleep(interval)
         status_after = client.status()
-        errors, warnings = validate_filter_status(status_after, desired, metadata)
+        errors, warnings = validate_filter_status(
+            status_after, desired, metadata, max_total_rules
+        )
     if errors and time.time() >= deadline:
         log(f"WARN governance poll timeout ({poll_sec}s)")
     return status_after, errors, warnings
@@ -454,6 +502,7 @@ def build_state_payload(
     manifest: Path,
     desired: list[tuple[str, str]],
     metadata: dict[str, Any],
+    max_total_rules: int,
     status_after: dict[str, Any],
     duration_sec: float,
     mem_before_kb: int,
@@ -478,6 +527,7 @@ def build_state_payload(
         "update_in_progress": False,
         "duration_sec": round(duration_sec, 2),
         "profile": profile,
+        "max_total_rules": max_total_rules,
         "mem_available_mib_before": round(mem_before_kb / 1024) if mem_before_kb else None,
         "mem_available_mib_after": round(mem_after_kb / 1024) if mem_after_kb else None,
         "total_rules": total_rules,
@@ -530,7 +580,7 @@ def apply_filters() -> int:
     failed: list[str] = []
     manifest_path = Path(remote_dir) / "config/adguard/filter-lists.json"
 
-    desired, metadata, regression = load_manifest(remote_dir, profile)
+    desired, metadata, regression, max_total_rules = load_manifest(remote_dir, profile)
     desired_urls = {url for _, url in desired}
     rules = load_user_rules(remote_dir)
     check_disk_regression_rules(rules, regression)
@@ -573,6 +623,7 @@ def apply_filters() -> int:
         client,
         desired,
         metadata,
+        max_total_rules,
         needs_refresh=needs_refresh,
     )
     for warning in validation_warnings:
@@ -594,7 +645,7 @@ def apply_filters() -> int:
                 pass
             status_after = client.status()
             validation_errors, validation_warnings = validate_filter_status(
-                status_after, desired, metadata
+                status_after, desired, metadata, max_total_rules
             )
             if validation_errors:
                 for error in validation_errors:
@@ -621,11 +672,18 @@ def apply_filters() -> int:
 
     previous_state = load_previous_state()
     success = not failed
+    if success and os.environ.get("ADGUARD_FILTER_PREFLIGHT", "true") == "true":
+        mark_source_cache_good(cache, desired_urls)
+        try:
+            save_source_cache(cache)
+        except OSError as exc:
+            log(f"WARN: source cache yazilamadi ({exc})")
     state_payload = build_state_payload(
         profile=profile,
         manifest=manifest_path,
         desired=desired,
         metadata=metadata,
+        max_total_rules=max_total_rules,
         status_after=status_after,
         duration_sec=time.time() - started,
         mem_before_kb=mem_before,
@@ -654,10 +712,12 @@ def governance_check() -> int:
     if not base or not cookie or not remote_dir:
         log_err("governance: BASE/COOKIE/REMOTE_DIR gerekli")
         return 2
-    desired, metadata, _ = load_manifest(remote_dir, profile)
+    desired, metadata, _, max_total_rules = load_manifest(remote_dir, profile)
     client = AguardClient(base, cookie)
     status = client.status()
-    errors, _warnings = validate_filter_status(status, desired, metadata)
+    errors, _warnings = validate_filter_status(
+        status, desired, metadata, max_total_rules
+    )
     state = load_previous_state()
     if state.get("failure_reasons"):
         errors.append(f"state: onceki apply basarisiz ({','.join(state['failure_reasons'])})")
@@ -690,6 +750,10 @@ def self_check() -> None:
     }
     errors, _ = validate_filter_status(status, [("Test", "https://example.test/list.txt")], sample_meta)
     assert not errors
+    errors, _ = validate_filter_status(
+        status, [("Test", "https://example.test/list.txt")], sample_meta, 9
+    )
+    assert any("profil kural butcesi asildi" in error for error in errors)
     validate_source_sample(
         "||ads.example^\n||tracker.example^\n||bad.example^\n",
         "https://example.test/list.txt",
@@ -699,6 +763,13 @@ def self_check() -> None:
         bad, [("Test", "https://example.test/list.txt")], sample_meta
     )
     assert any("disabled" in e for e in errors)
+    cache = {
+        "sources": {
+            "https://example.test/list.txt": {"sha256_sample": "abc", "line_count": 3}
+        }
+    }
+    mark_source_cache_good(cache, {"https://example.test/list.txt"})
+    assert cache["sources"]["https://example.test/list.txt"]["last_good_sha256_sample"] == "abc"
     import tempfile
 
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
@@ -709,6 +780,7 @@ def self_check() -> None:
         manifest=manifest_tmp,
         desired=[("Test", "https://example.test/list.txt")],
         metadata=sample_meta,
+        max_total_rules=100,
         status_after=status,
         duration_sec=1.2,
         mem_before_kb=512000,

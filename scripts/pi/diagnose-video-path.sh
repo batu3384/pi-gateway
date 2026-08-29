@@ -37,25 +37,31 @@ export BASE COOKIE REMOTE_DIR VIDEO_IP PI_IP
 
 echo "=== Video yol kanit toplama ==="
 echo "Cihaz=${VIDEO_IP} — salt okunur"
+echo "Zaman=$(date -Is)"
 echo "--- Pi kaynak kontrolu ---"
 awk '/^MemAvailable:/ {printf "MemAvailable=%dMiB\n", int($2/1024)} /^MemTotal:/ {printf "MemTotal=%dMiB\n", int($2/1024)}' /proc/meminfo
 awk '{print "Load1=" $1 " Load5=" $2 " Load15=" $3}' /proc/loadavg
 if command -v ping >/dev/null 2>&1; then
   gateway="${LAN_GATEWAY:-192.168.1.1}"
+  echo "LAN cihaz RTT/packet loss:"
+  ping -c 20 -W 1 "$VIDEO_IP" 2>&1 | awk '/packet loss|round-trip|rtt/ {print}' || true
+  echo "Gateway RTT/packet loss:"
   ping -c 10 -W 1 "$gateway" 2>&1 | awk '/packet loss|round-trip|rtt/ {print}' || true
+  echo "Internet RTT/packet loss:"
   ping -c 10 -W 1 1.1.1.1 2>&1 | awk '/packet loss|round-trip|rtt/ {print}' || true
 fi
 
 python3 - <<'PY'
-import json, os, subprocess
+import json, os, subprocess, sys
 from collections import Counter
-from pathlib import Path
 from urllib.parse import quote
 
 base = os.environ["BASE"]
 cookie = os.environ["COOKIE"]
 video_ip = os.environ["VIDEO_IP"]
 remote_dir = os.environ["REMOTE_DIR"]
+sys.path.insert(0, os.path.join(remote_dir, "scripts", "lib"))
+from modem_inventory import load_modem_inventory, modem_device
 
 def api(path):
     return json.loads(
@@ -118,26 +124,36 @@ for host in (
     result = api(f"/control/filtering/check_host?name={quote(host, safe='')}")
     print(f"  {host}: {result.get('reason', '?')}")
 
-snapshot_path = os.environ.get("MODEM_INVENTORY_PATH") or os.path.join(
-    remote_dir, "data", "modem-inventory.json"
-)
-try:
-    snapshot = json.loads(Path(snapshot_path).read_text(encoding="utf-8"))
-except (OSError, json.JSONDecodeError):
-    snapshot = {}
-for device in snapshot.get("devices", []):
-    if str(device.get("ip") or "") == video_ip:
-        print(
-            "Modem snapshot: "
-            f"name={device.get('name') or '?'} "
-            f"network={device.get('network') or '?'} "
-            f"band={device.get('band') or '?'} "
-            f"channel={device.get('channel') or '?'} "
-            f"rssi={device.get('rssi') or '?'} "
-            f"last_seen={device.get('last_seen') or '?'}"
-        )
-        break
+inventory = load_modem_inventory()
+device = modem_device(inventory, ip=video_ip)
+if not device:
+    device = next(
+        (
+            item
+            for item in inventory.get("devices", [])
+            if str(item.get("ip") or "") == video_ip
+        ),
+        {},
+    )
+if device:
+    print(
+        "Modem snapshot: "
+        f"state={'fresh' if inventory.get('fresh') else 'stale/missing'} "
+        f"age={inventory.get('age') or '?'}s "
+        f"name={device.get('name') or '?'} "
+        f"network={device.get('network') or '?'} "
+        f"band={device.get('band') or '?'} "
+        f"channel={device.get('channel') or '?'} "
+        f"rssi={device.get('rssi') or '?'} "
+        f"confidence={device.get('confidence') or '?'} "
+        f"privacy_mac={device.get('privacy_mac', '?')} "
+        f"source={device.get('source') or '?'} "
+        f"last_seen={device.get('last_seen') or '?'}"
+    )
 else:
-    print("Modem snapshot: cihaz yok veya snapshot yok")
+    print(
+        "Modem snapshot: cihaz yok veya snapshot yok "
+        f"(state={'fresh' if inventory.get('fresh') else 'stale/missing'})"
+    )
 print("Not: AdGuard query log transportu kanıtlamaz; DoH/DoT/DoQ ayrı ağ ölçümü ister.")
 PY

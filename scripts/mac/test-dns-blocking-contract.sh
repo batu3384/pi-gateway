@@ -16,6 +16,7 @@ need "$PROJECT_DIR/scripts/pi/wait-dns-rollout.sh"
 need "$PROJECT_DIR/scripts/pi/apply-adguard-dns.sh"
 need "$PROJECT_DIR/scripts/pi/apply-adguard-filters.sh"
 need "$PROJECT_DIR/scripts/lib/adguard-filters.py"
+need "$PROJECT_DIR/scripts/lib/modem_inventory.py"
 need "$PROJECT_DIR/scripts/lib/zte-h3600p.py"
 need "$PROJECT_DIR/scripts/pi/sync-modem-inventory.sh"
 need "$PROJECT_DIR/scripts/pi/observe-rdnss-ra.sh"
@@ -63,6 +64,10 @@ grep -q 'dhcp-dns-offer.sh' "$PROJECT_DIR/scripts/pi/diagnose-dns-bypass.sh" \
   || die "diagnose dhcp sniff bagli degil"
 grep -q 'observe-rdnss-ra.sh' "$PROJECT_DIR/scripts/pi/diagnose-dns-bypass.sh" \
   || die "diagnose gercek RA/RDNSS gozlemi yok"
+grep -q 'Geçiş öncesi repo kapıları' "$PROJECT_DIR/docs/OPENWRT-DNS-ENFORCEMENT.md" \
+  || die "OpenWrt gecis oncesi repo kapilari yok"
+grep -q 'LAN -> TCP/UDP 853 WAN   REJECT' "$PROJECT_DIR/docs/OPENWRT-DNS-ENFORCEMENT.md" \
+  || die "OpenWrt 853 reject kapisi yok"
 grep -q 'REACHABLE/DELAY\|online_ips' "$PROJECT_DIR/scripts/pi/audit-dns-coverage.sh" \
   || die "audit ARP state ayrimi yok"
 grep -q 'USING_PI_DNS\|POSSIBLE_BYPASS\|STALE\|UNKNOWN' "$PROJECT_DIR/scripts/pi/audit-dns-coverage.sh" \
@@ -79,10 +84,14 @@ grep -q 'pi-gateway-modem-inventory.timer' "$PROJECT_DIR/scripts/pi/setup-home-o
   || die "modem inventory timer kuruluma bagli degil"
 grep -q 'must_not_block_hosts\|max_age_hours\|min_rules' "$PROJECT_DIR/config/adguard/filter-lists.json" \
   || die "filter governance metadata/regression yok"
+grep -q '"budgets"' "$PROJECT_DIR/config/adguard/filter-lists.json" \
+  || die "filter total rule budget yok"
 python3 -m json.tool "$PROJECT_DIR/config/adguard/filter-lists.json" >/dev/null \
   || die "filter-lists.json gecersiz JSON"
 python3 "$PROJECT_DIR/scripts/lib/zte-h3600p.py" --self-check \
   || die "zte-h3600p self-check"
+python3 "$PROJECT_DIR/scripts/lib/modem_inventory.py" --self-check \
+  || die "modem_inventory self-check"
 python3 "$PROJECT_DIR/scripts/lib/netalert-devices.py" --self-check \
   || die "netalert-devices modem isim self-check"
 grep -q 'balanced-core' "$PROJECT_DIR/config/adguard/filter-lists.json" \
@@ -132,6 +141,8 @@ grep -q 'flock -w' "$PROJECT_DIR/scripts/pi/apply-adguard-filters.sh" \
   || die "apply-adguard-filters flock yok"
 grep -q 'IN_PROGRESS_FILE' "$PROJECT_DIR/scripts/pi/apply-adguard-filters.sh" \
   || die "apply-adguard-filters in_progress flag yok"
+grep -q 'filtering_api_ready' "$PROJECT_DIR/scripts/pi/apply-adguard-filters.sh" \
+  || die "apply-adguard-filters filtering API readiness yok"
 grep -q 'AGH non-JSON' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
   || die "adguard-filters AGH non-JSON guard yok"
 grep -q 'first in ("ok", "true")' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
@@ -150,6 +161,10 @@ grep -q 'check_live_regressions' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
   || die "adguard-filters live regression set_rules sonrasi yok"
 grep -q 'If-Modified-Since' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
   || die "adguard-filters ETag/IMS source cache yok"
+grep -q 'last_good_sha256_sample' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
+  || die "adguard-filters last-known-good sample yok"
+grep -q 'profil kural butcesi asildi' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
+  || die "adguard-filters total rule budget guard yok"
 python3 "$PROJECT_DIR/scripts/lib/adguard-filters.py" --self-check \
   || die "adguard-filters self-check"
 grep -q 'ponytail: TIF Full' "$PROJECT_DIR/scripts/pi/apply-adguard-filters.sh" \
@@ -211,6 +226,12 @@ grep -q 'host_label' "$PROJECT_DIR/scripts/pi/audit-dns-coverage.sh" \
   || die "audit NetAlertX cihaz adi yok"
 grep -q '/control/clients' "$PROJECT_DIR/scripts/pi/audit-dns-coverage.sh" \
   || die "audit AGH client adi yok"
+grep -q 'modem_inventory import' "$PROJECT_DIR/scripts/pi/diagnose-video-path.sh" \
+  || die "video diagnose shared modem inventory loader yok"
+grep -q 'ping -c 20' "$PROJECT_DIR/scripts/pi/diagnose-video-path.sh" \
+  || die "video diagnose cihaz RTT/packet loss yok"
+grep -q 'Zaman=' "$PROJECT_DIR/scripts/pi/diagnose-video-path.sh" \
+  || die "video diagnose zaman damgasi yok"
 grep -q 'log_err(f"set_rules:' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
   || die "adguard-filters set_rules try/except yok"
 grep -q 'ROUTER_DNS_SECONDARY:-1.1.1.1' "$PROJECT_DIR/scripts/mac/setup-dns-fallback.sh" \
@@ -299,10 +320,26 @@ grep -q 'governance-check' "$PROJECT_DIR/scripts/pi/health-check.sh" \
   || die "health-check adguard-filters --governance-check yok"
 grep -q 'filter apply suruyor' "$PROJECT_DIR/scripts/pi/health-check.sh" \
   || die "health-check in_progress auto-heal skip yok"
+grep -q 'modem_inventory import' "$PROJECT_DIR/scripts/pi/audit-dns-coverage.sh" \
+  || die "audit shared modem inventory loader yok"
+grep -q 'privacy_mac=true' "$PROJECT_DIR/scripts/pi/audit-dns-coverage.sh" \
+  || die "audit privacy MAC metadata yok"
+grep -q "last_seen=.*record" "$PROJECT_DIR/scripts/pi/audit-dns-coverage.sh" \
+  || die "audit modem last_seen metadata yok"
+grep -q 'stale haric' "$PROJECT_DIR/scripts/pi/audit-dns-coverage.sh" \
+  || die "audit coverage stale cihazlari ayirmiyor"
 grep -q 'crit "AdGuard filters"' "$PROJECT_DIR/scripts/pi/post-deploy-code.sh" \
   || die "post-deploy-code AdGuard filters soft degil crit olmali"
 grep -q 'adguard-filters.py' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" \
   || die "install-privileged adguard-filters.py yok"
+grep -q 'modem_inventory.py' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" \
+  || die "install-privileged modem_inventory.py yok"
+grep -q 'inventory_confidence' "$PROJECT_DIR/scripts/lib/netalert-devices.py" \
+  || die "NetAlert inventory confidence yok"
+grep -q 'inventory_last_seen' "$PROJECT_DIR/scripts/lib/netalert-devices.py" \
+  || die "NetAlert inventory last_seen yok"
+grep -q 'modem_inventory.py' "$PROJECT_DIR/Makefile" \
+  || die "Makefile modem inventory shared loader sync yok"
 grep -q 'ADGUARD_FILTER_POLL_SEC' "$PROJECT_DIR/.env.example" \
   || die ".env.example ADGUARD_FILTER_POLL_SEC yok"
 grep -q 'ADGUARD_FILTER_LOCK_WAIT_SEC' "$PROJECT_DIR/.env.example" \

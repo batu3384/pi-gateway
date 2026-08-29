@@ -22,10 +22,15 @@ FILTERS_PY="${SCRIPT_DIR}/../lib/adguard-filters.py"
 [[ -f "$FILTERS_PY" ]] || FILTERS_PY="${REMOTE_DIR}/scripts/lib/adguard-filters.py"
 LOCK_FILE="${ADGUARD_FILTER_LOCK_FILE:-/run/pi-gateway/adguard-filters.lock}"
 LOCK_WAIT_SEC="${ADGUARD_FILTER_LOCK_WAIT_SEC:-120}"
+API_READY_WAIT_SEC="${ADGUARD_FILTER_API_READY_WAIT_SEC:-120}"
 IN_PROGRESS_FILE="${ADGUARD_FILTER_IN_PROGRESS_FILE:-/run/pi-gateway/adguard-filters.in_progress}"
 
 [[ -n "$AGH_ADMIN_PASSWORD" ]] || { echo "[adguard-filters] AGH_ADMIN_PASSWORD bos"; exit 1; }
 [[ -f "$FILTERS_PY" ]] || { echo "[adguard-filters] HATA: $FILTERS_PY yok" >&2; exit 1; }
+[[ "$API_READY_WAIT_SEC" =~ ^[0-9]+$ ]] || {
+  echo "[adguard-filters] HATA: ADGUARD_FILTER_API_READY_WAIT_SEC sayi olmali" >&2
+  exit 1
+}
 
 if [[ "${1:-}" == "--self-check" ]]; then
   exec python3 "$FILTERS_PY" --self-check
@@ -46,6 +51,22 @@ trap cleanup EXIT
 
 agh_login "$BASE" "$COOKIE" "$AGH_ADMIN_USER" "$AGH_ADMIN_PASSWORD" \
   || { log "AdGuard login basarisiz"; exit 1; }
+
+filtering_api_ready() {
+  local deadline=$((SECONDS + API_READY_WAIT_SEC))
+  while (( SECONDS < deadline )); do
+    if curl -fsS --max-time 5 -b "$COOKIE" \
+      "${BASE}/control/filtering/status" >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 2
+  done
+  return 1
+}
+filtering_api_ready || {
+  log "HATA: AdGuard filtering API hazir degil (${API_READY_WAIT_SEC}s)" >&2
+  exit 1
+}
 
 # ponytail: TIF Full ~2.1M rules. Ceiling ~400MiB Available; upgrade: ADGUARD_FILTER_PROFILE=balanced.
 if [[ "$ADGUARD_FILTER_PROFILE" == "aggressive" ]]; then

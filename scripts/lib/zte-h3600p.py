@@ -446,6 +446,9 @@ def self_check() -> None:
     merged = merge_devices(parsed + [{"mac": parsed[0]["mac"], "ip": "", "name": "M2003J15SC", "source": "topology"}])
     assert len(merged) == 1
     assert "last_seen" in merged[0]
+    assert "source" in merged[0]
+    assert merged[0]["privacy_mac"] is True
+    assert merged[0]["confidence"] == "high"
     assert hashlib.sha256(b"secret-token").hexdigest()
     print("[zte-h3600p] self-check OK")
 

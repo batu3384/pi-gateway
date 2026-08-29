@@ -21,9 +21,11 @@
 | `ADGUARD_FILTER_FORCE_REFRESH` | `false`; `true` yalnız kontrollü manuel yenileme için |
 | `ADGUARD_FILTER_POLL_SEC` / `ADGUARD_FILTER_POLL_INTERVAL_SEC` | `180` / `5`; refresh sonrası governance poll (AGH liste indirme süresi) |
 | `ADGUARD_FILTER_LOCK_WAIT_SEC` | `120`; `apply-adguard-filters` flock bekleme |
+| `ADGUARD_FILTER_API_READY_WAIT_SEC` | `120`; stack restart sonrası AGH filtering API readiness bekleme |
 | `ADGUARD_FILTER_STATE_PATH` | Boşsa `/var/lib/pi-gateway/adguard-filter-state.json` |
 | `ADGUARD_FILTER_SOURCE_CACHE_PATH` | Boşsa `/var/lib/pi-gateway/adguard-filter-source-cache.json` (ETag/If-Modified-Since) |
 | `ADGUARD_FILTER_PROFILE` | `balanced` (TIF Medium). `balanced-core` = Pro++ + TIF Medium + DoH (3 liste, düşük RAM). `aggressive` = TIF Full + CNAME original trackers; AGH ≥2GB RAM. Fake **and** Popup Hosts not stacked (inside Pro++). TIF Full: `apply-adguard-filters` WARNs if MemAvailable <400MiB — switch `balanced`. Not Multi Ultimate / not disguised CNAME list. See `docs/DNS-BLOCKING.md`. |
+| `config/adguard/filter-lists.json` `budgets` | Profil başına toplam kural üst sınırı; upstream `@latest` büyümesi bu sınırı aşarsa apply başarısız olur ve stale listeler kaldırılmaz |
 | `ROUTER_DNS_SECONDARY` | Yalnız `MAC_DNS_GATEWAY_FALLBACK=true` iken. **Bos** veya `LAN_GATEWAY`. Public resolver WAN `:53` drop ile ölür. |
 | `MAC_DNS_GATEWAY_FALLBACK` | `false` (varsayılan): `make mac-dns` modem `.1` eklemez; **yalnız LAN IP** olan Ethernet/Wi-Fi. Hotspot'a Pi+ULA yazmaz (`make mac-dns-clear`). `true`: Pi down yedek; modem LAN `:53` reklam kaçırır. |
 | `DHCP_RANGE_START` / `DHCP_RANGE_END` / `LAN_SUBNET_MASK` | Yalnız `NETWORK_MODE=adguard-dhcp`. Örnek: `192.168.1.50`–`200`, `255.255.255.0`. |
@@ -39,6 +41,9 @@ ZTE H3600P credential'ları repo `.env` içine konmaz. `/etc/pi-gateway/modem-in
 dosyasını root sahipli `0600` oluşturun (`MODEM_USERNAME=...`, `MODEM_PASSWORD=...`);
 systemd bunu `LoadCredential` ile servise aktarır. Adapter yalnızca GET veri endpoint'leri
 ve login/logout çağrısı kullanır; response/session hatasında eski snapshot korunur.
+Snapshot cihaz kayıtları `source`, `confidence`, `privacy_mac` ve `last_seen` alanlarını
+taşır. NetAlertX ile DNS audit bu aynı snapshot loader'ını kullanır; stale snapshot
+isim gösterebilir ama aktiflik/DNS kanıtı olarak kullanılamaz.
 Kurulum: `sudo install -d -m 755 /etc/pi-gateway` → `sudoedit
 /etc/pi-gateway/modem-inventory.env` → `sudo chown root:root ...` ve `sudo chmod
 600 ...`. Sonra `.env` içinde inventory'yi açıp `make modem-inventory` çalıştırın;

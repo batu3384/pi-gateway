@@ -168,6 +168,8 @@ if awk '/units=\(/,/\)/' "$PROJECT_DIR/scripts/lib/reset-gateway-units.sh" | gre
 fi
 grep -q 'scripts/lib/reset-gateway-units.sh' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" \
   || die "privileged reset-gateway-units yok"
+grep -q 'sudo -n' "$PROJECT_DIR/scripts/lib/reset-gateway-units.sh" \
+  || die "reset-failed interaktif sudo prompt aciyor"
 ok "privileged reset-gateway-units"
 grep -q 'PasswordAuthentication no' "$PROJECT_DIR/scripts/pi/harden-host.sh" \
   || die "SSH PasswordAuthentication kapatma yok"

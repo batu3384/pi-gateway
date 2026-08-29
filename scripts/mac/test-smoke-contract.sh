@@ -18,6 +18,7 @@ for needle in \
   'adguard-dhcp-config' \
   'adguard-ui-ufw-no-lan' \
   'privileged-lib-sync' \
+  'privileged-modem-inventory-sync' \
   'privileged-adguard-filters-sync' \
   'privileged-lib-hash' \
   'adguard-no-popup-stack' \
