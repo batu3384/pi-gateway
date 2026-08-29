@@ -30,6 +30,7 @@ SCRIPTS=(
   scripts/pi/export-gateway-state.sh
   scripts/pi/export-adguard-metrics.sh
   scripts/lib/adguard-metrics.py
+  scripts/lib/adguard-filters.py
   scripts/lib/unbound-dnssec.sh
   scripts/lib/gateway-probes.py
   scripts/lib/netalert-devices.py

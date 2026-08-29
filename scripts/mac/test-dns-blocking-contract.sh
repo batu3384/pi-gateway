@@ -15,6 +15,7 @@ need "$PROJECT_DIR/scripts/pi/ensure-adguard-blocking.sh"
 need "$PROJECT_DIR/scripts/pi/wait-dns-rollout.sh"
 need "$PROJECT_DIR/scripts/pi/apply-adguard-dns.sh"
 need "$PROJECT_DIR/scripts/pi/apply-adguard-filters.sh"
+need "$PROJECT_DIR/scripts/lib/adguard-filters.py"
 need "$PROJECT_DIR/scripts/lib/zte-h3600p.py"
 need "$PROJECT_DIR/scripts/pi/sync-modem-inventory.sh"
 need "$PROJECT_DIR/scripts/pi/observe-rdnss-ra.sh"
@@ -84,6 +85,8 @@ python3 "$PROJECT_DIR/scripts/lib/zte-h3600p.py" --self-check \
   || die "zte-h3600p self-check"
 python3 "$PROJECT_DIR/scripts/lib/netalert-devices.py" --self-check \
   || die "netalert-devices modem isim self-check"
+grep -q 'balanced-core' "$PROJECT_DIR/config/adguard/filter-lists.json" \
+  || die "filter-lists balanced-core profil yok"
 grep -q 'balanced' "$PROJECT_DIR/config/adguard/filter-lists.json" \
   || die "filter-lists balanced profil yok"
 grep -q 'aggressive' "$PROJECT_DIR/config/adguard/filter-lists.json" \
@@ -123,12 +126,34 @@ grep -q 'ADGUARD_RATELIMIT=50' "$PROJECT_DIR/docs/DNS-BLOCKING.md" \
   || die "DNS-BLOCKING knobs dokuman yok"
 awk '/^adguard-tune:/,/^recover-stack:/' "$PROJECT_DIR/Makefile" | grep -q 'apply-adguard-dns.sh' \
   || die "Makefile adguard-tune apply-adguard-dns sync yok"
-grep -F 'ponytail: AGH add/remove_url' "$PROJECT_DIR/scripts/pi/apply-adguard-filters.sh" >/dev/null \
-  || die "apply-adguard-filters AGH non-JSON POST govde"
-grep -q 'AGH non-JSON' "$PROJECT_DIR/scripts/pi/apply-adguard-filters.sh" \
-  || die "apply-adguard-filters HTML/hata govdeyi basari saymamali"
-grep -q 'first in ("ok", "true")' "$PROJECT_DIR/scripts/pi/apply-adguard-filters.sh" \
-  || die "apply-adguard-filters OK 93 rules prefix yok"
+awk '/^adguard-tune:/,/^recover-stack:/' "$PROJECT_DIR/Makefile" | grep -q 'adguard-filters.py' \
+  || die "Makefile adguard-tune adguard-filters.py sync yok"
+grep -q 'flock -w' "$PROJECT_DIR/scripts/pi/apply-adguard-filters.sh" \
+  || die "apply-adguard-filters flock yok"
+grep -q 'IN_PROGRESS_FILE' "$PROJECT_DIR/scripts/pi/apply-adguard-filters.sh" \
+  || die "apply-adguard-filters in_progress flag yok"
+grep -q 'AGH non-JSON' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
+  || die "adguard-filters AGH non-JSON guard yok"
+grep -q 'first in ("ok", "true")' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
+  || die "adguard-filters OK prefix guard yok"
+grep -q 'set_rules' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
+  || die "adguard-filters set_rules yok"
+grep -q 'cache_clear' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
+  || die "adguard-filters cache_clear yok"
+grep -q 'agh_match' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
+  || die "adguard-filters AGH user_rules kiyas yok"
+grep -q 'set_url' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
+  || die "adguard-filters disabled liste enable (set_url) yok"
+grep -q 'remove_stale_lists' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
+  || die "adguard-filters stale remove governance sonrasi yok"
+grep -q 'check_live_regressions' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
+  || die "adguard-filters live regression set_rules sonrasi yok"
+grep -q 'If-Modified-Since' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
+  || die "adguard-filters ETag/IMS source cache yok"
+python3 "$PROJECT_DIR/scripts/lib/adguard-filters.py" --self-check \
+  || die "adguard-filters self-check"
+grep -q 'ponytail: TIF Full' "$PROJECT_DIR/scripts/pi/apply-adguard-filters.sh" \
+  || die "apply-adguard-filters TIF Full MemAvailable tavan yok"
 grep -q '8.8.8.8 UDP timeout' "$PROJECT_DIR/scripts/pi/diagnose-dns-bypass.sh" \
   || die "diagnose 8.8.8.8 timeout ≠ 0.0.0.0 WARN"
 grep -q 'Filtre Kriterleri' "$PROJECT_DIR/docs/DNS-BLOCKING.md" \
@@ -186,8 +211,8 @@ grep -q 'host_label' "$PROJECT_DIR/scripts/pi/audit-dns-coverage.sh" \
   || die "audit NetAlertX cihaz adi yok"
 grep -q '/control/clients' "$PROJECT_DIR/scripts/pi/audit-dns-coverage.sh" \
   || die "audit AGH client adi yok"
-grep -q 'HATA set_rules' "$PROJECT_DIR/scripts/pi/apply-adguard-filters.sh" \
-  || die "apply-adguard-filters set_rules try/except yok"
+grep -q 'log_err(f"set_rules:' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
+  || die "adguard-filters set_rules try/except yok"
 grep -q 'ROUTER_DNS_SECONDARY:-1.1.1.1' "$PROJECT_DIR/scripts/mac/setup-dns-fallback.sh" \
   && die "dns-fallback hala public 1.1.1.1 default"
 grep -q 'is_public_dns' "$PROJECT_DIR/scripts/mac/setup-dns-fallback.sh" \
@@ -268,12 +293,20 @@ grep -q '@@||mdp-appconf-tr.heytapdl.com^' "$PROJECT_DIR/config/adguard/user-rul
   || die "user-rules Heytap appconf allowlist yok"
 grep -q '@@||cloudconf-app-tr.heytapmobile.com^' "$PROJECT_DIR/config/adguard/user-rules.txt" \
   || die "user-rules Heytap cloudconf allowlist yok"
-grep -q 'cache_clear' "$PROJECT_DIR/scripts/pi/apply-adguard-filters.sh" \
-  || die "apply-adguard-filters cache_clear yok"
-grep -q 'agh_match' "$PROJECT_DIR/scripts/pi/apply-adguard-filters.sh" \
-  || die "apply-adguard-filters AGH user_rules kiyas yok"
-grep -q 'ponytail: TIF Full' "$PROJECT_DIR/scripts/pi/apply-adguard-filters.sh" \
-  || die "apply-adguard-filters TIF Full MemAvailable tavan yok"
+grep -q 'adguard-filter-governance' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check adguard-filter-governance yok"
+grep -q 'governance-check' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check adguard-filters --governance-check yok"
+grep -q 'filter apply suruyor' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check in_progress auto-heal skip yok"
+grep -q 'crit "AdGuard filters"' "$PROJECT_DIR/scripts/pi/post-deploy-code.sh" \
+  || die "post-deploy-code AdGuard filters soft degil crit olmali"
+grep -q 'adguard-filters.py' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" \
+  || die "install-privileged adguard-filters.py yok"
+grep -q 'ADGUARD_FILTER_POLL_SEC' "$PROJECT_DIR/.env.example" \
+  || die ".env.example ADGUARD_FILTER_POLL_SEC yok"
+grep -q 'ADGUARD_FILTER_LOCK_WAIT_SEC' "$PROJECT_DIR/.env.example" \
+  || die ".env.example ADGUARD_FILTER_LOCK_WAIT_SEC yok"
 grep -q '_pi_home_script apply-adguard-filters.sh' "$PROJECT_DIR/scripts/pi/health-check.sh" \
   || die "health-check apply-adguard-filters home SSOT yok"
 grep -q '_pi_home_script ensure-adguard-blocking.sh' "$PROJECT_DIR/scripts/pi/health-check.sh" \

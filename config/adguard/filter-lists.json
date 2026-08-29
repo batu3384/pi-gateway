@@ -1,5 +1,10 @@
 {
   "profiles": {
+    "balanced-core": [
+      ["HaGeZi Pro++", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_51.txt"],
+      ["HaGeZi TIF Medium", "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/tif.medium.txt"],
+      ["HaGeZi DoH/DoT Bypass", "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/doh.txt"]
+    ],
     "balanced": [
       ["HaGeZi Pro++", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_51.txt"],
       ["HaGeZi TIF Medium", "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/tif.medium.txt"],

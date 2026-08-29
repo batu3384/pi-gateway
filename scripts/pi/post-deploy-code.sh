@@ -32,7 +32,7 @@ crit() {
 }
 
 crit "Privileged scripts" "$SCRIPT_DIR/install-privileged-scripts.sh"
-soft "AdGuard filters" "$SCRIPT_DIR/apply-adguard-filters.sh"
+crit "AdGuard filters" "$SCRIPT_DIR/apply-adguard-filters.sh"
 soft "Config izinleri" "$SCRIPT_DIR/fix-config-perms.sh"
 
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx caddy; then

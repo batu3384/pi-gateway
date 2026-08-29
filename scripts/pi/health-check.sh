@@ -153,7 +153,21 @@ fi
 if [[ -n "${AGH_ADMIN_PASSWORD:-}" ]]; then
   COOKIE="$(mktemp)"
   BASE="http://127.0.0.1:${ADGUARD_WEB_PORT}"
+  _filters_py="${SCRIPT_DIR}/../lib/adguard-filters.py"
+  [[ -f "$_filters_py" ]] || _filters_py="${REMOTE_DIR}/scripts/lib/adguard-filters.py"
+  _filter_in_progress="${ADGUARD_FILTER_IN_PROGRESS_FILE:-/run/pi-gateway/adguard-filters.in_progress}"
   if agh_login "$BASE" "$COOKIE" "${AGH_ADMIN_USER:-admin}" "$AGH_ADMIN_PASSWORD" 3; then
+    filter_governance_ok=true
+    if [[ -f "$_filter_in_progress" ]]; then
+      logger -t "$LOG_TAG" "adguard filter apply suruyor — auto-heal atlandi"
+      filter_governance_ok=false
+    elif [[ -f "$_filters_py" ]]; then
+      if ! REMOTE_DIR="$REMOTE_DIR" BASE="$BASE" COOKIE="$COOKIE" \
+        ADGUARD_FILTER_PROFILE="${ADGUARD_FILTER_PROFILE:-balanced}" \
+        python3 "$_filters_py" --governance-check; then
+        filter_governance_ok=false
+      fi
+    fi
     rules="$(curl -fsS -b "$COOKIE" "${BASE}/control/filtering/status" | python3 -c "
 import json,sys
 d=json.load(sys.stdin)
@@ -172,20 +186,30 @@ ptr_ok = d.get('use_private_ptr_resolvers') is False
 ttl_ok = d.get('blocked_response_ttl') == int('${ADGUARD_BLOCKED_TTL:-60}')
 print('1' if udp_ok and ptr_ok and ttl_ok else '0')
 " 2>/dev/null || echo 0)"
-    [[ "${rules:-0}" -ge "${ADGUARD_MIN_FILTER_RULES:-100000}" ]] || {
-      if [[ "${ADGUARD_AUTO_HEAL:-true}" == "true" ]]; then
-        logger -t "$LOG_TAG" "adguard-filter-rules-low — auto-heal (filters)"
+    [[ "${rules:-0}" -ge "${ADGUARD_MIN_FILTER_RULES:-100000}" ]] || filter_governance_ok=false
+    if [[ "$filter_governance_ok" != "true" ]]; then
+      if [[ "${ADGUARD_AUTO_HEAL:-true}" == "true" && ! -f "$_filter_in_progress" ]]; then
+        logger -t "$LOG_TAG" "adguard-filter-governance — auto-heal (filters)"
         if ! REMOTE_DIR="$REMOTE_DIR" bash "$(_pi_home_script apply-adguard-filters.sh)"; then
           logger -t "$LOG_TAG" "WARN adguard filter auto-heal basarisiz"
+        fi
+        if [[ -f "$_filters_py" ]] && REMOTE_DIR="$REMOTE_DIR" BASE="$BASE" COOKIE="$COOKIE" \
+          ADGUARD_FILTER_PROFILE="${ADGUARD_FILTER_PROFILE:-balanced}" \
+          python3 "$_filters_py" --governance-check 2>/dev/null; then
+          filter_governance_ok=true
         fi
         rules="$(curl -fsS -b "$COOKIE" "${BASE}/control/filtering/status" | python3 -c "
 import json,sys
 d=json.load(sys.stdin)
 print(sum((f.get('rules_count') or 0) for f in d.get('filters',[])))
 " 2>/dev/null || echo 0)"
+        [[ "${rules:-0}" -ge "${ADGUARD_MIN_FILTER_RULES:-100000}" ]] || filter_governance_ok=false
       fi
-      [[ "${rules:-0}" -ge "${ADGUARD_MIN_FILTER_RULES:-100000}" ]] || note_fail "adguard-filter-rules-low(${rules:-0})"
-    }
+      [[ "$filter_governance_ok" == "true" ]] \
+        || note_fail "adguard-filter-governance"
+      [[ "${rules:-0}" -ge "${ADGUARD_MIN_FILTER_RULES:-100000}" ]] \
+        || note_fail "adguard-filter-rules-low(${rules:-0})"
+    fi
     [[ "${rewrites:-0}" -ge "${ADGUARD_MIN_REWRITES:-8}" ]] || note_fail "adguard-rewrites-low(${rewrites:-0})"
     [[ "$dns_ok" == "1" ]] || {
       if [[ "${ADGUARD_AUTO_HEAL:-true}" == "true" ]]; then

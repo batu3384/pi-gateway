@@ -17,10 +17,13 @@
 | `ADGUARD_MIN_FILTER_RULES` | 100000 |
 | `ADGUARD_MIN_REWRITES` | 8 |
 | `ADGUARD_BLOCKED_TTL` | 60 |
-| `ADGUARD_FILTER_PROFILE` | `balanced` (TIF Medium). `aggressive` = TIF Full + CNAME original trackers; AGH ≥2GB RAM. Fake **and** Popup Hosts not stacked (inside Pro++). TIF Full: `apply-adguard-filters` WARNs if MemAvailable <400MiB — switch `balanced`. Not Multi Ultimate / not disguised CNAME list. See `docs/DNS-BLOCKING.md`. |
 | `ADGUARD_FILTER_PREFLIGHT` / `ADGUARD_FILTER_PREFLIGHT_TIMEOUT_SEC` | `true` / `20`; liste URL'si HTTP ve ilk blok syntax kontrolü |
 | `ADGUARD_FILTER_FORCE_REFRESH` | `false`; `true` yalnız kontrollü manuel yenileme için |
+| `ADGUARD_FILTER_POLL_SEC` / `ADGUARD_FILTER_POLL_INTERVAL_SEC` | `180` / `5`; refresh sonrası governance poll (AGH liste indirme süresi) |
+| `ADGUARD_FILTER_LOCK_WAIT_SEC` | `120`; `apply-adguard-filters` flock bekleme |
 | `ADGUARD_FILTER_STATE_PATH` | Boşsa `/var/lib/pi-gateway/adguard-filter-state.json` |
+| `ADGUARD_FILTER_SOURCE_CACHE_PATH` | Boşsa `/var/lib/pi-gateway/adguard-filter-source-cache.json` (ETag/If-Modified-Since) |
+| `ADGUARD_FILTER_PROFILE` | `balanced` (TIF Medium). `balanced-core` = Pro++ + TIF Medium + DoH (3 liste, düşük RAM). `aggressive` = TIF Full + CNAME original trackers; AGH ≥2GB RAM. Fake **and** Popup Hosts not stacked (inside Pro++). TIF Full: `apply-adguard-filters` WARNs if MemAvailable <400MiB — switch `balanced`. Not Multi Ultimate / not disguised CNAME list. See `docs/DNS-BLOCKING.md`. |
 | `ROUTER_DNS_SECONDARY` | Yalnız `MAC_DNS_GATEWAY_FALLBACK=true` iken. **Bos** veya `LAN_GATEWAY`. Public resolver WAN `:53` drop ile ölür. |
 | `MAC_DNS_GATEWAY_FALLBACK` | `false` (varsayılan): `make mac-dns` modem `.1` eklemez; **yalnız LAN IP** olan Ethernet/Wi-Fi. Hotspot'a Pi+ULA yazmaz (`make mac-dns-clear`). `true`: Pi down yedek; modem LAN `:53` reklam kaçırır. |
 | `DHCP_RANGE_START` / `DHCP_RANGE_END` / `LAN_SUBNET_MASK` | Yalnız `NETWORK_MODE=adguard-dhcp`. Örnek: `192.168.1.50`–`200`, `255.255.255.0`. |
