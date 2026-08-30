@@ -16,7 +16,7 @@
 | `ADGUARD_BOOT_WAIT_SEC` | 180 |
 | `ADGUARD_MIN_FILTER_RULES` | 100000 |
 | `ADGUARD_MIN_REWRITES` | 8 |
-| `ADGUARD_BLOCKED_TTL` | 60 |
+| `ADGUARD_BLOCKED_TTL` | 300; engellenen NXDOMAIN cache (60 → daha sık AGH işi) |
 | `ADGUARD_FILTER_PREFLIGHT` / `ADGUARD_FILTER_PREFLIGHT_TIMEOUT_SEC` | `true` / `20`; HTTPS, izinli host, redirect ve filter syntax kontrolü |
 | `ADGUARD_FILTER_FORCE_REFRESH` | `false`; `true` yalnız kontrollü manuel yenileme için |
 | `ADGUARD_FILTER_SCHEDULED_SLA_SEC` | `93600` (26 saat); doğrulanmış scheduled apply yaş sınırı |
@@ -48,7 +48,7 @@
 | `VIDEO_HTTP_PROBE_URL` | `https://www.youtube.com/generate_204`; Pi kaynaklı HTTPS WAN kanıtı |
 | `VIDEO_HTTP_PROBE_TIMEOUT_SEC` | `8`; HTTPS probe timeout değeri, 1–60 saniye |
 | `NETALERTX_GID` | `1000` örneği; NetAlertX container PGID host kullanıcı grubuyla eşleşmeli |
-| `ADGUARD_COVERAGE_AUDIT_ENABLED` | `true`; health timer DNS kapsam kanıtını warn modunda yeniler |
+| `ADGUARD_COVERAGE_AUDIT_ENABLED` | `false`; `true` iken health timer 2000 satır audit çalıştırır — rutin için `make audit-dns` yeter |
 | `ADGUARD_DNS_COVERAGE_STATE_PATH` | `/var/lib/pi-gateway/dns-coverage-state.json`; son kapsam kanıtı |
 | `ADGUARD_DNS_COVERAGE_STATE_MAX_AGE_SEC` | `600`; eski kapsam kanıtı metric’te `UNKNOWN` olur |
 

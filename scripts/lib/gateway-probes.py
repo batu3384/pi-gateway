@@ -91,9 +91,11 @@ def _who_home() -> tuple[int, str, bool]:
 
 def probe() -> dict[str, Any]:
     dns_ms, dns_failures = _median_dns_ms(("example.com",), samples=3)
-    video_dns_ms, video_dns_failures = _median_dns_ms(
-        ("googlevideo.com", "ytimg.com"), samples=2
-    )
+    video_dns_ms, video_dns_failures = -1, 0
+    if os.environ.get("GATEWAY_VIDEO_DNS_PROBE", "false").lower() in ("1", "true", "yes"):
+        video_dns_ms, video_dns_failures = _median_dns_ms(
+            ("googlevideo.com", "ytimg.com"), samples=2
+        )
     port = os.environ.get("ADGUARD_WEB_PORT", "8080")
     panel_ms = _http_ms(f"http://127.0.0.1:{port}/")
     n, who, readable = _who_home()

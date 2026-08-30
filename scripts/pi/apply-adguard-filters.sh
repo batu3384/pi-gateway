@@ -68,10 +68,10 @@ filtering_api_ready || {
   exit 1
 }
 
-# ponytail: TIF Full ~2.1M rules. Ceiling ~400MiB Available; upgrade: ADGUARD_FILTER_PROFILE=balanced.
+# ponytail: TIF Full ~2.1M rules. Ceiling ~800MiB Available; upgrade: ADGUARD_FILTER_PROFILE=balanced.
 if [[ "$ADGUARD_FILTER_PROFILE" == "aggressive" ]]; then
   _avail_kb="$(awk '/MemAvailable:/ {print $2; exit}' /proc/meminfo 2>/dev/null || echo 0)"
-  if [[ "${_avail_kb:-0}" -gt 0 && "${_avail_kb}" -lt 409600 ]]; then
+  if [[ "${_avail_kb:-0}" -gt 0 && "${_avail_kb}" -lt 819200 ]]; then
     log "WARN MemAvailable ${_avail_kb}kB — aggressive -> balanced (TIF Full OOM riski)"
     ADGUARD_FILTER_PROFILE=balanced
   fi

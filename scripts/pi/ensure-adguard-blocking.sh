@@ -24,9 +24,9 @@ run_diagnose() {
 }
 
 heal_light() {
-  echo "[ensure-adguard] hedefli onarim (dns + filtre + rewrite)..."
+  # ponytail: filter apply cache_clear tüm ev DNS'ini soğutur — yalnız dns+rewrite
+  echo "[ensure-adguard] hedefli onarim (dns + rewrite)..."
   REMOTE_DIR="$REMOTE_DIR" bash "$(_pi_home_script apply-adguard-dns.sh)"
-  REMOTE_DIR="$REMOTE_DIR" bash "$(_pi_home_script apply-adguard-filters.sh)"
   REMOTE_DIR="$REMOTE_DIR" bash "$(_pi_home_script apply-adguard-rewrites.sh)"
 }
 

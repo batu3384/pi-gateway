@@ -281,6 +281,12 @@ awk '/^  unbound:/,/^  adguard:/' "$PROJECT_DIR/compose/docker-compose.yml" | gr
   || die "unbound healthcheck disable yok (WAN drop recover dongusu)"
 grep -A3 'FIX_LIGHT" == "true"' "$PROJECT_DIR/scripts/pi/ensure-adguard-blocking.sh" | grep -q heal_light \
   || die "ensure-adguard --fix-light diagnose-once heal yok"
+! grep -A8 '^heal_light()' "$PROJECT_DIR/scripts/pi/ensure-adguard-blocking.sh" | grep -q 'apply-adguard-filters.sh' \
+  || die "heal_light filter apply cache_clear yapiyor"
+grep -q 'GATEWAY_VIDEO_DNS_PROBE' "$PROJECT_DIR/scripts/lib/gateway-probes.py" \
+  || die "gateway probes video DNS toggle yok"
+grep -q 'ADGUARD_COVERAGE_AUDIT_ENABLED:-false' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health coverage audit default acik"
 grep -q 'unbound-dot-conf' "$PROJECT_DIR/scripts/pi/health-check.sh" \
   || die "health unbound-dot-conf yok"
 grep -q 'unbound-stale-conf' "$PROJECT_DIR/scripts/pi/health-check.sh" \
@@ -427,8 +433,8 @@ grep -q '_pi_home_script ensure-adguard-blocking.sh' "$PROJECT_DIR/scripts/pi/he
   || die "health-check ensure-adguard home SSOT yok"
 grep -q '_pi_home_script apply-adguard-dns.sh' "$PROJECT_DIR/scripts/pi/health-check.sh" \
   || die "health-check apply-adguard-dns home SSOT yok"
-grep -q '_pi_home_script apply-adguard-filters.sh' "$PROJECT_DIR/scripts/pi/ensure-adguard-blocking.sh" \
-  || die "ensure-adguard nested filters home SSOT yok"
+grep -q '_pi_home_script configure-adguard.sh' "$PROJECT_DIR/scripts/pi/ensure-adguard-blocking.sh" \
+  || die "ensure-adguard full heal configure yok"
 grep -q 'combined_original_trackers.txt' "$PROJECT_DIR/config/adguard/filter-lists.json" \
   || die "CNAME original_trackers aggressive profilde yok"
 grep -q 'combined_disguised_trackers.txt' "$PROJECT_DIR/config/adguard/filter-lists.json" \

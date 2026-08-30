@@ -127,25 +127,15 @@ adguard_dns_ok() {
   [[ -z "$aaaa" || "$aaaa" == "::" || "$aaaa" == "::1" ]]
 }
 if ! adguard_dns_ok; then
-  if [[ "${ADGUARD_AUTO_HEAL:-true}" == "true" ]]; then
+  if [[ "${ADGUARD_AUTO_HEAL:-false}" == "true" ]]; then
     logger -t "$LOG_TAG" "adguard drift — auto-heal (light)"
     if ! REMOTE_DIR="$REMOTE_DIR" bash "$(_pi_home_script ensure-adguard-blocking.sh)" --fix-light; then
       logger -t "$LOG_TAG" "WARN adguard auto-heal (light) basarisiz"
     fi
   fi
 fi
-if ! dig +time=2 +tries=1 @"${PI_STATIC_IP}" cloudflare.com A >/dev/null 2>&1; then
-  note_fail "adguard:53"
-fi
-if ! dig +time=2 +tries=1 @"${PI_STATIC_IP}" doubleclick.net A 2>/dev/null | grep -Eq '0\.0\.0\.0|127\.0\.0\.0|NXDOMAIN'; then
-  note_fail "adguard-block-test"
-else
-  _aaaa="$(dig +time=2 +tries=1 +short @"${PI_STATIC_IP}" doubleclick.net AAAA 2>/dev/null || true)"
-  _aaaa="${_aaaa%%$'\n'*}"
-  if [[ -n "$_aaaa" && "$_aaaa" != "::" && "$_aaaa" != "::1" ]]; then
-    note_fail "adguard-block-aaaa"
-  fi
-  unset _aaaa
+if ! adguard_dns_ok; then
+  note_fail "adguard-dns-block"
 fi
 if ! dig +time=2 +tries=1 @"${PI_STATIC_IP}" "gateway.${LAN_DOMAIN}" A +short 2>/dev/null | grep -qx "${PI_STATIC_IP}"; then
   note_fail "adguard-rewrite-gateway.${LAN_DOMAIN}"
@@ -499,7 +489,7 @@ if [[ -n "${mem_avail_mb:-}" && "$mem_avail_mb" =~ ^[0-9]+$ ]] && (( 10#$mem_ava
 fi
 # Coverage is evidence, not core DNS health; warn mode keeps expected ZTE DNS2 degraded state visible.
 _coverage_audit="${REMOTE_DIR}/scripts/pi/audit-dns-coverage.sh"
-if [[ "${ADGUARD_COVERAGE_AUDIT_ENABLED:-true}" == "true" ]] && [[ -x "$_coverage_audit" ]]; then
+if [[ "${ADGUARD_COVERAGE_AUDIT_ENABLED:-false}" == "true" ]] && [[ -x "$_coverage_audit" ]]; then
   _coverage_log="$(mktemp /tmp/pi-gateway-dns-coverage.XXXXXX)"
   if ! ADGUARD_COVERAGE_AUDIT_MODE=warn REMOTE_DIR="$REMOTE_DIR" \
     bash "$_coverage_audit" >"$_coverage_log" 2>&1; then

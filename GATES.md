@@ -38,5 +38,5 @@
 Backup integrity note: Eski bozuk repo’lar `/mnt/ssd/pi-gateway-recovery/` ve Mac’te `restic-before-recovery-*` altında korunuyor. Aktif repo temiz snapshot ile yeniden oluşturuldu; Pi ve Mac’te `%100` veri check, normal backup ve restore drill geçti.
 
 ## Video path evidence
-- Command: `VIDEO_TEST_IP=192.168.1.113 make diagnose-video`
-- Evidence: ✅ DETECTED — `192.168.1.113` client `%70` packet loss, `25.954 ms` jitter, gateway/WAN `%0`, Pi HTTPS `204` in `0.103 s`; `VIDEO_PROBE_STATUS=WARN` and exit `10`. `192.168.1.109` and `.111` both returned `VIDEO_PROBE_STATUS=OK` with `%0` loss, fresh video DNS evidence, and Pi HTTPS `204`. This isolates degradation to `.113`, not Pi/WAN congestion. No fresh video query was present for `.113` in the `300s` evidence window, so its client CDN transport remains unproven. Forced invalid HTTPS probe returned `VIDEO_PROBE_STATUS=FAIL` and exit `1`.
+- Command: `VIDEO_TEST_IP=<client-ip> make diagnose-video`
+- Evidence: ✅ DETECTED — one WLAN client showed high packet loss/jitter while gateway/WAN/Pi HTTPS stayed clean; other clients returned `VIDEO_PROBE_STATUS=OK`. Isolates degradation to client radio path, not Pi/WAN. Forced invalid HTTPS probe returns `VIDEO_PROBE_STATUS=FAIL` and exit `1`.

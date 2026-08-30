@@ -1,9 +1,9 @@
 [Unit]
-Description=Pi Gateway earthquake poll every 10s (AFAD+Kandilli; outbox bot, no Hermes)
+Description=Pi Gateway earthquake poll every 30s (AFAD+Kandilli; outbox bot, no Hermes)
 
 [Timer]
 OnBootSec=15s
-OnUnitActiveSec=10s
+OnUnitActiveSec=30s
 AccuracySec=1s
 
 [Install]

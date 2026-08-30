@@ -156,6 +156,18 @@ HTTPS probe yalnızca Pi→internet kanıtıdır; ZTE ile aynı Layer-2 ağdaki 
 şifreli CDN akışı Pi üzerinden geçmediği için client video transport'unu doğrudan ölçmez.
 `WARN` exit code `10`, `FAIL` exit code `1` döner. Ölçümü video oynarken tekrarlayın.
 
+## Performans (tüm cihazlar)
+
+Pi 4B + tam stack için önerilen `.env` ayarları:
+
+- `ADGUARD_FILTER_PROFILE=balanced` — `aggressive` (~2.4M kural) bellek ve lookup maliyeti yüksek
+- `ADGUARD_BLOCKED_TTL=300` — engellenen domainleri 60s yerine 5 dk cache
+- `ADGUARD_COVERAGE_AUDIT_ENABLED=false` — health timer’da 2000 satır audit kapalı; `make audit-dns` ile manuel
+- `ADGUARD_AUTO_HEAL=false` — drift’te filter apply + `cache_clear` tüm ev DNS’ini soğutmasın
+- `GATEWAY_VIDEO_DNS_PROBE=false` — rutin export’ta video DNS probe yok
+
+Unbound cache `32m/64m` (2GB Pi). Health timer 5 dk, deprem poll 30s. Profil değişince `make adguard-tune`.
+
 ## Update
 
 ```bash
