@@ -41,8 +41,16 @@
 | `MODEM_INVENTORY_STALE_SEC` | `900`; bu süreden eski snapshot IP eşleştirmesinde kullanılmaz |
 | `MODEM_INVENTORY_REQUIRED` | `false`; `true` iken (veya inventory enabled iken) snapshot yok/eskiyse strict audit `UNKNOWN` döner |
 | `NETALERTX_RECENCY_SEC` | `900`; NetAlertX `devLastConnection` aktiflik kanıtı penceresi |
+| `ADGUARD_AUDIT_QUERY_RECENCY_SEC` | `NETALERTX_RECENCY_SEC` ile aynı varsayılan; eski AdGuard querylog kayıtları aktif cihaz kanıtı sayılmaz |
 | `VIDEO_QUERY_RECENCY_SEC` | `300`; video diagnostik query log için son kanıt penceresi |
+| `VIDEO_CLIENT_MAX_LOSS_PERCENT` | `20`; hedef cihaz ICMP packet loss üstünde `WARN` üretir |
+| `VIDEO_CLIENT_MAX_JITTER_MS` | `30`; hedef cihaz ping RTT mdev üstünde `WARN` üretir |
+| `VIDEO_HTTP_PROBE_URL` | `https://www.youtube.com/generate_204`; Pi kaynaklı HTTPS WAN kanıtı |
+| `VIDEO_HTTP_PROBE_TIMEOUT_SEC` | `8`; HTTPS probe timeout değeri, 1–60 saniye |
 | `NETALERTX_GID` | `1000` örneği; NetAlertX container PGID host kullanıcı grubuyla eşleşmeli |
+| `ADGUARD_COVERAGE_AUDIT_ENABLED` | `true`; health timer DNS kapsam kanıtını warn modunda yeniler |
+| `ADGUARD_DNS_COVERAGE_STATE_PATH` | `/var/lib/pi-gateway/dns-coverage-state.json`; son kapsam kanıtı |
+| `ADGUARD_DNS_COVERAGE_STATE_MAX_AGE_SEC` | `600`; eski kapsam kanıtı metric’te `UNKNOWN` olur |
 
 ZTE H3600P credential'ları repo `.env` içine konmaz. `/etc/pi-gateway/modem-inventory.env`
 dosyasını root sahipli `0600` oluşturun (`MODEM_USERNAME=...`, `MODEM_PASSWORD=...`);

@@ -290,7 +290,12 @@ fi
 # Backup restore drill SLA (Mac: make backup-restore-drill)
 drill_max="${BACKUP_DRILL_MAX_AGE_DAYS:-30}"
 drill_marker="/var/lib/pi-gateway/last-backup-restore-drill"
+drill_failure_marker="/var/lib/pi-gateway/last-backup-restore-drill-failure"
 if [[ "$drill_max" != "0" ]] && [[ "${ENABLE_RESTIC:-true}" == "true" ]] && ! storage_degraded; then
+  if [[ -f "$drill_failure_marker" ]] \
+    && { [[ ! -f "$drill_marker" ]] || [[ "$drill_failure_marker" -nt "$drill_marker" ]]; }; then
+    slo_note "backup-restore-drill-failed"
+  fi
   if [[ ! -f "$drill_marker" ]]; then
     if [[ "${WEAK_BACKUP_OK:-}" == "yes" ]]; then
       logger -t "$LOG_TAG" "WARN backup-restore-drill-missing WEAK_BACKUP_OK=yes"
@@ -491,6 +496,16 @@ mem_avail_mb="$(awk '/^MemAvailable:/ {print int($2/1024)}' /proc/meminfo 2>/dev
 if [[ -n "${mem_avail_mb:-}" && "$mem_avail_mb" =~ ^[0-9]+$ ]] && (( 10#$mem_avail_mb < MEM_WARN_MB )); then
   notify_disk_warn "memory" "MemAvailable ${mem_avail_mb}MiB (esik ${MEM_WARN_MB})" "Bellek düşük"
   logger -t "$LOG_TAG" "WARN mem available ${mem_avail_mb}MiB"
+fi
+# Coverage is evidence, not core DNS health; warn mode keeps expected ZTE DNS2 degraded state visible.
+_coverage_audit="${REMOTE_DIR}/scripts/pi/audit-dns-coverage.sh"
+if [[ "${ADGUARD_COVERAGE_AUDIT_ENABLED:-true}" == "true" ]] && [[ -x "$_coverage_audit" ]]; then
+  _coverage_log="$(mktemp /tmp/pi-gateway-dns-coverage.XXXXXX)"
+  if ! ADGUARD_COVERAGE_AUDIT_MODE=warn REMOTE_DIR="$REMOTE_DIR" \
+    bash "$_coverage_audit" >"$_coverage_log" 2>&1; then
+    logger -t "$LOG_TAG" "WARN dns coverage audit failed"
+  fi
+  rm -f "$_coverage_log"
 fi
 _export="${SCRIPT_DIR}/export-gateway-state.sh"
 [[ -x "$_export" ]] || _export="${REMOTE_DIR}/scripts/pi/export-gateway-state.sh"

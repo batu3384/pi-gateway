@@ -23,13 +23,14 @@ ADGUARD_WEB_PORT="${ADGUARD_WEB_PORT:-8080}"
 QUERY_LIMIT="${ADGUARD_AUDIT_QUERY_LIMIT:-2000}"
 MIN_QUERIES="${ADGUARD_AUDIT_MIN_QUERIES:-3}"
 MIN_COVERAGE="${ADGUARD_MIN_COVERAGE_PERCENT:-50}"
-BYPASS_CHECK="${ADGUARD_BYPASS_CHECK:-strict}"
+BYPASS_CHECK="${ADGUARD_COVERAGE_AUDIT_MODE:-${ADGUARD_BYPASS_CHECK:-strict}}"
 AGH_ADMIN_USER="${AGH_ADMIN_USER:-admin}"
 AGH_ADMIN_PASSWORD="${AGH_ADMIN_PASSWORD:-}"
 MODEM_INVENTORY_PATH="${MODEM_INVENTORY_PATH:-${REMOTE_DIR}/data/modem-inventory.json}"
 MODEM_INVENTORY_STALE_SEC="${MODEM_INVENTORY_STALE_SEC:-900}"
 MODEM_INVENTORY_REQUIRED="${MODEM_INVENTORY_REQUIRED:-false}"
 NETALERTX_RECENCY_SEC="${NETALERTX_RECENCY_SEC:-900}"
+QUERY_RECENCY_SEC="${ADGUARD_AUDIT_QUERY_RECENCY_SEC:-${NETALERTX_RECENCY_SEC}}"
 [[ "$MODEM_INVENTORY_STALE_SEC" =~ ^[0-9]+$ ]] || {
   echo "[${PG_SCRIPT_NAME}] HATA: MODEM_INVENTORY_STALE_SEC sayi olmali" >&2
   exit 1
@@ -38,10 +39,27 @@ NETALERTX_RECENCY_SEC="${NETALERTX_RECENCY_SEC:-900}"
   echo "[${PG_SCRIPT_NAME}] HATA: NETALERTX_RECENCY_SEC sayi olmali" >&2
   exit 1
 }
+[[ "$QUERY_RECENCY_SEC" =~ ^[0-9]+$ ]] || {
+  echo "[${PG_SCRIPT_NAME}] HATA: ADGUARD_AUDIT_QUERY_RECENCY_SEC sayi olmali" >&2
+  exit 1
+}
 fail=0
 note_fail() { echo "[FAIL] $*"; fail=1; }
 note_ok() { echo "[OK] $*"; }
 note_warn() { echo "[WARN] $*"; }
+coverage_state_status() {
+  python3 - "${ADGUARD_DNS_COVERAGE_STATE_PATH:-/var/lib/pi-gateway/dns-coverage-state.json}" <<'PY' || printf 'unknown'
+import json
+import sys
+
+try:
+    with open(sys.argv[1], encoding="utf-8") as fh:
+        status = json.load(fh).get("status", "unknown")
+except (OSError, TypeError, ValueError, json.JSONDecodeError):
+    status = "unknown"
+print(status)
+PY
+}
 
 echo "=== DNS kapsam auditi ==="
 echo "Pi=${PI_IP} gateway=${GATEWAY_IP} (ARP + son ${QUERY_LIMIT} sorgu)"
@@ -56,11 +74,11 @@ trap 'rm -f "$COOKIE"' EXIT
 agh_login "http://127.0.0.1:${ADGUARD_WEB_PORT}" "$COOKIE" "$AGH_ADMIN_USER" "$AGH_ADMIN_PASSWORD" \
   || { note_fail "AdGuard API login"; exit 1; }
 
-export COOKIE PI_IP GATEWAY_IP LAN_NET_PREFIX QUERY_LIMIT MIN_QUERIES MIN_COVERAGE BYPASS_CHECK ADGUARD_WEB_PORT REMOTE_DIR MODEM_INVENTORY_PATH MODEM_INVENTORY_STALE_SEC MODEM_INVENTORY_REQUIRED MODEM_INVENTORY_ENABLED NETALERTX_RECENCY_SEC
+export COOKIE PI_IP GATEWAY_IP LAN_NET_PREFIX QUERY_LIMIT MIN_QUERIES MIN_COVERAGE BYPASS_CHECK ADGUARD_WEB_PORT REMOTE_DIR MODEM_INVENTORY_PATH MODEM_INVENTORY_STALE_SEC MODEM_INVENTORY_REQUIRED MODEM_INVENTORY_ENABLED NETALERTX_RECENCY_SEC QUERY_RECENCY_SEC
 set +e
 python3 - <<'PY'
 import ipaddress
-import json, os, subprocess, sys
+import json, os, subprocess, sys, tempfile
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 
@@ -83,6 +101,7 @@ modem_required = (
     or os.environ.get("MODEM_INVENTORY_ENABLED", "false") == "true"
 )
 netalert_recency_sec = int(os.environ["NETALERTX_RECENCY_SEC"])
+query_recency_sec = int(os.environ["QUERY_RECENCY_SEC"])
 
 def curl_api(path):
     return subprocess.check_output(
@@ -206,7 +225,24 @@ ql = json.loads(curl_api(f"/control/querylog?older_than=&limit={query_limit}"))
 clients, blocked = Counter(), Counter()
 protocols = defaultdict(Counter)
 ipv6_query_clients = Counter()
+now_ts = datetime.now(timezone.utc).timestamp()
+
+def query_is_recent(row):
+    raw_time = row.get("time") or row.get("timestamp")
+    if not raw_time:
+        return True
+    try:
+        query_ts = datetime.fromisoformat(
+            str(raw_time).replace("Z", "+00:00")
+        ).timestamp()
+    except (TypeError, ValueError):
+        return False
+    age = now_ts - query_ts
+    return 0 <= age <= query_recency_sec
+
 for row in ql.get("data", []):
+    if not query_is_recent(row):
+        continue
     ip = str(row.get("client_ip") or row.get("client") or "")
     try:
         parsed_ip = ipaddress.ip_address(ip)
@@ -231,7 +267,6 @@ for row in ql.get("data", []):
 
 query_ips = set(clients)
 observed_ips = online_ips | idle_ips
-now_ts = datetime.now(timezone.utc).timestamp()
 recent_netalert_ips = {
     ip for ip, seen in netalert_seen.items()
     if 0 <= now_ts - seen <= netalert_recency_sec
@@ -294,7 +329,8 @@ if ipv6_query_clients:
     )
 else:
     print("  [UNKNOWN] IPv6 istemci query logu görünmedi; RDNSS kaynağı ayrı doğrulanmalı")
-if any("api-unknown" in values for values in protocols.values()):
+protocol_unknown = any("api-unknown" in values for values in protocols.values())
+if protocol_unknown:
     print("  [UNKNOWN] AdGuard query log protokol alanı vermiyor; DoH/DoT/DoQ sonucu bu API'den çıkarılamaz")
 if not netalert_db_readable:
     print("  [UNKNOWN] NetAlertX app.db okunamadi; online cihaz/isim kaniti eksik")
@@ -315,29 +351,88 @@ print("  B) NETWORK_MODE=adguard-dhcp — ZTE H3600P'te DENEME (relay DISCOVER y
 print("  C) Ethernet+WiFi: kablolu NIC public DNS WAN :53 drop keser — Mac: make mac-dns")
 print("  D) IPv6: radvd 3–4s + modem LL lifetime 0; modem RA 900s last-RA. Anlamazsa make mac-dns")
 
+def write_state(status, exit_code):
+    path = os.environ.get(
+        "ADGUARD_DNS_COVERAGE_STATE_PATH",
+        "/var/lib/pi-gateway/dns-coverage-state.json",
+    )
+    payload = {
+        "ts": datetime.fromtimestamp(now_ts, timezone.utc).isoformat(),
+        "status": status,
+        "exit_code": exit_code,
+        "coverage_percent": strict_cov,
+        "active_devices": strict_total,
+        "using_pi_dns": using,
+        "reported_devices": total,
+        "unverified_devices": len(unverified),
+        "inventory_fresh": bool(modem["fresh"]),
+        "netalert_db_readable": bool(netalert_db_readable),
+        "ipv6_query_clients": len(ipv6_query_clients),
+        "protocol_unknown": bool(protocol_unknown),
+    }
+    tmp_path = None
+    try:
+        directory = os.path.dirname(path) or "."
+        os.makedirs(directory, exist_ok=True)
+        fd, tmp_path = tempfile.mkstemp(prefix=".dns-coverage-", dir=directory)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, ensure_ascii=False)
+            fh.write("\n")
+        os.replace(tmp_path, path)
+    except OSError as exc:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+        print(f"[WARN] DNS coverage state yazilamadi: {exc}", file=sys.stderr)
+
+
+def finish(status, exit_code):
+    write_state(status, exit_code)
+    sys.exit(exit_code)
+
+
 if bypass_check == "off":
     print("COVERAGE_OK")
-    sys.exit(0)
+    finish("off", 0)
 inventory_unknown = modem_required and not modem["fresh"]
 if inventory_unknown:
     print("COVERAGE_UNKNOWN: modem snapshot missing or stale")
-    sys.exit(12)
+    finish("unknown", 12)
 if modem_required and modem["fresh"] and unknown_ips:
     print("UNKNOWN_DEVICES:" + ",".join(unknown_ips))
-    sys.exit(12)
+    finish("unknown", 12)
 if strict_total and strict_cov < min_cov:
     print(f"COVERAGE_FAIL:{strict_cov}")
-    sys.exit(10)
+    finish("fail", 10)
 if unverified:
     print("MISSING_DEVICES:" + ",".join(unverified))
-    sys.exit(11)
+    finish("warn" if bypass_check == "warn" else "fail", 11)
+if protocol_unknown:
+    print("COVERAGE_OK")
+    finish("warn", 0)
 print("COVERAGE_OK")
+finish("ok", 0)
 PY
 rc=$?
 set -e
 case "$rc" in
   0)
-    note_ok "DNS kapsami yeterli"
+    case "$(coverage_state_status)" in
+      ok)
+        note_ok "DNS kapsami yeterli"
+        ;;
+      warn)
+        note_warn "DNS kapsami PASS degil — evidence WARN (protokol/bypass kaniti eksik olabilir)"
+        ;;
+      fail)
+        note_fail "DNS kapsami FAIL — state/exit kodu uyumsuz"
+        ;;
+      *)
+        note_warn "DNS kapsami sonucu UNKNOWN — coverage state okunamadi veya stale"
+        ;;
+    esac
     ;;
   10|11)
     if [[ "$BYPASS_CHECK" == "warn" ]]; then

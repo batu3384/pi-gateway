@@ -17,6 +17,35 @@ ok() { echo "[config-drift] OK: $*"; }
 
 [[ -n "$PI_HOST" ]] || die "PI_STATIC_IP gerekli"
 
+canonical_hash() {
+  python3 - "$1" <<'PY' | sha256sum | awk '{print $1}'
+import re
+import sys
+
+text = open(sys.argv[1], encoding="utf-8").read()
+text = re.sub(r"\$2[aby]\$\d{2}\$[./A-Za-z0-9]+", "<BCRYPT>", text)
+print(text.rstrip())
+PY
+}
+
+canonical_hash_remote() {
+  local path="$1"
+  local text
+  if ! text="$(ssh -o ConnectTimeout=15 -o BatchMode=yes "$PI_USER@$PI_HOST" \
+    python3 - "$path" <<'PY'
+import re
+import sys
+
+text = open(sys.argv[1], encoding="utf-8").read()
+text = re.sub(r"\$2[aby]\$\d{2}\$[./A-Za-z0-9]+", "<BCRYPT>", text)
+print(text.rstrip())
+PY
+  )"; then
+    return 1
+  fi
+  printf '%s\n' "$text" | sha256sum | awk '{print $1}'
+}
+
 PATHS=(
   "config/adguard/AdGuardHome.yaml"
   "config/unbound/unbound.conf"
@@ -28,9 +57,8 @@ fail=0
 for rel in "${PATHS[@]}"; do
   local_f="$PROJECT_DIR/$rel"
   [[ -f "$local_f" ]] || { log "WARN: local yok — $rel"; continue; }
-  local_hash="$(sha256sum "$local_f" | awk '{print $1}')"
-  remote_hash="$(ssh -o ConnectTimeout=15 -o BatchMode=yes "$PI_USER@$PI_HOST" \
-    "sha256sum '$REMOTE_DIR/$rel' 2>/dev/null" | awk '{print $1}' || true)"
+  local_hash="$(canonical_hash "$local_f")"
+  remote_hash="$(canonical_hash_remote "$REMOTE_DIR/$rel" || true)"
   if [[ -z "$remote_hash" ]]; then
     log "DRIFT missing: $rel (Pi dosya yok)"
     fail=1

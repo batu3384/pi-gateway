@@ -18,6 +18,7 @@ post="$ROOT/scripts/pi/post-deploy.sh"
 health="$ROOT/scripts/pi/health-check.sh"
 deploy="$ROOT/scripts/mac/deploy.sh"
 restore="$ROOT/scripts/mac/restore-check.sh"
+config_drift="$ROOT/scripts/mac/config-drift-check.sh"
 smoke="$ROOT/scripts/pi/smoke-test.sh"
 firewall="$ROOT/scripts/pi/setup-firewall.sh"
 install_priv="$ROOT/scripts/pi/install-privileged-scripts.sh"
@@ -30,6 +31,7 @@ docker_ssd="$ROOT/scripts/pi/setup-docker-ssd.sh"
 docker_fallback="$ROOT/scripts/pi/setup-docker-fallback.sh"
 prune_sd_space="$ROOT/scripts/pi/prune-sd-space.sh"
 backup_snapshot="$ROOT/scripts/pi/backup.sh"
+backup_drill="$ROOT/scripts/mac/backup-restore-drill.sh"
 heartbeat="$ROOT/scripts/pi/push-slo-heartbeat.sh"
 env_loader="$ROOT/scripts/lib/env-file.sh"
 health_unit="$ROOT/host/systemd/pi-gateway-health.service"
@@ -56,7 +58,16 @@ grep -q 'restic-reinit\|RESTIC_REINIT' "$restic" || die "C2: reinit marker yok"
 grep -q 'stage_root\|atomic' "$pull" || die "C2: backup-pull staging yok"
 grep -q 'snapshot\|refuse\|REINIT\|fewer\|az' "$pull" || die "C2: pull shrink/reinit gate yok"
 grep -q 'check_restic_repo' "$pull" || die "C2: backup-pull restic check yok"
+grep -q 'check --no-lock' "$restore" || die "C2: read-only restore-check lock acmaya calisiyor"
+grep -q 'command -v restic' "$restore" || die "C2: native restic fallback yok"
+grep -q 'host restic ve Docker kullanılamıyor' "$restore" || die "C2: restore-check arac yok guard yok"
+[[ "$(grep -c 'read_remote_dotenv' "$restore")" -ge 2 ]] || die "C2: both remote env yuklemiyor"
 ok "C2 restic reinit + pull gate"
+
+# C2b: generated bcrypt salts and trailing newlines must not create false drift
+grep -q 'canonical_hash_remote' "$config_drift" || die "C2b: remote canonical hash yok"
+grep -q '\$2\[aby\]' "$config_drift" || die "C2b: bcrypt salt normalization yok"
+ok "C2b config drift canonical hash"
 
 # C3: ensure_ssd_mounted no clear on mountpoint alone
 ensure_fn="$(grep -A25 '^ensure_ssd_mounted()' "$recover")"
@@ -265,6 +276,18 @@ ok "C21b Tailscale Serve ACL gate"
 grep -q 'restic_failed=1\|exit "\$restic_failed"' "$backup_snapshot" \
   || die "C22: backup Restic failure swallowed"
 ok "C22 backup failure visible"
+
+# C22b: failed restore drills must remain visible after the last success
+grep -q 'DRILL_FAILURE_MARKER_PI\|record_failure' "$backup_drill" \
+  || die "C22b: restore drill failure marker yok"
+grep -q 'drill_failure_marker\|backup-restore-drill-failed' "$health" \
+  || die "C22b: health restore drill failure gate yok"
+grep -q 'backup_restore_drill_failed' "$ROOT/scripts/pi/export-gateway-state.sh" \
+  || die "C22b: restore drill failure metric yok"
+grep -q 'backup_restore_drill_failed' \
+  "$ROOT/config/grafana/provisioning/dashboards/json/pi-gateway.json" \
+  || die "C22b: Grafana restore drill failure panel yok"
+ok "C22b restore drill failure evidence"
 
 # C23: privileged copy checks source stability and final hash
 grep -q 'source install sirasinda degisti\|group/world-writable' "$install_priv" \

@@ -52,7 +52,7 @@ korunur; yeni mega-list eklenmez.
 
 **DNS knobs** (`apply-adguard-dns.sh`, env): `ADGUARD_RATELIMIT=50` (Tailscale burst; düşürme), `ADGUARD_CACHE_SIZE=16777216` (16MiB), `ADGUARD_QUERYLOG_INTERVAL_DAYS=7` + `ADGUARD_STATS_INTERVAL_DAYS=7`. Fresh install template aynı. TLD/IDN blanket block yok (FP). Kaçan reklam: manuel “reklam şimdi” + querylog — otomatik haftalık LLM rapor yok.
 
-**Grafana:** `export-adguard-metrics.sh` (health timer, textfile) → blocked ratio, top clients / blocked domains, per-list `rules_count` / `last_updated` age, filter apply failure, rollback failure ve last verified apply timestamp. A silent 403 on one list shows as that series going stale, not only `ADGUARD_MIN_FILTER_RULES`.
+**Grafana:** `export-adguard-metrics.sh` (health timer, textfile) → blocked ratio, top clients / blocked domains, per-list `rules_count` / `last_updated` age, filter apply failure, rollback failure ve last verified apply timestamp. `audit-dns-coverage.sh` her health tick’inde `/var/lib/pi-gateway/dns-coverage-state.json` yazar; dashboard `pi_gateway_dns_coverage_percent`, `pi_gateway_dns_coverage_status` (1=OK, 2=WARN, 3=FAIL, 4=UNKNOWN), `pi_gateway_dns_coverage_protocol_unknown` ve IPv6 `pi_gateway_ipv6_rdnss_configured` metriklerini gösterir. Query protocol API’de yoksa status WARN olur; kanıt `600s` aşarsa UNKNOWN olur. A silent 403 on one list shows as that series going stale, not only `ADGUARD_MIN_FILTER_RULES`.
 
 **DNSSEC:** Unbound default validator. Proof (not assumption): `diagnose-dns-bypass.sh` / smoke — Unbound `:5335` AD flag on `cloudflare.com`; `dnssec-failed.org` SERVFAIL (`+time=8`, first miss can exceed 3s). Health timer checks AD only (no flaky third-party bogus domain every 2 min). AGH may copy AD to clients; contract is Unbound.
 
@@ -149,6 +149,12 @@ query-log medya alan adlarını son `VIDEO_QUERY_RECENCY_SEC` penceresiyle birli
 5 GHz ve 2.4 GHz sonuçlarını aynı cihazda ayrı zaman pencerelerinde karşılaştırın. Query-log'da block görünmemesi
 tek başına video transport'unun sağlıklı olduğunu kanıtlamaz; DoH/DoT/DoQ ve
 Wi-Fi radyo koşulları ayrı kanıttır.
+Araç `VIDEO_PROBE_STATUS=OK|WARN|FAIL` üretir: hedef cihaz packet loss'u varsayılan `%20`
+veya RTT jitter mdev'i `30 ms` üstünde `WARN`, gateway/WAN packet loss veya Pi kaynaklı
+HTTPS probe hatası `FAIL` olur.
+HTTPS probe yalnızca Pi→internet kanıtıdır; ZTE ile aynı Layer-2 ağdaki başka cihazın
+şifreli CDN akışı Pi üzerinden geçmediği için client video transport'unu doğrudan ölçmez.
+`WARN` exit code `10`, `FAIL` exit code `1` döner. Ölçümü video oynarken tekrarlayın.
 
 ## Update
 

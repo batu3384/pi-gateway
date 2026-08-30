@@ -77,18 +77,54 @@ grep -q 'VIDEO_QUERY_RECENCY_SEC' "$PROJECT_DIR/scripts/pi/diagnose-video-path.s
   || die "video query recency yok"
 grep -q 'inventory.get("fresh")' "$PROJECT_DIR/scripts/pi/diagnose-video-path.sh" \
   || die "video stale inventory gate yok"
+grep -q 'ipaddress.ip_address' "$PROJECT_DIR/scripts/pi/diagnose-video-path.sh" \
+  || die "video hedef IP validation yok"
+grep -q 'VIDEO_CLIENT_MAX_LOSS_PERCENT' "$PROJECT_DIR/scripts/pi/diagnose-video-path.sh" \
+  || die "video client loss esigi yok"
+grep -q 'VIDEO_CLIENT_MAX_JITTER_MS' "$PROJECT_DIR/scripts/pi/diagnose-video-path.sh" \
+  || die "video client jitter esigi yok"
+grep -q 'VIDEO_PROBE_STATUS=FAIL' "$PROJECT_DIR/scripts/pi/diagnose-video-path.sh" \
+  || die "video fail status yok"
+grep -q 'exit 10' "$PROJECT_DIR/scripts/pi/diagnose-video-path.sh" \
+  || die "video WARN exit code yok"
+grep -q 'VIDEO_HTTP_PROBE' "$PROJECT_DIR/scripts/pi/diagnose-video-path.sh" \
+  || die "video HTTPS WAN probe yok"
 grep -q 'Geçiş öncesi repo kapıları' "$PROJECT_DIR/docs/OPENWRT-DNS-ENFORCEMENT.md" \
   || die "OpenWrt gecis oncesi repo kapilari yok"
 grep -q 'LAN -> TCP/UDP 853 WAN   REJECT' "$PROJECT_DIR/docs/OPENWRT-DNS-ENFORCEMENT.md" \
   || die "OpenWrt 853 reject kapisi yok"
 grep -q 'REACHABLE/DELAY\|online_ips' "$PROJECT_DIR/scripts/pi/audit-dns-coverage.sh" \
   || die "audit ARP state ayrimi yok"
+grep -q 'ADGUARD_AUDIT_QUERY_RECENCY_SEC' "$PROJECT_DIR/scripts/pi/audit-dns-coverage.sh" \
+  || die "audit query recency ayari yok"
+grep -q 'query_is_recent' "$PROJECT_DIR/scripts/pi/audit-dns-coverage.sh" \
+  || die "audit eski query logu aktif sayiyor"
 grep -q 'USING_PI_DNS\|POSSIBLE_BYPASS\|STALE\|UNKNOWN' "$PROJECT_DIR/scripts/pi/audit-dns-coverage.sh" \
   || die "audit durum siniflari yok"
 grep -q 'MODEM_INVENTORY_ENABLED\|MODEM_INVENTORY_STALE_SEC\|MODEM_INVENTORY_REQUIRED' "$PROJECT_DIR/scripts/pi/audit-dns-coverage.sh" \
   || die "audit modem snapshot stale/required politikasi yok"
 grep -q 'inventory_unknown = modem_required and not modem\["fresh"\]' "$PROJECT_DIR/scripts/pi/audit-dns-coverage.sh" \
   || die "audit disabled inventory stale gate bozuk"
+grep -q 'ADGUARD_COVERAGE_AUDIT_MODE' "$PROJECT_DIR/scripts/pi/audit-dns-coverage.sh" \
+  || die "audit health warn modu yok"
+grep -q 'write_state' "$PROJECT_DIR/scripts/pi/audit-dns-coverage.sh" \
+  || die "audit coverage state persistence yok"
+grep -q 'dns_coverage_state_age_seconds' "$PROJECT_DIR/scripts/pi/export-gateway-state.sh" \
+  || die "export coverage evidence age metric yok"
+grep -q 'dns_coverage_protocol_unknown' "$PROJECT_DIR/scripts/pi/export-gateway-state.sh" \
+  || die "export protocol unknown metric yok"
+grep -q 'ipv6_rdnss_configured' "$PROJECT_DIR/scripts/pi/export-gateway-state.sh" \
+  || die "export IPv6 RDNSS config metric yok"
+grep -q 'ADGUARD_COVERAGE_AUDIT_ENABLED' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health coverage audit toggle yok"
+grep -q 'DNS kapsam auditi PASS degil' "$PROJECT_DIR/scripts/pi/diagnose-dns-bypass.sh" \
+  || die "diagnose coverage WARN evidence yok"
+grep -q 'coverage_state_status' "$PROJECT_DIR/scripts/pi/audit-dns-coverage.sh" \
+  || die "audit coverage status evidence yok"
+grep -q 'DNS coverage evidence' "$PROJECT_DIR/config/grafana/provisioning/dashboards/json/pi-gateway.json" \
+  || die "Grafana DNS coverage panel yok"
+grep -q 'DNS rollout' "$PROJECT_DIR/docs/OPERATIONS.md" \
+  || die "DNS rollout runbook yok"
 grep -q 'LoadCredential=modem' "$PROJECT_DIR/host/systemd/pi-gateway-modem-inventory.service" \
   || die "modem credential systemd LoadCredential yok"
 grep -q 'Environment=REMOTE_DIR=' "$PROJECT_DIR/host/systemd/pi-gateway-modem-inventory.service" \
@@ -255,7 +291,7 @@ grep -q '/control/clients' "$PROJECT_DIR/scripts/pi/audit-dns-coverage.sh" \
   || die "audit AGH client adi yok"
 grep -q 'modem_inventory import' "$PROJECT_DIR/scripts/pi/diagnose-video-path.sh" \
   || die "video diagnose shared modem inventory loader yok"
-grep -q 'ping -c 20' "$PROJECT_DIR/scripts/pi/diagnose-video-path.sh" \
+grep -q 'probe_ping client.*20' "$PROJECT_DIR/scripts/pi/diagnose-video-path.sh" \
   || die "video diagnose cihaz RTT/packet loss yok"
 grep -q 'Zaman=' "$PROJECT_DIR/scripts/pi/diagnose-video-path.sh" \
   || die "video diagnose zaman damgasi yok"
@@ -375,6 +411,10 @@ grep -q 'ADGUARD_FILTER_SCHEDULED_SLA_SEC' "$PROJECT_DIR/.env.example" \
   || die ".env.example filter scheduled SLA yok"
 grep -q 'VIDEO_QUERY_RECENCY_SEC' "$PROJECT_DIR/.env.example" \
   || die ".env.example video query recency yok"
+grep -q 'VIDEO_HTTP_PROBE_URL' "$PROJECT_DIR/.env.example" \
+  || die ".env.example video HTTPS probe yok"
+grep -q 'VIDEO_CLIENT_MAX_JITTER_MS' "$PROJECT_DIR/.env.example" \
+  || die ".env.example video jitter probe yok"
 grep -q 'netalert_db_readable' "$PROJECT_DIR/scripts/lib/gateway-probes.py" \
   || die "gateway probes NetAlert readability yok"
 grep -q 'pi_gateway_video_dns_latency_ms' "$PROJECT_DIR/scripts/lib/gateway-probes.py" \

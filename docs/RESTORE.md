@@ -52,4 +52,4 @@ make backup-pull
 make restore-check
 ```
 
-`restore-check` runs `restic check --read-data-subset=5%` on Pi SSD repo and Mac offsite copy (`RESTIC_CHECK_SUBSET` override in `.env`).
+`restore-check` runs read-only `restic check --no-lock --read-data-subset=5%` on Pi SSD repo and Mac offsite copy (`RESTIC_CHECK_SUBSET` override in `.env`). Mac’te Docker kapalıysa kurulu native `restic` fallback kullanılır. Read-only check corruption bildirirse `repair packs`, `repair snapshots --forget` veya reinit otomatik çalıştırılmaz; önce repository kopyası alınır. Kurtarılamayan repo için temiz repo yeni snapshot ile oluşturulur, eski repo `/mnt/ssd/pi-gateway-recovery/` altında korunur ve ardından `make backup-pull` ile offsite yenilenir. `backup-restore-drill` başarısızsa Pi’ye `/var/lib/pi-gateway/last-backup-restore-drill-failure` marker’ı yazar ve dashboard’da `pi_gateway_backup_restore_drill_failed=1` görünür.

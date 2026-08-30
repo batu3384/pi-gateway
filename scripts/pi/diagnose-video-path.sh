@@ -4,17 +4,42 @@
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
-VIDEO_IP="${VIDEO_TEST_IP:-}"
-if [[ -z "$VIDEO_IP" ]]; then
-  echo "Kullanim: VIDEO_TEST_IP=192.168.1.x $0" >&2
-  exit 2
-fi
 # shellcheck source=../lib/env-file.sh
 source "$SCRIPT_DIR/../lib/env-file.sh"
 read_remote_dotenv || {
   echo "[video-diagnose] HATA: .env dotenv parser hatasi" >&2
   exit 1
 }
+VIDEO_IP="${VIDEO_TEST_IP:-}"
+VIDEO_CLIENT_MAX_LOSS_PERCENT="${VIDEO_CLIENT_MAX_LOSS_PERCENT:-20}"
+VIDEO_CLIENT_MAX_JITTER_MS="${VIDEO_CLIENT_MAX_JITTER_MS:-30}"
+VIDEO_HTTP_PROBE_URL="${VIDEO_HTTP_PROBE_URL:-https://www.youtube.com/generate_204}"
+VIDEO_HTTP_PROBE_TIMEOUT_SEC="${VIDEO_HTTP_PROBE_TIMEOUT_SEC:-8}"
+if ! python3 - "$VIDEO_IP" "$VIDEO_CLIENT_MAX_LOSS_PERCENT" \
+  "$VIDEO_CLIENT_MAX_JITTER_MS" \
+  "$VIDEO_HTTP_PROBE_URL" "$VIDEO_HTTP_PROBE_TIMEOUT_SEC" <<'PY'
+import ipaddress
+import sys
+from urllib.parse import urlparse
+
+try:
+    ipaddress.ip_address(sys.argv[1])
+    loss = int(sys.argv[2])
+    jitter = int(sys.argv[3])
+    timeout = int(sys.argv[5])
+    parsed = urlparse(sys.argv[4])
+    if not 0 <= loss <= 100 or not 0 <= jitter <= 1000 or not 1 <= timeout <= 60:
+        raise ValueError
+    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+        raise ValueError
+except (IndexError, TypeError, ValueError):
+    raise SystemExit(1)
+PY
+then
+  echo "Kullanim: VIDEO_TEST_IP=192.168.1.x $0" >&2
+  echo "[video-diagnose] HATA: hedef IP veya probe ayari gecersiz" >&2
+  exit 2
+fi
 # shellcheck source=../lib/adguard-api.sh
 source "$SCRIPT_DIR/../lib/adguard-api.sh"
 
@@ -42,16 +67,99 @@ echo "Zaman=$(date -Is)"
 echo "--- Pi kaynak kontrolu ---"
 awk '/^MemAvailable:/ {printf "MemAvailable=%dMiB\n", int($2/1024)} /^MemTotal:/ {printf "MemTotal=%dMiB\n", int($2/1024)}' /proc/meminfo
 awk '{print "Load1=" $1 " Load5=" $2 " Load15=" $3}' /proc/loadavg
+video_probe_fail=0
+video_probe_warn=0
+VIDEO_CLIENT_PACKET_LOSS=-1
+VIDEO_CLIENT_JITTER_MS=-1
+VIDEO_GATEWAY_PACKET_LOSS=-1
+VIDEO_WAN_PACKET_LOSS=-1
+probe_ping() {
+  local label="$1" target="$2" count="$3" output parsed ping_rc=0
+  output="$(ping -c "$count" -W 1 "$target" 2>&1)" || ping_rc=$?
+  printf '%s\n' "$output" | awk '/packet loss|round-trip|rtt/ {print}'
+  parsed="$(printf '%s\n' "$output" | python3 -c '
+import re
+import sys
+
+text = sys.stdin.read()
+loss_match = re.search(r"(\d+(?:\.\d+)?)%\s+packet loss", text)
+rtt_match = re.search(r"=\s*([0-9.]+)/([0-9.]+)/([0-9.]+)/([0-9.]+)", text)
+if not loss_match:
+    print("unknown unknown unknown unknown")
+else:
+    loss = int(round(float(loss_match.group(1))))
+    avg = rtt_match.group(2) if rtt_match else "unknown"
+    maximum = rtt_match.group(3) if rtt_match else "unknown"
+    jitter = rtt_match.group(4) if rtt_match else "unknown"
+    print(f"{loss} {avg} {maximum} {jitter}")
+')"
+  local loss avg maximum jitter
+  read -r loss avg maximum jitter <<<"$parsed"
+  if [[ "$loss" == "unknown" ]]; then
+    echo "VIDEO_PING label=$label status=unknown rc=$ping_rc"
+    if [[ "$label" == "client" ]]; then
+      video_probe_warn=1
+    else
+      video_probe_fail=1
+    fi
+    return 0
+  fi
+  case "$label" in
+    client) VIDEO_CLIENT_PACKET_LOSS="$loss" ;;
+    gateway) VIDEO_GATEWAY_PACKET_LOSS="$loss" ;;
+    wan) VIDEO_WAN_PACKET_LOSS="$loss" ;;
+  esac
+  local probe_status=ok
+  if [[ "$label" == "client" ]]; then
+    if (( loss > VIDEO_CLIENT_MAX_LOSS_PERCENT )); then
+      video_probe_warn=1
+      probe_status=warn
+    fi
+    if [[ "$jitter" != "unknown" ]]; then
+      VIDEO_CLIENT_JITTER_MS="$jitter"
+      if awk -v value="$jitter" -v threshold="$VIDEO_CLIENT_MAX_JITTER_MS" \
+        'BEGIN { exit !(value > threshold) }'; then
+        video_probe_warn=1
+        probe_status=warn
+      fi
+    fi
+  elif (( loss > 0 )); then
+    video_probe_fail=1
+    probe_status=fail
+  fi
+  echo "VIDEO_PING label=$label status=$probe_status packet_loss=${loss}% avg_ms=$avg max_ms=$maximum jitter_ms=$jitter"
+}
 if command -v ping >/dev/null 2>&1; then
   gateway="${LAN_GATEWAY:-192.168.1.1}"
   echo "LAN cihaz RTT/packet loss:"
-  ping -c 20 -W 1 "$VIDEO_IP" 2>&1 | awk '/packet loss|round-trip|rtt/ {print}' || true
+  probe_ping client "$VIDEO_IP" 20
   echo "Gateway RTT/packet loss:"
-  ping -c 10 -W 1 "$gateway" 2>&1 | awk '/packet loss|round-trip|rtt/ {print}' || true
+  probe_ping gateway "$gateway" 10
   echo "Internet RTT/packet loss:"
-  ping -c 10 -W 1 1.1.1.1 2>&1 | awk '/packet loss|round-trip|rtt/ {print}' || true
+  probe_ping wan 1.1.1.1 10
+else
+  echo "VIDEO_PING status=unknown reason=ping-unavailable"
+  video_probe_fail=1
 fi
 
+http_probe_rc=0
+http_probe="$(curl -4LfsS --max-time "$VIDEO_HTTP_PROBE_TIMEOUT_SEC" \
+  -o /dev/null -w '%{http_code} %{time_total}' "$VIDEO_HTTP_PROBE_URL" 2>/dev/null)" \
+  || http_probe_rc=$?
+if [[ "$http_probe_rc" -eq 0 ]]; then
+  read -r http_code http_time <<<"$http_probe"
+  if [[ "$http_code" =~ ^2[0-9][0-9]$|^3[0-9][0-9]$ ]]; then
+    echo "VIDEO_HTTP_PROBE=ok code=$http_code time_s=$http_time source=pi"
+  else
+    echo "VIDEO_HTTP_PROBE=fail code=${http_code:-unknown} source=pi"
+    video_probe_fail=1
+  fi
+else
+  echo "VIDEO_HTTP_PROBE=fail rc=$http_probe_rc source=pi"
+  video_probe_fail=1
+fi
+
+set +e
 python3 - <<'PY'
 import json, os, subprocess, sys, time
 from collections import Counter
@@ -182,4 +290,30 @@ else:
         f"(state={'fresh' if inventory.get('fresh') else 'stale/missing'})"
     )
 print("Not: AdGuard query log transportu kanıtlamaz; DoH/DoT/DoQ ayrı ağ ölçümü ister.")
+if not matched:
+    print("VIDEO_QUERY_STATUS=WARN")
+    sys.exit(10)
+print("VIDEO_QUERY_STATUS=OK")
 PY
+query_rc=$?
+set -e
+if [[ "$query_rc" -ne 0 ]]; then
+  video_probe_warn=1
+fi
+
+VIDEO_PROBE_STATUS=OK
+if (( video_probe_fail )); then
+  VIDEO_PROBE_STATUS=FAIL
+elif (( video_probe_warn )); then
+  VIDEO_PROBE_STATUS=WARN
+fi
+echo "VIDEO_CLIENT_PACKET_LOSS=${VIDEO_CLIENT_PACKET_LOSS}%"
+echo "VIDEO_CLIENT_JITTER_MS=$VIDEO_CLIENT_JITTER_MS"
+echo "VIDEO_GATEWAY_PACKET_LOSS=${VIDEO_GATEWAY_PACKET_LOSS}%"
+echo "VIDEO_WAN_PACKET_LOSS=${VIDEO_WAN_PACKET_LOSS}%"
+echo "VIDEO_PROBE_STATUS=$VIDEO_PROBE_STATUS"
+case "$VIDEO_PROBE_STATUS" in
+  FAIL) exit 1 ;;
+  WARN) exit 10 ;;
+  *) exit 0 ;;
+esac

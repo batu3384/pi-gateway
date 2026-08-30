@@ -21,10 +21,17 @@ run_check() {
   local label="$1" repo_path="$2"
   [[ -d "$repo_path" ]] || die "$label — repo yok: $repo_path"
   log "check: $label ($repo_path, subset=$CHECK_SUBSET)"
-  timeout "$RESTIC_TIMEOUT_SEC" docker run --rm --network none \
-    -e RESTIC_PASSWORD \
-    -v "${repo_path}:/repo:ro" \
-    "$RESTIC_IMAGE" -r "local:/repo" check --read-data-subset="$CHECK_SUBSET"
+  if command -v restic >/dev/null 2>&1; then
+    timeout "$RESTIC_TIMEOUT_SEC" env RESTIC_PASSWORD="$RESTIC_PASSWORD" \
+      restic -r "$repo_path" check --no-lock --read-data-subset="$CHECK_SUBSET"
+  elif command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+    timeout "$RESTIC_TIMEOUT_SEC" docker run --rm --network none \
+      -e RESTIC_PASSWORD \
+      -v "${repo_path}:/repo:ro" \
+      "$RESTIC_IMAGE" -r "local:/repo" check --no-lock --read-data-subset="$CHECK_SUBSET"
+  else
+    die "$label — host restic ve Docker kullanılamıyor"
+  fi
   log "OK: $label"
 }
 case "$TARGET" in
@@ -44,7 +51,7 @@ RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic@sha256:8f5a62b422a2cb1277ea0dd6e826f
 timeout "${RESTIC_TIMEOUT_SEC:-7200}" docker run --rm --network none \
   -e RESTIC_PASSWORD \
   -v "${RESTIC_REPOSITORY}:/repo:ro" \
-  "$RESTIC_IMAGE" -r "local:/repo" check --read-data-subset="${RESTIC_CHECK_SUBSET:-5%}"
+  "$RESTIC_IMAGE" -r "local:/repo" check --no-lock --read-data-subset="${RESTIC_CHECK_SUBSET:-5%}"
 REMOTE
     ;;
   local)
@@ -61,13 +68,16 @@ REMOTE
     ssh -o ConnectTimeout=15 "$PI_USER@$PI_HOST" \
       "REMOTE_DIR='$REMOTE_DIR' RESTIC_REPOSITORY='$RESTIC_REMOTE' RESTIC_CHECK_SUBSET='$CHECK_SUBSET' RESTIC_TIMEOUT_SEC='$RESTIC_TIMEOUT_SEC' RESTIC_IMAGE='$RESTIC_IMAGE' bash -s" <<'REMOTE'
 set -euo pipefail
+source "$REMOTE_DIR/scripts/lib/env-file.sh"
+read_remote_dotenv || { echo "[restore-check] HATA: .env dotenv parser hatasi" >&2; exit 1; }
+[[ -n "${RESTIC_PASSWORD:-}" ]] || { echo "[restore-check] HATA: RESTIC_PASSWORD bos" >&2; exit 1; }
 RESTIC_REPOSITORY="${RESTIC_REPOSITORY:?RESTIC_REPOSITORY missing}"
 RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic@sha256:8f5a62b422a2cb1277ea0dd6e826fe1acf649e5b9f02d60e5268d5fd1976255a}"
 [[ -d "$RESTIC_REPOSITORY" ]] || { echo "[restore-check] HATA: Pi repo yok"; exit 1; }
 timeout "${RESTIC_TIMEOUT_SEC:-7200}" docker run --rm --network none \
   -e RESTIC_PASSWORD \
   -v "${RESTIC_REPOSITORY}:/repo:ro" \
-  "$RESTIC_IMAGE" -r "local:/repo" check --read-data-subset="${RESTIC_CHECK_SUBSET:-5%}"
+  "$RESTIC_IMAGE" -r "local:/repo" check --no-lock --read-data-subset="${RESTIC_CHECK_SUBSET:-5%}"
 REMOTE
     log "OK: pi-ssd"
     run_check "mac-offsite" "$LOCAL_REPO"

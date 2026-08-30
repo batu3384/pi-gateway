@@ -82,6 +82,17 @@ Mac HTTPS cert warning: `make trust-ca`.
 
 Remote access (telefon): Tailscale **Connected** — paneller `http://100.x/p/…` (MagicDNS şart değil). **Filtre ev dışı:** Use Tailscale DNS + admin global NS=`100.x` + Override (`docs/TAILSCALE.md`). Private DNS / iCloud Relay / Chrome Secure DNS kapalı. Pi: `setup-caddy-lan-ip` TS:80→LAN Caddy DNAT.
 
+## DNS rollout
+
+1. ZTE LAN/DHCP DNS1’i Pi IP’ye ayarla; DNS2’yi boş bırak; lease’i yenile.
+2. Mac’te `make mac-dns`, sonra `make dns-test` çalıştır.
+3. Android’de Private DNS’i, iOS’ta Private Relay/Limit IP Tracking’i, tarayıcıda Secure DNS’i kapat.
+4. TV/konsol manuel DNS kullanıyorsa Pi IP’sini yaz; public resolver veya modem `.1` ekleme.
+5. Yayılımı `make rollout-dns-wait` ile bekle; sonucu `make audit-dns` ile doğrula.
+6. `WARN`, `UNKNOWN` veya `POSSIBLE_BYPASS` cihazları reklam listesi sorunu sayma; cihaz DNS/IPv6 ayarını düzelt, sonra auditi tekrarla.
+
+ZTE H3600P aynı Layer-2 ağda modem `.1:53` erişimini Pi’ye göndermez. Bu nedenle yalnız Pi DNS kullanan cihazlar kanıtlı korunur; tüm kablolu cihazları Pi’ye zorlamak mevcut ZTE + Pi donanımıyla mümkün değildir.
+
 ## Daily commands (Mac)
 
 | Command | Description |
@@ -96,6 +107,8 @@ Remote access (telefon): Tailscale **Connected** — paneller `http://100.x/p/�
 | `make backup-restore-drill` | Restore latest offsite snapshot to temp + verify |
 | `make config-drift` | Rendered config hash Mac vs Pi |
 | `make restore-check` | `restic check` Pi + Mac offsite |
+
+`make config-drift` generated bcrypt salt and trailing newline farklarını normalize eder; gerçek config değişikliği yine `DRIFT` olarak kalır.
 
 ## Deploy
 
@@ -181,6 +194,8 @@ SLO PUSH heartbeats → Uptime Kuma (`docs/SLO.md`).
 2. Mac `make backup-pull` — weekly cron recommended
 3. Optional B2/R2 — `RESTIC_OFFSITE_ENABLED=true` (after local backup)
 4. Monthly `make backup-restore-drill` — proves restore works
+
+Başarısız restore drill `/var/lib/pi-gateway/last-backup-restore-drill-failure` marker’ı ve `pi_gateway_backup_restore_drill_failed=1` metric’i üretir; son başarılı drill yaşı tek başına güven kanıtı sayılmaz.
 
 ## Notifications
 

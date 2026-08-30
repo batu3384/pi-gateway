@@ -193,6 +193,13 @@ def validate_source_sample(sample: str, url: str) -> None:
         raise RuntimeError(f"broad-domain sample ({broad}/{len(lines)})")
 
 
+def source_line_delta_limit(
+    old_lines: int, source_metadata: dict[str, Any] | None = None
+) -> int:
+    expected_max_lines = _int_or_zero((source_metadata or {}).get("max_rules")) * 2
+    return max(500, old_lines // 2, expected_max_lines)
+
+
 class _NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, *args: Any, **kwargs: Any) -> None:
         return None
@@ -204,7 +211,9 @@ def validate_source_url(url: str) -> None:
         raise RuntimeError(f"izin verilmeyen filter source: {url}")
 
 
-def preflight_url(url: str, cache: dict[str, Any]) -> bool:
+def preflight_url(
+    url: str, cache: dict[str, Any], source_metadata: dict[str, Any] | None = None
+) -> bool:
     timeout = int(os.environ.get("ADGUARD_FILTER_PREFLIGHT_TIMEOUT_SEC", "20"))
     max_bytes = int(
         os.environ.get("ADGUARD_FILTER_MAX_SOURCE_BYTES", str(MAX_SOURCE_BYTES))
@@ -290,7 +299,8 @@ def preflight_url(url: str, cache: dict[str, Any]) -> bool:
             prev.get("last_good_line_count") or prev.get("line_count")
         )
         new_lines = total_lines
-        if old_lines and abs(new_lines - old_lines) > max(500, old_lines // 2):
+        delta_limit = source_line_delta_limit(old_lines, source_metadata)
+        if old_lines and abs(new_lines - old_lines) > delta_limit:
             raise RuntimeError(
                 f"sample delta too large: {url} ({old_lines}->{new_lines} satir)"
             )
@@ -852,7 +862,7 @@ def apply_filters() -> int:
     if os.environ.get("ADGUARD_FILTER_PREFLIGHT", "true") == "true":
         for _, url in desired:
             try:
-                source_changed = preflight_url(url, cache) or source_changed
+                source_changed = preflight_url(url, cache, metadata.get(url)) or source_changed
             except (OSError, RuntimeError) as exc:
                 log_err(f"preflight: {url} ({exc})")
                 write_failure_state(profile, f"preflight: {url}")
@@ -1059,6 +1069,7 @@ def self_check() -> None:
         "||ads.example^\n||tracker.example^\n||bad.example^\n",
         "https://example.test/list.txt",
     )
+    assert source_line_delta_limit(4687, {"max_rules": 4000000}) == 8000000
     bad = {"filters": [{"url": "https://example.test/list.txt", "enabled": False, "rules_count": 0}]}
     errors, _ = validate_filter_status(
         bad, [("Test", "https://example.test/list.txt")], sample_meta

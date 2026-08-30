@@ -8,7 +8,11 @@ METRICS_FILE="${METRICS_DIR}/pi_gateway.prom"
 STATE_JSON="${PI_GATEWAY_STATE_JSON:-/var/lib/pi-gateway/state.json}"
 OFFSITE_MARKER="${OFFSITE_MARKER:-/var/lib/pi-gateway/last-offsite-backup}"
 DRILL_MARKER="${DRILL_MARKER:-/var/lib/pi-gateway/last-backup-restore-drill}"
+DRILL_FAILURE_MARKER="${DRILL_FAILURE_MARKER:-/var/lib/pi-gateway/last-backup-restore-drill-failure}"
 OFFSITE_COPY_MARKER="${OFFSITE_COPY_MARKER:-/var/lib/pi-gateway/last-restic-offsite-copy}"
+COVERAGE_STATE_PATH="${ADGUARD_DNS_COVERAGE_STATE_PATH:-/var/lib/pi-gateway/dns-coverage-state.json}"
+COVERAGE_MAX_AGE_SEC="${ADGUARD_DNS_COVERAGE_STATE_MAX_AGE_SEC:-600}"
+[[ "$COVERAGE_MAX_AGE_SEC" =~ ^[0-9]+$ ]] || COVERAGE_MAX_AGE_SEC=600
 # shellcheck source=../lib/env-file.sh
 source "$SCRIPT_DIR/../lib/env-file.sh"
 read_remote_dotenv || { echo "[export-state] HATA: .env dotenv parser hatasi" >&2; exit 1; }
@@ -51,6 +55,11 @@ root_pct="$(usage_pct /)"
 ssd_pct="$(usage_pct /mnt/ssd)"
 offsite_age="$(file_age_days "$OFFSITE_MARKER")"
 drill_age="$(file_age_days "$DRILL_MARKER")"
+drill_failed=0
+if [[ -f "$DRILL_FAILURE_MARKER" ]] \
+  && { [[ ! -f "$DRILL_MARKER" ]] || [[ "$DRILL_FAILURE_MARKER" -nt "$DRILL_MARKER" ]]; }; then
+  drill_failed=1
+fi
 offsite_copy_age="$(file_age_days "$OFFSITE_COPY_MARKER")"
 ts="$(date -Iseconds)"
 
@@ -77,6 +86,9 @@ pi_gateway_offsite_backup_age_days ${offsite_age}
 # HELP pi_gateway_backup_restore_drill_age_days Days since last restore drill (-1 missing)
 # TYPE pi_gateway_backup_restore_drill_age_days gauge
 pi_gateway_backup_restore_drill_age_days ${drill_age}
+# HELP pi_gateway_backup_restore_drill_failed 1 when latest restore drill failed
+# TYPE pi_gateway_backup_restore_drill_failed gauge
+pi_gateway_backup_restore_drill_failed ${drill_failed}
 # HELP pi_gateway_restic_offsite_copy_age_days Days since last B2/R2 copy (-1 missing/disabled)
 # TYPE pi_gateway_restic_offsite_copy_age_days gauge
 pi_gateway_restic_offsite_copy_age_days ${offsite_copy_age}
@@ -93,6 +105,73 @@ if [[ -f "$PROBES_PY" ]]; then
     [[ -n "$probe_prom" ]] && printf '%s\n' "$probe_prom" >>"$tmp"
   fi
 fi
+python3 - "$COVERAGE_STATE_PATH" "$COVERAGE_MAX_AGE_SEC" >>"$tmp" <<'PY'
+import json
+import sys
+import time
+from datetime import datetime
+
+path, max_age = sys.argv[1], int(sys.argv[2])
+state = {}
+try:
+    with open(path, encoding="utf-8") as fh:
+        state = json.load(fh)
+except (OSError, TypeError, ValueError, json.JSONDecodeError):
+    pass
+
+status_map = {"off": 0, "ok": 1, "warn": 2, "fail": 3, "unknown": 4}
+status = "unknown"
+age = -1
+try:
+    age = max(0, int(time.time() - datetime.fromisoformat(
+        str(state["ts"]).replace("Z", "+00:00")
+    ).timestamp()))
+    if age <= max_age:
+        status = str(state.get("status", "unknown"))
+except (KeyError, TypeError, ValueError):
+    pass
+valid = status in status_map and age >= 0 and age <= max_age
+if not valid:
+    status = "unknown"
+
+def number(key, default):
+    if not valid:
+        return default
+    try:
+        return int(state.get(key, default))
+    except (TypeError, ValueError):
+        return default
+
+print("# HELP pi_gateway_dns_coverage_percent Active devices verified using Pi DNS (-1 unknown)")
+print("# TYPE pi_gateway_dns_coverage_percent gauge")
+print(f"pi_gateway_dns_coverage_percent {number('coverage_percent', -1)}")
+print("# HELP pi_gateway_dns_coverage_status 0 off, 1 ok, 2 warn, 3 fail, 4 unknown")
+print("# TYPE pi_gateway_dns_coverage_status gauge")
+print(f"pi_gateway_dns_coverage_status {status_map[status]}")
+print("# HELP pi_gateway_dns_coverage_active_devices Active devices in coverage denominator")
+print("# TYPE pi_gateway_dns_coverage_active_devices gauge")
+print(f"pi_gateway_dns_coverage_active_devices {number('active_devices', -1)}")
+print("# HELP pi_gateway_dns_coverage_using_pi_dns Devices verified using Pi DNS")
+print("# TYPE pi_gateway_dns_coverage_using_pi_dns gauge")
+print(f"pi_gateway_dns_coverage_using_pi_dns {number('using_pi_dns', -1)}")
+print("# HELP pi_gateway_dns_coverage_protocol_unknown 1 when query protocol is not exposed by AdGuard API")
+print("# TYPE pi_gateway_dns_coverage_protocol_unknown gauge")
+print(f"pi_gateway_dns_coverage_protocol_unknown {number('protocol_unknown', -1)}")
+print("# HELP pi_gateway_dns_coverage_state_age_seconds Age of DNS coverage evidence (-1 unknown)")
+print("# TYPE pi_gateway_dns_coverage_state_age_seconds gauge")
+print(f"pi_gateway_dns_coverage_state_age_seconds {age if valid else -1}")
+PY
+rdnss_configured=0
+if systemctl is-active --quiet radvd 2>/dev/null \
+  && grep -Eq '^[[:space:]]*AdvRDNSSLifetime[[:space:]]+0([[:space:];]|$)' \
+    /etc/radvd.conf 2>/dev/null; then
+  rdnss_configured=1
+fi
+cat >>"$tmp" <<EOF
+# HELP pi_gateway_ipv6_rdnss_configured 1 when radvd advertises Pi RDNSS and withdraws modem lifetime
+# TYPE pi_gateway_ipv6_rdnss_configured gauge
+pi_gateway_ipv6_rdnss_configured ${rdnss_configured}
+EOF
 
 run_as_needed mkdir -p "$METRICS_DIR" "$(dirname "$STATE_JSON")" 2>/dev/null || true
 if [[ "$(id -u)" -eq 0 ]]; then
@@ -104,8 +183,11 @@ rm -f "$tmp"
 
 json_tmp="$(mktemp)"
 python3 - "$json_tmp" "$STATE_JSON" "$ts" "$degraded" "$ssd_ok" "$docker_ssd" "${root_pct:-}" "${ssd_pct:-}" \
-  "$offsite_age" "$drill_age" "$offsite_copy_age" "$probe_json" <<'PY'
+  "$offsite_age" "$drill_age" "$offsite_copy_age" "$probe_json" "$COVERAGE_STATE_PATH" "$COVERAGE_MAX_AGE_SEC" \
+  "$rdnss_configured" "$drill_failed" <<'PY'
 import json, sys
+import time
+from datetime import datetime
 tmp, path = sys.argv[1], sys.argv[2]
 extra = {}
 raw = sys.argv[12] if len(sys.argv) > 12 else "{}"
@@ -113,6 +195,24 @@ try:
     extra = json.loads(raw) if raw.strip() else {}
 except json.JSONDecodeError:
     extra = {}
+coverage = {}
+try:
+    with open(sys.argv[13], encoding="utf-8") as fh:
+        coverage = json.load(fh)
+except (OSError, TypeError, ValueError, json.JSONDecodeError):
+    coverage = {}
+coverage_status = "unknown"
+coverage_age = -1
+try:
+    coverage_age = max(0, int(time.time() - datetime.fromisoformat(
+        str(coverage["ts"]).replace("Z", "+00:00")
+    ).timestamp()))
+    if coverage_age <= int(sys.argv[14]):
+        coverage_status = str(coverage.get("status", "unknown"))
+except (KeyError, TypeError, ValueError):
+    coverage_age = -1
+if coverage_status not in {"off", "ok", "warn", "fail"}:
+    coverage_status = "unknown"
 data = {
     "ts": sys.argv[3],
     "storage_degraded": int(sys.argv[4]),
@@ -123,7 +223,16 @@ data = {
     "offsite_backup_age_days": int(sys.argv[9]),
     "backup_restore_drill_age_days": int(sys.argv[10]),
     "restic_offsite_copy_age_days": int(sys.argv[11]),
+    "dns_coverage_status": coverage_status,
+    "dns_coverage_state_age_seconds": coverage_age,
+    "ipv6_rdnss_configured": int(sys.argv[15]),
+    "backup_restore_drill_failed": int(sys.argv[16]),
 }
+if coverage_status != "unknown":
+    data["dns_coverage_percent"] = int(coverage.get("coverage_percent", -1))
+    data["dns_coverage_active_devices"] = int(coverage.get("active_devices", -1))
+    data["dns_coverage_using_pi_dns"] = int(coverage.get("using_pi_dns", -1))
+    data["dns_coverage_protocol_unknown"] = int(bool(coverage.get("protocol_unknown", False)))
 if isinstance(extra, dict):
     for k in ("dns_latency_ms", "panel_latency_ms", "hosts_online", "who_home"):
         if k in extra:

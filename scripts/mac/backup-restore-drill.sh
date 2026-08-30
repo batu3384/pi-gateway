@@ -15,9 +15,24 @@ DRILL_SUBSET="${RESTIC_DRILL_SUBSET:-latest}"
 DRILL_TIMEOUT_SEC="${RESTIC_DRILL_TIMEOUT_SEC:-1800}"
 DRILL_MARKER_LOCAL="${LOCAL_DEST}/.last-restore-drill"
 DRILL_MARKER_PI="${DRILL_MARKER_PI:-/var/lib/pi-gateway/last-backup-restore-drill}"
+DRILL_FAILURE_MARKER_LOCAL="${LOCAL_DEST}/.last-restore-drill-failure"
+DRILL_FAILURE_MARKER_PI="${DRILL_FAILURE_MARKER_PI:-/var/lib/pi-gateway/last-backup-restore-drill-failure}"
 
 log() { echo "[backup-drill] $*"; }
-die() { echo "[backup-drill] HATA: $*" >&2; exit 1; }
+record_failure() {
+  mkdir -p "$LOCAL_DEST" 2>/dev/null || true
+  date -Iseconds >"$DRILL_FAILURE_MARKER_LOCAL" 2>/dev/null || true
+  if [[ -n "$PI_HOST" ]]; then
+    if ssh -o ConnectTimeout=10 -o BatchMode=yes "$PI_USER@$PI_HOST" \
+      "sudo mkdir -p /var/lib/pi-gateway && date -Iseconds | sudo tee '$DRILL_FAILURE_MARKER_PI' >/dev/null && sudo chmod 644 '$DRILL_FAILURE_MARKER_PI'" \
+      >/dev/null 2>&1; then
+      log "Pi failure marker: $DRILL_FAILURE_MARKER_PI"
+    else
+      log "WARN: Pi failure marker yazilamadi (SSH/sudo)"
+    fi
+  fi
+}
+die() { echo "[backup-drill] HATA: $*" >&2; record_failure; exit 1; }
 
 [[ "${ENABLE_RESTIC:-true}" == "true" ]] || { log "atlandi (ENABLE_RESTIC=false)"; exit 0; }
 [[ -n "${RESTIC_PASSWORD:-}" ]] || die "RESTIC_PASSWORD .env icinde bos"

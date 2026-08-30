@@ -80,9 +80,10 @@
       "targets": [
         { "expr": "pi_gateway_offsite_backup_age_days", "legendFormat": "offsite backup age", "refId": "A" },
         { "expr": "pi_gateway_backup_restore_drill_age_days", "legendFormat": "restore drill age", "refId": "B" },
-        { "expr": "pi_gateway_restic_offsite_copy_age_days", "legendFormat": "cloud copy age", "refId": "C" }
+        { "expr": "pi_gateway_restic_offsite_copy_age_days", "legendFormat": "cloud copy age", "refId": "C" },
+        { "expr": "pi_gateway_backup_restore_drill_failed", "legendFormat": "restore drill failed (1/0)", "refId": "D" }
       ],
-      "title": "Backup / drill age (days, -1 = missing)",
+      "title": "Backup / drill age and failure evidence",
       "type": "timeseries"
     },
     {
@@ -286,6 +287,35 @@
         { "expr": "pi_gateway_ibb_hki", "legendFormat": "HKI {{station}}", "refId": "A" }
       ],
       "title": "İBB HKI over time",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "decimals": 0 }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 62 },
+      "id": 22,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "pi_gateway_dns_coverage_percent", "legendFormat": "verified coverage", "refId": "A" },
+        { "expr": "pi_gateway_dns_coverage_active_devices", "legendFormat": "active devices", "refId": "B" },
+        { "expr": "pi_gateway_dns_coverage_using_pi_dns", "legendFormat": "using Pi DNS", "refId": "C" }
+      ],
+      "title": "DNS coverage evidence",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "decimals": 0 }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 62 },
+      "id": 23,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "pi_gateway_dns_coverage_status", "legendFormat": "coverage status (1 OK, 2 WARN, 3 FAIL, 4 UNKNOWN)", "refId": "A" },
+        { "expr": "pi_gateway_ipv6_rdnss_configured", "legendFormat": "IPv6 RDNSS configured", "refId": "B" },
+        { "expr": "pi_gateway_dns_coverage_protocol_unknown", "legendFormat": "query protocol unknown", "refId": "C" },
+        { "expr": "pi_gateway_dns_coverage_state_age_seconds", "legendFormat": "coverage evidence age (s)", "refId": "D" }
+      ],
+      "title": "DNS enforcement evidence",
       "type": "timeseries"
     }
   ],

@@ -97,7 +97,33 @@ echo ""
 echo "=== DNS kapsam (ARP vs query log) ==="
 if [[ "$api_ok" == "true" && "${ADGUARD_SKIP_BYPASS_CHECK:-false}" != "true" ]]; then
   if REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/audit-dns-coverage.sh"; then
-    pass "DNS kapsam auditi gecti"
+    _coverage_state_status="$(python3 - "${ADGUARD_DNS_COVERAGE_STATE_PATH:-/var/lib/pi-gateway/dns-coverage-state.json}" <<'PY' || printf 'unknown'
+import json
+import sys
+
+try:
+    with open(sys.argv[1], encoding="utf-8") as fh:
+        status = json.load(fh).get("status", "unknown")
+except (OSError, TypeError, ValueError, json.JSONDecodeError):
+    status = "unknown"
+print(status)
+PY
+)"
+    case "$_coverage_state_status" in
+      ok)
+        pass "DNS kapsam auditi gecti"
+        ;;
+      warn)
+        warn "DNS kapsam auditi PASS degil — evidence WARN (protokol/bypass kaniti eksik olabilir)"
+        ;;
+      fail)
+        fail "DNS kapsam auditi FAIL — bazi cihazlar Pi DNS kullanmiyor"
+        ;;
+      *)
+        warn "DNS kapsam auditi sonucu UNKNOWN — coverage state okunamadi veya stale"
+        ;;
+    esac
+    unset _coverage_state_status
   else
     fail "DNS kapsam auditi — bazi cihazlar Pi DNS kullanmiyor"
   fi
