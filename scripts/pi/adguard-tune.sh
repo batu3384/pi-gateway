@@ -26,5 +26,6 @@ else
   log "Unbound conf taze — recreate yok"
 fi
 docker compose --env-file ../.env up -d adguard
+REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/apply-adguard-dns.sh"
 REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/ensure-adguard-blocking.sh" --fix
 log "Tamamlandi"

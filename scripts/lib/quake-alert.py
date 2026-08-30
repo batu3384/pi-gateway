@@ -35,6 +35,8 @@ MAX_EVENT_AGE_SEC = int(os.environ.get("QUAKE_MAX_EVENT_AGE_SEC", "1200"))  # 20
 HTTP_TIMEOUT_SEC = float(os.environ.get("QUAKE_HTTP_TIMEOUT_SEC", "5"))
 FP_BUCKET_SEC = int(os.environ.get("QUAKE_FP_BUCKET_SEC", "180"))  # 3 dk
 STATE_PATH = Path(os.environ.get("QUAKE_STATE", "/var/lib/pi-gateway/quake-state.json"))
+PARTIAL_WARN_PATH = STATE_PATH.with_name("quake-partial-warn.json")
+PARTIAL_WARN_MIN_SEC = int(os.environ.get("QUAKE_PARTIAL_WARN_MIN_SEC", "900"))
 AFAD = "https://deprem.afad.gov.tr/apiv2/event/filter"
 KANDILLI = os.environ.get(
     "QUAKE_KANDILLI_URL",
@@ -305,6 +307,29 @@ def merge_events(*batches: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [by_fp[fp] for fp in order]
 
 
+def _log_partial_errors(errors: list[str]) -> None:
+    """AFAD 500 vb. — journal spam önle (aynı hata 15dk'da bir)."""
+    key = ";".join(errors)
+    now = time.time()
+    data: dict[str, Any] = {}
+    try:
+        if PARTIAL_WARN_PATH.is_file():
+            data = json.loads(PARTIAL_WARN_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        data = {}
+    if data.get("key") == key and now - float(data.get("ts", 0)) < PARTIAL_WARN_MIN_SEC:
+        return
+    print(f"[quake] kısmi: {key}", file=sys.stderr)
+    try:
+        PARTIAL_WARN_PATH.parent.mkdir(parents=True, exist_ok=True)
+        PARTIAL_WARN_PATH.write_text(
+            json.dumps({"key": key, "ts": now}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except OSError:
+        pass
+
+
 def fetch_events() -> list[dict[str, Any]]:
     afad: list[dict[str, Any]] = []
     kandilli: list[dict[str, Any]] = []
@@ -323,7 +348,7 @@ def fetch_events() -> list[dict[str, Any]]:
     if errors and not afad and not kandilli:
         raise RuntimeError("; ".join(errors))
     if errors:
-        print(f"[quake] kısmi: {'; '.join(errors)}", file=sys.stderr)
+        _log_partial_errors(errors)
     return merge_events(afad, kandilli)
 
 

@@ -17,6 +17,8 @@
 | `ADGUARD_MIN_FILTER_RULES` | 100000 |
 | `ADGUARD_MIN_REWRITES` | 8 |
 | `ADGUARD_BLOCKED_TTL` | 300; engellenen NXDOMAIN cache (60 → daha sık AGH işi) |
+| `ADGUARD_AUTO_HEAL` | `false`; filter drift → `apply-adguard-filters` + global `cache_clear` |
+| `ADGUARD_DNS_AUTO_HEAL` | `true`; DNS drift → yalnız `apply-adguard-dns.sh` (TTL/upstream, cache_clear yok) |
 | `ADGUARD_FILTER_PREFLIGHT` / `ADGUARD_FILTER_PREFLIGHT_TIMEOUT_SEC` | `true` / `20`; HTTPS, izinli host, redirect ve filter syntax kontrolü |
 | `ADGUARD_FILTER_FORCE_REFRESH` | `false`; `true` yalnız kontrollü manuel yenileme için |
 | `ADGUARD_FILTER_SCHEDULED_SLA_SEC` | `93600` (26 saat); doğrulanmış scheduled apply yaş sınırı |

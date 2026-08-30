@@ -229,8 +229,8 @@ print(sum((f.get('rules_count') or 0) for f in d.get('filters',[])))
     fi
     [[ "${rewrites:-0}" -ge "${ADGUARD_MIN_REWRITES:-8}" ]] || note_fail "adguard-rewrites-low(${rewrites:-0})"
     [[ "$dns_ok" == "1" ]] || {
-      if [[ "${ADGUARD_AUTO_HEAL:-true}" == "true" ]]; then
-        logger -t "$LOG_TAG" "adguard-dns-config-drift — auto-heal"
+      if [[ "${ADGUARD_DNS_AUTO_HEAL:-true}" == "true" ]]; then
+        logger -t "$LOG_TAG" "adguard-dns-config-drift — auto-heal (dns)"
         if ! REMOTE_DIR="$REMOTE_DIR" bash "$(_pi_home_script apply-adguard-dns.sh)"; then
           logger -t "$LOG_TAG" "WARN adguard dns auto-heal basarisiz"
         fi
@@ -456,6 +456,12 @@ else
 fi
 if [[ "$exit_code" -eq 0 ]]; then
   notify_health_systemd_ok || true
+  if ! storage_degraded && declare -F ssd_mount_healthy >/dev/null 2>&1 && ssd_mount_healthy; then
+    if [[ "$(cat "${NOTIFY_STATE_DIR:-/var/lib/pi-gateway/notify}/ssd-degraded.state" 2>/dev/null)" == "fail" ]]; then
+      notify_ssd_restored "$(hostname -s 2>/dev/null || echo pi-gateway)" \
+        "Periyodik sağlık kontrolü SSD'yi doğruladı."
+    fi
+  fi
   # shellcheck source=../lib/reset-gateway-units.sh
   source "$SCRIPT_DIR/../lib/reset-gateway-units.sh"
   reset_pi_gateway_failed_units
@@ -522,5 +528,7 @@ if (( exit_code != 0 )); then
     (( sd_fail )) && printf 'sd_fail=1\n'
     ((${#FAILURES[@]})) && printf 'failures=%s\n' "${FAILURES[*]}"
   } > /run/pi-gateway/health-last-exit.txt 2>/dev/null || true
+else
+  rm -f /run/pi-gateway/health-last-exit.txt 2>/dev/null || true
 fi
 exit "$exit_code"

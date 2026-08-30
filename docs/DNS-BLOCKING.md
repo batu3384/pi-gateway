@@ -31,7 +31,7 @@ AdGuard browser Mobile Ads (`filters.adtidy.org/.../11.txt`) is CSS/path — ski
 
 Kaçan reklam: query log → one `user-rules.txt` sniper line. New mega-list yok.
 
-Auto-heal: `ADGUARD_AUTO_HEAL=true`. Health prefers `REMOTE_DIR/scripts/pi/` (`ensure-adguard-blocking.sh --fix-light`, `apply-adguard-filters.sh`, `apply-adguard-dns.sh`) so systemd `/usr/local/lib` snapshot cannot re-apply a stale hash-only skip. Those three are also in `install-privileged-scripts.sh` as fallback.
+Auto-heal: `ADGUARD_DNS_AUTO_HEAL=true` (TTL/upstream via `apply-adguard-dns.sh`, cache_clear yok). Filter drift: `ADGUARD_AUTO_HEAL=true` (`apply-adguard-filters.sh` + cache_clear — varsayılan kapalı). Health prefers `REMOTE_DIR/scripts/pi/` (`ensure-adguard-blocking.sh --fix-light`, `apply-adguard-filters.sh`, `apply-adguard-dns.sh`) so systemd `/usr/local/lib` snapshot cannot re-apply a stale hash-only skip. Those three are also in `install-privileged-scripts.sh` as fallback.
 Bypass check: `ADGUARD_BYPASS_CHECK=strict` on `make diagnose-dns` (LAN clients must appear in query log).
 Custom rules: copy `config/adguard/user-rules.local.txt.example` → `user-rules.local.txt` on the Pi.
 Daily filter refresh: `pi-gateway-adguard-filters.timer` (~04:15). Kaynak değişirse
@@ -163,7 +163,8 @@ Pi 4B + tam stack için önerilen `.env` ayarları:
 - `ADGUARD_FILTER_PROFILE=balanced` — `aggressive` (~2.4M kural) bellek ve lookup maliyeti yüksek
 - `ADGUARD_BLOCKED_TTL=300` — engellenen domainleri 60s yerine 5 dk cache
 - `ADGUARD_COVERAGE_AUDIT_ENABLED=false` — health timer’da 2000 satır audit kapalı; `make audit-dns` ile manuel
-- `ADGUARD_AUTO_HEAL=false` — drift’te filter apply + `cache_clear` tüm ev DNS’ini soğutmasın
+- `ADGUARD_AUTO_HEAL=false` — filter drift’te apply + `cache_clear` (ev DNS soğumasın)
+- `ADGUARD_DNS_AUTO_HEAL=true` — DNS drift’te yalnız `apply-adguard-dns.sh` (TTL/upstream)
 - `GATEWAY_VIDEO_DNS_PROBE=false` — rutin export’ta video DNS probe yok
 
 Unbound cache `32m/64m` (2GB Pi). Health timer 5 dk, deprem poll 30s. Profil değişince `make adguard-tune`.

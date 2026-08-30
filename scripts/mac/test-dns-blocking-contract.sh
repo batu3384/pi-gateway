@@ -433,6 +433,18 @@ grep -q '_pi_home_script ensure-adguard-blocking.sh' "$PROJECT_DIR/scripts/pi/he
   || die "health-check ensure-adguard home SSOT yok"
 grep -q '_pi_home_script apply-adguard-dns.sh' "$PROJECT_DIR/scripts/pi/health-check.sh" \
   || die "health-check apply-adguard-dns home SSOT yok"
+grep -q 'ADGUARD_DNS_AUTO_HEAL' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check ADGUARD_DNS_AUTO_HEAL yok"
+grep -q 'rm -f /run/pi-gateway/health-last-exit.txt' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check success health-last-exit temizligi yok"
+grep -q 'notify_ssd_restored' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check SSD recovery notify yok"
+grep -q 'apply-adguard-dns.sh' "$PROJECT_DIR/scripts/pi/adguard-tune.sh" \
+  || die "adguard-tune apply-adguard-dns yok"
+grep -q 'crit "AdGuard DNS"' "$PROJECT_DIR/scripts/pi/post-deploy-code.sh" \
+  || die "post-deploy-code AdGuard DNS crit yok"
+grep -q '_log_partial_errors' "$PROJECT_DIR/scripts/lib/quake-alert.py" \
+  || die "quake partial log rate-limit yok"
 grep -q '_pi_home_script configure-adguard.sh' "$PROJECT_DIR/scripts/pi/ensure-adguard-blocking.sh" \
   || die "ensure-adguard full heal configure yok"
 grep -q 'combined_original_trackers.txt' "$PROJECT_DIR/config/adguard/filter-lists.json" \
