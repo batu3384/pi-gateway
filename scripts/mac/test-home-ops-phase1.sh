@@ -75,8 +75,8 @@ grep -qF 'OnCalendar=*:0/30' "$ROOT/host/systemd/pi-gateway-ibb.timer" \
   || die "ibb timer 30dk calendar yok"
 grep -q 'setup-home-ops-timers.sh' "$ROOT/scripts/pi/post-deploy-code.sh" \
   || die "code deploy home-ops timers yok"
-grep -q 'OnUnitActiveSec=30s' "$ROOT/host/systemd/pi-gateway-quake.timer" \
-  || die "quake timer 30s degil"
+grep -q 'OnUnitActiveSec=60s' "$ROOT/host/systemd/pi-gateway-quake.timer" \
+  || die "quake timer 60s degil"
 grep -q 'fetch_kandilli\|Kandilli' "$ROOT/scripts/lib/quake-alert.py" \
   || die "kandilli kaynagi yok"
 grep -q 'bootstrapped' "$ROOT/scripts/lib/quake-alert.py" \

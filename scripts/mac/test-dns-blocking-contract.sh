@@ -441,8 +441,8 @@ grep -q 'notify_ssd_restored' "$PROJECT_DIR/scripts/pi/health-check.sh" \
   || die "health-check SSD recovery notify yok"
 grep -q 'apply-adguard-dns.sh' "$PROJECT_DIR/scripts/pi/adguard-tune.sh" \
   || die "adguard-tune apply-adguard-dns yok"
-grep -q 'crit "AdGuard DNS"' "$PROJECT_DIR/scripts/pi/post-deploy-code.sh" \
-  || die "post-deploy-code AdGuard DNS crit yok"
+grep -q 'ensure-dns-perf-profile.sh' "$PROJECT_DIR/scripts/pi/post-deploy-code.sh" \
+  || die "post-deploy-code ensure-dns-perf-profile yok"
 grep -q '_log_partial_errors' "$PROJECT_DIR/scripts/lib/quake-alert.py" \
   || die "quake partial log rate-limit yok"
 grep -q '_pi_home_script configure-adguard.sh' "$PROJECT_DIR/scripts/pi/ensure-adguard-blocking.sh" \

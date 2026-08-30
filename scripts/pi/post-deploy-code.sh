@@ -32,6 +32,7 @@ crit() {
 }
 
 crit "Privileged scripts" "$SCRIPT_DIR/install-privileged-scripts.sh"
+crit "DNS perf profile" "$SCRIPT_DIR/ensure-dns-perf-profile.sh"
 crit "AdGuard DNS" "$SCRIPT_DIR/apply-adguard-dns.sh"
 crit "AdGuard filters" "$SCRIPT_DIR/apply-adguard-filters.sh"
 sudo systemctl reset-failed pi-gateway-adguard-filters.service 2>/dev/null || \

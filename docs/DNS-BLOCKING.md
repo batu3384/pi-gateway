@@ -167,7 +167,11 @@ Pi 4B + tam stack için önerilen `.env` ayarları:
 - `ADGUARD_DNS_AUTO_HEAL=true` — DNS drift’te yalnız `apply-adguard-dns.sh` (TTL/upstream)
 - `GATEWAY_VIDEO_DNS_PROBE=false` — rutin export’ta video DNS probe yok
 
-Unbound cache `32m/64m` (2GB Pi). Health timer 5 dk, deprem poll 30s. Profil değişince `make adguard-tune`.
+Unbound cache `32m/64m` (2GB Pi). Health timer 5 dk, deprem poll 60s. Profil değişince `make adguard-tune`.
+
+**Modem Wi-Fi (H3600P):** 5 GHz **160 MHz** kanal 44 yoğun ortamda takılma/jitter üretebilir — panelden **80 MHz** (veya otomatik kanal) dene. 2.4 GHz kanal 6 + 40 MHz genelde OK.
+
+**Deploy regression:** Mac `.env` içinde `ADGUARD_FILTER_PROFILE=aggressive` kalırsa `deploy-code` Pi’yi geri çeker — `post-deploy-code` `ensure-dns-perf-profile.sh` ile `balanced`’a döndürür (`ADGUARD_ALLOW_AGGRESSIVE=true` ile korunur).
 
 ## Update
 
