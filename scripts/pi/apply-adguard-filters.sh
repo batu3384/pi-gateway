@@ -89,11 +89,16 @@ flock -w "$LOCK_WAIT_SEC" "$FILTER_LOCK_FD" || {
 runtime_write "$IN_PROGRESS_FILE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 export BASE COOKIE REMOTE_DIR ADGUARD_FILTER_PROFILE
-python3 "$FILTERS_PY"
-rc=$?
-
-if [[ -x "$SCRIPT_DIR/apply-adguard-rewrites.sh" ]]; then
-  bash "$SCRIPT_DIR/apply-adguard-rewrites.sh"
+if python3 "$FILTERS_PY"; then
+  rc=0
+else
+  rc=$?
 fi
-log "Tamamlandi"
+
+if [[ "$rc" -eq 0 && -x "$SCRIPT_DIR/apply-adguard-rewrites.sh" ]]; then
+  bash "$SCRIPT_DIR/apply-adguard-rewrites.sh"
+elif [[ "$rc" -ne 0 ]]; then
+  log "WARN filter apply basarisiz — rewrites atlandi"
+fi
+[[ "$rc" -eq 0 ]] && log "Tamamlandi"
 exit "$rc"

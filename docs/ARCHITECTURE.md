@@ -51,6 +51,20 @@ Owner telefon/Mac (Tailscale, Override):
 
 Pi **LAN gateway değil.** Aynı L2’de `192.168.1.1:53` Pi’den geçmez. `iptables REDIRECT` / “Pi’yi GW yap” DNS2’yi kesmez (on-link). Yeni kutu veya cihaz DNS yoksa **tavan bu.**
 
+## Reliability evidence
+
+- Filter apply: source preflight → AdGuard reconcile → refresh/status/regression. Son
+  başarılı apply `last_success_at` ile korunur; API/network failure eski çalışan
+  filtreleri bırakır, kısmi membership/user-rule değişikliğinde rollback sonucu
+  state ve metric olarak yazılır.
+- Coverage: DHCP offer, fresh modem inventory, ARP ve AdGuard query log ayrı kanıt
+  kaynaklarıdır. Inventory disabled iken stale dosya hata sebebi değildir; enabled/
+  required stale durum `UNKNOWN`’dır. DHCP modem `.1` secondary ve IPv6 RDNSS pozitif
+  lifetime `WARN` olarak kalır.
+- Observability: NetAlertX `netalert_db_readable` ile okunamayan SQLite’ı sıfır
+  online cihazdan ayırır. Video probe son query penceresini ve küçük median DNS
+  örneklerini kullanır; ICMP RTT HTTPS/video buffer kanıtı sayılmaz.
+
 ## Mevcut donanım tavanı (kutu yok, elle yok)
 
 | Karar | Neden |

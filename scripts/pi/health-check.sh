@@ -158,6 +158,33 @@ if [[ -n "${AGH_ADMIN_PASSWORD:-}" ]]; then
   _filter_in_progress="${ADGUARD_FILTER_IN_PROGRESS_FILE:-/run/pi-gateway/adguard-filters.in_progress}"
   if agh_login "$BASE" "$COOKIE" "${AGH_ADMIN_USER:-admin}" "$AGH_ADMIN_PASSWORD" 3; then
     filter_governance_ok=true
+    if systemctl is-failed --quiet pi-gateway-adguard-filters.service 2>/dev/null; then
+      logger -t "$LOG_TAG" "adguard filter service failed"
+      filter_governance_ok=false
+    fi
+    _filter_state="${ADGUARD_FILTER_STATE_PATH:-/var/lib/pi-gateway/adguard-filter-state.json}"
+    _filter_last_success="$(
+      python3 - "$_filter_state" <<'PY'
+import json
+import sys
+from datetime import datetime
+
+try:
+    value = json.loads(open(sys.argv[1], encoding="utf-8").read()).get("last_success_at")
+    print(datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp())
+except (OSError, TypeError, ValueError, json.JSONDecodeError):
+    print("")
+PY
+    )"
+    if [[ -n "$_filter_last_success" ]] && awk -v now="$(date +%s)" \
+      -v last="$_filter_last_success" \
+      -v max_age="${ADGUARD_FILTER_SCHEDULED_SLA_SEC:-93600}" \
+      'BEGIN { exit !(now - last > max_age) }'; then
+      logger -t "$LOG_TAG" "adguard filter scheduled SLA asildi"
+      filter_governance_ok=false
+    fi
+    [[ -n "$_filter_last_success" ]] || filter_governance_ok=false
+    unset _filter_state _filter_last_success
     if [[ -f "$_filter_in_progress" ]]; then
       logger -t "$LOG_TAG" "adguard filter apply suruyor — auto-heal atlandi"
       filter_governance_ok=false

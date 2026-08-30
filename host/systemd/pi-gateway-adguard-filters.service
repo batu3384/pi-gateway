@@ -2,11 +2,13 @@
 Description=Pi Gateway AdGuard filter refresh
 After=docker.service network-online.target pi-gateway-adguard-config.service
 Wants=network-online.target
+OnFailure=pi-gateway-adguard-filters-failure.service
 
 [Service]
 Type=oneshot
 User=PI_USER
 Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
+Environment=ADGUARD_FILTER_SCHEDULED_REFRESH=true
 ExecStartPre=/bin/bash -lc 'for i in $(seq 1 36); do st=$(docker inspect -f "{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}" adguard 2>/dev/null || true); echo "$st" | grep -Eq "healthy|running" && exit 0; sleep 5; done; echo "adguard hazir degil" >&2; exit 1'
 ExecStart=/bin/bash -lc '/home/PI_USER/pi-gateway/scripts/pi/apply-adguard-filters.sh'
 TimeoutStartSec=600

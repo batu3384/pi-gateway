@@ -17,14 +17,16 @@
 | `ADGUARD_MIN_FILTER_RULES` | 100000 |
 | `ADGUARD_MIN_REWRITES` | 8 |
 | `ADGUARD_BLOCKED_TTL` | 60 |
-| `ADGUARD_FILTER_PREFLIGHT` / `ADGUARD_FILTER_PREFLIGHT_TIMEOUT_SEC` | `true` / `20`; liste URL'si HTTP ve ilk blok syntax kontrolü |
+| `ADGUARD_FILTER_PREFLIGHT` / `ADGUARD_FILTER_PREFLIGHT_TIMEOUT_SEC` | `true` / `20`; HTTPS, izinli host, redirect ve filter syntax kontrolü |
 | `ADGUARD_FILTER_FORCE_REFRESH` | `false`; `true` yalnız kontrollü manuel yenileme için |
+| `ADGUARD_FILTER_SCHEDULED_SLA_SEC` | `93600` (26 saat); doğrulanmış scheduled apply yaş sınırı |
+| `ADGUARD_FILTER_MAX_SOURCE_BYTES` | `134217728` (128 MiB); kaynak akış boyut tavanı |
 | `ADGUARD_FILTER_POLL_SEC` / `ADGUARD_FILTER_POLL_INTERVAL_SEC` | `180` / `5`; refresh sonrası governance poll (AGH liste indirme süresi) |
 | `ADGUARD_FILTER_LOCK_WAIT_SEC` | `120`; `apply-adguard-filters` flock bekleme |
 | `ADGUARD_FILTER_API_READY_WAIT_SEC` | `120`; stack restart sonrası AGH filtering API readiness bekleme |
 | `ADGUARD_FILTER_STATE_PATH` | Boşsa `/var/lib/pi-gateway/adguard-filter-state.json` |
 | `ADGUARD_FILTER_SOURCE_CACHE_PATH` | Boşsa `/var/lib/pi-gateway/adguard-filter-source-cache.json` (ETag/If-Modified-Since) |
-| `ADGUARD_FILTER_PROFILE` | `balanced` (TIF Medium). `balanced-core` = Pro++ + TIF Medium + DoH (3 liste, düşük RAM). `aggressive` = TIF Full + CNAME original trackers; AGH ≥2GB RAM. Fake **and** Popup Hosts not stacked (inside Pro++). TIF Full: `apply-adguard-filters` WARNs if MemAvailable <400MiB — switch `balanced`. Not Multi Ultimate / not disguised CNAME list. See `docs/DNS-BLOCKING.md`. |
+| `ADGUARD_FILTER_PROFILE` | `balanced` (TIF Medium). `balanced-core` = Pro++ + TIF Medium + DoH (3 liste, düşük RAM). `aggressive` = TIF Full + CNAME original trackers; AGH ≥2GB RAM. Fake **and** Popup Hosts not stacked (inside Pro++). TIF Full: `apply-adguard-filters` WARNs if MemAvailable <400MiB — effective profile `balanced` olur ve state bunu belirtir. See `docs/DNS-BLOCKING.md`. |
 | `config/adguard/filter-lists.json` `budgets` | Profil başına toplam kural üst sınırı; upstream `@latest` büyümesi bu sınırı aşarsa apply başarısız olur ve stale listeler kaldırılmaz |
 | `ROUTER_DNS_SECONDARY` | Yalnız `MAC_DNS_GATEWAY_FALLBACK=true` iken. **Bos** veya `LAN_GATEWAY`. Public resolver WAN `:53` drop ile ölür. |
 | `MAC_DNS_GATEWAY_FALLBACK` | `false` (varsayılan): `make mac-dns` modem `.1` eklemez; **yalnız LAN IP** olan Ethernet/Wi-Fi. Hotspot'a Pi+ULA yazmaz (`make mac-dns-clear`). `true`: Pi down yedek; modem LAN `:53` reklam kaçırır. |
@@ -32,14 +34,21 @@
 | `MODEM_IPV6_DNS_LL` | `fe80::1`. radvd RFC 8106 lifetime 0 (modem RDNSS un-advertise). |
 | `MODEM_INVENTORY_ENABLED` | `false` (önerilen: modem credential dosyası hazırlandıktan sonra `true`) |
 | `MODEM_URL` | `http://192.168.1.1` |
+| `MODEM_ALLOW_HTTP` | `false`; HTTPS desteklemeyen modem için açıkça `true` yapılır, login LAN’da şifreli değildir |
+| `MODEM_TLS_CA_FILE` | HTTPS modem sertifikası/CA PEM yolu; boşsa sistem CA store kullanılır |
+| `MODEM_TLS_INSECURE` | `false`; yalnız self-signed modem sertifikası için açıkça `true`, authenticity doğrulanmaz |
 | `MODEM_INVENTORY_PATH` | Boşsa `${REMOTE_DIR}/data/modem-inventory.json` |
 | `MODEM_INVENTORY_STALE_SEC` | `900`; bu süreden eski snapshot IP eşleştirmesinde kullanılmaz |
 | `MODEM_INVENTORY_REQUIRED` | `false`; `true` iken (veya inventory enabled iken) snapshot yok/eskiyse strict audit `UNKNOWN` döner |
 | `NETALERTX_RECENCY_SEC` | `900`; NetAlertX `devLastConnection` aktiflik kanıtı penceresi |
+| `VIDEO_QUERY_RECENCY_SEC` | `300`; video diagnostik query log için son kanıt penceresi |
+| `NETALERTX_GID` | `1000` örneği; NetAlertX container PGID host kullanıcı grubuyla eşleşmeli |
 
 ZTE H3600P credential'ları repo `.env` içine konmaz. `/etc/pi-gateway/modem-inventory.env`
 dosyasını root sahipli `0600` oluşturun (`MODEM_USERNAME=...`, `MODEM_PASSWORD=...`);
-systemd bunu `LoadCredential` ile servise aktarır. Adapter yalnızca GET veri endpoint'leri
+systemd bunu `LoadCredential` ile servise aktarır. `MODEM_URL=https://...` firmware destekliyorsa
+tercih edilir; HTTP yalnız `MODEM_ALLOW_HTTP=true` ile çalışır ve LAN sniffing riski taşır.
+Adapter yalnızca GET veri endpoint'leri
 ve login/logout çağrısı kullanır; response/session hatasında eski snapshot korunur.
 Snapshot cihaz kayıtları `source`, `confidence`, `privacy_mac` ve `last_seen` alanlarını
 taşır. NetAlertX ile DNS audit bu aynı snapshot loader'ını kullanır; stale snapshot
@@ -55,7 +64,7 @@ ilk doğrulamadan sonra modem parolasını rotate edin.
 |----------|-------------|
 | `TAILSCALE_AUTHKEY` | Device join (bootstrap). Admin DNS/ACL için yetmez. |
 | `TAILSCALE_ACL_OWNER` | Tailscale login e-posta — ACL template. |
-| `TAILSCALE_API_KEY` | `tskey-api-…` ([Keys](https://login.tailscale.com/admin/settings/keys)). `make tailscale-dns` → global NS=Pi `100.x` + Override + ACL publish. |
+| `TAILSCALE_API_KEY` | `tskey-api-…` ([Keys](https://login.tailscale.com/admin/settings/keys)). `make tailscale-dns` → global NS=Pi `100.x` + Override + ACL publish. Runtime curl config dosyası kullanır; key process argv’ye yazılmaz. |
 
 ## Security
 

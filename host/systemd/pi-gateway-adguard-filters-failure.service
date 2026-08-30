@@ -1,0 +1,10 @@
+[Unit]
+Description=Pi Gateway AdGuard filter refresh failure alert
+After=pi-gateway-adguard-filters.service
+
+[Service]
+Type=oneshot
+User=PI_USER
+Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
+Environment=FAILURE_KIND=adguard-filter
+ExecStart=/home/PI_USER/pi-gateway/scripts/pi/notify-failure.sh

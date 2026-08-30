@@ -14,6 +14,19 @@ LAN_SUBNET="${LAN_SUBNET_CIDR:-$LAN_SUBNET}"
 ENABLE_UFW="${ENABLE_UFW:-true}"
 UFW_ADMIN_EXPOSURE="${UFW_ADMIN_EXPOSURE:-caddy-only}"
 log() { echo "[firewall] $*"; }
+
+python3 - "$LAN_SUBNET" "${LAN_IPV6_CIDR:-}" "${PI_IPV6_ULA:-}" <<'PY'
+import ipaddress
+import sys
+
+lan, lan6, ula = sys.argv[1:]
+if ipaddress.ip_network(lan, strict=False).version != 4:
+    raise SystemExit("LAN_SUBNET_CIDR IPv4 olmali")
+for value in (lan6, ula):
+    if value and ipaddress.ip_interface(value).version != 6:
+        raise SystemExit("IPv6 firewall CIDR gecersiz")
+PY
+
 pkg_on_path() {
   command -v "$1" >/dev/null 2>&1 || [[ -x "/usr/sbin/$1" ]]
 }

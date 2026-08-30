@@ -40,6 +40,10 @@ ok "A4 A5 B2 B4 self-check"
 
 grep -q 'pi_gateway_dns_latency_ms' "$ROOT/scripts/lib/gateway-probes.py" \
   || die "dns latency metrik yok"
+grep -q 'pi_gateway_video_dns_latency_ms' "$ROOT/scripts/lib/gateway-probes.py" \
+  || die "video dns latency metrik yok"
+grep -q 'pi_gateway_netalert_db_readable' "$ROOT/scripts/lib/gateway-probes.py" \
+  || die "netalert db readability metrik yok"
 grep -q 'notify_latency_slow' "$ROOT/scripts/lib/notify.sh" || die "latency notify yok"
 grep -q 'pi_gateway_dns_latency_ms' "$ROOT/config/grafana/provisioning/dashboards/json/pi-gateway.json" \
   || die "grafana dns latency yok"

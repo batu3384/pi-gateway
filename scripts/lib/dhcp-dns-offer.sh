@@ -62,7 +62,7 @@ PY
 }
 
 # check_dhcp_dns_offer <pi_ip> [gateway_ip] [iface]
-# Exit 0 = OK, 1 = fail, 2 = sniff unavailable
+# Exit 0 = OK, 1 = fail, 2 = sniff unavailable, 3 = Pi primary plus modem fallback
 check_dhcp_dns_offer() {
   local pi_ip="$1"
   local gateway_ip="${2:-}"
@@ -116,11 +116,19 @@ check_dhcp_dns_offer() {
     return 1
   fi
 
-  local bad=0 ip
+  local bad=0 degraded=0 ip
   for ip in $dns_list; do
     case "$ip" in
+      "$pi_ip")
+        ;;
+      "$gateway_ip")
+        ;;
       1.1.1.1|1.0.0.1|8.8.8.8|8.8.4.4|9.9.9.9|208.67.222.222)
         echo "[dhcp-dns] HATA: dis DNS bypass: $ip"
+        bad=1
+        ;;
+      *)
+        echo "[dhcp-dns] HATA: bilinmeyen DNS bypass: $ip"
         bad=1
         ;;
     esac
@@ -133,11 +141,11 @@ check_dhcp_dns_offer() {
       return 1
     fi
     echo "[dhcp-dns] UYARI: ikincil DNS modem ($gateway_ip) — Pi down olursa cihaz fallback bypass (ZTE sik ekler; panel DNS2 yok sayilir)"
-    echo "[dhcp-dns] NOT: dis DNS (1.1.1.1/8.8.8.8) degil — modem resolver reklam engellemez; diagnose FAIL degil"
+    degraded=3
   fi
 
   echo "[dhcp-dns] OK: birincil DNS Pi"
-  return 0
+  return "$degraded"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

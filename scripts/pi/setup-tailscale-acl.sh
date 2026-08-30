@@ -14,6 +14,11 @@ ACL_OWNER="${TAILSCALE_ACL_OWNER:-}"
 ACL_LAN_SUBNET="${TAILSCALE_LAN_SUBNET:-${LAN_SUBNET_CIDR:-}}"
 API_KEY="${TAILSCALE_API_KEY:-}"
 ACL_APPLIED_MARKER="${TAILSCALE_ACL_APPLIED_MARKER:-/var/lib/pi-gateway/tailscale-acl-applied}"
+API_AUTH_FILE=""
+cleanup() {
+  [[ -z "$API_AUTH_FILE" ]] || rm -f "$API_AUTH_FILE"
+}
+trap cleanup EXIT
 log() { echo "[tailscale-acl] $*"; }
 command -v tailscale >/dev/null 2>&1 || { log "tailscale yok"; exit 0; }
 if [[ -z "$ACL_OWNER" || "$ACL_OWNER" == CHANGE_ME* ]]; then
@@ -49,10 +54,12 @@ Path(out).write_text(text, encoding="utf-8")
 PY
 ACL_FILE="$ACL_LOCAL"
 if [[ -n "$API_KEY" ]]; then
+  API_AUTH_FILE="$(mktemp)"
+  chmod 600 "$API_AUTH_FILE"
+  printf 'user = "%s:"\n' "$API_KEY" >"$API_AUTH_FILE"
   tailnet="-"
   log "API ile gonderiliyor (tailnet: -)..."
-  if curl -fsS -X POST "https://api.tailscale.com/api/v2/tailnet/${tailnet}/acl" \
-    -u "${API_KEY}:" \
+  if curl --config "$API_AUTH_FILE" -fsS -X POST "https://api.tailscale.com/api/v2/tailnet/${tailnet}/acl" \
     -H "Content-Type: application/json" \
     --data-binary @"$ACL_FILE"; then
     sudo install -d -m 755 "$(dirname "$ACL_APPLIED_MARKER")"

@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import re
+import ssl
 import sys
 import tempfile
 import time
@@ -250,9 +251,20 @@ class ZteH3600P:
         self.timeout = timeout
         self.session_token = ""
         self.guid = int(time.time() * 1000)
-        self.opener = urllib.request.build_opener(
-            urllib.request.HTTPCookieProcessor(CookieJar())
-        )
+        handlers: list[Any] = [urllib.request.HTTPCookieProcessor(CookieJar())]
+        if self.base_url.lower().startswith("https://"):
+            ca_file = os.environ.get("MODEM_TLS_CA_FILE", "").strip()
+            if ca_file:
+                context = ssl.create_default_context(cafile=ca_file)
+                # Router ships cert with IP CN but no usable IP SAN; CA file is
+                # an explicit local trust anchor, so pin trust and skip hostname.
+                context.check_hostname = False
+            elif os.environ.get("MODEM_TLS_INSECURE", "false") == "true":
+                context = ssl._create_unverified_context()
+            else:
+                context = ssl.create_default_context()
+            handlers.append(urllib.request.HTTPSHandler(context=context))
+        self.opener = urllib.request.build_opener(*handlers)
 
     def _next_guid(self) -> str:
         self.guid += 1
@@ -468,6 +480,21 @@ def main() -> int:
     if not args.output or not args.username or not args.password:
         print("[zte-h3600p] credentials/output missing", file=sys.stderr)
         return 2
+    scheme = urllib.parse.urlsplit(args.url).scheme.lower()
+    if scheme not in {"http", "https"} or not urllib.parse.urlsplit(args.url).hostname:
+        print("[zte-h3600p] MODEM_URL must be http(s) URL", file=sys.stderr)
+        return 2
+    if scheme == "http" and os.environ.get("MODEM_ALLOW_HTTP", "false") != "true":
+        print(
+            "[zte-h3600p] HTTP modem login disabled; use HTTPS or MODEM_ALLOW_HTTP=true",
+            file=sys.stderr,
+        )
+        return 2
+    if scheme == "http":
+        print(
+            "[zte-h3600p] WARN: modem login HTTP; LAN traffic is not encrypted",
+            file=sys.stderr,
+        )
 
     client = ZteH3600P(args.url, args.username, args.password, args.timeout)
     try:

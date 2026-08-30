@@ -20,6 +20,22 @@ MODEM_LL="${MODEM_IPV6_DNS_LL:-fe80::1}"
 MODEM_LL="${MODEM_LL%%/*}"
 log() { echo "[rdnss] $*"; }
 
+python3 - "$ULA" "$MODEM_LL" "$PI_IFACE" <<'PY'
+import ipaddress
+import re
+import sys
+
+ula, modem_ll, iface = sys.argv[1:]
+ula_ip = ipaddress.ip_address(ula)
+modem_ip = ipaddress.ip_address(modem_ll)
+if ula_ip.version != 6 or not ula_ip.is_private:
+    raise SystemExit("PI_IPV6_ULA IPv6 ULA olmali")
+if modem_ip.version != 6 or not modem_ip.is_link_local:
+    raise SystemExit("MODEM_IPV6_DNS_LL link-local IPv6 olmali")
+if not re.fullmatch(r"[A-Za-z0-9_.:-]+", iface):
+    raise SystemExit("PI_INTERFACE gecersiz")
+PY
+
 if ! command -v radvd >/dev/null 2>&1; then
   log "radvd kuruluyor..."
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq radvd ndisc6

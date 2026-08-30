@@ -26,22 +26,29 @@ for unit in \
   pi-gateway-kuma-report.service pi-gateway-kuma-report.timer \
   pi-gateway-speedtest.service pi-gateway-speedtest.timer \
   pi-gateway-quake.service pi-gateway-quake.timer \
-  pi-gateway-ibb.service pi-gateway-ibb.timer \
-  pi-gateway-modem-inventory.service pi-gateway-modem-inventory.timer
+  pi-gateway-ibb.service pi-gateway-ibb.timer
 do
   install_unit "$unit"
 done
+if [[ "${MODEM_INVENTORY_ENABLED:-false}" == "true" ]] \
+  && [[ -f /etc/pi-gateway/modem-inventory.env ]]; then
+  install_unit pi-gateway-modem-inventory.service
+  install_unit pi-gateway-modem-inventory.timer
+fi
 sudo systemctl daemon-reload
 sudo systemctl enable --now \
   pi-gateway-kuma-report.timer \
   pi-gateway-speedtest.timer \
   pi-gateway-quake.timer \
-  pi-gateway-ibb.timer \
-  pi-gateway-modem-inventory.timer
+  pi-gateway-ibb.timer
 if [[ "${MODEM_INVENTORY_ENABLED:-false}" == "true" ]] \
   && [[ -f /etc/pi-gateway/modem-inventory.env ]]; then
+  sudo systemctl enable --now pi-gateway-modem-inventory.timer
   sudo systemctl start pi-gateway-modem-inventory.service || \
     log "WARN: modem envanteri ilk snapshot basarisiz"
+else
+  sudo systemctl disable --now pi-gateway-modem-inventory.timer \
+    pi-gateway-modem-inventory.service 2>/dev/null || true
 fi
 # OnBootSec geçmişse timer ilk scrape atlar — bir kez şimdi.
 sudo systemctl start pi-gateway-ibb.service || log "WARN: ibb ilk scrape"

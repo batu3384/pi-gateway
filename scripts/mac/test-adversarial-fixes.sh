@@ -287,7 +287,11 @@ ok "C24 Restic image digest pin"
 if grep -q 'ssh .*TAILSCALE_AUTHKEY=' "$deploy"; then
   die "C25: Tailscale auth key SSH argv leak"
 fi
+if grep -qE -- '-u "\$\{API_KEY\}:' "$ROOT/scripts/pi/setup-tailscale-dns.sh" "$ROOT/scripts/pi/setup-tailscale-acl.sh"; then
+  die "C25b: Tailscale API key curl argv leak"
+fi
 ok "C25 deploy secret argv safe"
+ok "C25b Tailscale API key curl config"
 
 # C26: management SSH address can differ from LAN service bind address
 for deploy_script in "$deploy" "$predeploy" "$sync_cfg"; do

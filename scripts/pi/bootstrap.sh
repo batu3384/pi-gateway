@@ -140,7 +140,7 @@ if [[ -x "$REMOTE_DIR/scripts/pi/install-privileged-scripts.sh" ]]; then
   privileged_script="$REMOTE_DIR/scripts/pi/install-privileged-scripts.sh"
   REMOTE_DIR="$REMOTE_DIR" bash "$privileged_script"
 fi
-for svc in pi-gateway-health.service pi-gateway-backup.service pi-gateway-adguard-config.service pi-gateway-adguard-filters.service pi-gateway-health-failure.service pi-gateway-boot-notify.service pi-gateway-crowdsec-ufw.service pi-data-symlink.service pi-data-symlink-repair.service pi-gateway-recover-ro.service pi-gateway-ensure-fstab.service pi-ssd-data.service pi-ssd-watch.service pi-ssd-health.service pi-gateway-ssd-smart.service pi-gateway-kuma-report.service pi-gateway-speedtest.service pi-gateway-quake.service pi-gateway-ibb.service pi-gateway-modem-inventory.service; do
+for svc in pi-gateway-health.service pi-gateway-backup.service pi-gateway-adguard-config.service pi-gateway-adguard-filters.service pi-gateway-adguard-filters-failure.service pi-gateway-health-failure.service pi-gateway-boot-notify.service pi-gateway-crowdsec-ufw.service pi-data-symlink.service pi-data-symlink-repair.service pi-gateway-recover-ro.service pi-gateway-ensure-fstab.service pi-ssd-data.service pi-ssd-watch.service pi-ssd-health.service pi-gateway-ssd-smart.service pi-gateway-kuma-report.service pi-gateway-speedtest.service pi-gateway-quake.service pi-gateway-ibb.service pi-gateway-modem-inventory.service; do
   install_systemd_unit "$svc"
 done
 # Eski cift-doktor / cift-isim unit'lerini host'tan temizle (health + ADGUARDIMP yeterli)
@@ -152,14 +152,21 @@ for stale in pi-gateway-stack-watchdog.timer pi-gateway-stack-watchdog.service \
 done
 sudo rm -f /usr/local/lib/pi-gateway/scripts/pi/stack-watchdog.sh 2>/dev/null || true
 sudo systemctl daemon-reload
-sudo systemctl enable pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-adguard-config.service pi-gateway-adguard-filters.timer pi-gateway-recover-ro.service pi-gateway-boot-notify.service pi-gateway-kuma-report.timer pi-gateway-speedtest.timer pi-gateway-quake.timer pi-gateway-ibb.timer pi-gateway-modem-inventory.timer 2>/dev/null || true
+sudo systemctl enable pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-adguard-config.service pi-gateway-adguard-filters.timer pi-gateway-recover-ro.service pi-gateway-boot-notify.service pi-gateway-kuma-report.timer pi-gateway-speedtest.timer pi-gateway-quake.timer pi-gateway-ibb.timer 2>/dev/null || true
 if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
   sudo systemctl enable pi-data-symlink.service pi-gateway-ensure-fstab.service pi-data-symlink.timer pi-ssd-watch.path pi-ssd-data.service pi-ssd-health.timer pi-gateway-ssd-smart.timer 2>/dev/null || true
 fi
 if [[ "${ENABLE_CROWDSEC:-true}" == "true" ]]; then
   sudo systemctl enable --now pi-gateway-crowdsec-ufw.timer 2>/dev/null || true
 fi
-sudo systemctl start pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-adguard-filters.timer pi-gateway-speedtest.timer pi-gateway-quake.timer pi-gateway-ibb.timer pi-gateway-modem-inventory.timer 2>/dev/null || true
+sudo systemctl start pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-adguard-filters.timer pi-gateway-speedtest.timer pi-gateway-quake.timer pi-gateway-ibb.timer 2>/dev/null || true
+if [[ "${MODEM_INVENTORY_ENABLED:-false}" == "true" ]] \
+  && [[ -f /etc/pi-gateway/modem-inventory.env ]]; then
+  sudo systemctl enable --now pi-gateway-modem-inventory.timer 2>/dev/null || true
+else
+  sudo systemctl disable --now pi-gateway-modem-inventory.timer \
+    pi-gateway-modem-inventory.service 2>/dev/null || true
+fi
 if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
   sudo systemctl reset-failed pi-ssd-health.service 2>/dev/null || true
   sudo systemctl enable --now pi-ssd-health.timer pi-gateway-ssd-smart.timer 2>/dev/null || true

@@ -20,6 +20,7 @@ source "$SCRIPT_DIR/../lib/adguard-api.sh"
 
 PI_IP="${PI_STATIC_IP:-}"
 ADGUARD_WEB_PORT="${ADGUARD_WEB_PORT:-8080}"
+VIDEO_QUERY_RECENCY_SEC="${VIDEO_QUERY_RECENCY_SEC:-300}"
 AGH_ADMIN_USER="${AGH_ADMIN_USER:-admin}"
 AGH_ADMIN_PASSWORD="${AGH_ADMIN_PASSWORD:-}"
 BASE="http://127.0.0.1:${ADGUARD_WEB_PORT}"
@@ -33,7 +34,7 @@ agh_login "$BASE" "$COOKIE" "$AGH_ADMIN_USER" "$AGH_ADMIN_PASSWORD" || {
   echo "[video-diagnose] HATA: AdGuard login basarisiz" >&2
   exit 1
 }
-export BASE COOKIE REMOTE_DIR VIDEO_IP PI_IP
+export BASE COOKIE REMOTE_DIR VIDEO_IP PI_IP VIDEO_QUERY_RECENCY_SEC
 
 echo "=== Video yol kanit toplama ==="
 echo "Cihaz=${VIDEO_IP} — salt okunur"
@@ -52,14 +53,17 @@ if command -v ping >/dev/null 2>&1; then
 fi
 
 python3 - <<'PY'
-import json, os, subprocess, sys
+import json, os, subprocess, sys, time
 from collections import Counter
+from datetime import datetime, timezone
 from urllib.parse import quote
 
 base = os.environ["BASE"]
 cookie = os.environ["COOKIE"]
 video_ip = os.environ["VIDEO_IP"]
 remote_dir = os.environ["REMOTE_DIR"]
+recency_sec = int(os.environ.get("VIDEO_QUERY_RECENCY_SEC", "300"))
+now = time.time()
 sys.path.insert(0, os.path.join(remote_dir, "scripts", "lib"))
 from modem_inventory import load_modem_inventory, modem_device
 
@@ -74,9 +78,37 @@ def api(path):
 querylog = api("/control/querylog?older_than=&limit=5000")
 domains = Counter()
 matched = []
+stale_rows = 0
+unknown_time_rows = 0
+
+def row_epoch(row):
+    for key in ("time", "client_ts", "timestamp"):
+        value = row.get(key)
+        if value in (None, ""):
+            continue
+        try:
+            number = float(value)
+            return number / 1000 if number > 100000000000 else number
+        except (TypeError, ValueError):
+            try:
+                parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+                if parsed.tzinfo is None:
+                    parsed = parsed.replace(tzinfo=timezone.utc)
+                return parsed.timestamp()
+            except ValueError:
+                continue
+    return None
+
 for row in querylog.get("data", []):
     client = str(row.get("client_ip") or row.get("client") or "")
     if client != video_ip:
+        continue
+    event_ts = row_epoch(row)
+    if event_ts is None:
+        unknown_time_rows += 1
+        continue
+    if event_ts < now - recency_sec or event_ts > now + 60:
+        stale_rows += 1
         continue
     question = row.get("question")
     if isinstance(question, dict):
@@ -103,7 +135,10 @@ for row in querylog.get("data", []):
                 "elapsed": row.get("elapsed") or row.get("processing_time") or "",
             }
         )
-print(f"AdGuard video-domain sorgusu: {len(matched)}")
+print(f"AdGuard video-domain sorgusu (son {recency_sec}s): {len(matched)}")
+print(f"  recent olmayan satir: {stale_rows}, timestamp bilinmeyen: {unknown_time_rows}")
+if not matched:
+    print("  UNKNOWN: son pencerede cihaz için video DNS kanıtı yok")
 for host, count in domains.most_common(20):
     rows = [row for row in matched if row["host"] == host]
     blocked = sum(
@@ -125,16 +160,7 @@ for host in (
     print(f"  {host}: {result.get('reason', '?')}")
 
 inventory = load_modem_inventory()
-device = modem_device(inventory, ip=video_ip)
-if not device:
-    device = next(
-        (
-            item
-            for item in inventory.get("devices", [])
-            if str(item.get("ip") or "") == video_ip
-        ),
-        {},
-    )
+device = modem_device(inventory, ip=video_ip) if inventory.get("fresh") else {}
 if device:
     print(
         "Modem snapshot: "

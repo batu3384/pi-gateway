@@ -24,6 +24,7 @@ need "$PROJECT_DIR/scripts/pi/diagnose-video-path.sh"
 need "$PROJECT_DIR/config/adguard/filter-lists.json"
 need "$PROJECT_DIR/config/adguard/user-rules.txt"
 need "$PROJECT_DIR/host/systemd/pi-gateway-adguard-filters.timer"
+need "$PROJECT_DIR/host/systemd/pi-gateway-adguard-filters-failure.service"
 need "$PROJECT_DIR/host/systemd/pi-gateway-modem-inventory.service"
 need "$PROJECT_DIR/host/systemd/pi-gateway-modem-inventory.timer"
 
@@ -31,6 +32,10 @@ grep -q 'check_dhcp_dns_offer' "$PROJECT_DIR/scripts/lib/dhcp-dns-offer.sh" \
   || die "check_dhcp_dns_offer yok"
 grep -q 'python DISCOVER' "$PROJECT_DIR/scripts/lib/dhcp-dns-offer.sh" \
   || die "dhcp-dns python DISCOVER fallback yok"
+grep -q 'bilinmeyen DNS bypass' "$PROJECT_DIR/scripts/lib/dhcp-dns-offer.sh" \
+  || die "dhcp-dns unknown resolver guard yok"
+grep -q 'degraded=3' "$PROJECT_DIR/scripts/lib/dhcp-dns-offer.sh" \
+  || die "dhcp-dns modem fallback degraded sonucu yok"
 grep -q 'adguard-dhcp OFFER hâlâ modem DNS' "$PROJECT_DIR/scripts/lib/dhcp-dns-offer.sh" \
   || die "dhcp-dns adguard-dhcp modem DNS FAIL yok"
 grep -q 'pi-gateway dhcp' "$PROJECT_DIR/scripts/pi/setup-firewall.sh" \
@@ -64,6 +69,14 @@ grep -q 'dhcp-dns-offer.sh' "$PROJECT_DIR/scripts/pi/diagnose-dns-bypass.sh" \
   || die "diagnose dhcp sniff bagli degil"
 grep -q 'observe-rdnss-ra.sh' "$PROJECT_DIR/scripts/pi/diagnose-dns-bypass.sh" \
   || die "diagnose gercek RA/RDNSS gozlemi yok"
+grep -q 'exit 2' "$PROJECT_DIR/scripts/pi/observe-rdnss-ra.sh" \
+  || die "rdnss gozlem belirsiz durumda fail-open"
+grep -q 'lifetime' "$PROJECT_DIR/scripts/pi/observe-rdnss-ra.sh" \
+  || die "rdnss lifetime semantigi yok"
+grep -q 'VIDEO_QUERY_RECENCY_SEC' "$PROJECT_DIR/scripts/pi/diagnose-video-path.sh" \
+  || die "video query recency yok"
+grep -q 'inventory.get("fresh")' "$PROJECT_DIR/scripts/pi/diagnose-video-path.sh" \
+  || die "video stale inventory gate yok"
 grep -q 'Geçiş öncesi repo kapıları' "$PROJECT_DIR/docs/OPENWRT-DNS-ENFORCEMENT.md" \
   || die "OpenWrt gecis oncesi repo kapilari yok"
 grep -q 'LAN -> TCP/UDP 853 WAN   REJECT' "$PROJECT_DIR/docs/OPENWRT-DNS-ENFORCEMENT.md" \
@@ -74,12 +87,20 @@ grep -q 'USING_PI_DNS\|POSSIBLE_BYPASS\|STALE\|UNKNOWN' "$PROJECT_DIR/scripts/pi
   || die "audit durum siniflari yok"
 grep -q 'MODEM_INVENTORY_ENABLED\|MODEM_INVENTORY_STALE_SEC\|MODEM_INVENTORY_REQUIRED' "$PROJECT_DIR/scripts/pi/audit-dns-coverage.sh" \
   || die "audit modem snapshot stale/required politikasi yok"
+grep -q 'inventory_unknown = modem_required and not modem\["fresh"\]' "$PROJECT_DIR/scripts/pi/audit-dns-coverage.sh" \
+  || die "audit disabled inventory stale gate bozuk"
 grep -q 'LoadCredential=modem' "$PROJECT_DIR/host/systemd/pi-gateway-modem-inventory.service" \
   || die "modem credential systemd LoadCredential yok"
 grep -q 'Environment=REMOTE_DIR=' "$PROJECT_DIR/host/systemd/pi-gateway-modem-inventory.service" \
   || die "modem inventory service REMOTE_DIR yok"
 grep -q 'OnUnitActiveSec=5min' "$PROJECT_DIR/host/systemd/pi-gateway-modem-inventory.timer" \
   || die "modem inventory periyodik timer yok"
+grep -q 'OnFailure=pi-gateway-adguard-filters-failure.service' \
+  "$PROJECT_DIR/host/systemd/pi-gateway-adguard-filters.service" \
+  || die "adguard filter OnFailure alert yok"
+grep -q 'FAILURE_KIND=adguard-filter' \
+  "$PROJECT_DIR/host/systemd/pi-gateway-adguard-filters-failure.service" \
+  || die "adguard filter failure kind yok"
 grep -q 'pi-gateway-modem-inventory.timer' "$PROJECT_DIR/scripts/pi/setup-home-ops-timers.sh" \
   || die "modem inventory timer kuruluma bagli degil"
 grep -q 'must_not_block_hosts\|max_age_hours\|min_rules' "$PROJECT_DIR/config/adguard/filter-lists.json" \
@@ -143,8 +164,8 @@ grep -q 'IN_PROGRESS_FILE' "$PROJECT_DIR/scripts/pi/apply-adguard-filters.sh" \
   || die "apply-adguard-filters in_progress flag yok"
 grep -q 'filtering_api_ready' "$PROJECT_DIR/scripts/pi/apply-adguard-filters.sh" \
   || die "apply-adguard-filters filtering API readiness yok"
-grep -q 'AGH non-JSON' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
-  || die "adguard-filters AGH non-JSON guard yok"
+grep -q 'AguardApiError' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
+  || die "adguard-filters API hata guard yok"
 grep -q 'first in ("ok", "true")' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
   || die "adguard-filters OK prefix guard yok"
 grep -q 'set_rules' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
@@ -163,6 +184,12 @@ grep -q 'If-Modified-Since' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
   || die "adguard-filters ETag/IMS source cache yok"
 grep -q 'last_good_sha256_sample' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
   || die "adguard-filters last-known-good sample yok"
+grep -q 'last_good_sha256' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
+  || die "adguard-filters full source hash yok"
+grep -q 'rollback_failed' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
+  || die "adguard-filters rollback failure state yok"
+grep -q 'refresh_verified' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
+  || die "adguard-filters refresh verification yok"
 grep -q 'profil kural butcesi asildi' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
   || die "adguard-filters total rule budget guard yok"
 python3 "$PROJECT_DIR/scripts/lib/adguard-filters.py" --self-check \
@@ -344,6 +371,16 @@ grep -q 'ADGUARD_FILTER_POLL_SEC' "$PROJECT_DIR/.env.example" \
   || die ".env.example ADGUARD_FILTER_POLL_SEC yok"
 grep -q 'ADGUARD_FILTER_LOCK_WAIT_SEC' "$PROJECT_DIR/.env.example" \
   || die ".env.example ADGUARD_FILTER_LOCK_WAIT_SEC yok"
+grep -q 'ADGUARD_FILTER_SCHEDULED_SLA_SEC' "$PROJECT_DIR/.env.example" \
+  || die ".env.example filter scheduled SLA yok"
+grep -q 'VIDEO_QUERY_RECENCY_SEC' "$PROJECT_DIR/.env.example" \
+  || die ".env.example video query recency yok"
+grep -q 'netalert_db_readable' "$PROJECT_DIR/scripts/lib/gateway-probes.py" \
+  || die "gateway probes NetAlert readability yok"
+grep -q 'pi_gateway_video_dns_latency_ms' "$PROJECT_DIR/scripts/lib/gateway-probes.py" \
+  || die "gateway probes video DNS metric yok"
+grep -Fq 'PGID: ${NETALERTX_GID:-1000}' "$PROJECT_DIR/compose/docker-compose.yml" \
+  || die "NetAlertX host GID default yok"
 grep -q '_pi_home_script apply-adguard-filters.sh' "$PROJECT_DIR/scripts/pi/health-check.sh" \
   || die "health-check apply-adguard-filters home SSOT yok"
 grep -q '_pi_home_script ensure-adguard-blocking.sh' "$PROJECT_DIR/scripts/pi/health-check.sh" \

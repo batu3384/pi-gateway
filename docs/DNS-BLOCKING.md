@@ -34,21 +34,25 @@ Kaçan reklam: query log → one `user-rules.txt` sniper line. New mega-list yok
 Auto-heal: `ADGUARD_AUTO_HEAL=true`. Health prefers `REMOTE_DIR/scripts/pi/` (`ensure-adguard-blocking.sh --fix-light`, `apply-adguard-filters.sh`, `apply-adguard-dns.sh`) so systemd `/usr/local/lib` snapshot cannot re-apply a stale hash-only skip. Those three are also in `install-privileged-scripts.sh` as fallback.
 Bypass check: `ADGUARD_BYPASS_CHECK=strict` on `make diagnose-dns` (LAN clients must appear in query log).
 Custom rules: copy `config/adguard/user-rules.local.txt.example` → `user-rules.local.txt` on the Pi.
-Daily filter refresh: `pi-gateway-adguard-filters.timer` (~04:15).
+Daily filter refresh: `pi-gateway-adguard-filters.timer` (~04:15). Kaynak değişirse
+scheduled refresh zorunlu; değişmediyse 304/digest sonucu gereksiz refresh atlanır.
+API/network failure `last_success_at` değerini ilerletmez, filter service failure alert
+üretir ve başarısız apply sonrası membership/user-rule rollback denenir.
 One-shot tune from Mac: `make adguard-tune` (post-deploy yok). Unbound `--force-recreate` yalnız `unbound.conf` container start'tan yeni ise — filtre-only DNS deliği yok.
 
 **Liste governance:** `filter-lists.json` her URL için kategori, minimum/maksimum kural
-bütçesi ve maksimum yaş taşır. `apply-adguard-filters.sh` değişiklikten önce HTTPS/ilk
-syntax preflight, sonra her listenin `enabled`, `rules_count`, `last_updated` ve
-kritik medya regression setini kontrol eder; sonucu
-`/var/lib/pi-gateway/adguard-filter-state.json` içine yazar. `@latest` listeleri
-otomatik manifest değişikliği değildir: `ADGUARD_FILTER_FORCE_REFRESH=true` yalnız
-kontrollü yenileme penceresinde kullanılmalı. `googlevideo.com`, `ytimg.com`,
-Instagram CDN, WhatsApp medya alan adları korunur; yeni mega-list eklenmez.
+bütçesi ve maksimum yaş taşır. `apply-adguard-filters.sh` değişiklikten önce HTTPS,
+izinli source host, redirect ve bounded content/syntax preflight; sonra her listenin
+`enabled`, `rules_count`, `last_updated` ve kritik medya regression setini kontrol eder.
+Sonuç `/var/lib/pi-gateway/adguard-filter-state.json` içine yazılır. Başarılı scheduled
+apply yaş SLA’sı 26 saattir; liste yaş sınırı 168 saattir. `@latest` kaynakları
+upstream tarafından imzalanmadığı için digest/delta guard tam supply-chain garantisi
+değildir. `googlevideo.com`, `ytimg.com`, Instagram CDN, WhatsApp medya alan adları
+korunur; yeni mega-list eklenmez.
 
 **DNS knobs** (`apply-adguard-dns.sh`, env): `ADGUARD_RATELIMIT=50` (Tailscale burst; düşürme), `ADGUARD_CACHE_SIZE=16777216` (16MiB), `ADGUARD_QUERYLOG_INTERVAL_DAYS=7` + `ADGUARD_STATS_INTERVAL_DAYS=7`. Fresh install template aynı. TLD/IDN blanket block yok (FP). Kaçan reklam: manuel “reklam şimdi” + querylog — otomatik haftalık LLM rapor yok.
 
-**Grafana:** `export-adguard-metrics.sh` (health timer, textfile) → blocked ratio, top clients / blocked domains, per-list `rules_count` / `last_updated` age. A silent 403 on one list shows as that series going stale, not only `ADGUARD_MIN_FILTER_RULES`.
+**Grafana:** `export-adguard-metrics.sh` (health timer, textfile) → blocked ratio, top clients / blocked domains, per-list `rules_count` / `last_updated` age, filter apply failure, rollback failure ve last verified apply timestamp. A silent 403 on one list shows as that series going stale, not only `ADGUARD_MIN_FILTER_RULES`.
 
 **DNSSEC:** Unbound default validator. Proof (not assumption): `diagnose-dns-bypass.sh` / smoke — Unbound `:5335` AD flag on `cloudflare.com`; `dnssec-failed.org` SERVFAIL (`+time=8`, first miss can exceed 3s). Health timer checks AD only (no flaky third-party bogus domain every 2 min). AGH may copy AD to clients; contract is Unbound.
 
@@ -66,7 +70,7 @@ Modem panelinde DNS ayari **tek basina tum cihazlari otomatik Pi'ye baglamaz**.
 
 **Hizli rollout (telefon reboot yok):** Modem LAN Grubu → lease suresi **5 dk (300s)** → Uygula → modem **ac/kapa**. Cihazlar 5–15 dk icinde kendisi yeniler. Izlem: `make rollout-dns-wait`. Is bitince lease'i **3600** veya **86400**'e al (modem kalabalik yenileme yapmasin).
 
-**IPv6 DNS:** Pi sabit ULA (`PI_IPV6_ULA`). ZTE LAN IPv6 DNS UI yok. `setup-rdnss-ra.sh`: ULA RDNSS + modem LL lifetime 0, RA 3–4s (modem RA `fe80::1` 900s last-RA). Default route modemde. `dig @fe80::1` daemon hâlâ cevaplar. GUA dinamik — DNS icin kullanma.
+**IPv6 DNS:** Pi sabit ULA (`PI_IPV6_ULA`). ZTE LAN IPv6 DNS UI yok. `setup-rdnss-ra.sh`: ULA RDNSS + modem LL lifetime 0, RA 3–4s (modem RA `fe80::1` 900s last-RA). Default route modemde. `dig @fe80::1` daemon hâlâ cevaplar. GUA dinamik — DNS için kullanma. `observe-rdnss-ra.sh`, modem adresini lifetime değeriyle yorumlar: `0` withdrawn kabul edilir; pozitif lifetime bypass uyarısıdır. `rdisc6` yok/RA yoksa sonuç UNKNOWN’dur, PASS değildir.
 
 **DoH kilidi:** HaGeZi Encrypted DNS Bypass listesi (`adblock/doh.txt`) — bilinen DoH/DoT hostlari engeller. Ozel/unknown DoH host yine kacabilir.
 
@@ -83,13 +87,16 @@ allow; `videooplayer.xyz` ve `lgads.tv` block yönlerini birlikte doğrular.
 
 **Cihaz envanteri:** H3600P panelindeki DHCP/WLAN adları için
 `MODEM_INVENTORY_ENABLED=true` yapın ve `/etc/pi-gateway/modem-inventory.env`
-dosyasını root `0600` olarak oluşturun. `pi-gateway-modem-inventory.timer` her 5
-dakikada bir read-only snapshot üretir; MAC eşleşmesi IP'den önceliklidir.
+dosyasını root `0600` olarak oluşturun. `pi-gateway-modem-inventory.timer` yalnız
+enabled + credential hazırken çalışır ve her 5 dakikada read-only snapshot üretir;
+MAC eşleşmesi IP'den önceliklidir.
 Snapshot yok/eski ise audit `UNKNOWN`/`STALE` üretir, eski ARP kaydını kesin bypass
 saymaz. NetAlertX ve DNS audit aynı `scripts/lib/modem_inventory.py` loader'ını
 kullanır; çıktıda `source`, `inventory_confidence`, `privacy_mac` ve
 `inventory_last_seen` kanıt alanları bulunur. Coverage yüzdesi stale cihazları
-paydadan çıkarır; stale snapshot yine strict audit'i `UNKNOWN` yapar. Elle kontrol:
+paydadan çıkarır; enabled/required inventory stale ise strict audit'i `UNKNOWN` yapar.
+Inventory disabled ise eski snapshot strict unknown sebebi değildir. NetAlertX DB
+okunamazsa `netalert_db_readable=0` ayrı metric/UNKNOWN kanıtı üretilir. Elle kontrol:
 `make modem-inventory`.
 
 **H3600P Force DNS yok.** 78 menüde NAT 53 / DNS hijack yok. Yakın çare: **WAN → Güvenlik → Filtre Kriterleri → IP Filtresi** — Hedef=Düşür, dest port 53, proto 257, `IPVersion=-1`. Dest IP **boş** = tüm public `:53` (1.0.0.1, 9.9.9.9, IPv6 resolver). CHAIN1 WAN; LAN→Pi `:53` düşmez. **Sıra:** Unbound DoT (`forward-tls-upstream`, Quad9/CF `:853`) **önce** — recursive UDP 53 drop Unbound'u öldürür. Custom conf: `port: 5335` + `forward-zone` (klutchell `tls-cert-bundle` imajda; default port 53). Deploy `canary-compose-update.sh` Unbound'u `--force-recreate` eder; health `StartedAt` vs conf mtime stale ise fail (restart AdGuard'ı düşürür). Unbound compose healthcheck **kapalı** (`unbound-host` recursive `:53` WAN drop ile forever unhealthy → auto-recover döngüsü). AdGuard `depends_on: service_started`. Host `dig :5335` gerçek probe. 3 slot tavan; boş dest tek kural yeter. `/32` yedek olabilir. Yeni Madde spam'i mevcut kuralı ezer — mevcut instance düzenle. DROP ≠ redirect.
@@ -136,10 +143,10 @@ DNS kills third-party ad **domains** (game/app SDKs, `doubleclick.net`). Same-or
 VIDEO_TEST_IP=192.168.1.x make diagnose-video
 ```
 
-Komut cihazı, zaman damgasını, modem snapshot `band`/`rssi`/`channel` alanlarını;
+Komut cihazı, zaman damgasını, yalnız fresh modem snapshot `band`/`rssi`/`channel` alanlarını;
 Pi→cihaz, gateway ve internet packet loss/RTT özetlerini ve cihazın AdGuard
-query-log medya alan adlarını birlikte çıkarır. 5 GHz ve 2.4 GHz sonuçlarını aynı
-cihazda ayrı zaman pencerelerinde karşılaştırın. Query-log'da block görünmemesi
+query-log medya alan adlarını son `VIDEO_QUERY_RECENCY_SEC` penceresiyle birlikte çıkarır.
+5 GHz ve 2.4 GHz sonuçlarını aynı cihazda ayrı zaman pencerelerinde karşılaştırın. Query-log'da block görünmemesi
 tek başına video transport'unun sağlıklı olduğunu kanıtlamaz; DoH/DoT/DoQ ve
 Wi-Fi radyo koşulları ayrı kanıttır.
 

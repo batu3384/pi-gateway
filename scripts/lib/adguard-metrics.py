@@ -57,7 +57,12 @@ def top_pairs(raw: Any, limit: int) -> list[tuple[str, int]]:
     return [(k, v) for k, v in out if k][:limit]
 
 
-def render(up: int, stats: dict[str, Any], status: dict[str, Any]) -> str:
+def render(
+    up: int,
+    stats: dict[str, Any],
+    status: dict[str, Any],
+    state: dict[str, Any] | None = None,
+) -> str:
     q = int(stats.get("num_dns_queries") or 0)
     b = int(stats.get("num_blocked_filtering") or 0)
     avg = float(stats.get("avg_processing_time") or 0)
@@ -69,6 +74,15 @@ def render(up: int, stats: dict[str, Any], status: dict[str, Any]) -> str:
         "# HELP pi_gateway_adguard_up 1 when AdGuard API scrape succeeded",
         "# TYPE pi_gateway_adguard_up gauge",
         f"pi_gateway_adguard_up {int(up)}",
+        "# HELP pi_gateway_adguard_filter_apply_failed 1 when last filter apply failed",
+        "# TYPE pi_gateway_adguard_filter_apply_failed gauge",
+        f"pi_gateway_adguard_filter_apply_failed {int(bool((state or {}).get('failure_reasons')))}",
+        "# HELP pi_gateway_adguard_filter_rollback_failed 1 when last filter rollback failed",
+        "# TYPE pi_gateway_adguard_filter_rollback_failed gauge",
+        f"pi_gateway_adguard_filter_rollback_failed {int((state or {}).get('rollback_result') == 'failed')}",
+        "# HELP pi_gateway_adguard_filter_last_success_timestamp_seconds Last verified filter apply",
+        "# TYPE pi_gateway_adguard_filter_last_success_timestamp_seconds gauge",
+        f"pi_gateway_adguard_filter_last_success_timestamp_seconds {int(parse_ts((state or {}).get('last_success_at')) or 0)}",
         "# HELP pi_gateway_adguard_queries DNS queries since AdGuard stats reset",
         "# TYPE pi_gateway_adguard_queries gauge",
         f"pi_gateway_adguard_queries {q}",
@@ -168,7 +182,16 @@ def self_check() -> None:
             }
         ],
     }
-    text = render(1, stats, status)
+    text = render(
+        1,
+        stats,
+        status,
+        {
+            "last_success_at": "2026-08-27T00:00:00+00:00",
+            "failure_reasons": [],
+            "rollback_result": "not_needed",
+        },
+    )
     assert "pi_gateway_adguard_blocked_ratio 0.250000" in text
     assert 'pi_gateway_adguard_filter_rules{name="HaGeZi Pro++"} 245000' in text
     assert "pi_gateway_adguard_filter_updated_timestamp_seconds" in text
@@ -176,6 +199,9 @@ def self_check() -> None:
     assert 'pi_gateway_adguard_top_client_queries{client="192.0.2.10"} 400' in text
     assert 'pi_gateway_adguard_top_blocked_domain{domain="ads.example"} 12' in text
     assert "pi_gateway_adguard_replaced_safebrowsing 3" in text
+    assert "pi_gateway_adguard_filter_apply_failed 0" in text
+    assert "pi_gateway_adguard_filter_rollback_failed 0" in text
+    assert "pi_gateway_adguard_filter_last_success_timestamp_seconds" in text
     quoted = render(1, {}, {"filters": [{"name": 'a"b', "rules_count": 1, "enabled": False}]})
     assert 'name="a\\"b"' in quoted
     assert "pi_gateway_adguard_up 0" in render(0, {}, {})
@@ -202,7 +228,12 @@ def main() -> int:
             return {}
         return data if isinstance(data, dict) else {}
 
-    write_atomic(out, render(int(up_s), load_json(stats_arg), load_json(status_arg)))
+    state_path = os.environ.get(
+        "ADGUARD_FILTER_STATE_PATH",
+        "/var/lib/pi-gateway/adguard-filter-state.json",
+    )
+    state = load_json(state_path)
+    write_atomic(out, render(int(up_s), load_json(stats_arg), load_json(status_arg), state))
     return 0
 
 

@@ -16,10 +16,14 @@ install_unit() {
       "$src" | sudo tee "$dst" >/dev/null
 }
 
-for unit in pi-gateway-adguard-filters.service pi-gateway-adguard-filters.timer; do
+for unit in \
+  pi-gateway-adguard-filters.service \
+  pi-gateway-adguard-filters.timer \
+  pi-gateway-adguard-filters-failure.service; do
   install_unit "$unit"
 done
 sudo systemctl daemon-reload
+sudo systemctl reset-failed pi-gateway-adguard-filters.service 2>/dev/null || true
 sudo systemctl enable pi-gateway-adguard-filters.timer 2>/dev/null || true
 sudo systemctl start pi-gateway-adguard-filters.timer 2>/dev/null || true
 echo "[setup-adguard-timers] pi-gateway-adguard-filters.timer aktif"

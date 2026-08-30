@@ -167,6 +167,8 @@ else
   rc=$?
   if [[ "$rc" -eq 2 ]]; then
     warn "Modem DHCP sniff yapilamadi (nmap yok veya OFFER alinamadi)"
+  elif [[ "$rc" -eq 3 ]]; then
+    warn "Modem DHCP birincil DNS Pi; secondary modem DNS bypass yolu acik"
   else
     fail "Modem DHCP DNS Pi'ye isaret etmiyor veya dis DNS var"
   fi

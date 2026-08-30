@@ -13,6 +13,12 @@ source "$SCRIPT_DIR/../lib/notify.sh"
 host="$(hostname -s 2>/dev/null || echo pi-gateway)"
 details=""
 
+if [[ "${FAILURE_KIND:-}" == "adguard-filter" ]]; then
+  notify_health_systemd_fail "$host" \
+    "AdGuard filter timer basarisiz; eski son basarili filtreler korunuyor. journalctl -u pi-gateway-adguard-filters.service"
+  exit 0
+fi
+
 if [[ -f /run/pi-gateway/health-last-exit.txt ]]; then
   details="$(tr '\n' '; ' < /run/pi-gateway/health-last-exit.txt | sed 's/; $//')"
 fi

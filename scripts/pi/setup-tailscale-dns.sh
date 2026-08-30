@@ -13,6 +13,11 @@ read_remote_dotenv || { echo "[${PG_SCRIPT_NAME}] HATA: .env" >&2; exit 1; }
 log() { echo "[tailscale-dns] $*"; }
 API_KEY="${TAILSCALE_API_KEY:-}"
 LAN_DOMAIN="${LAN_DOMAIN:-home}"
+API_AUTH_FILE=""
+cleanup() {
+  [[ -z "$API_AUTH_FILE" ]] || rm -f "$API_AUTH_FILE"
+}
+trap cleanup EXIT
 command -v tailscale >/dev/null 2>&1 || { log "tailscale yok"; exit 1; }
 if ! tailscale status --json 2>/dev/null | python3 -c \
   "import json,sys; sys.exit(0 if json.load(sys.stdin).get('BackendState')=='Running' else 1)"; then
@@ -27,6 +32,9 @@ if [[ -z "$API_KEY" || "$API_KEY" != tskey-api-* ]]; then
   log "Bir kez: https://login.tailscale.com/admin/settings/keys → Generate API key"
   exit 1
 fi
+API_AUTH_FILE="$(mktemp)"
+chmod 600 "$API_AUTH_FILE"
+printf 'user = "%s:"\n' "$API_KEY" >"$API_AUTH_FILE"
 # '-' = API key sahibinin default tailnet (email kesme 404)
 BASE="https://api.tailscale.com/api/v2/tailnet/-"
 body="$(python3 -c "
@@ -40,8 +48,7 @@ print(json.dumps({
 }))
 ")"
 log "DNS yaziliyor (NS=$TS_IP Override=on split=${LAN_DOMAIN})..."
-resp="$(curl -fsS -X POST "${BASE}/dns/configuration" \
-  -u "${API_KEY}:" \
+resp="$(curl --config "$API_AUTH_FILE" -fsS -X POST "${BASE}/dns/configuration" \
   -H "Content-Type: application/json" \
   -d "$body")"
 printf '%s\n' "$resp" | python3 -c "
@@ -68,12 +75,12 @@ d=json.load(sys.stdin)
 print((d.get('Self') or {}).get('ID') or '')
 ")"
 if [[ -n "$self_id" ]]; then
-  tags_json="$(curl -fsS -u "${API_KEY}:" "https://api.tailscale.com/api/v2/device/${self_id}?fields=all" 2>/dev/null || true)"
+  tags_json="$(curl --config "$API_AUTH_FILE" -fsS "https://api.tailscale.com/api/v2/device/${self_id}?fields=all" 2>/dev/null || true)"
   if printf '%s' "$tags_json" | python3 -c "import json,sys; t=json.load(sys.stdin).get('tags') or []; sys.exit(0 if 'tag:pi-gateway' in t else 1)" 2>/dev/null; then
     log "Pi tag:pi-gateway OK"
   else
     log "Pi tag:pi-gateway eksik — API ile ekleniyor"
-    curl -fsS -u "${API_KEY}:" -X POST "https://api.tailscale.com/api/v2/device/${self_id}/tags" \
+    curl --config "$API_AUTH_FILE" -fsS -X POST "https://api.tailscale.com/api/v2/device/${self_id}/tags" \
       -H "Content-Type: application/json" \
       -d '{"tags":["tag:pi-gateway"]}' >/dev/null
     log "Pi tag:pi-gateway yazildi"

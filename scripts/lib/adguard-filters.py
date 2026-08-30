@@ -13,13 +13,21 @@ import urllib.error
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
-from urllib.request import Request, urlopen
+from urllib.parse import quote, urljoin, urlsplit
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 SCHEMA_VERSION = 2
 SAMPLE_BYTES = 131072
+MAX_SOURCE_BYTES = 128 * 1024 * 1024
 DEFAULT_POLL_SEC = 180
 DEFAULT_LOCK_WAIT_SEC = 120
+ALLOWED_SOURCE_HOSTS = frozenset(
+    {
+        "adguardteam.github.io",
+        "cdn.jsdelivr.net",
+        "raw.githubusercontent.com",
+    }
+)
 
 
 def log(msg: str) -> None:
@@ -28,6 +36,10 @@ def log(msg: str) -> None:
 
 def log_err(msg: str) -> None:
     print(f"[adguard-filters] HATA: {msg}", file=sys.stderr)
+
+
+class AguardApiError(RuntimeError):
+    """Redacted, actionable AdGuard API failure."""
 
 
 def mem_available_kb() -> int:
@@ -181,37 +193,103 @@ def validate_source_sample(sample: str, url: str) -> None:
         raise RuntimeError(f"broad-domain sample ({broad}/{len(lines)})")
 
 
-def preflight_url(url: str, cache: dict[str, Any]) -> None:
+class _NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, *args: Any, **kwargs: Any) -> None:
+        return None
+
+
+def validate_source_url(url: str) -> None:
+    parsed = urlsplit(url)
+    if parsed.scheme != "https" or parsed.hostname not in ALLOWED_SOURCE_HOSTS:
+        raise RuntimeError(f"izin verilmeyen filter source: {url}")
+
+
+def preflight_url(url: str, cache: dict[str, Any]) -> bool:
     timeout = int(os.environ.get("ADGUARD_FILTER_PREFLIGHT_TIMEOUT_SEC", "20"))
+    max_bytes = int(
+        os.environ.get("ADGUARD_FILTER_MAX_SOURCE_BYTES", str(MAX_SOURCE_BYTES))
+    )
     prev = (cache.get("sources") or {}).get(url) or {}
     headers = {"User-Agent": "Pi-Gateway filter preflight"}
     if prev.get("etag"):
         headers["If-None-Match"] = str(prev["etag"])
     if prev.get("last_modified"):
         headers["If-Modified-Since"] = str(prev["last_modified"])
-    request = Request(url, headers=headers)
-    try:
-        with urlopen(request, timeout=timeout) as response:
-            code = getattr(response, "status", None) or response.getcode()
-            if code == 304:
+    opener = build_opener(_NoRedirect)
+    current_url = url
+    response = None
+    for _ in range(4):
+        validate_source_url(current_url)
+        request = Request(current_url, headers=headers)
+        try:
+            response = opener.open(request, timeout=timeout)
+            break
+        except urllib.error.HTTPError as exc:
+            if exc.code == 304:
                 log(f"preflight 304: {url}")
-                return
-            sample = response.read(SAMPLE_BYTES).decode("utf-8", "replace")
-            etag = response.headers.get("ETag")
-            last_modified = response.headers.get("Last-Modified")
-    except urllib.error.HTTPError as exc:
-        if exc.code == 304:
+                return False
+            if exc.code not in (301, 302, 303, 307, 308):
+                raise RuntimeError(f"HTTP {exc.code}") from exc
+            location = exc.headers.get("Location")
+            if not location:
+                raise RuntimeError(f"redirect location yok: {url}") from exc
+            current_url = urljoin(current_url, location)
+    if response is None:
+        raise RuntimeError(f"redirect limiti asildi: {url}")
+    with response:
+        final_url = response.geturl()
+        validate_source_url(final_url)
+        code = getattr(response, "status", None) or response.getcode()
+        if code == 304:
             log(f"preflight 304: {url}")
-            return
-        raise RuntimeError(f"HTTP {exc.code}") from exc
+            return False
+        content_length = response.headers.get("Content-Length")
+        if content_length:
+            try:
+                if int(content_length) > max_bytes:
+                    raise RuntimeError(f"source cok buyuk: {url}")
+            except ValueError as exc:
+                raise RuntimeError(f"source Content-Length gecersiz: {url}") from exc
+        sample_parts: list[bytes] = []
+        sample_size = 0
+        total_bytes = 0
+        total_lines = 0
+        full_hash = hashlib.sha256()
+        while True:
+            chunk = response.read(1024 * 1024)
+            if not chunk:
+                break
+            total_bytes += len(chunk)
+            if total_bytes > max_bytes:
+                raise RuntimeError(f"source cok buyuk: {url}")
+            full_hash.update(chunk)
+            total_lines += chunk.count(b"\n")
+            if sample_size < SAMPLE_BYTES:
+                part = chunk[: SAMPLE_BYTES - sample_size]
+                sample_parts.append(part)
+                sample_size += len(part)
+        sample = b"".join(sample_parts).decode("utf-8", "replace")
+        etag = response.headers.get("ETag")
+        last_modified = response.headers.get("Last-Modified")
     validate_source_sample(sample, url)
-    digest = hashlib.sha256(sample.encode()).hexdigest()
-    old_digest = prev.get("last_good_sha256_sample") or prev.get("sha256_sample")
-    if old_digest and old_digest != digest:
+    sample_digest = hashlib.sha256(sample.encode()).hexdigest()
+    digest = full_hash.hexdigest()
+    old_digest = prev.get("last_good_sha256") or prev.get("sha256")
+    if old_digest:
+        changed = old_digest != digest
+    else:
+        old_sample_digest = (
+            prev.get("last_good_sha256_sample") or prev.get("sha256_sample")
+        )
+        changed = old_sample_digest != sample_digest
+    old_guard_digest = old_digest or prev.get("last_good_sha256_sample") or prev.get(
+        "sha256_sample"
+    )
+    if old_guard_digest and changed:
         old_lines = _int_or_zero(
             prev.get("last_good_line_count") or prev.get("line_count")
         )
-        new_lines = len([ln for ln in sample.splitlines() if ln.strip()])
+        new_lines = total_lines
         if old_lines and abs(new_lines - old_lines) > max(500, old_lines // 2):
             raise RuntimeError(
                 f"sample delta too large: {url} ({old_lines}->{new_lines} satir)"
@@ -219,12 +297,14 @@ def preflight_url(url: str, cache: dict[str, Any]) -> None:
     entry = {
         "etag": etag,
         "last_modified": last_modified,
-        "sha256_sample": digest,
-        "line_count": len([ln for ln in sample.splitlines() if ln.strip()]),
+        "sha256_sample": sample_digest,
+        "sha256": digest,
+        "line_count": total_lines,
         "checked_at": datetime.now(timezone.utc).isoformat(),
     }
     for key in (
         "last_good_sha256_sample",
+        "last_good_sha256",
         "last_good_line_count",
         "last_good_etag",
         "last_good_last_modified",
@@ -234,6 +314,7 @@ def preflight_url(url: str, cache: dict[str, Any]) -> None:
             entry[key] = prev[key]
     cache.setdefault("sources", {})[url] = entry
     log(f"preflight OK: {url}")
+    return changed
 
 
 def mark_source_cache_good(cache: dict[str, Any], urls: set[str]) -> None:
@@ -243,6 +324,8 @@ def mark_source_cache_good(cache: dict[str, Any], urls: set[str]) -> None:
         if not isinstance(entry, dict) or not entry.get("sha256_sample"):
             continue
         entry["last_good_sha256_sample"] = entry["sha256_sample"]
+        if entry.get("sha256"):
+            entry["last_good_sha256"] = entry["sha256"]
         entry["last_good_line_count"] = entry.get("line_count", 0)
         entry["last_good_etag"] = entry.get("etag")
         entry["last_good_last_modified"] = entry.get("last_modified")
@@ -268,16 +351,36 @@ class AguardClient:
         ]
         if payload is not None:
             cmd += ["-H", "Content-Type: application/json", "-d", json.dumps(payload)]
-        out = subprocess.check_output(cmd, text=True).strip()
+        try:
+            completed = subprocess.run(
+                cmd,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+            )
+        except (OSError, subprocess.CalledProcessError) as exc:
+            detail = ""
+            if isinstance(exc, subprocess.CalledProcessError):
+                detail = (exc.stderr or "").strip()[-200:]
+                suffix = f": {detail}" if detail else ""
+                raise AguardApiError(
+                    f"{method} {path}: curl exit {exc.returncode}{suffix}"
+                ) from exc
+            raise AguardApiError(f"{method} {path}: curl calistirilamadi") from exc
+        out = completed.stdout.strip()
         if not out:
             return {}
         if out[0] in "{[":
-            data = json.loads(out)
+            try:
+                data = json.loads(out)
+            except json.JSONDecodeError as exc:
+                raise AguardApiError(f"{method} {path}: gecersiz JSON") from exc
             return data if isinstance(data, dict) else {}
         first = out.split(None, 1)[0].lower()
         if first in ("ok", "true"):
             return {}
-        raise RuntimeError(f"AGH non-JSON: {out[:200]}")
+        raise AguardApiError(f"{method} {path}: AGH non-JSON response")
 
     def status(self) -> dict[str, Any]:
         return self.api("/control/filtering/status")
@@ -462,6 +565,142 @@ def remove_stale_lists(
     return removed, failed
 
 
+def snapshot_live_state(status: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "filters": [
+            {
+                key: item.get(key)
+                for key in ("url", "name", "enabled", "whitelist")
+                if key in item
+            }
+            for item in status.get("filters") or []
+            if isinstance(item, dict) and item.get("url")
+        ],
+        "user_rules": list(status.get("user_rules") or [])
+        if isinstance(status.get("user_rules") or [], list)
+        else None,
+    }
+
+
+def restore_live_state(client: AguardClient, snapshot: dict[str, Any]) -> str | None:
+    """Restore AGH list membership/settings and user rules after a partial apply."""
+    try:
+        current_status = client.status()
+        current = {
+            item.get("url"): item
+            for item in current_status.get("filters") or []
+            if isinstance(item, dict) and item.get("url")
+        }
+        wanted = {
+            item.get("url"): item
+            for item in snapshot.get("filters") or []
+            if isinstance(item, dict) and item.get("url")
+        }
+        for url in sorted(set(current) - set(wanted)):
+            client.api("/control/filtering/remove_url", "POST", {"url": url})
+        for url, item in wanted.items():
+            if url not in current:
+                client.api(
+                    "/control/filtering/add_url",
+                    "POST",
+                    {
+                        "name": item.get("name") or url,
+                        "url": url,
+                        "whitelist": bool(item.get("whitelist", False)),
+                    },
+                )
+            client.api(
+                "/control/filtering/set_url",
+                "POST",
+                {
+                    "url": url,
+                    "whitelist": bool(item.get("whitelist", False)),
+                    "data": {
+                        "enabled": item.get("enabled") is True,
+                        "name": item.get("name") or url,
+                        "url": url,
+                    },
+                },
+            )
+        if isinstance(snapshot.get("user_rules"), list):
+            client.api(
+                "/control/filtering/set_rules",
+                "POST",
+                {"rules": snapshot["user_rules"], "enabled": True},
+            )
+        client.api("/control/filtering/refresh", "POST", {"whitelist": False})
+        restored = client.status()
+        restored_urls = {
+            item.get("url")
+            for item in restored.get("filters") or []
+            if isinstance(item, dict)
+        }
+        if restored_urls != set(wanted):
+            return "rollback filter membership dogrulanamadi"
+        if isinstance(snapshot.get("user_rules"), list):
+            actual_rules = [
+                rule
+                for rule in restored.get("user_rules") or []
+                if isinstance(rule, str) and rule.strip()
+            ]
+            if sorted(actual_rules) != sorted(snapshot["user_rules"]):
+                return "rollback user rules dogrulanamadi"
+    except (AguardApiError, RuntimeError) as exc:
+        return f"rollback API hatasi: {exc}"
+    return None
+
+
+def write_failure_state(profile: str, reason: str) -> None:
+    previous = load_previous_state()
+    now = datetime.now(timezone.utc).isoformat()
+    payload = dict(previous)
+    payload.update(
+        {
+            "schema_version": SCHEMA_VERSION,
+            "checked_at": now,
+            "last_success_at": previous.get("last_success_at"),
+            "last_failure_at": now,
+            "failure_reasons": [reason],
+            "rollback_result": "not_attempted",
+            "update_in_progress": False,
+            "profile": profile,
+        }
+    )
+    try:
+        _write_json(state_path(), payload)
+    except (OSError, subprocess.CalledProcessError) as exc:
+        log_err(f"failure state yazilamadi: {exc}")
+
+
+def refresh_verified(
+    before: dict[str, Any],
+    after: dict[str, Any],
+    desired: list[tuple[str, str]],
+) -> bool:
+    before_by_url = {
+        item.get("url"): item
+        for item in before.get("filters") or []
+        if isinstance(item, dict) and item.get("url")
+    }
+    after_by_url = {
+        item.get("url"): item
+        for item in after.get("filters") or []
+        if isinstance(item, dict) and item.get("url")
+    }
+    changed = 0
+    for _, url in desired:
+        current = after_by_url.get(url)
+        if not current:
+            return False
+        previous_ts = _epoch((before_by_url.get(url) or {}).get("last_updated"))
+        current_ts = _epoch(current.get("last_updated"))
+        if current_ts is None:
+            return False
+        if previous_ts is None or current_ts > previous_ts:
+            changed += 1
+    return changed > 0
+
+
 def poll_validation(
     client: AguardClient,
     desired: list[tuple[str, str]],
@@ -469,28 +708,49 @@ def poll_validation(
     max_total_rules: int,
     *,
     needs_refresh: bool,
+    previous_status: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], list[str], list[str]]:
     poll_sec = int(os.environ.get("ADGUARD_FILTER_POLL_SEC", str(DEFAULT_POLL_SEC)))
     interval = max(2, int(os.environ.get("ADGUARD_FILTER_POLL_INTERVAL_SEC", "5")))
     deadline = time.time() + poll_sec
-    status_after = client.status()
-    errors, warnings = validate_filter_status(
-        status_after, desired, metadata, max_total_rules
-    )
+    status_after: dict[str, Any] = {}
+    errors: list[str] = []
+    warnings: list[str] = []
+    refresh_attempts = 0
+    status_failures = 0
+    refresh_required = needs_refresh
     while time.time() < deadline:
+        try:
+            status_after = client.status()
+            errors, warnings = validate_filter_status(
+                status_after, desired, metadata, max_total_rules
+            )
+            if not errors and refresh_required and not refresh_verified(
+                previous_status or {}, status_after, desired
+            ):
+                errors = ["refresh sonucu dogrulanamadi"]
+            status_failures = 0
+        except (AguardApiError, RuntimeError) as exc:
+            status_failures += 1
+            errors = [f"status okunamadi: {exc}"]
+            warnings = []
+            if status_failures >= 3:
+                break
         if not errors:
             break
-        if not needs_refresh:
+        max_refresh_attempts = 2 if refresh_required else 1
+        if refresh_attempts < max_refresh_attempts:
             try:
                 client.api("/control/filtering/refresh", "POST", {"whitelist": False})
+                refresh_attempts += 1
+                refresh_required = True
                 log("gecersiz liste durumu — refresh istendi")
-            except (subprocess.CalledProcessError, RuntimeError) as exc:
+            except (AguardApiError, RuntimeError) as exc:
+                refresh_attempts += 1
                 log(f"WARN refresh: {exc}")
+        if time.time() + interval >= deadline:
+            break
         time.sleep(interval)
-        status_after = client.status()
-        errors, warnings = validate_filter_status(
-            status_after, desired, metadata, max_total_rules
-        )
     if errors and time.time() >= deadline:
         log(f"WARN governance poll timeout ({poll_sec}s)")
     return status_after, errors, warnings
@@ -510,6 +770,7 @@ def build_state_payload(
     success: bool,
     failure_reasons: list[str],
     previous_state: dict[str, Any] | None,
+    rollback_result: str = "not_needed",
 ) -> dict[str, Any]:
     total_rules = sum(
         _int_or_zero(item.get("rules_count"))
@@ -524,6 +785,7 @@ def build_state_payload(
         "last_success_at": now if success else prev_success,
         "last_failure_at": None if success else now,
         "failure_reasons": [] if success else failure_reasons,
+        "rollback_result": rollback_result,
         "update_in_progress": False,
         "duration_sec": round(duration_sec, 2),
         "profile": profile,
@@ -586,29 +848,47 @@ def apply_filters() -> int:
     check_disk_regression_rules(rules, regression)
 
     cache = load_source_cache()
+    source_changed = False
     if os.environ.get("ADGUARD_FILTER_PREFLIGHT", "true") == "true":
         for _, url in desired:
             try:
-                preflight_url(url, cache)
+                source_changed = preflight_url(url, cache) or source_changed
             except (OSError, RuntimeError) as exc:
                 log_err(f"preflight: {url} ({exc})")
+                write_failure_state(profile, f"preflight: {url}")
                 return 1
         save_source_cache(cache)
 
-    status = client.status()
+    try:
+        status = client.status()
+    except (AguardApiError, RuntimeError) as exc:
+        reason = f"initial status: {exc}"
+        log_err(reason)
+        write_failure_state(profile, reason)
+        return 1
     current = {f.get("url"): f for f in status.get("filters", []) if f.get("url")}
+    live_snapshot = snapshot_live_state(status)
 
     try:
         added, enabled, list_changed = reconcile_desired_lists(client, desired, current)
-    except (subprocess.CalledProcessError, RuntimeError) as exc:
+    except (AguardApiError, RuntimeError) as exc:
         log_err(f"liste reconcile: {exc}")
-        return 1
+        failed.append("list-reconcile")
+        added = enabled = 0
+        list_changed = False
 
     failed.extend(apply_user_rules(client, rules, status))
     log(f"profil={profile}")
 
     force_refresh = os.environ.get("ADGUARD_FILTER_FORCE_REFRESH", "false") == "true"
-    needs_refresh = bool(added or enabled or list_changed or force_refresh)
+    scheduled_refresh = (
+        os.environ.get("ADGUARD_FILTER_SCHEDULED_REFRESH", "false") == "true"
+    )
+    needs_refresh = bool(
+        added or enabled or list_changed or source_changed or force_refresh
+    )
+    if scheduled_refresh and source_changed:
+        log("scheduled refresh: kaynak degisti")
     if needs_refresh:
         try:
             client.api("/control/filtering/refresh", "POST", {"whitelist": False})
@@ -625,6 +905,7 @@ def apply_filters() -> int:
         metadata,
         max_total_rules,
         needs_refresh=needs_refresh,
+        previous_status=status,
     )
     for warning in validation_warnings:
         log(f"WARN: {warning}")
@@ -643,10 +924,14 @@ def apply_filters() -> int:
                 client.api("/control/filtering/refresh", "POST", {"whitelist": False})
             except (subprocess.CalledProcessError, RuntimeError):
                 pass
-            status_after = client.status()
-            validation_errors, validation_warnings = validate_filter_status(
-                status_after, desired, metadata, max_total_rules
-            )
+            try:
+                status_after = client.status()
+                validation_errors, validation_warnings = validate_filter_status(
+                    status_after, desired, metadata, max_total_rules
+                )
+            except (AguardApiError, RuntimeError) as exc:
+                validation_errors = [f"post-remove status okunamadi: {exc}"]
+                validation_warnings = []
             if validation_errors:
                 for error in validation_errors:
                     log_err(error)
@@ -666,9 +951,20 @@ def apply_filters() -> int:
     if not failed:
         try:
             check_live_regressions(client, regression)
-        except (subprocess.CalledProcessError, RuntimeError, json.JSONDecodeError) as exc:
+        except (AguardApiError, RuntimeError) as exc:
             log_err(f"refresh sonrasi kritik regression ({exc})")
             failed.append("filter-regression")
+
+    rollback_result = "not_needed"
+    if failed:
+        rollback_error = restore_live_state(client, live_snapshot)
+        if rollback_error:
+            failed.append("rollback_failed")
+            rollback_result = "failed"
+            log_err(rollback_error)
+        else:
+            rollback_result = "ok"
+            log("kismi apply geri alindi")
 
     previous_state = load_previous_state()
     success = not failed
@@ -691,6 +987,7 @@ def apply_filters() -> int:
         success=success,
         failure_reasons=failed,
         previous_state=previous_state,
+        rollback_result=rollback_result,
     )
     try:
         _write_json(state_path(), state_payload)
@@ -714,7 +1011,11 @@ def governance_check() -> int:
         return 2
     desired, metadata, _, max_total_rules = load_manifest(remote_dir, profile)
     client = AguardClient(base, cookie)
-    status = client.status()
+    try:
+        status = client.status()
+    except (AguardApiError, RuntimeError) as exc:
+        log_err(f"governance status: {exc}")
+        return 2
     errors, _warnings = validate_filter_status(
         status, desired, metadata, max_total_rules
     )
@@ -770,6 +1071,51 @@ def self_check() -> None:
     }
     mark_source_cache_good(cache, {"https://example.test/list.txt"})
     assert cache["sources"]["https://example.test/list.txt"]["last_good_sha256_sample"] == "abc"
+    assert refresh_verified(
+        {"filters": [{"url": "https://example.test/list.txt", "last_updated": 1}]},
+        {"filters": [{"url": "https://example.test/list.txt", "last_updated": 2}]},
+        [("Test", "https://example.test/list.txt")],
+    )
+    validate_source_url("https://adguardteam.github.io/list.txt")
+    try:
+        validate_source_url("http://evil.example/list.txt")
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("insecure source accepted")
+    from unittest.mock import patch
+
+    with patch(
+        "subprocess.run",
+        side_effect=subprocess.CalledProcessError(
+            22, ["curl"], stderr="HTTP 500"
+        ),
+    ):
+        try:
+            AguardClient("http://127.0.0.1", "/tmp/cookie").status()
+        except AguardApiError as exc:
+            assert "HTTP 500" in str(exc)
+            assert "/tmp/cookie" not in str(exc)
+        else:
+            raise AssertionError("API failure not surfaced")
+
+    class RedirectOpener:
+        def open(self, request: Any, timeout: int) -> Any:
+            raise urllib.error.HTTPError(
+                request.full_url,
+                302,
+                "redirect",
+                {"Location": "http://evil.example/list.txt"},
+                None,
+            )
+
+    with patch(f"{__name__}.build_opener", return_value=RedirectOpener()):
+        try:
+            preflight_url("https://adguardteam.github.io/list.txt", {"sources": {}})
+        except RuntimeError as exc:
+            assert "izin verilmeyen" in str(exc)
+        else:
+            raise AssertionError("unsafe redirect accepted")
     import tempfile
 
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
@@ -796,12 +1142,16 @@ def self_check() -> None:
 
 
 def main() -> int:
-    if "--self-check" in sys.argv:
-        self_check()
-        return 0
-    if "--governance-check" in sys.argv:
-        return governance_check()
-    return apply_filters()
+    try:
+        if "--self-check" in sys.argv:
+            self_check()
+            return 0
+        if "--governance-check" in sys.argv:
+            return governance_check()
+        return apply_filters()
+    except (AguardApiError, RuntimeError, OSError, json.JSONDecodeError) as exc:
+        log_err(f"beklenmeyen apply hatasi: {exc}")
+        return 1
 
 
 if __name__ == "__main__":

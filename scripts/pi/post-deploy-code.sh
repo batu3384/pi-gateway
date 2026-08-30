@@ -33,6 +33,23 @@ crit() {
 
 crit "Privileged scripts" "$SCRIPT_DIR/install-privileged-scripts.sh"
 crit "AdGuard filters" "$SCRIPT_DIR/apply-adguard-filters.sh"
+sudo systemctl reset-failed pi-gateway-adguard-filters.service 2>/dev/null || \
+  log "WARN: AdGuard filter failed state reset"
+if [[ "${ENABLE_NETALERTX:-true}" == "true" ]] \
+  && docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx netalertx; then
+  netalert_gid="${NETALERTX_GID:-$(id -g)}"
+  netalert_current_gid="$(
+    docker inspect netalertx --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null \
+      | sed -n 's/^PGID=//p' | head -1
+  )"
+  if [[ "$netalert_current_gid" != "$netalert_gid" ]]; then
+    log ">> NetAlertX recreate (PGID=${netalert_gid})"
+    (cd "$REMOTE_DIR/compose" && docker compose --env-file ../.env \
+      --profile netalert up -d --no-deps --force-recreate netalertx) \
+      || { log "HATA: NetAlertX recreate"; exit 1; }
+  fi
+  crit "NetAlert DB permissions" "$SCRIPT_DIR/ensure-netalert-db-access.sh"
+fi
 soft "Config izinleri" "$SCRIPT_DIR/fix-config-perms.sh"
 
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx caddy; then

@@ -56,7 +56,7 @@ trap 'rm -f "$COOKIE"' EXIT
 agh_login "http://127.0.0.1:${ADGUARD_WEB_PORT}" "$COOKIE" "$AGH_ADMIN_USER" "$AGH_ADMIN_PASSWORD" \
   || { note_fail "AdGuard API login"; exit 1; }
 
-export COOKIE PI_IP GATEWAY_IP LAN_NET_PREFIX QUERY_LIMIT MIN_QUERIES MIN_COVERAGE BYPASS_CHECK ADGUARD_WEB_PORT REMOTE_DIR MODEM_INVENTORY_PATH MODEM_INVENTORY_STALE_SEC MODEM_INVENTORY_REQUIRED NETALERTX_RECENCY_SEC
+export COOKIE PI_IP GATEWAY_IP LAN_NET_PREFIX QUERY_LIMIT MIN_QUERIES MIN_COVERAGE BYPASS_CHECK ADGUARD_WEB_PORT REMOTE_DIR MODEM_INVENTORY_PATH MODEM_INVENTORY_STALE_SEC MODEM_INVENTORY_REQUIRED MODEM_INVENTORY_ENABLED NETALERTX_RECENCY_SEC
 set +e
 python3 - <<'PY'
 import ipaddress
@@ -143,6 +143,7 @@ def load_names():
     except (subprocess.CalledProcessError, json.JSONDecodeError, TypeError):
         pass
     db_ip, db_mac, netalert_seen = {}, {}, {}
+    db_readable = False
     db = os.path.join(os.environ.get("REMOTE_DIR", ""), "data/netalertx/db/app.db")
     if os.path.isfile(db):
         try:
@@ -165,11 +166,12 @@ def load_names():
                     except (TypeError, ValueError):
                         pass
             con.close()
+            db_readable = True
         except Exception:
             pass
-    return agh_ip, agh_mac, db_ip, db_mac, netalert_seen
+    return agh_ip, agh_mac, db_ip, db_mac, netalert_seen, db_readable
 
-agh_ip, agh_mac, db_ip, db_mac, netalert_seen = load_names()
+agh_ip, agh_mac, db_ip, db_mac, netalert_seen, netalert_db_readable = load_names()
 
 def host_label(ip):
     mac = mac_for(ip).lower()
@@ -294,6 +296,8 @@ else:
     print("  [UNKNOWN] IPv6 istemci query logu görünmedi; RDNSS kaynağı ayrı doğrulanmalı")
 if any("api-unknown" in values for values in protocols.values()):
     print("  [UNKNOWN] AdGuard query log protokol alanı vermiyor; DoH/DoT/DoQ sonucu bu API'den çıkarılamaz")
+if not netalert_db_readable:
+    print("  [UNKNOWN] NetAlertX app.db okunamadi; online cihaz/isim kaniti eksik")
 
 print("")
 print("=== Olası nedenler (modem DNS tek basina yetmez) ===")
@@ -314,11 +318,11 @@ print("  D) IPv6: radvd 3–4s + modem LL lifetime 0; modem RA 900s last-RA. Anl
 if bypass_check == "off":
     print("COVERAGE_OK")
     sys.exit(0)
-inventory_unknown = (modem_required or modem["present"]) and not modem["fresh"]
+inventory_unknown = modem_required and not modem["fresh"]
 if inventory_unknown:
     print("COVERAGE_UNKNOWN: modem snapshot missing or stale")
     sys.exit(12)
-if unknown_ips:
+if modem_required and modem["fresh"] and unknown_ips:
     print("UNKNOWN_DEVICES:" + ",".join(unknown_ips))
     sys.exit(12)
 if strict_total and strict_cov < min_cov:
