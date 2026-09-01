@@ -115,6 +115,12 @@ docker_ssd_root_ok() {
   fi
   return 0
 }
+# libnetwork sandbox store (local-kv.db) — SSD I/O sonrasi false-green mount yakalar
+docker_sandbox_ok() {
+  command -v docker >/dev/null 2>&1 || return 1
+  systemctl is-active --quiet docker 2>/dev/null || return 1
+  timeout 30 docker run --rm --network none alpine:latest true 2>/dev/null
+}
 # bind-mount unbound.conf process reload etmez. Recreate AdGuard'ı düşürür (depends_on).
 unbound_conf_stale() {
   local conf="${REMOTE_DIR}/config/unbound/unbound.conf"

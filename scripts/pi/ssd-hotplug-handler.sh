@@ -60,8 +60,10 @@ fi
 if ssd_mount_healthy; then
   # Degraded bayrak varken asla early-exit — tam stack restore zorunlu
   if [[ ! -f "${STORAGE_DEGRADED_FLAG:-/run/pi-gateway/storage-degraded}" ]] \
-    && [[ -f "$SSD_HOTPLUG_STATE_FILE" ]] && stack_core_ok 2>/dev/null; then
-    log "SSD saglikli ve stack core ayakta — atlaniyor"
+    && [[ -f "$SSD_HOTPLUG_STATE_FILE" ]] \
+    && stack_core_ok 2>/dev/null \
+    && docker_sandbox_ok 2>/dev/null; then
+    log "SSD saglikli ve stack core + docker sandbox ayakta — atlaniyor"
     exit 0
   fi
   if hotplug_debounced \
@@ -121,6 +123,8 @@ if ssd_mount_healthy; then
   run_root mkdir -p "$(dirname "$SSD_HOTPLUG_STATE_FILE")" 2>/dev/null || true
   run_root touch "$SSD_HOTPLUG_STATE_FILE" 2>/dev/null || true
   mark_stack_recover_cooldown
+  REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/repair-post-ssd-recovery.sh" \
+    || log "WARN: post-ssd repair"
   # SSD recovery notification is owned by recover-readonly-root.sh.
   ssd_usb_reset_clear 2>/dev/null || true
   recover_lock_release

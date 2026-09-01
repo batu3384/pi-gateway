@@ -105,6 +105,11 @@ ok "ssd-watch disconnect path (udev+PathChanged)"
 grep -q 'ssd_mount_healthy\|Stale' "$PROJECT_DIR/scripts/pi/ssd-hotplug-handler.sh" \
   || die "hotplug stale/healthy yok"
 ok "hotplug stale+remount"
+grep -q 'docker_sandbox_ok' "$PROJECT_DIR/scripts/pi/ssd-hotplug-handler.sh" \
+  || die "hotplug docker_sandbox_ok gate yok"
+grep -q 'repair-post-ssd-recovery.sh' "$PROJECT_DIR/scripts/pi/ssd-hotplug-handler.sh" \
+  || die "hotplug post-ssd repair yok"
+ok "hotplug post-ssd repair"
 
 [[ -f "$PROJECT_DIR/scripts/pi/ssd-health.sh" ]] || die "ssd-health.sh yok"
 grep -q 'ssd-health.sh' "$PROJECT_DIR/scripts/pi/check-sd-health.sh" \
