@@ -134,4 +134,9 @@ if [[ -n "$realloc" && "$realloc" =~ ^[0-9]+$ ]] && (( realloc >= SSD_REALLOC_WA
 fi
 
 log "OK SMART $ssd_dev (wear=${wear_pct:-n/a} realloc=${realloc:-n/a})"
+METRICS_PY="${REMOTE_DIR}/scripts/lib/ssd-usb-metrics.py"
+if [[ -f "$METRICS_PY" ]]; then
+  python3 "$METRICS_PY" update --smart-file /dev/stdin --notify <<<"$health_out" \
+    || log "WARN: ssd-usb-metrics"
+fi
 exit 0

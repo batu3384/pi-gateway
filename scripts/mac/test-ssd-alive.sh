@@ -205,8 +205,8 @@ PANEL_PROTOCOL='' ENABLE_TLS=true LAN_DOMAIN=home PI_STATIC_IP=192.168.1.50 \
   || die "telegram-panels self_check fail"
 PANEL_PROTOCOL='' ENABLE_TLS=true LAN_DOMAIN=home PI_STATIC_IP=192.168.1.50 \
   python3 "$PROJECT_DIR/scripts/lib/telegram-panels.py" use_reply_keyboard \
-  | grep -qx '1' \
-  || die "telegram-panels reply keyboard kapali"
+  | grep -qx '0' \
+  || die "telegram-panels reply keyboard kaldirildi (0 beklenir)"
 grep -q 'p/grafana' "$PROJECT_DIR/scripts/pi/setup-caddy-lan-ip.sh" \
   || die "caddy-lan-ip grafana path yok"
 grep -q 'p/grafana' "$PROJECT_DIR/scripts/pi/setup-tailscale-serve.sh" \

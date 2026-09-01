@@ -70,6 +70,10 @@ chmod +x "$SCRIPT_DIR/test-hermes-bulletins.sh" "$PROJECT_DIR/scripts/pi/fx-quot
 if [[ -f "$SCRIPT_DIR/test-hermes-bulletins.sh" ]]; then
   "$SCRIPT_DIR/test-hermes-bulletins.sh"
 fi
+chmod +x "$SCRIPT_DIR/test-telegram-ops-contract.sh" 2>/dev/null || true
+if [[ -f "$SCRIPT_DIR/test-telegram-ops-contract.sh" ]]; then
+  "$SCRIPT_DIR/test-telegram-ops-contract.sh"
+fi
 chmod +x "$SCRIPT_DIR/test-home-ops-phase1.sh" 2>/dev/null || true
 if [[ -f "$SCRIPT_DIR/test-home-ops-phase1.sh" ]]; then
   "$SCRIPT_DIR/test-home-ops-phase1.sh"

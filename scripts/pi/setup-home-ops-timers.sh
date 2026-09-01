@@ -26,7 +26,9 @@ for unit in \
   pi-gateway-kuma-report.service pi-gateway-kuma-report.timer \
   pi-gateway-speedtest.service pi-gateway-speedtest.timer \
   pi-gateway-quake.service pi-gateway-quake.timer \
-  pi-gateway-ibb.service pi-gateway-ibb.timer
+  pi-gateway-ibb.service pi-gateway-ibb.timer \
+  pi-gateway-dns-coverage.service pi-gateway-dns-coverage.timer \
+  pi-gateway-dns-weekly.service pi-gateway-dns-weekly.timer
 do
   install_unit "$unit"
 done
@@ -40,7 +42,9 @@ sudo systemctl enable --now \
   pi-gateway-kuma-report.timer \
   pi-gateway-speedtest.timer \
   pi-gateway-quake.timer \
-  pi-gateway-ibb.timer
+  pi-gateway-ibb.timer \
+  pi-gateway-dns-coverage.timer \
+  pi-gateway-dns-weekly.timer
 if [[ "${MODEM_INVENTORY_ENABLED:-false}" == "true" ]] \
   && [[ -f /etc/pi-gateway/modem-inventory.env ]]; then
   sudo systemctl enable --now pi-gateway-modem-inventory.timer
@@ -52,4 +56,4 @@ else
 fi
 # OnBootSec geçmişse timer ilk scrape atlar — bir kez şimdi.
 sudo systemctl start pi-gateway-ibb.service || log "WARN: ibb ilk scrape"
-log "Aktif: kuma-report / speedtest / quake / ibb / modem-inventory"
+log "Aktif: kuma-report / speedtest / quake / ibb / dns-coverage / dns-weekly / modem-inventory"

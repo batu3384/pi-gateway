@@ -131,5 +131,7 @@ if storage_degraded; then
   [[ "$hp_rc" -eq 0 ]] && exit 0
   exit "$hp_rc"
 fi
+METRICS_PY="${REMOTE_DIR}/scripts/lib/ssd-usb-metrics.py"
+[[ -f "$METRICS_PY" ]] && python3 "$METRICS_PY" update --notify 2>/dev/null || true
 [[ "$hp_rc" -eq 0 ]] && exit 1
 exit "$hp_rc"

@@ -130,8 +130,7 @@ def build_card_text() -> str:
 
     lines.append("")
     lines.append(
-        "<i>Buton → … → Safari’de Aç. Telegram içi tarayıcı kullanma. "
-        "Bu kart otomatik güncellenir.</i>"
+        "<i>Buton → Safari’de Aç. Komutlar: /menu /dns /ssd /backup</i>"
     )
     return "\n".join(lines)
 
@@ -166,7 +165,7 @@ def _save_state(path: str, state: dict[str, Any]) -> None:
     os.replace(tmp, path)
 
 
-def apply(*, force: bool = False, once_reply_kb: bool = False) -> int:
+def apply(*, force: bool = False) -> int:
     token = os.environ.get("TELEGRAM_BOT_TOKEN") or ""
     chat = os.environ.get("TELEGRAM_CHAT_ID") or ""
     if not token or not chat:
@@ -181,10 +180,6 @@ def apply(*, force: bool = False, once_reply_kb: bool = False) -> int:
     msg_id = state.get("message_id")
 
     if not force and state.get("hash") == digest and msg_id:
-        if once_reply_kb and not state.get("reply_kb"):
-            _send_reply_kb(chat)
-            state["reply_kb"] = 1
-            _save_state(STATE_PATH, state)
         print("[status-card] hash aynı — dokunulmadı")
         return 0
 
@@ -236,28 +231,9 @@ def apply(*, force: bool = False, once_reply_kb: bool = False) -> int:
 
     state["message_id"] = msg_id
     state["hash"] = digest
-    if once_reply_kb and not state.get("reply_kb"):
-        _send_reply_kb(chat)
-        state["reply_kb"] = 1
     _save_state(STATE_PATH, state)
     print(f"[status-card] OK message_id={msg_id}")
     return 0
-
-
-def _send_reply_kb(chat: str) -> None:
-    panels = _panels()
-    kb = json.dumps(panels.reply_keyboard(), ensure_ascii=False)
-    _api(
-        "sendMessage",
-        {
-            "chat_id": chat,
-            "parse_mode": "HTML",
-            "text": "Altta <b>Paneller</b> menüsü. Kartı yenilemek için: /menu",
-            "reply_markup": kb,
-            "disable_web_page_preview": "true",
-        },
-    )
-
 
 def self_check() -> int:
     os.environ.setdefault("PI_GATEWAY_HEALTH_OK", "1")
@@ -280,8 +256,7 @@ def main() -> int:
         return 0
     if mode == "apply":
         force = "--force" in sys.argv
-        once = "--once-reply-kb" in sys.argv
-        return apply(force=force, once_reply_kb=once)
+        return apply(force=force)
     print(f"unknown mode: {mode}", file=sys.stderr)
     return 2
 

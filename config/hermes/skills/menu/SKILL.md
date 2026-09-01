@@ -1,33 +1,29 @@
 ---
 name: menu
-description: "Pi Gateway durum kartı. ONLY when user message is exactly one of: /menu /paneller /start /linkler menu paneller Paneller. Run hermes-menu.sh; do not chat."
-version: 1.1.0
+description: "Pi Gateway durum kartı. ONLY when user message is exactly one of: /menu /start /linkler menu. Run hermes-menu.sh; do not chat."
+version: 1.2.0
 author: Pi Gateway
 license: MIT
 platforms: [linux]
 metadata:
   hermes:
-    tags: [Pi-Gateway, Telegram, Menu, Panels]
+    tags: [Pi-Gateway, Telegram, Menu]
 ---
-# Pi Gateway Panel Menu
+# Pi Gateway Durum Kartı
 
 ## When to Use
 
-Kullanici mesaji **tam olarak** suysa — baska hicbir sey yapma:
+Kullanici mesaji **tam olarak** suysa:
 
-- `/menu`, `/paneller`, `/start`, `/linkler`
-- `menu`, `paneller`, `Paneller`
+- `/menu`, `/start`, `/linkler`
+- `menu`
 
-Genel sohbet / soru icin bu skill'i **kullanma**.
+`/dns` `/ssd` `/backup` `/recover` icin ayri skill'ler var.
 
 ## Action
-
-Hemen terminal (web arama yok, uzun aciklama yok):
 
 ```bash
 REMOTE_DIR=__REMOTE_DIR__ bash __REMOTE_DIR__/scripts/pi/hermes-menu.sh
 ```
 
-Basarili: `Durum kartı güncellendi. Buton → Safari’de Aç.`
-
-Hata: `Panel menusu gonderilemedi — Pi log.`
+Basarili: `Durum kartı güncellendi.`

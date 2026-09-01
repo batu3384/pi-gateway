@@ -68,6 +68,10 @@ widgets:
           format: percent
         - field: offsite_backup_age_days
           label: Offsite yedek (gun)
+        - field: dns_coverage_percent
+          label: DNS kapsam (%)
+        - field: dns_coverage_status
+          label: DNS kapsam durumu
         - field: backup_restore_drill_age_days
           label: Restore drill (gun)
         - field: dns_latency_ms

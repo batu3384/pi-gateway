@@ -1,0 +1,11 @@
+[Unit]
+Description=Pi Gateway DNS coverage audit (every 15 min)
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=15min
+AccuracySec=2min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

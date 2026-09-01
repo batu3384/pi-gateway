@@ -465,6 +465,49 @@ notify_disk_warn() {
   notify_send_with_transition "$key" "fail" "📋 Disk Doluluk Uyarısı" "$body" "HTML"
 }
 
+notify_ssd_usb_flap() {
+  local detail="${1:-}"
+  local body
+  body="$(notify_html_alert \
+    "USB/SSD bağlantısı zayıflıyor olabilir. Yazılımsal kurtarma devrede; kablo değişimi gerekmez." \
+    "• Detay: $(notify_escape_html "$detail")
+• Durum: /ssd · kurtarma: /recover
+• journal: <code>journalctl -k -g usb</code>")"
+  notify_send_with_transition "ssd-usb-flap" "fail" "⚠️ SSD USB Erken Uyarı" "$body" "HTML"
+}
+
+notify_ssd_usb_flap_ok() {
+  notify_send_with_transition \
+    "ssd-usb-flap" "ok" "✅ SSD USB Stabil" \
+    "CRC ve reset sayacı normale döndü." "HTML"
+}
+
+notify_restic_offsite_stale() {
+  local age="$1"
+  local body
+  body="$(notify_html_alert \
+    "Bulut offsite kopya ${age} gündür güncellenmedi." \
+    "• .env: RESTIC_OFFSITE_* kontrol
+• Manuel: <code>restic-offsite-copy.sh</code>")"
+  notify_send_with_transition "restic-offsite" "fail" "📋 Bulut Yedek Gecikti" "$body" "HTML"
+}
+
+notify_restic_offsite_ok() {
+  notify_send_with_transition \
+    "restic-offsite" "ok" "✅ Bulut Yedek Güncel" \
+    "Offsite restic kopyası yenilendi." "HTML"
+}
+
+notify_ssd_post_recovery() {
+  local detail="${1:-}"
+  local body
+  body="$(notify_html_alert \
+    "USB kopması sonrası yazılımsal kurtarma tamamlandı." \
+    "• $(notify_escape_html "$detail")
+• /ssd · /backup ile doğrula")"
+  notify_send_with_transition "ssd-post-recovery" "ok" "✅ SSD Olay Raporu" "$body" "HTML"
+}
+
 notify_sd_warn() {
   local host="$1"
   local details="$2"

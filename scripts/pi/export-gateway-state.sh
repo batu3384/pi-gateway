@@ -258,6 +258,18 @@ if [[ -x "$_agh_export" ]]; then
   REMOTE_DIR="$REMOTE_DIR" bash "$_agh_export" \
     || echo "[export-state] WARN export-adguard-metrics failed" >&2
 fi
+_ssd_usb_py="${SCRIPT_DIR}/../lib/ssd-usb-metrics.py"
+[[ -f "$_ssd_usb_py" ]] || _ssd_usb_py="${REMOTE_DIR}/scripts/lib/ssd-usb-metrics.py"
+if [[ -f "$_ssd_usb_py" ]]; then
+  python3 "$_ssd_usb_py" export 2>/dev/null || true
+  if [[ -f /var/lib/pi-gateway/metrics/ssd_usb.prom ]]; then
+    if [[ "$(id -u)" -eq 0 ]]; then
+      cat /var/lib/pi-gateway/metrics/ssd_usb.prom >>"$METRICS_FILE"
+    else
+      run_as_needed bash -c "cat /var/lib/pi-gateway/metrics/ssd_usb.prom >>\"$METRICS_FILE\""
+    fi
+  fi
+fi
 echo "[export-state] OK ${METRICS_FILE}"
 
 # P2 yavaşlama — kartta ms; eşikte alarm

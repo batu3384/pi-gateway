@@ -125,16 +125,6 @@ def inline_keyboard(panels: list[dict[str, Any]], mode: str = "all") -> dict[str
     return {"inline_keyboard": rows}
 
 
-def reply_keyboard() -> dict[str, Any]:
-    """Sticky bottom button — Hermes skill `menu` catches the text."""
-    return {
-        "keyboard": [[{"text": "Paneller"}]],
-        "resize_keyboard": True,
-        "is_persistent": True,
-        "one_time_keyboard": False,
-    }
-
-
 def html_links(panels: list[dict[str, Any]], mode: str = "button") -> str:
     lines: list[str] = []
     for p in panels:
@@ -177,8 +167,7 @@ def menu_text(panels: list[dict[str, Any]], mode: str = "all") -> str:
 
     lines.append("")
     lines.append(
-        "<i>Buton → … → Safari’de Aç. Telegram içi tarayıcı kullanma. "
-        "Kart: <code>/menu</code>.</i>"
+        "<i>Buton → Safari’de Aç. Komutlar: /menu /dns /ssd /backup</i>"
     )
     return "\n".join(lines)
 
@@ -259,7 +248,7 @@ def main() -> None:
     if mode == "keyboard":
         print(json.dumps(inline_keyboard(panels, sub), ensure_ascii=False))
     elif mode == "reply_keyboard":
-        print(json.dumps(reply_keyboard(), ensure_ascii=False))
+        print("{}")
     elif mode == "html":
         print(html_links(panels, sub if sub != "all" else "button"))
     elif mode == "text":
@@ -277,8 +266,7 @@ def main() -> None:
     elif mode == "hermes_owns_inbox":
         print("1" if hermes_owns_inbox() else "0")
     elif mode == "use_reply_keyboard":
-        # Always show sticky Paneller (Hermes skill `menu` handles the tap)
-        print("1")
+        print("0")
     elif mode == "menu_webapp_url":
         print("")
     else:

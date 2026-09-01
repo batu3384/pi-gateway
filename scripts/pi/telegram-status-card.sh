@@ -30,7 +30,7 @@ export PI_GATEWAY_HEALTH_OK="${PI_GATEWAY_HEALTH_OK:-1}"
 args=(apply)
 for a in "$@"; do
   case "$a" in
-    --force|--once-reply-kb) args+=("$a") ;;
+    --force) args+=("$a") ;;
   esac
 done
 python3 "$CARD_PY" "${args[@]}"

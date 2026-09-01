@@ -1,0 +1,17 @@
+[Unit]
+Description=Pi Gateway DNS coverage audit
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+User=PI_USER
+Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
+Environment=ADGUARD_COVERAGE_AUDIT_MODE=warn
+ExecStart=/bin/bash -c 'REMOTE_DIR=/home/PI_USER/pi-gateway ADGUARD_COVERAGE_AUDIT_MODE=warn bash /home/PI_USER/pi-gateway/scripts/pi/audit-dns-coverage.sh'
+Nice=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

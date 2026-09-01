@@ -277,6 +277,22 @@ elif [[ "${ENABLE_RESTIC:-true}" == "true" ]]; then
     fi
   fi
 fi
+# Cloud offsite (B2/R2) when enabled
+if [[ "${RESTIC_OFFSITE_ENABLED:-false}" == "true" ]] && [[ "${ENABLE_RESTIC:-true}" == "true" ]] \
+  && ! storage_degraded; then
+  cloud_max="${RESTIC_OFFSITE_COPY_MAX_AGE_DAYS:-3}"
+  cloud_marker="/var/lib/pi-gateway/last-restic-offsite-copy"
+  if [[ "$cloud_max" != "0" ]]; then
+    if [[ ! -f "$cloud_marker" ]]; then
+      slo_note "restic-offsite-missing"
+    else
+      cloud_age="$(python3 -c "import os,time; print(int((time.time()-os.path.getmtime('$cloud_marker'))//86400))")"
+      if (( cloud_age > cloud_max )); then
+        slo_note "restic-offsite-stale(${cloud_age}d)"
+      fi
+    fi
+  fi
+fi
 # Backup restore drill SLA (Mac: make backup-restore-drill)
 drill_max="${BACKUP_DRILL_MAX_AGE_DAYS:-30}"
 drill_marker="/var/lib/pi-gateway/last-backup-restore-drill"
@@ -362,7 +378,7 @@ health_is_dns_only_fail() {
 health_is_slo_fail() {
   local f="$1"
   case "$f" in
-    offsite-*|backup-restore-drill*)
+    offsite-*|restic-offsite-*|backup-restore-drill*)
       return 0
       ;;
     *)
@@ -379,7 +395,7 @@ elif [[ ${#FAILURES[@]} -gt 0 ]]; then
   exit_code=0
   for f in "${FAILURES[@]}"; do
     case "$f" in
-      optional-*|offsite-*|backup-restore-drill*|bulletin-*|hermes-session-*|hermes-token-*) ;;
+      optional-*|offsite-*|restic-offsite-*|backup-restore-drill*|bulletin-*|hermes-session-*|hermes-token-*) ;;
       *) exit_code=1; break ;;
     esac
   done
@@ -396,6 +412,7 @@ elif [[ ${#FAILURES[@]} -eq 0 ]]; then
   # Çekirdek DNS: OnFailure (notify_health_systemd_*) — health-dns çift bubble yok
   notify_optional_recovered || true
   notify_slo_backup_ok || true
+  notify_restic_offsite_ok || true
   notify_slo_ops_ok || true
 else
   details="${FAILURES[*]}"
@@ -412,7 +429,7 @@ else
       optional-*)
         has_optional=1
         ;;
-      offsite-*|backup-restore-drill*)
+      offsite-*|restic-offsite-*|backup-restore-drill*)
         has_slo=1
         ;;
       bulletin-*|hermes-session-*|hermes-token-*)
@@ -435,12 +452,25 @@ else
   fi
   if [[ "$has_slo" -eq 1 ]]; then
     slo_details=()
+    cloud_stale=""
     for f in "${FAILURES[@]}"; do
-      health_is_slo_fail "$f" && slo_details+=("$f")
+      if health_is_slo_fail "$f"; then
+        slo_details+=("$f")
+        case "$f" in
+          restic-offsite-stale(*))
+            cloud_stale="${f#restic-offsite-stale(}"
+            cloud_stale="${cloud_stale%)}"
+            ;;
+        esac
+      fi
     done
+    if [[ -n "$cloud_stale" ]]; then
+      notify_restic_offsite_stale "${cloud_stale%d}" || true
+    fi
     notify_slo_backup "$host" "${slo_details[*]}"
   else
     notify_slo_backup_ok || true
+    notify_restic_offsite_ok || true
   fi
   if [[ "$has_ops_slo" -eq 1 ]]; then
     ops_slo_details=()

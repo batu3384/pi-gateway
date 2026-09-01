@@ -37,4 +37,42 @@ fi
 # shellcheck source=../lib/reset-gateway-units.sh
 source "$SCRIPT_DIR/../lib/reset-gateway-units.sh"
 reset_pi_gateway_failed_units 2>/dev/null || true
+# shellcheck source=../lib/notify.sh
+source "$SCRIPT_DIR/../lib/notify.sh"
+_incident="$(python3 - <<'PY' 2>/dev/null || true
+import json
+from pathlib import Path
+st = {}
+p = Path("/var/lib/pi-gateway/ssd-usb-metrics-state.json")
+if p.is_file():
+    try:
+        st = json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+parts = []
+if st:
+    parts.append(f"CRC {st.get('crc', '?')} (Δ{st.get('crc_delta', 0)})")
+    parts.append(f"reset24h={st.get('usb_resets_24h', 0)} io24h={st.get('io_errors_24h', 0)}")
+parts.append("docker net + restic repair + backup")
+print("; ".join(parts) if parts else "post-ssd repair OK")
+PY
+)"
+notify_ssd_post_recovery "$_incident" 2>/dev/null || true
+python3 - "$_incident" <<'PY' 2>/dev/null || true
+import json, sys, time
+from pathlib import Path
+detail = sys.argv[1]
+path = Path("/var/lib/pi-gateway/state.json")
+data = {}
+if path.is_file():
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        data = {}
+data["last_ssd_incident"] = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "detail": detail}
+path.parent.mkdir(parents=True, exist_ok=True)
+tmp = path.with_suffix(".tmp")
+tmp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+tmp.replace(path)
+PY
 log "Tamamlandi"

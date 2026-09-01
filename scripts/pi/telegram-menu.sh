@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Telegram: sabit durum kartı (pin + edit) + TR panel butonları
+# Telegram: sabit durum kartı + panel inline butonları + ops komutları
 set -euo pipefail
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -30,7 +30,7 @@ export TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID
 API="https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}"
 
 if [[ -x "$CARD" ]]; then
-  bash "$CARD" --force --once-reply-kb || log "WARN: durum karti"
+  bash "$CARD" --force || log "WARN: durum karti"
 else
   log "HATA: telegram-status-card.sh yok"
   exit 1
@@ -47,7 +47,10 @@ import json, sys, urllib.parse, urllib.request
 api, chat_id = sys.argv[1], sys.argv[2]
 want = [
     ("menu", "Durum kartini yenile"),
-    ("paneller", "Durum kartini yenile"),
+    ("dns", "DNS kapsam ozeti"),
+    ("ssd", "SSD / USB saglik"),
+    ("backup", "Yedek durumu"),
+    ("recover", "SSD yazilim kurtarma"),
 ]
 
 def api_call(method, payload):
@@ -78,11 +81,30 @@ PY
 }
 
 if [[ "$(python3 "$PANELS_PY" hermes_owns_inbox 2>/dev/null || echo 0)" == "1" ]]; then
-  _register_chat_panel_commands || log "WARN: chat-scope /menu komutlari"
+  _register_chat_panel_commands || log "WARN: chat-scope komutlar"
 else
   curl -fsS -X POST "${API}/setMyCommands" \
-    -d 'commands=[{"command":"menu","description":"Durum kartini yenile"},{"command":"paneller","description":"Durum kartini yenile"}]' \
+    -d 'commands=[{"command":"menu","description":"Durum kartini yenile"},{"command":"dns","description":"DNS kapsam ozeti"},{"command":"ssd","description":"SSD saglik"},{"command":"backup","description":"Yedek durumu"},{"command":"recover","description":"SSD kurtarma"}]' \
     >/dev/null 2>&1 || true
+fi
+
+# Eski sticky Paneller klavyesini kaldir (bir kez)
+if [[ -f /var/lib/pi-gateway/telegram-status-card.json ]] \
+  && grep -q '"reply_kb"' /var/lib/pi-gateway/telegram-status-card.json 2>/dev/null; then
+  curl -fsS -X POST "${API}/sendMessage" \
+    -d "chat_id=${TELEGRAM_CHAT_ID}" \
+    -d 'reply_markup={"remove_keyboard":true}' \
+    -d "disable_notification=true" \
+    -d "text= " >/dev/null 2>&1 || true
+  python3 - <<'PY' 2>/dev/null || true
+import json
+from pathlib import Path
+p = Path("/var/lib/pi-gateway/telegram-status-card.json")
+if p.is_file():
+    d = json.loads(p.read_text(encoding="utf-8"))
+    d.pop("reply_kb", None)
+    p.write_text(json.dumps(d, indent=2) + "\n", encoding="utf-8")
+PY
 fi
 
 log "Durum karti guncellendi"
