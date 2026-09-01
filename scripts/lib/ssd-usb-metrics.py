@@ -8,6 +8,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -120,31 +121,32 @@ def load_state() -> dict[str, Any]:
         return {}
 
 
-def save_state(data: dict[str, Any]) -> None:
-    path = Path(STATE_PATH)
+def _atomic_install(path: Path, text: str, mode: str = "644") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    with tmp.open("w", encoding="utf-8") as fh:
-        json.dump(data, fh, indent=2, ensure_ascii=False)
-        fh.write("\n")
+    fd, tmp_path = tempfile.mkstemp(prefix="pi-gw-", suffix=".tmp", dir="/tmp", text=True)
     try:
-        tmp.replace(path)
-        return
-    except OSError:
-        pass
-    try:
-        subprocess.run(
-            ["sudo", "install", "-m", "644", "-o", str(os.getuid()), "-g", str(os.getgid()), str(tmp), str(path)],
-            check=True,
-            timeout=10,
-        )
-        tmp.unlink(missing_ok=True)
-    except (subprocess.SubprocessError, OSError):
-        tmp.unlink(missing_ok=True)
-        raise
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        try:
+            Path(tmp_path).replace(path)
+            return
+        except OSError:
+            subprocess.run(
+                ["sudo", "install", "-m", mode, tmp_path, str(path)],
+                check=True,
+                timeout=10,
+            )
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
 
 
-def prom_lines(crc: int | None, delta: int, resets: int, io_err: int) -> str:
+def save_state(data: dict[str, Any]) -> None:
+    payload = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    _atomic_install(Path(STATE_PATH), payload)
+
+
+def write_prom(text: str) -> None:
+    _atomic_install(Path(METRICS_PATH), text)
     crc_v = crc if crc is not None else -1
     return (
         "# HELP pi_gateway_ssd_usb_crc_errors SMART CRC error count (-1 unknown)\n"
