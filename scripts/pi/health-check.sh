@@ -458,7 +458,7 @@ else
       if health_is_slo_fail "$f"; then
         slo_details+=("$f")
         case "$f" in
-          restic-offsite-stale(*))
+          restic-offsite-stale*)
             cloud_stale="${f#restic-offsite-stale(}"
             cloud_stale="${cloud_stale%)}"
             ;;
