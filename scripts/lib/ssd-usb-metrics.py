@@ -147,6 +147,9 @@ def save_state(data: dict[str, Any]) -> None:
 
 def write_prom(text: str) -> None:
     _atomic_install(Path(METRICS_PATH), text)
+
+
+def prom_lines(crc: int | None, delta: int, resets: int, io_err: int) -> str:
     crc_v = crc if crc is not None else -1
     return (
         "# HELP pi_gateway_ssd_usb_crc_errors SMART CRC error count (-1 unknown)\n"
@@ -162,28 +165,6 @@ def write_prom(text: str) -> None:
         "# TYPE pi_gateway_ssd_usb_io_errors_24h gauge\n"
         f"pi_gateway_ssd_usb_io_errors_24h {io_err}\n"
     )
-
-
-def write_prom(text: str) -> None:
-    path = Path(METRICS_PATH)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
-    try:
-        tmp.write_text(text, encoding="utf-8")
-        tmp.replace(path)
-        return
-    except OSError:
-        pass
-    try:
-        subprocess.run(
-            ["sudo", "install", "-m", "644", "-o", str(os.getuid()), "-g", str(os.getgid()), str(tmp), str(path)],
-            check=True,
-            timeout=10,
-        )
-        tmp.unlink(missing_ok=True)
-    except (subprocess.SubprocessError, OSError):
-        tmp.unlink(missing_ok=True)
-        raise
 
 
 def _alert_signature(delta: int, resets: int, io_err: int) -> str:
