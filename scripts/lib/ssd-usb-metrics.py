@@ -127,7 +127,21 @@ def save_state(data: dict[str, Any]) -> None:
     with tmp.open("w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=2, ensure_ascii=False)
         fh.write("\n")
-    tmp.replace(path)
+    try:
+        tmp.replace(path)
+        return
+    except OSError:
+        pass
+    try:
+        subprocess.run(
+            ["sudo", "install", "-m", "644", "-o", str(os.getuid()), "-g", str(os.getgid()), str(tmp), str(path)],
+            check=True,
+            timeout=10,
+        )
+        tmp.unlink(missing_ok=True)
+    except (subprocess.SubprocessError, OSError):
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 def prom_lines(crc: int | None, delta: int, resets: int, io_err: int) -> str:
@@ -152,8 +166,22 @@ def write_prom(text: str) -> None:
     path = Path(METRICS_PATH)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(text, encoding="utf-8")
-    tmp.replace(path)
+    try:
+        tmp.write_text(text, encoding="utf-8")
+        tmp.replace(path)
+        return
+    except OSError:
+        pass
+    try:
+        subprocess.run(
+            ["sudo", "install", "-m", "644", "-o", str(os.getuid()), "-g", str(os.getgid()), str(tmp), str(path)],
+            check=True,
+            timeout=10,
+        )
+        tmp.unlink(missing_ok=True)
+    except (subprocess.SubprocessError, OSError):
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 def _alert_signature(delta: int, resets: int, io_err: int) -> str:
