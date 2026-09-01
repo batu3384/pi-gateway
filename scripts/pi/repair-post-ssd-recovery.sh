@@ -58,11 +58,11 @@ print("; ".join(parts) if parts else "post-ssd repair OK")
 PY
 )"
 notify_ssd_post_recovery "$_incident" 2>/dev/null || true
-python3 - "$_incident" <<'PY' 2>/dev/null || true
-import json, sys, time
+_state_json="/var/lib/pi-gateway/state.json"
+python3 - "$_incident" "$_state_json" <<'PY' 2>/dev/null || true
+import json, os, subprocess, sys, time
 from pathlib import Path
-detail = sys.argv[1]
-path = Path("/var/lib/pi-gateway/state.json")
+detail, path = sys.argv[1], Path(sys.argv[2])
 data = {}
 if path.is_file():
     try:
@@ -73,6 +73,10 @@ data["last_ssd_incident"] = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "detail
 path.parent.mkdir(parents=True, exist_ok=True)
 tmp = path.with_suffix(".tmp")
 tmp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-tmp.replace(path)
+if os.geteuid() == 0:
+    tmp.replace(path)
+else:
+    subprocess.run(["sudo", "install", "-m", "644", str(tmp), str(path)], check=False)
+    tmp.unlink(missing_ok=True)
 PY
 log "Tamamlandi"

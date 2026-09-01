@@ -12,8 +12,8 @@ log() { echo "[hermes-menu-skill] $*"; }
 mkdir -p "$HERMES_SKILLS"
 rm -rf "${HERMES_SKILLS}/pi-gateway-menu" "${HERMES_SKILLS}/paneller"
 
-# Skills: config/hermes/skills/menu dns ssd backup recover
-for skill in menu dns ssd backup recover; do
+# Skills: config/hermes/skills/menu dns ssd backup recover recover-ask
+for skill in menu dns ssd backup recover recover-ask; do
   src="${REMOTE_DIR}/config/hermes/skills/${skill}"
   dst="${HERMES_SKILLS}/${skill}"
   [[ -d "$src" ]] || continue

@@ -453,6 +453,7 @@ else
   if [[ "$has_slo" -eq 1 ]]; then
     slo_details=()
     cloud_stale=""
+    cloud_missing=0
     for f in "${FAILURES[@]}"; do
       if health_is_slo_fail "$f"; then
         slo_details+=("$f")
@@ -461,11 +462,18 @@ else
             cloud_stale="${f#restic-offsite-stale(}"
             cloud_stale="${cloud_stale%)}"
             ;;
+          restic-offsite-missing)
+            cloud_missing=1
+            ;;
         esac
       fi
     done
-    if [[ -n "$cloud_stale" ]]; then
+    if [[ "$cloud_missing" -eq 1 ]]; then
+      notify_restic_offsite_missing || true
+    elif [[ -n "$cloud_stale" ]]; then
       notify_restic_offsite_stale "${cloud_stale%d}" || true
+    else
+      notify_restic_offsite_ok || true
     fi
     notify_slo_backup "$host" "${slo_details[*]}"
   else

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SSD USB metrics — SMART CRC trend + dmesg reset/I/O counter."""
+"""SSD USB metrics — SMART CRC trend + kernel journal USB/I/O counter."""
 from __future__ import annotations
 
 import argparse
@@ -24,6 +24,7 @@ METRICS_PATH = os.environ.get(
 WINDOW_SEC = int(os.environ.get("SSD_USB_DMESG_WINDOW_SEC", "86400") or "86400")
 CRC_WARN_DELTA = int(os.environ.get("SSD_USB_CRC_WARN_DELTA", "5") or "5")
 RESET_WARN_COUNT = int(os.environ.get("SSD_USB_RESET_WARN_COUNT", "3") or "3")
+IO_WARN_COUNT = int(os.environ.get("SSD_USB_IO_WARN_COUNT", "5") or "5")
 
 
 def _run(cmd: list[str], timeout: float = 8.0) -> str:
@@ -54,29 +55,45 @@ def parse_crc(text: str) -> int | None:
     return None
 
 
-def count_dmesg_events(window_sec: int) -> tuple[int, int]:
-    """Return (usb_reset_events, io_errors) in window."""
-    out = _run(["dmesg", "-T"], timeout=12.0)
+def _parse_journal_ts(line: str) -> float | None:
+    m = re.match(r"^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:[+-]\d{2}:?\d{2}|Z)?)", line)
+    if not m:
+        return None
+    raw = m.group(1).replace("Z", "+00:00")
+    if len(raw) >= 5 and raw[-5] in "+-" and raw[-3] != ":":
+        raw = f"{raw[:-5]}{raw[-5:-2]}:{raw[-2:]}"
+    try:
+        return datetime.fromisoformat(raw).timestamp()
+    except ValueError:
+        return None
+
+
+def count_kernel_usb_events(window_sec: int) -> tuple[int, int]:
+    """journalctl -k — locale-safe (dmesg -T TR ay adlari parse etmez)."""
+    hours = max(1, (window_sec + 3599) // 3600)
+    out = _run(
+        [
+            "journalctl",
+            "-k",
+            "--since",
+            f"{hours} hours ago",
+            "-o",
+            "short-iso",
+            "--no-pager",
+            "-q",
+        ],
+        timeout=20.0,
+    )
     if not out:
         return 0, 0
     cutoff = time.time() - window_sec
     resets = io_err = 0
-    ts_re = re.compile(r"^\[[^\]]+\]")
     for line in out.splitlines():
+        ts = _parse_journal_ts(line)
+        if ts is None or ts < cutoff:
+            continue
         low = line.lower()
         if "usb" not in low and "sda" not in low and "sdb" not in low:
-            continue
-        m = ts_re.match(line)
-        if not m:
-            continue
-        try:
-            ts_txt = m.group(0).strip("[]")
-            ts = datetime.strptime(ts_txt, "%a %b %d %H:%M:%S %Y").replace(
-                tzinfo=timezone.utc
-            ).timestamp()
-        except ValueError:
-            continue
-        if ts < cutoff:
             continue
         if any(
             x in low
@@ -139,12 +156,20 @@ def write_prom(text: str) -> None:
     tmp.replace(path)
 
 
+def _alert_signature(delta: int, resets: int, io_err: int) -> str:
+    return f"crc={delta}:r={resets}:io={io_err}"
+
+
+def _threshold_met(delta: int, resets: int, io_err: int) -> bool:
+    return delta >= CRC_WARN_DELTA or resets >= RESET_WARN_COUNT or io_err >= IO_WARN_COUNT
+
+
 def update(smart_text: str = "") -> dict[str, Any]:
     prev = load_state()
     crc = parse_crc(smart_text) if smart_text else prev.get("crc")
     if crc is None and not smart_text:
         crc = prev.get("crc")
-    resets, io_err = count_dmesg_events(WINDOW_SEC)
+    resets, io_err = count_kernel_usb_events(WINDOW_SEC)
     prev_crc = prev.get("crc")
     delta = 0
     if crc is not None and prev_crc is not None:
@@ -157,6 +182,7 @@ def update(smart_text: str = "") -> dict[str, Any]:
         "usb_resets_24h": resets,
         "io_errors_24h": io_err,
         "window_sec": WINDOW_SEC,
+        "last_alert_sig": prev.get("last_alert_sig"),
     }
     save_state(state)
     write_prom(prom_lines(crc if isinstance(crc, int) else None, delta, resets, io_err))
@@ -167,17 +193,18 @@ def notify_if_needed(state: dict[str, Any]) -> int:
     delta = int(state.get("crc_delta") or 0)
     resets = int(state.get("usb_resets_24h") or 0)
     io_err = int(state.get("io_errors_24h") or 0)
-    if delta < CRC_WARN_DELTA and resets < RESET_WARN_COUNT:
+    if not _threshold_met(delta, resets, io_err):
+        return 0
+    sig = _alert_signature(delta, resets, io_err)
+    if sig == state.get("last_alert_sig"):
         return 0
     remote = os.environ.get("REMOTE_DIR", os.path.expanduser("~/pi-gateway"))
     notify_sh = os.path.join(remote, "scripts/lib/notify.sh")
     if not os.path.isfile(notify_sh):
         return 0
-    detail = f"CRC +{delta} (24s pencere), USB reset {resets}, I/O hata {io_err}"
+    detail = f"CRC +{delta}, USB reset {resets}, I/O {io_err} (son {WINDOW_SEC // 3600}s)"
     env = os.environ.copy()
     env["SSD_USB_NOTIFY_DETAIL"] = detail
-    env["SSD_USB_CRC_DELTA"] = str(delta)
-    env["SSD_USB_RESET_COUNT"] = str(resets)
     try:
         subprocess.run(
             ["bash", "-c", f'source "{notify_sh}"; notify_ssd_usb_flap "$SSD_USB_NOTIFY_DETAIL"'],
@@ -187,6 +214,8 @@ def notify_if_needed(state: dict[str, Any]) -> int:
         )
     except (subprocess.SubprocessError, OSError):
         return 1
+    state["last_alert_sig"] = sig
+    save_state(state)
     return 0
 
 
@@ -222,8 +251,12 @@ def cmd_export(_: argparse.Namespace) -> int:
 def _self_check() -> None:
     assert parse_crc("199 UDMA_CRC_Error_Count 0x0032 100 32 0 0 0 0 38") == 38
     assert parse_crc("no crc here") is None
+    ts = _parse_journal_ts("2026-09-01T11:45:37+0300 usb 2-2: USB disconnect")
+    assert ts is not None
     prom = prom_lines(38, 2, 1, 0)
     assert "pi_gateway_ssd_usb_crc_errors 38" in prom
+    assert _threshold_met(0, 3, 0)
+    assert not _threshold_met(0, 2, 4)
     print("[ssd-usb-metrics] self-check OK")
 
 

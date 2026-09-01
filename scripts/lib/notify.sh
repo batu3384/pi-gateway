@@ -131,6 +131,7 @@ notify_repeat_sec_for() {
   local key="$1"
   case "$key" in
     health-slo-backup) printf '%s' "$NOTIFY_SLO_REPEAT_SEC" ;;
+    ssd-usb-flap) printf '%s' "${NOTIFY_USB_FLAP_REPEAT_SEC:-21600}" ;;
     disk-*) printf '%s' "$NOTIFY_DISK_REPEAT_SEC" ;;
     restic-ok) printf '%s' "${NOTIFY_BACKUP_OK_COOLDOWN_SEC:-86400}" ;;
     ibb-hki) printf '%s' "${NOTIFY_IBB_REPEAT_SEC:-21600}" ;;
@@ -490,6 +491,15 @@ notify_restic_offsite_stale() {
     "• .env: RESTIC_OFFSITE_* kontrol
 • Manuel: <code>restic-offsite-copy.sh</code>")"
   notify_send_with_transition "restic-offsite" "fail" "📋 Bulut Yedek Gecikti" "$body" "HTML"
+}
+
+notify_restic_offsite_missing() {
+  local body
+  body="$(notify_html_alert \
+    "Bulut offsite kopya hiç yapılmamış (RESTIC_OFFSITE_ENABLED=true)." \
+    "• Local backup sonrası offsite copy çalışmalı
+• .env: RESTIC_OFFSITE_REPOSITORY + anahtarlar")"
+  notify_send_with_transition "restic-offsite" "fail" "📋 Bulut Yedek Eksik" "$body" "HTML"
 }
 
 notify_restic_offsite_ok() {

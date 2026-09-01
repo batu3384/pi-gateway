@@ -50,7 +50,7 @@ want = [
     ("dns", "DNS kapsam ozeti"),
     ("ssd", "SSD / USB saglik"),
     ("backup", "Yedek durumu"),
-    ("recover", "SSD yazilim kurtarma"),
+    ("recover", "SSD kurtarma (onay gerekir)"),
 ]
 
 def api_call(method, payload):

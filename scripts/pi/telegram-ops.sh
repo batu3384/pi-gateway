@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
-# Telegram ops — /dns /ssd /backup /recover
+# Telegram ops — /dns /ssd /backup /recover [/recover onay]
 set -euo pipefail
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CMD="${1:-}"
+SUB="${2:-}"
+RECOVER_PENDING="${TELEGRAM_RECOVER_PENDING:-/var/lib/pi-gateway/telegram-recover-pending}"
+RECOVER_COOLDOWN_SEC="${TELEGRAM_RECOVER_COOLDOWN_SEC:-300}"
+RECOVER_CONFIRM_SEC="${TELEGRAM_RECOVER_CONFIRM_SEC:-60}"
 # shellcheck source=../lib/env-file.sh
 source "$SCRIPT_DIR/../lib/env-file.sh"
 read_remote_dotenv || { echo "[telegram-ops] HATA: .env" >&2; exit 1; }
@@ -13,7 +17,7 @@ source "$SCRIPT_DIR/../lib/notify.sh"
 log() { echo "[telegram-ops] $*"; }
 
 notify_enabled || { log "TELEGRAM eksik"; exit 1; }
-[[ -n "$CMD" ]] || { log "Kullanim: $0 dns|ssd|backup|recover"; exit 1; }
+[[ -n "$CMD" ]] || { log "Kullanim: $0 dns|ssd|backup|recover [onay]"; exit 1; }
 
 API="https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}"
 _send() {
@@ -57,7 +61,6 @@ PY
 }
 
 _cmd_ssd() {
-  export REMOTE_DIR
   python3 - <<'PY'
 import html, json, subprocess
 from pathlib import Path
@@ -84,15 +87,15 @@ if st:
         f"24s: reset <code>{st.get('usb_resets_24h', 0)}</code> · I/O <code>{st.get('io_errors_24h', 0)}</code>"
     )
 lines.append("")
-lines.append("<i>Kurtarma:</i> /recover")
+lines.append("<i>Kurtarma:</i> /recover → /recover onay")
 print("\n".join(lines))
 PY
 }
 
 _cmd_backup() {
-  export RESTIC_OFFSITE_ENABLED RESTIC_REPOSITORY RESTIC_PASSWORD
+  export RESTIC_OFFSITE_ENABLED RESTIC_REPOSITORY RESTIC_PASSWORD RESTIC_IMAGE
   python3 - <<'PY'
-import html, os, subprocess, time
+import html, os, subprocess, tempfile, time
 from pathlib import Path
 
 def age_days(path: str) -> int:
@@ -111,15 +114,22 @@ else:
     lines.append("B2/R2: <code>kapalı</code>")
 repo = os.environ.get("RESTIC_REPOSITORY", "/mnt/ssd/pi-gateway-data/backups/restic")
 pwd = os.environ.get("RESTIC_PASSWORD", "")
+image = os.environ.get(
+    "RESTIC_IMAGE",
+    "restic/restic@sha256:8f5a62b422a2cb1277ea0dd6e826fe1acf649e5b9f02d60e5268d5fd1976255a",
+)
 if pwd and Path(repo).is_dir():
+    env_fd, env_path = tempfile.mkstemp(prefix="restic-env-", text=True)
     try:
+        with os.fdopen(env_fd, "w", encoding="utf-8") as fh:
+            fh.write(f"RESTIC_PASSWORD={pwd}\n")
         out = subprocess.check_output(
             [
                 "docker", "run", "--rm", "--network", "none",
-                "-e", f"RESTIC_PASSWORD={pwd}",
+                "--env-file", env_path,
                 "-e", "RESTIC_REPOSITORY=local:/repo",
                 "-v", f"{repo}:/repo:ro",
-                "restic/restic", "snapshots", "--last",
+                image, "snapshots", "--last",
             ],
             text=True, timeout=30, stderr=subprocess.DEVNULL,
         ).strip().splitlines()
@@ -127,29 +137,82 @@ if pwd and Path(repo).is_dir():
             lines.append(html.escape(out[-1][:180]))
     except (subprocess.SubprocessError, OSError, ValueError):
         pass
+    finally:
+        try:
+            os.unlink(env_path)
+        except OSError:
+            pass
 lines.append("")
 lines.append("<i>Mac:</i> <code>make backup-pull</code>")
 print("\n".join(lines))
 PY
 }
 
+_recover_lock() {
+  local lockdir="/run/pi-gateway/telegram-recover.lock"
+  mkdir -p /run/pi-gateway 2>/dev/null || true
+  if mkdir "$lockdir" 2>/dev/null; then
+    return 0
+  fi
+  local mtime now
+  mtime="$(stat -c %Y "$lockdir" 2>/dev/null || echo 0)"
+  now="$(date +%s)"
+  if (( now - mtime > RECOVER_COOLDOWN_SEC )); then
+    rmdir "$lockdir" 2>/dev/null && mkdir "$lockdir" 2>/dev/null && return 0
+  fi
+  return 1
+}
+
+_recover_unlock() {
+  rmdir "/run/pi-gateway/telegram-recover.lock" 2>/dev/null || true
+}
+
 _cmd_recover() {
+  local confirm="${1:-}"
   local repair="${REMOTE_DIR}/scripts/pi/repair-post-ssd-recovery.sh"
   [[ -x "$repair" ]] || { _send "<b>Kurtarma</b>\n\nrepair script yok."; return 1; }
+
+  if [[ "$confirm" != "onay" && "$confirm" != "confirm" ]]; then
+    mkdir -p "$(dirname "$RECOVER_PENDING")" 2>/dev/null || true
+    date +%s >"$RECOVER_PENDING" 2>/dev/null || true
+    _send "<b>SSD kurtarma</b>
+
+Docker durur, restic onarımı ve yedek çalışır.
+
+Onay için <b>60 sn</b> içinde: <code>/recover onay</code>"
+    return 0
+  fi
+
+  local pending_ts now
+  pending_ts="$(cat "$RECOVER_PENDING" 2>/dev/null || echo 0)"
+  now="$(date +%s)"
+  if (( now - pending_ts > RECOVER_CONFIRM_SEC )); then
+    _send "<b>Kurtarma</b>\n\nOnay süresi doldu. Önce <code>/recover</code> gönder."
+    return 1
+  fi
+  rm -f "$RECOVER_PENDING" 2>/dev/null || true
+
+  if ! _recover_lock; then
+    _send "<b>Kurtarma</b>\n\nBaşka kurtarma yakın zamanda çalıştı (${RECOVER_COOLDOWN_SEC}s bekle)."
+    return 1
+  fi
+
   _send "<b>SSD kurtarma</b>\n\nYazılımsal onarım başlatıldı…"
   if REMOTE_DIR="$REMOTE_DIR" bash "$repair"; then
     _send "<b>SSD kurtarma</b>\n\n✅ Tamamlandı."
-  else
-    _send "<b>SSD kurtarma</b>\n\n⚠️ Kısmi — journalctl bak."
-    return 1
+    _recover_unlock
+    return 0
   fi
+  _send "<b>SSD kurtarma</b>\n\n⚠️ Kısmi — journalctl bak."
+  _recover_unlock
+  return 1
 }
 
 case "$CMD" in
   dns) _send "$(_cmd_dns)" ;;
   ssd) _send "$(_cmd_ssd)" ;;
   backup) _send "$(_cmd_backup)" ;;
-  recover) _cmd_recover ;;
+  recover) _cmd_recover "$SUB" ;;
   *)
     log "Bilinmeyen: $CMD"
     exit 1

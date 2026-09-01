@@ -17,8 +17,8 @@ state="${ADGUARD_DNS_COVERAGE_STATE_PATH:-/var/lib/pi-gateway/dns-coverage-state
 audit="${REMOTE_DIR}/scripts/pi/audit-dns-coverage.sh"
 [[ -x "$audit" ]] && ADGUARD_COVERAGE_AUDIT_MODE=warn REMOTE_DIR="$REMOTE_DIR" bash "$audit" >/dev/null 2>&1 || true
 
-body="$(python3 - "$state" <<'PY'
-import html, json, sys
+mapfile -t _dns_weekly < <(python3 - "$state" <<'PY'
+import json, sys
 from pathlib import Path
 st = {}
 p = Path(sys.argv[1])
@@ -31,19 +31,20 @@ pct = st.get("coverage_percent", -1)
 active = st.get("active_devices", -1)
 using = st.get("using_pi_dns", -1)
 status = st.get("status", "unknown")
-lines = [
-    f"Doğrulanan cihaz: <b>{using}/{active}</b> (%{pct})" if pct >= 0 else "Kanıt yok",
-    f"Durum: <code>{html.escape(str(status))}</code>",
-]
+if pct >= 0:
+    detail = f"Doğrulanan cihaz: {using}/{active} (%{pct}) — durum {status}"
+else:
+    detail = "Kanıt yok"
 if st.get("protocol_unknown"):
-    lines.append("Protokol API’de yok — DoH/DoT ayrımı yapılamıyor.")
-detail = "\n".join(lines)
-action = "• Bypass şüphesi: /dns veya make audit-dns\n• TV/IoT: elle Pi DNS\n• Modem DNS2=.1 firmware tavanı"
-print(
-    f"{detail}\n\n{action}"
-)
+    detail += " — protokol API bilinmiyor"
+action = "Bypass: /dns veya make audit-dns · TV/IoT: elle Pi DNS · Modem DNS2=.1 tavanı"
+print(detail)
+print(action)
 PY
-)"
+)
+detail="${_dns_weekly[0]:-Kanıt yok}"
+action="${_dns_weekly[1]:-}"
 
-notify_telegram "📋 Haftalık DNS Kapsam" "$(notify_html_alert "$body" "")" "dns-weekly-report" "HTML"
+body="$(notify_html_alert "$detail" "$action")"
+notify_telegram "📋 Haftalık DNS Kapsam" "$body" "dns-weekly-report" "HTML"
 log "OK"
