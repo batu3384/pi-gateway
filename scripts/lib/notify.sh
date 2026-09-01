@@ -225,12 +225,12 @@ notify_send_with_transition() {
 }
 
 notify_escape_html() {
-  local text="$1"
-  text="${text//&/\&amp;}"
-  text="${text//</\&lt;}"
-  text="${text//>/\&gt;}"
-  text="${text//\'/\&#39;}"
-  printf '%s' "$text"
+  # ponytail: bash 3.2 (macOS /bin/bash) treats & in ${//} replacement as backref
+  printf '%s' "$1" | sed \
+    -e 's/&/\&amp;/g' \
+    -e 's/</\&lt;/g' \
+    -e 's/>/\&gt;/g' \
+    -e "s/'/\&#39;/g"
 }
 
 notify_send_message() {
