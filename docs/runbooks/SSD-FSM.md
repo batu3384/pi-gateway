@@ -17,6 +17,7 @@ docker info --format '{{.DockerRootDir}}'
 | `storage_degraded: 1` | SSD yok/stale — core-dns modu |
 | `ssd_mount_healthy: 0` | Mount yok veya yazma testi fail |
 | `docker_root_on_ssd: 0` | Docker hâlâ SD veya SSD restore eksik |
+| `containerd_on_ssd: 1` | Deneysel — JMicron overlay segfault riski; default 0 (SD) |
 | DNS çalışıyor, paneller yok | Beklenen degraded modu |
 
 ## Degraded modu (otomatik)

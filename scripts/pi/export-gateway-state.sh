@@ -51,6 +51,13 @@ docker_ssd=0
 if [[ "${ENABLE_DOCKER_SSD:-false}" == "true" ]] && docker_ssd_root_ok; then
   docker_ssd=1
 fi
+containerd_ssd=0
+_croot="$(grep -E '^root\s*=' /etc/containerd/config.toml 2>/dev/null | head -1 | sed -n 's/.*"\([^"]*\)".*/\1/p' || true)"
+if [[ "${CONTAINERD_ON_SSD:-false}" == "true" ]] \
+  && [[ "${_croot}" == "${CONTAINERD_SSD_ROOT:-/mnt/ssd/containerd}" ]]; then
+  containerd_ssd=1
+fi
+unset _croot
 root_pct="$(usage_pct /)"
 ssd_pct="$(usage_pct /mnt/ssd)"
 offsite_age="$(file_age_days "$OFFSITE_MARKER")"
@@ -74,6 +81,9 @@ pi_gateway_ssd_mount_healthy ${ssd_ok}
 # HELP pi_gateway_docker_root_on_ssd 1 when Docker data-root matches DOCKER_SSD_ROOT
 # TYPE pi_gateway_docker_root_on_ssd gauge
 pi_gateway_docker_root_on_ssd ${docker_ssd}
+# HELP pi_gateway_containerd_on_ssd 1 when containerd root is on SSD (experimental)
+# TYPE pi_gateway_containerd_on_ssd gauge
+pi_gateway_containerd_on_ssd ${containerd_ssd}
 # HELP pi_gateway_root_usage_percent SD root filesystem usage percent
 # TYPE pi_gateway_root_usage_percent gauge
 pi_gateway_root_usage_percent ${root_pct:-0}
@@ -184,7 +194,7 @@ rm -f "$tmp"
 json_tmp="$(mktemp)"
 python3 - "$json_tmp" "$STATE_JSON" "$ts" "$degraded" "$ssd_ok" "$docker_ssd" "${root_pct:-}" "${ssd_pct:-}" \
   "$offsite_age" "$drill_age" "$offsite_copy_age" "$probe_json" "$COVERAGE_STATE_PATH" "$COVERAGE_MAX_AGE_SEC" \
-  "$rdnss_configured" "$drill_failed" <<'PY'
+  "$rdnss_configured" "$drill_failed" "$containerd_ssd" <<'PY'
 import json, sys
 import time
 from datetime import datetime
@@ -218,6 +228,7 @@ data = {
     "storage_degraded": int(sys.argv[4]),
     "ssd_mount_healthy": int(sys.argv[5]),
     "docker_root_on_ssd": int(sys.argv[6]),
+    "containerd_on_ssd": int(sys.argv[17]),
     "root_usage_pct": int(sys.argv[7] or 0),
     "ssd_usage_pct": int(sys.argv[8]) if sys.argv[8] else None,
     "offsite_backup_age_days": int(sys.argv[9]),

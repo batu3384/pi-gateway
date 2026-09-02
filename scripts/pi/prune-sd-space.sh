@@ -21,20 +21,16 @@ prune_safe() {
     log "degraded — docker image prune atlandi"
     return 0
   fi
-  local docker_root containerd_root
-  docker_root="$(docker info 2>/dev/null | awk -F': ' '/Docker Root Dir/{print $2; exit}')" || true
+  # ponytail: Docker 29+ overlayfs snapshotter = layers in containerd, not Docker Root Dir.
+  # ENABLE_DOCKER_SSD=true + /mnt/ssd/docker does not mean images left SD.
+  local containerd_root
   containerd_root="$(grep -E '^root\s*=' /etc/containerd/config.toml 2>/dev/null | head -1 | sed -n 's/.*"\([^"]*\)".*/\1/p' || true)"
-  if [[ "${ENABLE_DOCKER_SSD:-false}" == "true" ]]; then
-    if [[ -n "$docker_root" && "$docker_root" != "/var/lib/docker" ]] \
-      || [[ -n "$containerd_root" && "$containerd_root" != "/var/lib/containerd" ]]; then
-      log "docker/containerd SSD'de (${docker_root:-?} / ${containerd_root:-?}) — image prune atlandi"
-      return 0
-    fi
-  elif [[ -n "$docker_root" && "$docker_root" != "/var/lib/docker" ]]; then
-    log "docker data-root SD degil (${docker_root}) — image prune atlandi"
+  [[ -n "$containerd_root" ]] || containerd_root="/var/lib/containerd"
+  if [[ "$containerd_root" == /mnt/ssd/* ]]; then
+    log "containerd SSD'de (${containerd_root}) — image prune atlandi"
     return 0
   fi
-  # Kullanilmayan imajlar (calisan container imajlari korunur)
+  log "containerd SD'de (${containerd_root}) — unused image prune"
   docker image prune -a -f 2>/dev/null || true
 }
 usage="$(root_usage_pct)"

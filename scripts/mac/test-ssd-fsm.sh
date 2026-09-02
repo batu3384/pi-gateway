@@ -67,11 +67,18 @@ grep -q 'recover_lock_acquire()' "$stack_health" || die "C35: recover_lock_acqui
 grep -q 'recover_lock_release()' "$stack_health" || die "C35: recover_lock_release wrapper yok"
 ok "C35 nested recover lock safe"
 
-# C36: prune skips docker when data-root not on SD
-grep -q 'docker data-root SD degil' "$prune" || die "C36: prune docker root guard yok"
-grep -A20 'prune_safe' "$prune" | grep -q 'ENABLE_DOCKER_SSD' \
-  || die "C36: prune ENABLE_DOCKER_SSD kontrolu yok"
-ok "C36 prune data-root aware"
+# C36: prune unused images only when containerd snapshot store is on SD
+grep -q 'containerd SD' "$prune" || die "C36: prune containerd SD yolu yok"
+grep -q 'containerd SSD' "$prune" || die "C36: prune containerd SSD skip yok"
+grep -q 'overlayfs snapshotter' "$prune" || die "C36: Docker 29+ snapshotter notu yok"
+! grep -q 'docker data-root SD degil' "$prune" \
+  || die "C36: eski docker-root skip (yanlis Docker 29+)"
+ok "C36 prune containerd-on-SD aware"
+grep -q 'pi_gateway_containerd_on_ssd' "$ROOT/scripts/pi/export-gateway-state.sh" \
+  || die "C36b: containerd_on_ssd metric yok"
+grep -q 'pi_gateway_containerd_on_ssd' "$ROOT/config/grafana/provisioning/dashboards/json/pi-gateway.json" \
+  || die "C36b: grafana containerd_on_ssd yok"
+ok "C36b containerd_on_ssd visibility"
 
 # C37: ssd-health propagates hotplug exit (no || true swallow)
 run_hotplug_fn="$(grep -A3 '^run_hotplug()' "$ssd_health")"

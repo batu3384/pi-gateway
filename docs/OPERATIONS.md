@@ -173,7 +173,7 @@ df -h / /mnt/ssd
 docker info | grep "Docker Root Dir"
 ```
 
-`prune-sd-space.sh` (health ≥65%): apt/journal; docker prune only when data-root is on SD and not degraded.
+`prune-sd-space.sh` (health ≥65%): apt/journal; unused Docker image prune when **containerd is on SD** (Docker 29+ overlayfs snapshotter). Docker `data-root` on SSD does **not** skip this — layers still live in `/var/lib/containerd`. Skip image prune only if containerd root is already on `/mnt/ssd/*` or storage is degraded.
 
 `docker system prune` (careful). Restic `forget --prune` runs daily.
 

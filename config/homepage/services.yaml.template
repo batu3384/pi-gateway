@@ -60,6 +60,8 @@ widgets:
           label: SSD saglik
         - field: docker_root_on_ssd
           label: Docker SSD
+        - field: containerd_on_ssd
+          label: containerd SSD
         - field: root_usage_pct
           label: SD doluluk
           format: percent
