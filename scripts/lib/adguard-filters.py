@@ -879,13 +879,29 @@ def apply_filters() -> int:
     current = {f.get("url"): f for f in status.get("filters", []) if f.get("url")}
     live_snapshot = snapshot_live_state(status)
 
+    # ponytail: stale once reconcile oncesi — TIF Full varken Medium eklenemez (OOM)
+    removed_pre, remove_pre_failed = remove_stale_lists(client, desired_urls, current)
+    failed.extend(remove_pre_failed)
+    list_changed = bool(removed_pre)
+    if removed_pre:
+        log(f"reconcile oncesi stale kaldirildi: {removed_pre}")
+        current = {url: item for url, item in current.items() if url in desired_urls}
+        try:
+            client.api("/control/filtering/refresh", "POST", {"whitelist": False})
+            status = client.status()
+            current = {f.get("url"): f for f in status.get("filters", []) if f.get("url")}
+        except (AguardApiError, RuntimeError) as exc:
+            log_err(f"post-remove refresh: {exc}")
+            failed.append("post-remove-refresh")
+
     try:
-        added, enabled, list_changed = reconcile_desired_lists(client, desired, current)
+        added, enabled, reconcile_changed = reconcile_desired_lists(client, desired, current)
     except (AguardApiError, RuntimeError) as exc:
         log_err(f"liste reconcile: {exc}")
         failed.append("list-reconcile")
         added = enabled = 0
-        list_changed = False
+        reconcile_changed = False
+    list_changed = list_changed or reconcile_changed
 
     failed.extend(apply_user_rules(client, rules, status))
     log(f"profil={profile}")

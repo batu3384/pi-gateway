@@ -100,10 +100,24 @@ else
     local name="$1"
     docker ps --format '{{.Names}}' | grep -q "^${name}$" || note_fail "optional-${name}-down"
   }
+  optional_prometheus_ok() {
+    docker ps --format '{{.Names}}' | grep -q '^prometheus$' && return 0
+    if [[ "${PROMETHEUS_AUTO_HEAL:-true}" == "true" ]]; then
+      local repair="${SCRIPT_DIR}/repair-prometheus-tsdb.sh"
+      if [[ -x "$repair" ]] \
+        && docker logs prometheus 2>&1 | tail -30 | grep -qE 'invalid checksum|opening storage failed'; then
+        logger -t "$LOG_TAG" "prometheus TSDB — auto-heal"
+        if REMOTE_DIR="$REMOTE_DIR" bash "$repair"; then
+          docker ps --format '{{.Names}}' | grep -q '^prometheus$' && return 0
+        fi
+      fi
+    fi
+    note_fail "optional-prometheus-down"
+  }
   [[ "${ENABLE_N8N:-true}" == "true" ]] && optional_down n8n
   [[ "${ENABLE_NETALERTX:-true}" == "true" ]] && optional_down netalertx
   [[ "${ENABLE_DOZZLE:-true}" == "true" ]] && optional_down dozzle
-  [[ "${ENABLE_MONITORING:-true}" == "true" ]] && optional_down prometheus
+  [[ "${ENABLE_MONITORING:-true}" == "true" ]] && optional_prometheus_ok
   [[ "${ENABLE_MONITORING:-true}" == "true" ]] && optional_down grafana
   [[ "${ENABLE_MONITORING:-true}" == "true" ]] && optional_down node-exporter
 fi
@@ -207,7 +221,8 @@ print('1' if udp_ok and ptr_ok and ttl_ok else '0')
     if [[ "$filter_governance_ok" != "true" ]]; then
       if [[ "${ADGUARD_AUTO_HEAL:-true}" == "true" && ! -f "$_filter_in_progress" ]]; then
         logger -t "$LOG_TAG" "adguard-filter-governance — auto-heal (filters)"
-        if ! REMOTE_DIR="$REMOTE_DIR" bash "$(_pi_home_script apply-adguard-filters.sh)"; then
+        if ! ADGUARD_FILTER_FORCE_REFRESH=true REMOTE_DIR="$REMOTE_DIR" \
+          bash "$(_pi_home_script apply-adguard-filters.sh)"; then
           logger -t "$LOG_TAG" "WARN adguard filter auto-heal basarisiz"
         fi
         if [[ -f "$_filters_py" ]] && REMOTE_DIR="$REMOTE_DIR" BASE="$BASE" COOKIE="$COOKIE" \

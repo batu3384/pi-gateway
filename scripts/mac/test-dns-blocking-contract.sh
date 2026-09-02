@@ -214,6 +214,10 @@ grep -q 'set_url' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
   || die "adguard-filters disabled liste enable (set_url) yok"
 grep -q 'remove_stale_lists' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
   || die "adguard-filters stale remove governance sonrasi yok"
+grep -q 'reconcile oncesi stale kaldirildi' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
+  || die "adguard-filters pre-reconcile stale remove yok"
+grep -q 'repair-prometheus-tsdb.sh' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check prometheus TSDB auto-heal yok"
 grep -q 'check_live_regressions' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
   || die "adguard-filters live regression set_rules sonrasi yok"
 grep -q 'If-Modified-Since' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
