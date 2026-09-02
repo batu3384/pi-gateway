@@ -90,6 +90,12 @@ grep -q 'setup-home-ops-timers.sh' "$ROOT/scripts/pi/post-deploy.sh" \
   || die "post-deploy home-ops timers yok"
 grep -q 'pi-gateway-quake.timer' "$ROOT/scripts/pi/bootstrap.sh" || die "bootstrap quake yok"
 grep -q 'pi-gateway-ibb.timer' "$ROOT/scripts/pi/bootstrap.sh" || die "bootstrap ibb yok"
+grep -q 'pi-gateway-container-watchdog.timer' "$ROOT/scripts/pi/bootstrap.sh" \
+  || die "bootstrap container-watch yok"
+bash "$ROOT/scripts/pi/container-restart-watchdog.sh" --self-check || die "container-watch self-check"
+bash "$ROOT/scripts/pi/crowdsec-ban-diary.sh" --self-check || die "crowdsec-diary self-check"
+grep -q 'notify_container_restart_warn' "$ROOT/scripts/lib/notify.sh" \
+  || die "notify container-restart yok"
 ok "timer wiring"
 
 grep -q 'LOCAL_MAG' "$ROOT/scripts/lib/quake-alert.py" || die "deprem esik yok"

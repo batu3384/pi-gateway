@@ -1,0 +1,19 @@
+[Unit]
+Description=Pi Gateway CrowdSec nightly ban diary
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=PI_USER
+Group=PI_USER
+WorkingDirectory=/home/PI_USER/pi-gateway
+Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
+Environment=HOME=/home/PI_USER
+ExecStart=/home/PI_USER/pi-gateway/scripts/pi/crowdsec-ban-diary.sh
+Nice=19
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

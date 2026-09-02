@@ -1,0 +1,10 @@
+[Unit]
+Description=Pi Gateway CrowdSec ban diary daily 23:05
+
+[Timer]
+OnCalendar=*-*-* 23:05:00
+Persistent=true
+AccuracySec=5min
+
+[Install]
+WantedBy=timers.target

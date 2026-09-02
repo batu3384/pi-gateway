@@ -5,7 +5,21 @@ REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../lib/stack-health.sh
 source "$SCRIPT_DIR/../lib/stack-health.sh"
+# shellcheck source=../lib/env-file.sh
+source "$SCRIPT_DIR/../lib/env-file.sh"
 log() { echo "[repair-prometheus] $*"; }
+
+repair_notify() {
+  local mode="$1"
+  local detail="${2:-}"
+  [[ "${NOTIFY_REPAIR:-}" == "1" ]] || return 0
+  read_remote_dotenv 2>/dev/null || true
+  load_telegram_from_hermes 2>/dev/null || true
+  # shellcheck source=../lib/notify.sh
+  source "$SCRIPT_DIR/../lib/notify.sh"
+  notify_enabled || return 0
+  notify_prometheus_repair "$mode" "$detail" || true
+}
 
 PROM_DIR="${REMOTE_DIR}/data/prometheus"
 LOCK="${PROMETHEUS_TSDB_REPAIR_LOCK:-/run/pi-gateway/prometheus-tsdb-repair.lock}"
@@ -61,6 +75,7 @@ prometheus_up
 sleep "$WAIT_SEC"
 if prometheus_ready; then
   log "OK prometheus ready (wal repair)"
+  repair_notify wal "Son saatlik ham scrape verisi sıfırlandı."
   exit 0
 fi
 
@@ -82,6 +97,7 @@ prometheus_up
 sleep "$WAIT_SEC"
 if prometheus_ready; then
   log "OK prometheus ready (blok reset — gecmis metrik yedek: ${bak})"
+  repair_notify blocks "Yedek: ${bak}"
   exit 0
 fi
 

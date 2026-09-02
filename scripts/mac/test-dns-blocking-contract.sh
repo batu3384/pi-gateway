@@ -218,6 +218,12 @@ grep -q 'reconcile oncesi stale kaldirildi' "$PROJECT_DIR/scripts/lib/adguard-fi
   || die "adguard-filters pre-reconcile stale remove yok"
 grep -q 'repair-prometheus-tsdb.sh' "$PROJECT_DIR/scripts/pi/health-check.sh" \
   || die "health-check prometheus TSDB auto-heal yok"
+grep -q 'pi-gateway-container-watchdog.timer' "$PROJECT_DIR/scripts/pi/setup-home-ops-timers.sh" \
+  || die "home-ops container-watchdog timer yok"
+grep -q 'notify_monitoring_stack_warn' "$PROJECT_DIR/scripts/lib/notify.sh" \
+  || die "notify monitoring-stack yok"
+grep -q 'notify_prometheus_repair' "$PROJECT_DIR/scripts/lib/notify.sh" \
+  || die "notify prometheus-repair yok"
 grep -q 'check_live_regressions' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
   || die "adguard-filters live regression set_rules sonrasi yok"
 grep -q 'If-Modified-Since' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \

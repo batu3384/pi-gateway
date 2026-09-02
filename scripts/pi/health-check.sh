@@ -107,7 +107,7 @@ else
       if [[ -x "$repair" ]] \
         && docker logs prometheus 2>&1 | tail -30 | grep -qE 'invalid checksum|opening storage failed'; then
         logger -t "$LOG_TAG" "prometheus TSDB — auto-heal"
-        if REMOTE_DIR="$REMOTE_DIR" bash "$repair"; then
+        if REMOTE_DIR="$REMOTE_DIR" NOTIFY_REPAIR=1 bash "$repair"; then
           docker ps --format '{{.Names}}' | grep -q '^prometheus$' && return 0
         fi
       fi
@@ -459,6 +459,18 @@ else
     notify_ssd_degraded "$host" "$details"
   elif [[ "$has_core" -eq 1 ]]; then
     logger -t "$LOG_TAG" "core fail — Telegram OnFailure (health-dns yok)"
+    _monitoring_details=()
+    for f in "${FAILURES[@]}"; do
+      case "$f" in
+        optional-prometheus-down|optional-grafana-down|optional-node-exporter-down)
+          _monitoring_details+=("$f")
+          ;;
+      esac
+    done
+    if [[ ${#_monitoring_details[@]} -gt 0 ]]; then
+      notify_monitoring_stack_warn "$host" "${_monitoring_details[*]}" || true
+    fi
+    unset _monitoring_details
   elif [[ "$has_optional" -eq 1 ]]; then
     notify_optional_warn "$host" "$details"
   else

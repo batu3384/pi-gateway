@@ -366,6 +366,58 @@ notify_optional_recovered() {
     "Önceki ikincil servis uyarısı sona erdi; kontroller tekrar geçiyor." "HTML"
 }
 
+notify_monitoring_stack_warn() {
+  local host="$1"
+  local details="$2"
+  local body
+  body="$(notify_html_alert \
+    "$details" \
+    "• DNS etkilenmez; izleme/Grafana metrikleri eksik olabilir.
+• Pi: <code>docker logs prometheus --tail 30</code>
+• Otomatik onarım: <code>repair-prometheus-tsdb.sh</code>")"
+  notify_send_with_transition "monitoring-stack" "fail" "⚠️ İzleme Yığını Sorunu" "$body" "HTML"
+}
+
+notify_container_restart_warn() {
+  local name="$1"
+  local restarts="$2"
+  local status="$3"
+  local body
+  body="$(notify_html_alert \
+    "Konteyner: $(notify_escape_html "$name")
+Restart: ${restarts}
+Durum: $(notify_escape_html "$status")" \
+    "• Pi: <code>docker logs ${name} --tail 40</code>
+• Prometheus TSDB bozuksa otomatik onarım devrede")"
+  notify_send_with_transition "container-restart-${name}" "fail" "⚠️ Konteyner Restart Döngüsü" "$body" "HTML"
+}
+
+notify_container_restart_ok() {
+  local name="$1"
+  notify_send_with_transition \
+    "container-restart-${name}" "ok" "✅ Konteyner Normale Döndü" \
+    "$(notify_html_alert "$(notify_escape_html "$name") yeniden stabil çalışıyor.")" "HTML"
+}
+
+notify_prometheus_repair() {
+  local mode="$1"
+  local detail="${2:-}"
+  local human
+  case "$mode" in
+    wal) human="WAL + chunks_head temizlendi; metrik toplama yeniden başladı." ;;
+    blocks) human="Bozuk TSDB blokları yedeklendi ve sıfırlandı; geçmiş grafikler gitti." ;;
+    *) human="Prometheus TSDB onarımı tamamlandı." ;;
+  esac
+  local body
+  body="$(notify_html_alert "$human" "${detail:+• $(notify_escape_html "$detail")}")"
+  notify_send_with_transition "prometheus-repair" "ok" "🔧 Prometheus Onarıldı" "$body" "HTML"
+}
+
+notify_crowdsec_diary() {
+  local body="$1"
+  notify_telegram "🛡️ Gece Saldırı Defteri" "$body" "crowdsec-diary"
+}
+
 notify_backup_ok() {
   local stamp="$1"
   local body
