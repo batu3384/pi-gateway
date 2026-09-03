@@ -104,11 +104,16 @@ else
     docker ps --format '{{.Names}}' | grep -q '^prometheus$' && return 0
     if [[ "${PROMETHEUS_AUTO_HEAL:-true}" == "true" ]]; then
       local repair="${SCRIPT_DIR}/repair-prometheus-tsdb.sh"
-      if [[ -x "$repair" ]] \
-        && docker logs prometheus 2>&1 | tail -30 | grep -qE 'invalid checksum|opening storage failed'; then
-        logger -t "$LOG_TAG" "prometheus TSDB — auto-heal"
-        if REMOTE_DIR="$REMOTE_DIR" NOTIFY_REPAIR=1 bash "$repair"; then
-          docker ps --format '{{.Names}}' | grep -q '^prometheus$' && return 0
+      local plogs
+      if [[ -x "$repair" ]]; then
+        plogs="$(docker logs prometheus 2>&1 | tail -50 || true)"
+        if echo "$plogs" | grep -qE 'invalid checksum|opening storage failed' \
+          || { echo "$plogs" | grep -q 'WAL truncation' \
+            && echo "$plogs" | grep -q 'compaction failed'; }; then
+          logger -t "$LOG_TAG" "prometheus TSDB — auto-heal"
+          if REMOTE_DIR="$REMOTE_DIR" NOTIFY_REPAIR=1 bash "$repair"; then
+            docker ps --format '{{.Names}}' | grep -q '^prometheus$' && return 0
+          fi
         fi
       fi
     fi

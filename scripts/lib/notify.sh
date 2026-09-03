@@ -380,15 +380,32 @@ notify_monitoring_stack_warn() {
 
 notify_container_restart_warn() {
   local name="$1"
-  local restarts="$2"
+  local recent="$2"
   local status="$3"
+  local lifetime="${4:-}"
+  local hints window_min
+  window_min="${CONTAINER_RESTART_WINDOW_SEC:-900}"
+  window_min=$((window_min / 60))
+  case "$name" in
+    prometheus)
+      hints="• Pi: <code>docker logs prometheus --tail 40</code>
+• TSDB: <code>repair-prometheus-tsdb.sh</code> (checksum/WAL hatasında otomatik)"
+      ;;
+    adguard|unbound)
+      hints="• Pi: <code>docker logs ${name} --tail 40</code>
+• DNS: <code>health-check.sh</code>"
+      ;;
+    *)
+      hints="• Pi: <code>docker logs ${name} --tail 40</code>"
+      ;;
+  esac
   local body
   body="$(notify_html_alert \
     "Konteyner: $(notify_escape_html "$name")
-Restart: ${restarts}
-Durum: $(notify_escape_html "$status")" \
-    "• Pi: <code>docker logs ${name} --tail 40</code>
-• Prometheus TSDB bozuksa otomatik onarım devrede")"
+Son ${window_min} dk restart: ${recent}
+${lifetime:+Ömür boyu sayaç: ${lifetime}
+}Durum: $(notify_escape_html "$status")" \
+    "$hints")"
   notify_send_with_transition "container-restart-${name}" "fail" "⚠️ Konteyner Restart Döngüsü" "$body" "HTML"
 }
 

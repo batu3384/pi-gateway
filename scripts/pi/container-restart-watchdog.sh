@@ -12,6 +12,8 @@ source "$SCRIPT_DIR/../lib/notify.sh"
 
 THRESHOLD="${CONTAINER_RESTART_ALERT_THRESHOLD:-3}"
 REPEAT_SEC="${CONTAINER_RESTART_REPEAT_SEC:-21600}"
+WINDOW_SEC="${CONTAINER_RESTART_WINDOW_SEC:-900}"
+STABLE_SEC="${CONTAINER_RESTART_STABLE_SEC:-600}"
 STATE="${CONTAINER_WATCH_STATE_PATH:-/var/lib/pi-gateway/container-watch-state.json}"
 WATCH="${CONTAINER_WATCH_LIST:-prometheus grafana n8n adguard unbound caddy crowdsec netalertx}"
 
@@ -19,23 +21,37 @@ log() { echo "[container-watch] $*"; }
 
 if [[ "${1:-}" == "--self-check" ]]; then
   [[ "$THRESHOLD" =~ ^[0-9]+$ ]] || exit 1
+  [[ "$WINDOW_SEC" =~ ^[0-9]+$ ]] || exit 1
   grep -q 'notify_container_restart' "$SCRIPT_DIR/../lib/notify.sh" || exit 1
+  python3 - "$THRESHOLD" "$WINDOW_SEC" <<'PY' || exit 1
+import sys
+threshold, window = int(sys.argv[1]), int(sys.argv[2])
+now = 1_000_000.0
+events = [{"at": now - 60, "delta": 1}, {"at": now - 120, "delta": 1}]
+total = sum(e["delta"] for e in events if now - e["at"] < window)
+assert total < threshold, "tek deploy spike alarm olmamali"
+events.append({"at": now - 30, "delta": 2})
+total = sum(e["delta"] for e in events if now - e["at"] < window)
+assert total >= threshold, "gercek dongu alarm olmali"
+PY
   log "self-check OK"
   exit 0
 fi
 
 notify_enabled || exit 0
 
-mapfile -t _lines < <(python3 - "$STATE" "$THRESHOLD" "$REPEAT_SEC" "$WATCH" <<'PY'
+mapfile -t _lines < <(python3 - "$STATE" "$THRESHOLD" "$REPEAT_SEC" "$WINDOW_SEC" "$STABLE_SEC" "$WATCH" <<'PY'
 import json
 import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-state_path, threshold_s, repeat_s, watch_raw = sys.argv[1:5]
+state_path, threshold_s, repeat_s, window_s, stable_s, watch_raw = sys.argv[1:7]
 threshold = int(threshold_s)
 repeat_sec = int(repeat_s)
+window_sec = int(window_s)
+stable_sec = int(stable_s)
 watch = [w for w in watch_raw.split() if w]
 now = datetime.now(timezone.utc).timestamp()
 
@@ -80,19 +96,58 @@ def inspect(name: str) -> tuple[int, str, bool]:
         restarts = -1
     return restarts, parts[1], parts[2] == "true"
 
-def prometheus_corrupt() -> bool:
+def prometheus_ready() -> bool:
+    try:
+        if subprocess.run(
+            ["curl", "-fsS", "--max-time", "3", "http://127.0.0.1:9090/-/ready"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        ).returncode != 0:
+            return False
+        out = subprocess.check_output(
+            ["docker", "ps", "--format", "{{.Names}}"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
+    return any(line.strip() == "prometheus" for line in out.splitlines())
+
+
+def prometheus_needs_repair() -> bool:
     try:
         logs = subprocess.check_output(
-            ["docker", "logs", "prometheus", "--tail", "30"],
+            ["docker", "logs", "prometheus", "--tail", "50"],
             text=True,
             stderr=subprocess.STDOUT,
         )
     except subprocess.CalledProcessError:
         return False
-    return "invalid checksum" in logs or "opening storage failed" in logs
+    if "invalid checksum" in logs or "opening storage failed" in logs:
+        return True
+    if not prometheus_ready():
+        return "WAL truncation" in logs and "compaction failed" in logs
+    return False
+
+
+def prune_events(events: list, cutoff: float) -> list[dict]:
+    kept: list[dict] = []
+    for raw in events:
+        if not isinstance(raw, dict):
+            continue
+        try:
+            at = float(raw.get("at", 0))
+            delta = int(raw.get("delta", 0))
+        except (TypeError, ValueError):
+            continue
+        if delta <= 0 or at < cutoff:
+            continue
+        kept.append({"at": at, "delta": delta})
+    return kept
+
 
 state = load_state()
-alerts: list[tuple[str, int, str]] = []
+alerts: list[tuple[str, int, str, int]] = []
 recovered: list[str] = []
 
 for name in watch:
@@ -100,20 +155,53 @@ for name in watch:
     if restarts < 0:
         continue
     entry = state.get(name, {})
+    if not isinstance(entry, dict):
+        entry = {}
+
+    last_seen = int(entry.get("last_seen_restarts", restarts))
+    events = prune_events(entry.get("restart_events") or [], now - window_sec)
+    if restarts > last_seen:
+        events.append({"at": now, "delta": restarts - last_seen})
+
+    window_total = sum(e["delta"] for e in events)
+    restarting = status == "restarting"
+    bad = restarting or window_total >= threshold
+    was_alerting = bool(entry.get("alerting"))
     last_alert = float(entry.get("last_alert_at") or 0)
-    last_restarts = int(entry.get("last_alert_restarts") or 0)
-    bad = restarts >= threshold or status == "restarting"
-    if bad:
-        jump = restarts > last_restarts
-        repeat = now - last_alert >= repeat_sec
-        if jump or (repeat and restarts >= threshold):
-            alerts.append((name, restarts, status))
-            entry["last_alert_at"] = now
-            entry["last_alert_restarts"] = restarts
-    elif running and status == "running" and entry.get("last_alert_at"):
-        recovered.append(name)
+
+    # Eski kümülatif alarm state — pencere sifirsa temizle
+    if entry.get("last_alert_at") and not was_alerting and window_total == 0 and not restarting:
         entry.pop("last_alert_at", None)
         entry.pop("last_alert_restarts", None)
+
+    if bad:
+        should_alert = False
+        if not was_alerting:
+            should_alert = True
+        elif window_total > int(entry.get("last_alert_window_total", 0)):
+            should_alert = True
+        elif now - last_alert >= repeat_sec:
+            should_alert = True
+        if should_alert:
+            alerts.append((name, window_total, status, restarts))
+            entry["alerting"] = True
+            entry["last_alert_at"] = now
+            entry["last_alert_window_total"] = window_total
+            entry.pop("stable_since", None)
+    elif was_alerting and running and status == "running":
+        stable_since = float(entry.get("stable_since") or 0)
+        if not stable_since:
+            entry["stable_since"] = now
+        elif now - stable_since >= stable_sec:
+            recovered.append(name)
+            entry["alerting"] = False
+            entry.pop("last_alert_at", None)
+            entry.pop("last_alert_window_total", None)
+            entry.pop("stable_since", None)
+    else:
+        entry.pop("stable_since", None)
+
+    entry["restart_events"] = events
     entry["last_seen_restarts"] = restarts
     entry["last_status"] = status
     entry["checked_at"] = datetime.now(timezone.utc).isoformat()
@@ -121,23 +209,27 @@ for name in watch:
 
 save_state(state)
 
-for name, restarts, status in alerts:
-    print(f"ALERT\t{name}\t{restarts}\t{status}")
+for name, window_total, status, lifetime in alerts:
+    print(f"ALERT\t{name}\t{window_total}\t{status}\t{lifetime}")
 
 for name in recovered:
     print(f"OK\t{name}")
 
-if any(a[0] == "prometheus" for a in alerts) and prometheus_corrupt():
+if any(a[0] == "prometheus" for a in alerts) and prometheus_needs_repair():
+    print("REPAIR\tprometheus")
+
+# Prometheus ayakta degil + TSDB — restart alarmi olmasa da repair dene
+if not any(a[0] == "prometheus" for a in alerts) and prometheus_needs_repair():
     print("REPAIR\tprometheus")
 PY
 )
 
 for line in "${_lines[@]:-}"; do
-  IFS=$'\t' read -r kind arg1 arg2 arg3 <<<"$line"
+  IFS=$'\t' read -r kind arg1 arg2 arg3 arg4 <<<"$line"
   case "$kind" in
     ALERT)
-      log "uyari: ${arg1} restarts=${arg2} status=${arg3}"
-      notify_container_restart_warn "$arg1" "$arg2" "$arg3" || true
+      log "uyari: ${arg1} window=${arg2} lifetime=${arg4:-?} status=${arg3}"
+      notify_container_restart_warn "$arg1" "$arg2" "$arg3" "${arg4:-}" || true
       ;;
     OK)
       log "normale dondu: ${arg1}"

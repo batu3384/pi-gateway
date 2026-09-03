@@ -93,6 +93,10 @@ grep -q 'pi-gateway-ibb.timer' "$ROOT/scripts/pi/bootstrap.sh" || die "bootstrap
 grep -q 'pi-gateway-container-watchdog.timer' "$ROOT/scripts/pi/bootstrap.sh" \
   || die "bootstrap container-watch yok"
 bash "$ROOT/scripts/pi/container-restart-watchdog.sh" --self-check || die "container-watch self-check"
+grep -q 'CONTAINER_RESTART_WINDOW_SEC' "$ROOT/scripts/pi/container-restart-watchdog.sh" \
+  || die "container-watch window algilama yok"
+grep -q 'restart_events' "$ROOT/scripts/pi/container-restart-watchdog.sh" \
+  || die "container-watch restart_events yok"
 bash "$ROOT/scripts/pi/crowdsec-ban-diary.sh" --self-check || die "crowdsec-diary self-check"
 grep -q 'notify_container_restart_warn' "$ROOT/scripts/lib/notify.sh" \
   || die "notify container-restart yok"
