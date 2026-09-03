@@ -309,6 +309,10 @@ grep -q 'modem_inventory import' "$PROJECT_DIR/scripts/pi/diagnose-video-path.sh
   || die "video diagnose shared modem inventory loader yok"
 grep -q 'probe_ping client.*20' "$PROJECT_DIR/scripts/pi/diagnose-video-path.sh" \
   || die "video diagnose cihaz RTT/packet loss yok"
+grep -q 'VIDEO_NEIGH label=client' "$PROJECT_DIR/scripts/pi/diagnose-video-path.sh" \
+  || die "video diagnose ARP/neigh ICMP filtresi yok"
+grep -q 'icmp-filtered' "$PROJECT_DIR/scripts/pi/diagnose-video-path.sh" \
+  || die "video diagnose icmp-filtered notu yok"
 grep -q 'Zaman=' "$PROJECT_DIR/scripts/pi/diagnose-video-path.sh" \
   || die "video diagnose zaman damgasi yok"
 grep -q 'log_err(f"set_rules:' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
@@ -383,8 +387,12 @@ grep -q 'adblock/fake.txt' "$PROJECT_DIR/config/adguard/filter-lists.json" \
   && die "HaGeZi Fake Pro++ icinde — stack etme"
 grep -q 'filter_59.txt' "$PROJECT_DIR/config/adguard/filter-lists.json" \
   && die "Popup Hosts Pro++ icinde — stack etme"
-grep -q 'videooplayer.xyz' "$PROJECT_DIR/config/adguard/user-rules.txt" \
-  || die "user-rules videooplayer sniper yok"
+grep -q '||videooplayer.xyz^$important' "$PROJECT_DIR/config/adguard/user-rules.txt" \
+  && die "user-rules videooplayer sniper geri geldi (player CDN kirar)"
+grep -q '@@||entitlements.jwplayer.com^$important' "$PROJECT_DIR/config/adguard/user-rules.txt" \
+  || die "user-rules JW entitlements allowlist yok"
+grep -q '@@||jwpltx.com^$important' "$PROJECT_DIR/config/adguard/user-rules.txt" \
+  || die "user-rules JW jwpltx allowlist yok"
 grep -q '@@||dit.whatsapp.net^' "$PROJECT_DIR/config/adguard/user-rules.txt" \
   || die "user-rules WhatsApp allowlist yok"
 grep -q '@@||graph-fallback.instagram.com^' "$PROJECT_DIR/config/adguard/user-rules.txt" \

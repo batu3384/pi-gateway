@@ -111,7 +111,20 @@ else:
   esac
   local probe_status=ok
   if [[ "$label" == "client" ]]; then
-    if (( loss > VIDEO_CLIENT_MAX_LOSS_PERCENT )); then
+    local neigh_state icmp_filtered=0
+    neigh_state="$(ip -4 neigh show "$target" 2>/dev/null \
+      | awk '{for (i = 1; i <= NF; i++) if ($i ~ /^(REACHABLE|STALE|DELAY|PROBE|FAILED|INCOMPLETE)$/) print $i}' \
+      | tail -n1)"
+    if [[ -n "$neigh_state" ]]; then
+      echo "VIDEO_NEIGH label=client state=$neigh_state"
+    fi
+    # ponytail: Android/iOS ICMP drop. L2 REACHABLE + 100% ping ≠ Wi-Fi kopuk.
+    # Upgrade: TCP/DNS liveness if STALE+100% still misleads.
+    if (( loss == 100 )) && [[ "$neigh_state" == "REACHABLE" || "$neigh_state" == "DELAY" || "$neigh_state" == "PROBE" ]]; then
+      icmp_filtered=1
+      echo "VIDEO_PING note=icmp-filtered (L2 ${neigh_state}; ICMP drop ≠ client loss)"
+    fi
+    if (( loss > VIDEO_CLIENT_MAX_LOSS_PERCENT && icmp_filtered == 0 )); then
       video_probe_warn=1
       probe_status=warn
     fi

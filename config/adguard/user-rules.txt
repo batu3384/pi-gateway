@@ -53,8 +53,9 @@
 ||hit.gemius.pl^$important
 ||mc.yandex.ru^$important
 ||an.yandex.ru^$important
-# JW Player / pirat dizi player reklam CDN (çift-o videooplayer; sniper 2026-08)
-||videooplayer.xyz^$important
+# videooplayer.xyz sniper kaldırıldı (2026-09): aynı host reklam+player; Doeda/JW video kırılıyordu.
+@@||entitlements.jwplayer.com^$important
+@@||jwpltx.com^$important
 # First-party app (Pro++ native leftovers — WhatsApp/Instagram/ColorOS kırılmasın)
 @@||dit.whatsapp.net^
 @@||graph.instagram.com^

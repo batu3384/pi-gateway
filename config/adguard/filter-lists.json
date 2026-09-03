@@ -108,13 +108,12 @@
       "@@||graph.instagram.com^",
       "@@||graph-fallback.instagram.com^",
       "@@||mdp-appconf-tr.heytapdl.com^",
-      "@@||cloudconf-app-tr.heytapmobile.com^"
+      "@@||cloudconf-app-tr.heytapmobile.com^",
+      "@@||entitlements.jwplayer.com^$important",
+      "@@||jwpltx.com^$important"
     ],
-    "must_block": [
-      "||videooplayer.xyz^$important"
-    ],
+    "must_block": [],
     "must_block_hosts": [
-      "videooplayer.xyz",
       "lgads.tv"
     ],
     "must_not_block_hosts": [

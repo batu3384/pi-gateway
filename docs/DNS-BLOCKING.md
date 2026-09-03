@@ -81,7 +81,7 @@ ve toplam bütçe aşımı refresh'i durdurur. Başarılı apply sonrası son iy
 saklanır. Bu, upstream kaynağı imzalamaz; hatalı küçük değişiklikler için query-log
 ve regression kontrolleri yine gereklidir. Regression seti `googlevideo.com`,
 `ytimg.com`, Instagram CDN, `whatsapp.net`, ColorOS app-config ve `lgappstv.com`
-allow; `videooplayer.xyz` ve `lgads.tv` block yönlerini birlikte doğrular.
+allow; `lgads.tv` block. `videooplayer.xyz` player+reklam aynı host — sniper video kırıyor, yok.
 
 **Modem ikincil DNS:** ZTE H3600P (Superonline) DNS2 panelde boş/`0.0.0.0` veya **Pi** olsa bile DHCP OFFER'a gateway (`.1`) ekler. Panel DNS2 kabloyu değiştirmez. `.1` modem **INPUT** resolver reklam engellemez (WAN dest:53 ve LAN-ingress dest `.1:53` FORWARD; modem kendi `:53` cevaplar). Canlı: `dig @192.168.1.1 doubleclick.net` gerçek IP. Bu ZTE'de DHCP relay LAN DISCOVER yutuyor — `adguard-dhcp` ev IP keser; kilit = modem DHCP açık + DNS1=Pi + `make mac-dns` (yalnız LAN). IPv6: aşağıdaki RDNSS lifetime 0.
 
@@ -154,7 +154,8 @@ veya RTT jitter mdev'i `30 ms` üstünde `WARN`, gateway/WAN packet loss veya Pi
 HTTPS probe hatası `FAIL` olur.
 HTTPS probe yalnızca Pi→internet kanıtıdır; ZTE ile aynı Layer-2 ağdaki başka cihazın
 şifreli CDN akışı Pi üzerinden geçmediği için client video transport'unu doğrudan ölçmez.
-`WARN` exit code `10`, `FAIL` exit code `1` döner. Ölçümü video oynarken tekrarlayın.
+Client `ping` 100% + `VIDEO_NEIGH` `REACHABLE|DELAY|PROBE` = ICMP filtresi (Android/iOS);
+Wi-Fi kopuk değil. `WARN` exit code `10`, `FAIL` exit code `1`. Ölçümü video oynarken tekrarlayın.
 
 ## Performans (tüm cihazlar)
 
@@ -169,7 +170,7 @@ Pi 4B + tam stack için önerilen `.env` ayarları:
 
 Unbound cache `32m/64m` (2GB Pi). Health timer 5 dk, deprem poll 60s. Profil değişince `make adguard-tune`.
 
-**Modem Wi-Fi (H3600P):** 5 GHz **160 MHz** kanal 44 yoğun ortamda takılma/jitter üretebilir — panelden **80 MHz** (veya otomatik kanal) dene. 2.4 GHz kanal 6 + 40 MHz genelde OK.
+**Modem Wi-Fi (H3600P, 2026-09-02 uygulandı):** 5 GHz **80 MHz** kanal **44**, TX **%80** (DFS auto=112 ve 160 MHz jitter; %100 TX zayıf istemciyi 5 GHz’de tutuyordu). 2.4 GHz **20 MHz** kanal **1** kilit (Auto 12/13 seçmesin). Aynı SSID `Fenerbahçe`, Bant Geçiş açık, Mesh kapalı, misafir SSID kapalı. Zayıf istemci hâlâ 5 GHz’de takılırsa telefonu 2.4’e zorla veya AP ekle.
 
 **Deploy regression:** Mac `.env` içinde `ADGUARD_FILTER_PROFILE=aggressive` kalırsa `deploy-code` Pi’yi geri çeker — `post-deploy-code` `ensure-dns-perf-profile.sh` ile `balanced`’a döndürür (`ADGUARD_ALLOW_AGGRESSIVE=true` ile korunur).
 
