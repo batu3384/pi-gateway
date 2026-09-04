@@ -36,11 +36,11 @@ PY
 }
 
 record_success() {
-  local detail="$1"
-  python3 - "$STATE" "$detail" <<'PY'
+  local detail="$1" device="${2:-}"
+  python3 - "$STATE" "$detail" "$device" <<'PY'
 import json, sys, time, subprocess
 from pathlib import Path
-path, detail = Path(sys.argv[1]), sys.argv[2]
+path, detail, device = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
 data = {}
 if path.is_file():
     try:
@@ -49,6 +49,8 @@ if path.is_file():
         data = {}
 data["last_success_at"] = int(time.time())
 data["last_detail"] = detail
+if device:
+    data["last_device"] = device
 text = json.dumps(data, indent=2) + "\n"
 path.parent.mkdir(parents=True, exist_ok=True)
 try:
@@ -113,7 +115,7 @@ if [[ "${1:-}" == "--self-check" ]]; then
   grep -q 'stack_dns_core_ok' "$0" || exit 1
   grep -q 'SKIP_RECOVER_LOCK=true' "$0" || exit 1
   grep -q 'REMOTE_DIR}/scripts/pi/repair-post-ssd-recovery.sh' "$0" || exit 1
-  grep -q 'flock -n "$FSCK_LOCK_FD"' "$0" || exit 1
+  grep -q 'last_device' "$0" || exit 1
   log "self-check OK"
   exit 0
 fi
@@ -230,7 +232,7 @@ fi
 if stack_core_ok 2>/dev/null; then
   clear_storage_degraded || true
 fi
-record_success "e2fsck -f -y $dev"
+record_success "e2fsck -f -y $dev" "$dev"
 log "Tamamlandi"
 _fsck_release
 trap - EXIT

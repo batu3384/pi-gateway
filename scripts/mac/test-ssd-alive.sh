@@ -61,12 +61,44 @@ fi
 rm -rf "$_detector_tmp"
 ok "fsck detector pipefail + state"
 
+_ghost_tmp="$(mktemp -d)"
+cat >"$_ghost_tmp/journalctl" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' 'EXT4-fs warning (device sda1): htree_dirblock_to_tree:1051'
+EOF
+cat >"$_ghost_tmp/findmnt" <<'EOF'
+#!/usr/bin/env bash
+if [[ "${*:-}" == *"/mnt/ssd"* ]]; then
+  echo /dev/sdb1
+  exit 0
+fi
+exit 1
+EOF
+chmod +x "$_ghost_tmp/journalctl" "$_ghost_tmp/findmnt"
+printf '{"last_success_at":%s}\n' "$(date +%s)" >"$_ghost_tmp/state.json"
+if ! (
+  export PATH="$_ghost_tmp:$PATH"
+  export SSD_FSCK_STATE_PATH="$_ghost_tmp/state.json"
+  export SSD_MOUNT=/mnt/ssd
+  # shellcheck disable=SC1090
+  source "$SSD_ALIVE"
+  ssd_filesystem_needs_fsck
+); then
+  rm -rf "$_ghost_tmp"
+  die "ghost sda1 journal aktif sdb1 mount ile fsck tetiklememeli"
+fi
+rm -rf "$_ghost_tmp"
+ok "fsck detector ghost device scope"
+
 [[ "$SSD_PROBE_FILE" == *".pi-gateway-io-probe" ]] || die "probe dosya default yanlis: $SSD_PROBE_FILE"
 [[ "$SSD_USB_AUTHORIZED_RESET" == "false" ]] || die "AUTHORIZED_RESET default false olmali"
 [[ "${SSD_USB_XHCI_REBIND:-}" == "false" ]] || die "XHCI_REBIND default false olmali"
 [[ "${SSD_USB_XHCI_AUTO_ON_DROPOUT:-}" == "true" ]] || die "XHCI_AUTO_ON_DROPOUT default true olmali"
 grep -q 'ssd_xhci_rebind_enabled' "$SSD_ALIVE" || die "xhci rebind enabled helper yok"
 grep -q 'ssd_ghost_block_cleanup' "$SSD_ALIVE" || die "ghost block cleanup yok"
+grep -q 'ssd_purge_stale_block_devs' "$SSD_ALIVE" || die "stale block purge yok"
+grep -q 'ssd_kmsg_active_dev_only' "$SSD_ALIVE" || die "active dev journal scope yok"
+grep -q 'ssd_purge_stale_block_devs' "$HOTPLUG" || die "hotplug stale purge yok"
 grep -q 'ssd_usb_port_cycle_allowed' "$SSD_ALIVE" || die "undervolt port guard yok"
 grep -q 'SSD_USB_XHCI_RESET_STATE_FILE' "$SSD_ALIVE" || die "xhci ayri rate-limit state yok"
 grep -q 'degraded_stop_optional_apps' "$HOTPLUG" || die "hotplug degraded_stop_optional_apps yok"

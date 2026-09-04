@@ -986,20 +986,76 @@ ssd_fsck_last_success_at() {
   printf '%s\n' "$value"
 }
 
-ssd_filesystem_needs_fsck() {
-  local kmsg dev last_success now
+ssd_mount_block_dev() {
+  findmnt -n -o SOURCE "${SSD_MOUNT}" 2>/dev/null | head -n1 || true
+}
+
+# USB re-enumerate: sda1 -> sdb1. Journal ghost hatalari aktif diske scope'lanmali.
+ssd_active_sd_token() {
+  local dev="$1"
+  [[ -z "$dev" ]] && dev="$(ssd_mount_block_dev)"
+  [[ "$dev" == /dev/sd* ]] || return 1
+  if [[ "$dev" =~ /dev/sd([a-z]+) ]]; then
+    printf '%s\n' "${BASH_REMATCH[1]}"
+    return 0
+  fi
+  return 1
+}
+
+ssd_kernel_journal_since() {
+  local last_success now
   last_success="$(ssd_fsck_last_success_at)"
   now="$(date +%s)"
   if [[ "$last_success" =~ ^[0-9]+$ ]] && (( last_success > 0 && last_success <= now )); then
-    kmsg="$(journalctl -k -b --no-pager --since "@${last_success}" 2>/dev/null || true)"
+    journalctl -k -b --no-pager --since "@${last_success}" 2>/dev/null || true
   else
-    kmsg="$(journalctl -k -b --no-pager 2>/dev/null || true)"
+    journalctl -k -b --no-pager 2>/dev/null || true
   fi
-  grep -qE 'journal recovery failed|error loading journal|htree_dirblock_to_tree|Buffer I/O error on (dev|device) sd[a-z]|JBD2: Invalid checksum|JBD2: journal recovery failed|EXT4-fs error.*Journal has aborted|device offline error, dev sd' <<<"$kmsg" \
-    && return 0
-  dev="$(findmnt -n -o SOURCE "${SSD_MOUNT}" 2>/dev/null | head -n1 || true)"
+}
+
+ssd_kmsg_active_dev_only() {
+  local kmsg="$1" token
+  token="$(ssd_active_sd_token 2>/dev/null || true)"
+  if [[ -z "$token" ]]; then
+    printf '%s' "$kmsg"
+    return 0
+  fi
+  grep -E "(device|dev) ${token}[0-9]*|on dev ${token}[0-9]*|error, dev ${token}([^a-z]|$)|\\[${token}\\]" <<<"$kmsg" || true
+}
+
+ssd_kmsg_needs_fsck() {
+  local kmsg="$1"
+  grep -qE 'journal recovery failed|error loading journal|htree_dirblock_to_tree|Buffer I/O error on (dev|device) sd|JBD2: Invalid checksum|JBD2: journal recovery failed|EXT4-fs error.*Journal has aborted|device offline error, dev sd' <<<"$kmsg"
+}
+
+ssd_filesystem_needs_fsck() {
+  local kmsg scoped dev
+  kmsg="$(ssd_kernel_journal_since)"
+  scoped="$(ssd_kmsg_active_dev_only "$kmsg")"
+  ssd_kmsg_needs_fsck "$scoped" && return 0
+  dev="$(ssd_mount_block_dev)"
   [[ -n "$dev" ]] && tune2fs -l "$dev" 2>/dev/null | grep -qiE 'Filesystem state:.*not clean' && return 0
   return 1
+}
+
+# Aktif mount saglikli — ghost sd* node (USB letter churn) temizle
+ssd_purge_stale_block_devs() {
+  local active base disk del by_label="${SSD_LABEL:-pi-data}" labeled
+  active="$(ssd_mount_block_dev)"
+  [[ -n "$active" && "$active" == /dev/sd* ]] || return 0
+  ssd_mount_healthy || return 0
+  base="$(echo "$active" | sed -E 's/p?[0-9]+$//')"
+  labeled="$(blkid -L "$by_label" 2>/dev/null || true)"
+  for disk in /dev/sd[a-z]; do
+    [[ -b "$disk" ]] || continue
+    [[ "$disk" == "$base" ]] && continue
+    [[ -n "$labeled" && "$labeled" == "${disk}"* ]] && continue
+    del="${disk}/device/delete"
+    [[ -f "$del" ]] || continue
+    echo "[ssd-alive] stale block ${disk} — device/delete (active=${base})" >&2
+    ssd_sysfs_write "$del" 1 || true
+  done
+  command -v udevadm >/dev/null 2>&1 && _ssd_alive_root udevadm settle --timeout=10 2>/dev/null || true
 }
 
 # vcgencmd get_throttled — bit0 now, bit16 occurred

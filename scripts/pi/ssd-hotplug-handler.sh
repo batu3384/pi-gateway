@@ -127,6 +127,15 @@ if ssd_mount_healthy; then
     || log "WARN: post-ssd repair"
   # SSD recovery notification is owned by recover-readonly-root.sh.
   ssd_usb_reset_clear 2>/dev/null || true
+  ssd_ghost_block_cleanup 2>/dev/null || true
+  ssd_purge_stale_block_devs 2>/dev/null || true
+  if declare -F ssd_filesystem_needs_fsck >/dev/null 2>&1 && ssd_filesystem_needs_fsck; then
+    log "WARN: aktif SSD ext4 fsck gerekli — SSD_FSCK_AUTO veya ssd-fsck.sh --run"
+    if [[ "${SSD_FSCK_AUTO:-false}" == "true" ]] && [[ -x "$SCRIPT_DIR/ssd-fsck.sh" ]]; then
+      REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/ssd-fsck.sh" --run \
+        || log "WARN: otomatik fsck basarisiz"
+    fi
+  fi
   recover_lock_release
   exit 0
 fi
