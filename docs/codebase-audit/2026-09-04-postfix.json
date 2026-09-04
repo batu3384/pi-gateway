@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "title": "Pi Gateway post-fix audit",
+  "date": "2026-09-04",
+  "result": "code_stack_pass_hardware_blocker",
+  "findings": {
+    "CA-001": "closed",
+    "CA-002": "closed",
+    "CA-003": "closed",
+    "CA-004": "closed",
+    "CA-005": "deferred_maintainability_refactor",
+    "CA-006": "unchanged",
+    "CA-007": "unchanged",
+    "CA-008": "unchanged",
+    "SSD-HW-001": "open"
+  },
+  "checks": {
+    "make_test": "pass",
+    "shellcheck_all": "pass",
+    "ssd_alive_contract": "pass",
+    "ssd_fsm_contract": "pass",
+    "home_ops_contract": "pass",
+    "dns_contract": "pass",
+    "remote_smoke": "63/63",
+    "mac_dns": "9/9",
+    "read_lints": "no_errors"
+  },
+  "backup": {
+    "restic_repository_check": "pass",
+    "remote_snapshots": 4,
+    "local_snapshots": 2,
+    "config_snapshot": "pass_secrets_excluded"
+  },
+  "ssd_recovery": {
+    "device": "/dev/sda1",
+    "mount": "rw,noatime",
+    "fsck_passes": 4,
+    "fsck_passes_with_new_metadata_repairs": 4,
+    "fsck_check": "Gerek yok",
+    "stack_restore": "pass",
+    "smartctl": "unavailable_not_installed",
+    "hardware_blocker": [
+      "USB disconnect and enumeration errors -71/-110",
+      "device offline error",
+      "Buffer I/O error",
+      "JBD2 checksum/journal abort",
+      "ext4 read-only remount",
+      "repeated inode/directory metadata corruption across fsck passes"
+    ]
+  },
+  "network": {
+    "mac_to_pi_avg_ms": 1.121,
+    "mac_to_pi_loss_percent": 0,
+    "mac_to_modem_avg_ms": 0.839,
+    "mac_to_modem_loss_percent": 0,
+    "wan_icmp_target": "1.1.1.1",
+    "wan_icmp_avg_ms": 6.158,
+    "wan_icmp_loss_percent": 15,
+    "network_quality_down_mbps": 811.42,
+    "network_quality_up_mbps": 51.939,
+    "network_quality_idle_latency_ms": 44.781,
+    "network_quality_responsiveness_ms": 125.756,
+    "network_quality_http_loaded_latency_ms": 244.271,
+    "interpretation": "LAN/Pi healthy; loaded WAN latency indicates bufferbloat or ISP queueing"
+  },
+  "runtime_fixes": [
+    "Disabled stale Uptime Kuma Telegram webhook workflow",
+    "Applied Mac Ethernet DNS Pi plus ULA",
+    "Deployed privileged ssd-fsck and restore lock/retry fixes"
+  ]
+}

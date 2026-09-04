@@ -203,16 +203,15 @@ Başarısız restore drill `/var/lib/pi-gateway/last-backup-restore-drill-failur
 
 | Source | What it sends |
 |--------|---------------|
-| `health-check` timer | DNS errors, disk/inode 80%+, düşük RAM, SD warnings |
+| `health-check` timer | Çekirdek sağlık hatası (OnFailure), disk/inode 80%+, düşük RAM, SD warnings |
 | `restic-backup` | Backup completed |
 | `health-check` / SSD hotplug | Stack or SSD recovery |
 | n8n ← Uptime Kuma webhook | Service down / back up |
-| `pi-gateway-quake.timer` (10s) | AFAD+Kandilli poll → outbox bot (Hermes yok; EEW değil) |
+| `pi-gateway-quake.timer` (60s) | AFAD+Kandilli poll → outbox bot (Hermes yok; EEW değil) |
 | `pi-gateway-ibb.timer` (30 dk) | İBB HKI ≥ `IBB_HKI_WARN` (51) → Telegram; iyileşince bir kez OK. API fail = sessiz |
-| Hermes cron (bülten) | Günaydın / piyasa / akşam / gece — ağ/saatlik gözcü kaldırıldı |
-| Hermes cron (07:00 / 18:55 / 23:00) | Daily bulletins (morning / market / night) |
+| Hermes cron (07:00 / 18:55 / 19:00 / 23:00) | Günaydın / piyasa / akşam / gece bültenleri — ağ/saatlik gözcü kaldırıldı |
 
-**Deprem:** yayın sonrası bildirim. Gecikme ≈ kaynak sayfası + ≤10s poll. İlk koşu bootstrap (tarihî liste spam yok). Eşik/konum: `.env` `QUAKE_*` (bkz. `.env.example`).
+**Deprem:** yayın sonrası bildirim. Gecikme ≈ kaynak sayfası + ≤60s poll. İlk koşu bootstrap (tarihî liste spam yok). Eşik/konum: `.env` `QUAKE_*` (bkz. `.env.example`).
 
 **Hava (İBB):** en yakın sabit istasyon (varsayılan Aksaray civarı). HKI sarı bant (51+) geçiş bildirimi; tekrar `NOTIFY_IBB_REPEAT_SEC`. Ev bahçesi ölçümü değil — istasyon açık veri.
 
@@ -221,7 +220,7 @@ Başarısız restore drill `/var/lib/pi-gateway/last-backup-restore-drill-failur
 | `make telegram-test` | Test message |
 | `make telegram-menu` | Panel link buttons |
 
-Bot sends notifications only; it does not reply to incoming messages.
+Outbox yalnız bildirim gönderir. Hermes gateway aktifken inbox gelen mesajları ve komutları yanıtlar.
 
 ### Hermes Agent (Telegram inbox)
 
