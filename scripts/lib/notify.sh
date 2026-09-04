@@ -15,6 +15,10 @@ NOTIFY_BOOT_MIN_DOWN_SEC="${NOTIFY_BOOT_MIN_DOWN_SEC:-90}"
 LAN_DOMAIN="${LAN_DOMAIN:-home}"
 
 notify_enabled() {
+  if [[ -z "${TELEGRAM_BOT_TOKEN:-}" || -z "${TELEGRAM_CHAT_ID:-}" ]] \
+    && declare -F load_telegram_from_hermes >/dev/null 2>&1; then
+    load_telegram_from_hermes 2>/dev/null || true
+  fi
   [[ -n "${TELEGRAM_BOT_TOKEN:-}" && -n "${TELEGRAM_CHAT_ID:-}" ]]
 }
 
@@ -22,7 +26,7 @@ panel_url() {
   local host="$1"
   local proto="${PANEL_PROTOCOL:-}"
   if [[ -z "$proto" ]]; then
-    if [[ "${ENABLE_TLS:-false}" == "true" ]]; then
+    if [[ "${ENABLE_TLS:-true}" == "true" ]]; then
       proto=https
     else
       proto=http

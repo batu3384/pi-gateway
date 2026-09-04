@@ -32,7 +32,7 @@ Deploy sonrası privileged kopya geride kalabilir → timer/script kırılır. S
 ## Durum / panel
 
 - “Sistem ne durumda?” → skill **`pi-gateway-ops`** (canlı komut). Eski Forgejo tarifi yok.
-- Panel kartı: `/menu` veya `/paneller` → `hermes-menu.sh` (sohbet etme).
+- Panel kartı: `/menu` → `hermes-menu.sh` (sohbet etme).
 - Hızlı sağlık: `REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/health-check.sh`
 
 ## Davranış

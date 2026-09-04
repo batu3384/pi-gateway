@@ -9,6 +9,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -203,6 +204,7 @@ def apply(*, force: bool = False) -> int:
             edited = False
         else:
             print(f"[status-card] edit: {out.get('description')}", file=sys.stderr)
+            return 1
 
     if not edited:
         out = _api(
@@ -243,6 +245,35 @@ def self_check() -> int:
     assert "DNS" in text, text
     h = card_hash(text, "{}")
     assert len(h) == 64
+    old_api = globals()["_api"]
+    old_token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    old_chat = os.environ.get("TELEGRAM_CHAT_ID")
+    old_state_path = globals()["STATE_PATH"]
+    calls: list[str] = []
+    with tempfile.TemporaryDirectory() as td:
+        state_path = str(Path(td) / "card.json")
+        _save_state(state_path, {"message_id": 1, "hash": "old"})
+        globals()["STATE_PATH"] = state_path
+        os.environ["TELEGRAM_BOT_TOKEN"] = "test-token"
+        os.environ["TELEGRAM_CHAT_ID"] = "test-chat"
+
+        def fake_api(method: str, payload: dict[str, Any]) -> dict[str, Any]:
+            calls.append(method)
+            return {"ok": False, "description": "temporary Telegram failure"}
+
+        globals()["_api"] = fake_api
+        assert apply() == 1
+        assert calls == ["editMessageText"], calls
+    globals()["_api"] = old_api
+    globals()["STATE_PATH"] = old_state_path
+    if old_token is None:
+        os.environ.pop("TELEGRAM_BOT_TOKEN", None)
+    else:
+        os.environ["TELEGRAM_BOT_TOKEN"] = old_token
+    if old_chat is None:
+        os.environ.pop("TELEGRAM_CHAT_ID", None)
+    else:
+        os.environ["TELEGRAM_CHAT_ID"] = old_chat
     print("[telegram-status-card] self-check OK")
     return 0
 

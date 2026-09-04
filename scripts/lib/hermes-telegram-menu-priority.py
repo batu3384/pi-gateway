@@ -16,7 +16,7 @@ try:
 except ImportError:
     raise SystemExit(1)
 
-WANT = ["menu", "paneller", "help", "new", "status", "commands"]
+WANT = ["menu", "help", "new", "status", "commands"]
 CFG = pathlib.Path.home() / ".hermes" / "config.yaml"
 if not CFG.is_file():
     raise SystemExit(1)

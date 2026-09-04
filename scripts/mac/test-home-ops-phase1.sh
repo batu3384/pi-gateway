@@ -93,8 +93,18 @@ grep -q 'pi-gateway-ibb.timer' "$ROOT/scripts/pi/bootstrap.sh" || die "bootstrap
 grep -q 'pi-gateway-container-watchdog.timer' "$ROOT/scripts/pi/bootstrap.sh" \
   || die "bootstrap container-watch yok"
 bash "$ROOT/scripts/pi/container-restart-watchdog.sh" --self-check || die "container-watch self-check"
-grep -q 'CONTAINER_RESTART_WINDOW_SEC' "$ROOT/scripts/pi/container-restart-watchdog.sh" \
-  || die "container-watch window algilama yok"
+grep -q 'ssd_filesystem_needs_fsck' "$ROOT/scripts/lib/ssd-alive.sh" \
+  || die "ssd-alive fsck detector yok"
+bash "$ROOT/scripts/pi/ssd-fsck.sh" --self-check || die "ssd-fsck self-check"
+bash "$ROOT/scripts/pi/repair-adguard-bbolt.sh" --self-check || die "repair-adguard-bbolt self-check"
+R="$ROOT/scripts/pi/notify-failure.sh"
+bash "$R" --self-check || die "notify-failure self-check"
+grep -q 'REPAIR_SKIP_RC=10' "$ROOT/scripts/pi/repair-adguard-bbolt.sh" \
+  || die "repair skip status yok"
+grep -q 'adguard-bbolt-repair-deferred' "$ROOT/scripts/pi/health-check.sh" \
+  || die "health bbolt deferred status yok"
+grep -q 'adguard-bbolt-repair-failed' "$ROOT/scripts/pi/health-check.sh" \
+  || die "health bbolt failure status yok"
 grep -q 'restart_events' "$ROOT/scripts/pi/container-restart-watchdog.sh" \
   || die "container-watch restart_events yok"
 bash "$ROOT/scripts/pi/crowdsec-ban-diary.sh" --self-check || die "crowdsec-diary self-check"

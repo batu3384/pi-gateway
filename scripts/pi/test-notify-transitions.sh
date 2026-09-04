@@ -3,6 +3,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/env-file.sh
+source "$SCRIPT_DIR/../lib/env-file.sh"
 # shellcheck source=../lib/notify.sh
 source "$SCRIPT_DIR/../lib/notify.sh"
 
@@ -13,6 +15,17 @@ export NOTIFY_REPEAT_SEC=3600
 
 fail() { echo "[test-notify] FAIL: $*"; exit 1; }
 ok() { echo "[test-notify] OK: $*"; }
+
+hermes_home="$(mktemp -d)"
+printf 'TELEGRAM_BOT_TOKEN=hermes-token\nTELEGRAM_CHAT_ID=hermes-chat\n' > "$hermes_home/.env"
+export HERMES_HOME="$hermes_home"
+if ! notify_enabled; then
+  fail "Hermes Telegram credential fallback yok"
+fi
+[[ "$TELEGRAM_BOT_TOKEN" == "hermes-token" && "$TELEGRAM_CHAT_ID" == "hermes-chat" ]] \
+  || fail "Hermes Telegram credential fallback hatali"
+rm -rf "$hermes_home"
+ok "Hermes credential fallback"
 
 notify_transition_peek "t" "fail" || fail "ilk fail peek"
 notify_transition_commit "t" "fail"

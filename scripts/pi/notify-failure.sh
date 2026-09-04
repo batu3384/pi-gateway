@@ -35,22 +35,43 @@ fi
 
 # SLA / SD yalniz — health-check veya check-sd-health zaten bildirdi
 notify_failure_skip_sla_only() {
-  local d="$1" line
+  local d="$1" failure_list token line saw_line=0
   [[ -z "$d" ]] && return 1
-  [[ "$d" == failures=offsite-* ]] && return 0
   [[ "$d" == *sd_fail=1* ]] && return 0
+  if [[ "$d" == *"failures="* ]]; then
+    failure_list="${d#*failures=}"
+    for token in $failure_list; do
+      case "$token" in
+        ssd-unmounted|ssd-unhealthy|storage-degraded*|data-ssd-symlink*|data-native-missing) ;;
+        offsite-*|restic-offsite-*|optional-*|backup-restore-drill*|bulletin-*|hermes-session-*|hermes-token-*|exit_code=*) ;;
+        *) return 1 ;;
+      esac
+    done
+    [[ -n "$failure_list" ]]
+    return
+  fi
   while IFS= read -r line; do
     line="${line#"${line%%[![:space:]]*}"}"
     line="${line#FAIL }"
     line="${line#SLO }"
     [[ -z "$line" ]] && continue
+    saw_line=1
     case "$line" in
-      offsite-*|optional-*|backup-restore-drill*|bulletin-*|hermes-session-*|exit_code=0) ;;
+      ssd-unmounted|ssd-unhealthy|storage-degraded*|data-ssd-symlink*|data-native-missing) ;;
+      offsite-*|restic-offsite-*|optional-*|backup-restore-drill*|bulletin-*|hermes-session-*|hermes-token-*|exit_code=0) ;;
       *) return 1 ;;
     esac
   done < <(printf '%s' "$d" | tr ';' '\n' | sort -u)
-  return 0
+  [[ "$saw_line" -eq 1 ]]
 }
+
+if [[ "${1:-}" == "--self-check" ]]; then
+  notify_failure_skip_sla_only "exit_code=1; failures=ssd-unmounted" || exit 1
+  notify_failure_skip_sla_only "SLO offsite-stale" || exit 1
+  notify_failure_skip_sla_only "exit_code=1; failures=container unbound down" && exit 1
+  echo "[notify-failure] self-check OK"
+  exit 0
+fi
 
 if notify_failure_skip_sla_only "$details"; then
   exit 0

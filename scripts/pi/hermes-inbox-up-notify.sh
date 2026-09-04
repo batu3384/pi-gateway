@@ -12,7 +12,7 @@ fi
 PG_SCRIPT_NAME="$(basename "$0")"
 # shellcheck source=../lib/env-file.sh
 source "${_PG_ENV_LIB:?}"
-read_remote_dotenv || { echo "[${PG_SCRIPT_NAME}] HATA: .env dotenv parser hatasi" >&2; exit 0; }
+read_remote_dotenv || { echo "[${PG_SCRIPT_NAME}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 # shellcheck source=../lib/notify.sh
 source "${REMOTE_DIR}/scripts/lib/notify.sh" 2>/dev/null \
   || source "${SCRIPT_DIR}/../lib/notify.sh"
