@@ -136,6 +136,47 @@ if ! grep -q 'forward-tls-upstream: yes' "${REMOTE_DIR}/config/unbound/unbound.c
 fi
 # bind-mount: up -d process reload etmez; cache'li dig yaniltir. Restart AdGuard'i dusurur (depends_on).
 unbound_conf_stale && note_fail "unbound-stale-conf"
+if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx adguard; then
+  _agh_logs="$(docker logs adguard 2>&1 | tail -80 || true)"
+  if grep -qiE 'freelist|bbolt|panic.*sessions|panic.*stats' <<<"$_agh_logs"; then
+    _agh_bad=1
+    _agh_state="$(docker inspect adguard --format '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' 2>/dev/null || true)"
+    grep -qiE 'restarting|exited|unhealthy' <<<"$_agh_state" \
+      || grep -qi panic <<<"$_agh_logs" \
+      || _agh_bad=0
+    if [[ "${_agh_bad:-0}" -eq 1 ]]; then
+      _bbolt="${SCRIPT_DIR}/repair-adguard-bbolt.sh"
+      [[ -f "$_bbolt" ]] || _bbolt="${REMOTE_DIR}/scripts/pi/repair-adguard-bbolt.sh"
+      if [[ ! -x "$_bbolt" ]]; then
+        note_fail "adguard-bbolt-repair-missing"
+      else
+        _bbolt_rc=0
+        REMOTE_DIR="$REMOTE_DIR" bash "$_bbolt" || _bbolt_rc=$?
+        case "$_bbolt_rc" in
+          0)
+            logger -t "$LOG_TAG" "adguard bbolt — auto-heal OK"
+            ;;
+          12)
+            logger -t "$LOG_TAG" "adguard bbolt — restart recovery OK"
+            ;;
+          10)
+            logger -t "$LOG_TAG" "WARN adguard bbolt auto-heal skipped"
+            note_fail "adguard-bbolt-repair-skipped"
+            ;;
+          11)
+            logger -t "$LOG_TAG" "WARN adguard bbolt auto-heal deferred"
+            note_fail "adguard-bbolt-repair-deferred"
+            ;;
+          *)
+            logger -t "$LOG_TAG" "WARN adguard bbolt auto-heal basarisiz (rc=$_bbolt_rc)"
+            note_fail "adguard-bbolt-repair-failed"
+            ;;
+        esac
+      fi
+    fi
+  fi
+  unset _agh_logs _agh_bad _agh_state _bbolt
+fi
 adguard_dns_ok() {
   local aaaa
   dig +time=2 +tries=1 @"${PI_STATIC_IP}" cloudflare.com A >/dev/null 2>&1 \
