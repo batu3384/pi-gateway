@@ -524,6 +524,8 @@ grep -q -- '--data-binary @-' "$PROJECT_DIR/scripts/lib/adguard-api.sh" \
   || die "AdGuard login encoded payload pipe yok"
 grep -q 'apply-adguard-filters.sh' "$PROJECT_DIR/scripts/pi/post-deploy-code.sh" \
   || die "post-deploy-code apply-adguard-filters yok"
+grep -q 'setup-rdnss-ra.sh' "$PROJECT_DIR/scripts/pi/post-deploy-code.sh" \
+  || die "post-deploy-code setup-rdnss-ra yok"
 grep -q 'pi_gateway_adguard_blocked_ratio' "$PROJECT_DIR/config/grafana/provisioning/dashboards/json/pi-gateway.json" \
   || die "grafana adguard blocked_ratio yok"
 grep -q 'pi_gateway_adguard_filter_rules' "$PROJECT_DIR/config/grafana/provisioning/dashboards/json/pi-gateway.json" \

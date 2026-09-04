@@ -37,6 +37,8 @@ crit "AdGuard DNS" "$SCRIPT_DIR/apply-adguard-dns.sh"
 crit "AdGuard filters" "$SCRIPT_DIR/apply-adguard-filters.sh"
 sudo systemctl reset-failed pi-gateway-adguard-filters.service 2>/dev/null || \
   log "WARN: AdGuard filter failed state reset"
+soft "IPv6 ULA DNS" "$SCRIPT_DIR/ensure-ipv6-ula.sh"
+soft "IPv6 RDNSS RA" "$SCRIPT_DIR/setup-rdnss-ra.sh"
 if [[ "${ENABLE_NETALERTX:-true}" == "true" ]] \
   && docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx netalertx; then
   netalert_gid="${NETALERTX_GID:-$(id -g)}"
