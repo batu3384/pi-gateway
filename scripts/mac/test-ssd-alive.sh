@@ -76,7 +76,7 @@ exit 1
 EOF
 chmod +x "$_ghost_tmp/journalctl" "$_ghost_tmp/findmnt"
 printf '{"last_success_at":%s}\n' "$(date +%s)" >"$_ghost_tmp/state.json"
-if ! (
+if (
   export PATH="$_ghost_tmp:$PATH"
   export SSD_FSCK_STATE_PATH="$_ghost_tmp/state.json"
   export SSD_MOUNT=/mnt/ssd

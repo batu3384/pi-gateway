@@ -992,8 +992,8 @@ ssd_mount_block_dev() {
 
 # USB re-enumerate: sda1 -> sdb1. Journal ghost hatalari aktif diske scope'lanmali.
 ssd_active_sd_token() {
-  local dev="$1"
-  [[ -z "$dev" ]] && dev="$(ssd_mount_block_dev)"
+  local dev
+  dev="$(ssd_mount_block_dev)"
   [[ "$dev" == /dev/sd* ]] || return 1
   if [[ "$dev" =~ /dev/sd([a-z]+) ]]; then
     printf '%s\n' "${BASH_REMATCH[1]}"
