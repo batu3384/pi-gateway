@@ -74,7 +74,7 @@ Modem panelinde DNS ayari **tek basina tum cihazlari otomatik Pi'ye baglamaz**.
 
 **DoH kilidi:** HaGeZi Encrypted DNS Bypass listesi (`adblock/doh.txt`) — bilinen DoH/DoT hostlari engeller. Ozel/unknown DoH host yine kacabilir. **Browser canary:** `use-application-dns.net` user-rules ile engellenir — Firefox/Chrome otomatik DoH acmaz (`make diagnose-dns` dogrular).
 
-**DoT kilidi (port 853):** LAN istemcileri modem uzerinden `1.1.1.1:853` ile Pi'yi atlayabilir. Pi Unbound upstream icin WAN `:853` gerekir — **tum LAN icin kör drop yapmayin**. ZTE H3600P: WAN → Guvenlik → IP Filtre → dest port **853** TCP+UDP Dusur; **kaynak haric = Pi IP** (`192.168.1.112`) mumkunse. Istisna yoksa modem 853 kurali uygulamayin (Unbound kirilir). Alternatif: cihaz Ozel DNS kapali + `doh.txt`.
+**DoT kilidi (port 853):** LAN istemcileri modem uzerinden `1.1.1.1:853` ile Pi'yi atlayabilir. Pi Unbound upstream icin WAN `:853` gerekir — **tum LAN icin kör drop yapmayin**. ZTE H3600P: WAN → Guvenlik → IP Filtre → dest port **853** TCP+UDP Dusur; **kaynak haric = Pi IP** (`PI_STATIC_IP`) mumkunse. Istisna yoksa modem 853 kurali uygulamayin (Unbound kirilir). Alternatif: cihaz Ozel DNS kapali + `doh.txt`.
 
 **Filtre governance:** Her listenin `min_rules`, `max_rules` ve `max_age_hours`
 kontrolüne ek olarak profil toplam kural bütçesi vardır. `@latest` kaynakları
