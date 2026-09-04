@@ -70,7 +70,7 @@ Modem panelinde DNS ayari **tek basina tum cihazlari otomatik Pi'ye baglamaz**.
 
 **Hizli rollout (telefon reboot yok):** Modem LAN Grubu → lease suresi **5 dk (300s)** → Uygula → modem **ac/kapa**. Cihazlar 5–15 dk icinde kendisi yeniler. Izlem: `make rollout-dns-wait`. Is bitince lease'i **3600** veya **86400**'e al (modem kalabalik yenileme yapmasin).
 
-**IPv6 DNS:** Pi sabit ULA (`PI_IPV6_ULA`). ZTE LAN IPv6 DNS UI yok. `setup-rdnss-ra.sh`: ULA RDNSS + modem LL lifetime 0, RA 3–4s (modem RA `fe80::1` 900s last-RA). Default route modemde. `dig @fe80::1` daemon hâlâ cevaplar. GUA dinamik — DNS için kullanma. `observe-rdnss-ra.sh`, modem adresini lifetime değeriyle yorumlar: `0` withdrawn kabul edilir; pozitif lifetime bypass uyarısıdır. `rdisc6` yok/RA yoksa sonuç UNKNOWN’dur, PASS değildir.
+**IPv6 DNS:** Pi sabit ULA (`PI_IPV6_ULA`). ZTE LAN IPv6 DNS UI yok. `setup-rdnss-ra.sh`: ULA `/64` on-link prefix (SLAAC kapalı) + RDNSS + modem LL lifetime 0, RA 3–4s (modem RA `fe80::1` 900s last-RA). Default route modemde. Mac: `make mac-dns` ULA erişilemezse yalnız IPv4 Pi yazar (ölü resolver timeout önlenir).
 
 **DoH kilidi:** HaGeZi Encrypted DNS Bypass listesi (`adblock/doh.txt`) — bilinen DoH/DoT hostlari engeller. Ozel/unknown DoH host yine kacabilir.
 

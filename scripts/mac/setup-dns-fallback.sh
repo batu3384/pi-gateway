@@ -37,8 +37,16 @@ fi
 dns_args=("$PI_DNS")
 ula="${PI_IPV6_ULA:-}"
 ula="${ula%%/*}"
+ula_reachable() {
+  [[ -n "$ula" ]] || return 1
+  dig +time=2 +tries=1 @"$ula" cloudflare.com A >/dev/null 2>&1
+}
 if [[ -n "$ula" ]]; then
-  dns_args+=("$ula")
+  if ula_reachable; then
+    dns_args+=("$ula")
+  else
+    log "UYARI: $ula erisilemiyor (ULA prefix route yok) — yalniz Pi IPv4 DNS kullaniliyor; AAAA timeout onlenir"
+  fi
 fi
 if [[ -n "$FALLBACK_DNS" && "$FALLBACK_DNS" != "$PI_DNS" ]]; then
   dns_args+=("$FALLBACK_DNS")
@@ -154,6 +162,9 @@ if (( applied > 0 )); then
     log "Test OK: Pi DNS yanit veriyor"
   else
     log "UYARI: Pi DNS su an yanit vermiyor"
+  fi
+  if [[ -n "$ula" ]] && ! ula_reachable; then
+    log "IPv6 DNS: radvd yalniz RDNSS duyuruyor; ULA /64 on-link yoksa Mac ULA resolver timeout yapar — simdilik IPv4 yeterli"
   fi
 fi
 [[ "$fail_dns" -eq 0 ]] || exit 1

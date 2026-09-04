@@ -336,6 +336,8 @@ grep -q 'MAC_DNS_GATEWAY_FALLBACK:-false' "$PROJECT_DIR/scripts/mac/setup-dns-fa
   || die "dns-fallback MAC_DNS_GATEWAY_FALLBACK default false yok"
 grep -q 'ipv4_in_lan' "$PROJECT_DIR/scripts/mac/setup-dns-fallback.sh" \
   || die "dns-fallback LAN-only ipv4_in_lan yok"
+grep -q 'ula_reachable' "$PROJECT_DIR/scripts/mac/setup-dns-fallback.sh" \
+  || die "dns-fallback ULA erisilebilirlik probu yok"
 grep -q 'load_env' "$PROJECT_DIR/scripts/mac/setup-local-dns.sh" \
   || die "setup-local-dns load_env yok (PROJECT_DIR bos = PI_STATIC_IP kaybolur)"
 grep -q 'for scoped queries' "$PROJECT_DIR/scripts/mac/dns-test.sh" \
@@ -379,6 +381,10 @@ grep -q 'AdvRDNSSLifetime 0' "$PROJECT_DIR/scripts/pi/setup-rdnss-ra.sh" \
   || die "rdnss RFC 8106 modem lifetime 0 yok"
 grep -q 'MaxRtrAdvInterval 4' "$PROJECT_DIR/scripts/pi/setup-rdnss-ra.sh" \
   || die "rdnss MaxRtrAdvInterval 4 yok"
+grep -q 'AdvOnLink on' "$PROJECT_DIR/scripts/pi/setup-rdnss-ra.sh" \
+  || die "rdnss ULA on-link prefix yok"
+grep -q 'mac-ula-dns' "$PROJECT_DIR/scripts/mac/dns-test.sh" \
+  || die "dns-test mac ULA erisilebilirlik kontrolu yok"
 grep -q 'DHCP_RANGE_START' "$PROJECT_DIR/.env.example" \
   || die ".env.example DHCP_RANGE_START yok"
 grep -Fq 'does **not** stop the resolver' "$PROJECT_DIR/README.md" \

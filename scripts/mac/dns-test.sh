@@ -60,6 +60,20 @@ if [[ "$(uname)" == "Darwin" ]]; then
     echo "PASS mac-dhcp-dns2-modem"
     pass=$((pass + 1))
   fi
+  ula="${PI_IPV6_ULA:-}"
+  ula="${ula%%/*}"
+  if [[ -n "$ula" ]] && grep -Fq "$ula" <<<"$_scoped"; then
+    if dig +time=2 +tries=1 @"$ula" cloudflare.com A >/dev/null 2>&1; then
+      echo "PASS mac-ula-dns"
+      pass=$((pass + 1))
+    else
+      echo "FAIL mac-ula-dns-dead ($ula resolver'da ama erisilemiyor — make mac-dns)"
+      fail=$((fail + 1))
+    fi
+  else
+    echo "PASS mac-ula-dns-skipped"
+    pass=$((pass + 1))
+  fi
   unset _r1 _scoped
 fi
 
