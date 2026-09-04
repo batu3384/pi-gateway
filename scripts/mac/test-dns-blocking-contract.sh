@@ -18,6 +18,7 @@ need "$PROJECT_DIR/scripts/pi/apply-adguard-filters.sh"
 need "$PROJECT_DIR/scripts/lib/adguard-filters.py"
 need "$PROJECT_DIR/scripts/lib/modem_inventory.py"
 need "$PROJECT_DIR/scripts/lib/zte-h3600p.py"
+need "$PROJECT_DIR/scripts/pi/audit-modem-performance.sh"
 need "$PROJECT_DIR/scripts/pi/sync-modem-inventory.sh"
 need "$PROJECT_DIR/scripts/pi/observe-rdnss-ra.sh"
 need "$PROJECT_DIR/scripts/pi/diagnose-video-path.sh"
@@ -30,6 +31,12 @@ need "$PROJECT_DIR/host/systemd/pi-gateway-modem-inventory.timer"
 
 grep -q 'check_dhcp_dns_offer' "$PROJECT_DIR/scripts/lib/dhcp-dns-offer.sh" \
   || die "check_dhcp_dns_offer yok"
+bash "$PROJECT_DIR/scripts/pi/audit-modem-performance.sh" --self-check \
+  || die "modem performance audit self-check"
+! grep -q 'MODEM_ALLOW_HTTP=true' "$PROJECT_DIR/scripts/pi/audit-modem-performance.sh" \
+  || die "modem audit HTTP opt-in bypass"
+grep -q 'MODEM_ALLOW_HTTP' "$PROJECT_DIR/scripts/pi/sync-modem-inventory.sh" \
+  || die "modem HTTP policy yok"
 grep -q 'python DISCOVER' "$PROJECT_DIR/scripts/lib/dhcp-dns-offer.sh" \
   || die "dhcp-dns python DISCOVER fallback yok"
 grep -q 'bilinmeyen DNS bypass' "$PROJECT_DIR/scripts/lib/dhcp-dns-offer.sh" \

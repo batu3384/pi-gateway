@@ -99,6 +99,12 @@ Inventory disabled ise eski snapshot strict unknown sebebi değildir. NetAlertX 
 okunamazsa `netalert_db_readable=0` ayrı metric/UNKNOWN kanıtı üretilir. Elle kontrol:
 `make modem-inventory`.
 
+**Modem inventory transport:** `MODEM_URL=https://...` ve doğrulanmış
+`MODEM_TLS_CA_FILE` tercih edilir. HTTP fallback script içinde zorlanmaz; yalnız
+credential/config üzerinden `MODEM_ALLOW_HTTP=true` ile açıkça etkinleşir ve LAN’da
+şifresiz login warning üretir. Inventory sync/login hatası audit’i başarısız yapar;
+DHCP ve Pi DNS başarılı diye eksik modem snapshot gizlenmez.
+
 **H3600P Force DNS yok.** 78 menüde NAT 53 / DNS hijack yok. Yakın çare: **WAN → Güvenlik → Filtre Kriterleri → IP Filtresi** — Hedef=Düşür, dest port 53, proto 257, `IPVersion=-1`. Dest IP **boş** = tüm public `:53` (1.0.0.1, 9.9.9.9, IPv6 resolver). CHAIN1 WAN; LAN→Pi `:53` düşmez. **Sıra:** Unbound DoT (`forward-tls-upstream`, Quad9/CF `:853`) **önce** — recursive UDP 53 drop Unbound'u öldürür. Custom conf: `port: 5335` + `forward-zone` (klutchell `tls-cert-bundle` imajda; default port 53). Deploy `canary-compose-update.sh` Unbound'u `--force-recreate` eder; health `StartedAt` vs conf mtime stale ise fail (restart AdGuard'ı düşürür). Unbound compose healthcheck **kapalı** (`unbound-host` recursive `:53` WAN drop ile forever unhealthy → auto-recover döngüsü). AdGuard `depends_on: service_started`. Host `dig :5335` gerçek probe. 3 slot tavan; boş dest tek kural yeter. `/32` yedek olabilir. Yeni Madde spam'i mevcut kuralı ezer — mevcut instance düzenle. DROP ≠ redirect.
 
 **Kablolu + WiFi:** OS ethernet'i tercih eder. O NIC'te DNS=8.8.8.8/1.1.1.1 ise WAN drop = "LAN internet yok, kabloyu çekince WiFi gelir". Mac: `make mac-dns` (Ethernet+Wi-Fi → Pi [+ULA]; public yedek yok). Wi-Fi DNS boşsa RDNSS `fe80::1` önce — internet var, reklam modemden kaçar.
