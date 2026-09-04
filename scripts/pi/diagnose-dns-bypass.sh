@@ -129,6 +129,23 @@ PY
   fi
 fi
 echo ""
+echo "=== Browser DoH canary ==="
+if test_blocked "use-application-dns.net"; then
+  pass "DoH canary (use-application-dns.net) engelli"
+else
+  fail "DoH canary acik — tarayici otomatik DoH acabilir (user-rules / make adguard-tune)"
+fi
+
+echo ""
+echo "=== DoT bypass (port 853) ==="
+if timeout 3 bash -c 'echo >/dev/tcp/1.1.1.1/853' 2>/dev/null; then
+  pass "Pi -> 1.1.1.1:853 acik (Unbound DoT upstream — beklenen)"
+else
+  warn "Pi -> 1.1.1.1:853 erisilemiyor — Unbound DoT kirilmis olabilir"
+fi
+echo "  LAN istemci DoT: modem WAN filtresi port 853 (Pi IP ${PI_IP} haric) — docs/DNS-BLOCKING.md"
+
+echo ""
 echo "=== DoH bypass listesi ==="
 if test_blocked "dns.google" || test_blocked "dns.google.com"; then
   pass "DoH host (dns.google) engelleniyor"

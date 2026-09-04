@@ -53,6 +53,8 @@
 ||hit.gemius.pl^$important
 ||mc.yandex.ru^$important
 ||an.yandex.ru^$important
+# Browser DoH canary — NXDOMAIN/0.0.0.0 → Firefox/Chrome otomatik DoH kapatir
+||use-application-dns.net^$important
 # videooplayer.xyz sniper kaldırıldı (2026-09): aynı host reklam+player; Doeda/JW video kırılıyordu.
 @@||entitlements.jwplayer.com^$important
 @@||jwpltx.com^$important

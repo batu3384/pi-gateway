@@ -414,6 +414,19 @@ grep -q '@@||mdp-appconf-tr.heytapdl.com^' "$PROJECT_DIR/config/adguard/user-rul
   || die "user-rules Heytap appconf allowlist yok"
 grep -q '@@||cloudconf-app-tr.heytapmobile.com^' "$PROJECT_DIR/config/adguard/user-rules.txt" \
   || die "user-rules Heytap cloudconf allowlist yok"
+grep -q 'use-application-dns.net' "$PROJECT_DIR/config/adguard/user-rules.txt" \
+  || die "user-rules DoH canary yok"
+grep -q 'use-application-dns.net' "$PROJECT_DIR/config/adguard/filter-lists.json" \
+  || die "filter-lists DoH canary regression yok"
+need "$PROJECT_DIR/scripts/pi/suggest-dns-sniper.sh"
+grep -q 'suggest-ad-sniper' "$PROJECT_DIR/Makefile" \
+  || die "Makefile suggest-ad-sniper yok"
+grep -q 'Browser DoH canary' "$PROJECT_DIR/scripts/pi/diagnose-dns-bypass.sh" \
+  || die "diagnose-dns DoH canary testi yok"
+grep -q 'DoT bypass' "$PROJECT_DIR/scripts/pi/diagnose-dns-bypass.sh" \
+  || die "diagnose-dns DoT bolumu yok"
+grep -q 'dest port.*853' "$PROJECT_DIR/docs/DNS-BLOCKING.md" \
+  || die "DNS-BLOCKING DoT 853 modem notu yok"
 grep -q 'adguard-filter-governance' "$PROJECT_DIR/scripts/pi/health-check.sh" \
   || die "health-check adguard-filter-governance yok"
 grep -q 'governance-check' "$PROJECT_DIR/scripts/pi/health-check.sh" \

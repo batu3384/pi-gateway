@@ -29,7 +29,7 @@ HaGeZi **TIF** (threat intel) ≠ **Multi Ultimate** (ad list). TIF levels: Mini
 OISD Big and AdGuard DNS filter (`filter_1`) omitted: duplicate Pro++; waste Pi RAM.
 AdGuard browser Mobile Ads (`filters.adtidy.org/.../11.txt`) is CSS/path — skip for AdGuard Home. Do **not** add Multi Ultimate / NRD / abused-TLD / TIF-IP-in-DNS.
 
-Kaçan reklam: query log → one `user-rules.txt` sniper line. New mega-list yok.
+Kaçan reklam: query log → one `user-rules.txt` sniper line. `make suggest-ad-sniper` (Pi) son 24h reklam adaylarini listeler. New mega-list yok.
 
 Auto-heal: `ADGUARD_DNS_AUTO_HEAL=true` (TTL/upstream via `apply-adguard-dns.sh`, cache_clear yok). Filter drift: `ADGUARD_AUTO_HEAL=true` (`apply-adguard-filters.sh` + cache_clear — varsayılan kapalı). Health prefers `REMOTE_DIR/scripts/pi/` (`ensure-adguard-blocking.sh --fix-light`, `apply-adguard-filters.sh`, `apply-adguard-dns.sh`) so systemd `/usr/local/lib` snapshot cannot re-apply a stale hash-only skip. Those three are also in `install-privileged-scripts.sh` as fallback.
 Bypass check: `ADGUARD_BYPASS_CHECK=strict` on `make diagnose-dns` (LAN clients must appear in query log).
@@ -72,7 +72,9 @@ Modem panelinde DNS ayari **tek basina tum cihazlari otomatik Pi'ye baglamaz**.
 
 **IPv6 DNS:** Pi sabit ULA (`PI_IPV6_ULA`). ZTE LAN IPv6 DNS UI yok. `setup-rdnss-ra.sh`: ULA `/64` on-link prefix (SLAAC kapalı) + RDNSS + modem LL lifetime 0, RA 3–4s (modem RA `fe80::1` 900s last-RA). Default route modemde. Mac: `make mac-dns` ULA erişilemezse yalnız IPv4 Pi yazar (ölü resolver timeout önlenir).
 
-**DoH kilidi:** HaGeZi Encrypted DNS Bypass listesi (`adblock/doh.txt`) — bilinen DoH/DoT hostlari engeller. Ozel/unknown DoH host yine kacabilir.
+**DoH kilidi:** HaGeZi Encrypted DNS Bypass listesi (`adblock/doh.txt`) — bilinen DoH/DoT hostlari engeller. Ozel/unknown DoH host yine kacabilir. **Browser canary:** `use-application-dns.net` user-rules ile engellenir — Firefox/Chrome otomatik DoH acmaz (`make diagnose-dns` dogrular).
+
+**DoT kilidi (port 853):** LAN istemcileri modem uzerinden `1.1.1.1:853` ile Pi'yi atlayabilir. Pi Unbound upstream icin WAN `:853` gerekir — **tum LAN icin kör drop yapmayin**. ZTE H3600P: WAN → Guvenlik → IP Filtre → dest port **853** TCP+UDP Dusur; **kaynak haric = Pi IP** (`192.168.1.112`) mumkunse. Istisna yoksa modem 853 kurali uygulamayin (Unbound kirilir). Alternatif: cihaz Ozel DNS kapali + `doh.txt`.
 
 **Filtre governance:** Her listenin `min_rules`, `max_rules` ve `max_age_hours`
 kontrolüne ek olarak profil toplam kural bütçesi vardır. `@latest` kaynakları

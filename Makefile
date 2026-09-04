@@ -13,7 +13,7 @@ PI_USER ?= pi
 REMOTE_DIR ?= /home/$(PI_USER)/pi-gateway
 PI_SSH_HOST ?= $(if $(PI_DEPLOY_HOST),$(PI_DEPLOY_HOST),$(if $(PI_HOST),$(PI_HOST),$(PI_STATIC_IP)))
 
-.PHONY: setup validate test render deploy deploy-code deploy-fast install discover mac-dns mac-dns-clear harden status dns-test test-remote backup-pull backup-cron backup-restore-drill restore-check verify-data config-drift pi-access trust-ca tls-certs telegram-menu firewall sync-configs docker-ssd ssd-fsck ssd-fsck-run check-pi-env doctor diagnose-remote diagnose-dns audit-dns modem-inventory diagnose-video adguard-tune recover-stack chaos-drill tailscale-acl tailscale-dns
+.PHONY: setup validate test render deploy deploy-code deploy-fast install discover mac-dns mac-dns-clear harden status dns-test test-remote backup-pull backup-cron backup-restore-drill restore-check verify-data config-drift pi-access trust-ca tls-certs telegram-menu firewall sync-configs docker-ssd ssd-fsck ssd-fsck-run check-pi-env doctor diagnose-remote diagnose-dns audit-dns suggest-ad-sniper modem-inventory diagnose-video adguard-tune recover-stack chaos-drill tailscale-acl tailscale-dns
 
 check-pi-env:
 	@test -n "$(PI_SSH_HOST)" || (echo "PI_STATIC_IP or PI_DEPLOY_HOST required — edit .env or run make discover" && exit 1)
@@ -134,6 +134,9 @@ diagnose-dns: check-pi-env
 
 audit-dns: check-pi-env
 	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/audit-dns-coverage.sh"'
+
+suggest-ad-sniper: check-pi-env
+	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/suggest-dns-sniper.sh"'
 
 modem-inventory: check-pi-env
 	@ssh -tt "$(PI_USER)@$(PI_SSH_HOST)" 'sudo systemctl start pi-gateway-modem-inventory.service; rc=$$?; sudo systemctl --no-pager --full status pi-gateway-modem-inventory.service || true; exit $$rc'
