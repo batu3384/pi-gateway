@@ -41,7 +41,40 @@ SSD kaybında stack **unbound + adguard + homepage + caddy** ile devam eder. App
 bash ~/pi-gateway/scripts/pi/recover-readonly-root.sh
 ```
 
+## ext4 journal / htree hatası (JMicron I/O sonrası)
+
+dmesg: `JBD2 Invalid checksum`, `journal recovery failed`, `htree_dirblock_to_tree`, `Buffer I/O error on dev sda`.
+
+```bash
+# Kontrol
+REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/ssd-fsck.sh --check
+
+# Planli onarim (~2-3 dk DNS kesintisi)
+REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/ssd-fsck.sh --run
+```
+
+AdGuard bbolt panic (`sessions.db` / `stats.db`): `repair-adguard-bbolt.sh` (health-check otomatik dener).
+
 `clear_storage_degraded` yalnızca `ssd_mount_healthy` **ve** `docker_ssd_root_ok` ile çalışır.
+
+### Fsck güvenlik sözleşmesi
+
+Ön koşul sırası: **backup → USB/SSD kararlılığı → offline fsck → mount → stack restore → health/smoke**.
+`pi-ssd-health.service` içindeki fsck çağrısı `/usr/local/lib/pi-gateway/scripts/pi/ssd-fsck.sh`
+kopyasını kullanır; deploy sonrası iki path hash’i eşleşmelidir:
+
+```bash
+sha256sum /home/batu/pi-gateway/scripts/pi/ssd-fsck.sh \
+  /usr/local/lib/pi-gateway/scripts/pi/ssd-fsck.sh
+```
+
+`ssd-fsck-state.json` son başarılı fsck zamanını tutar; `--check` eski boot journal kayıtlarını
+tekrar tetiklememek için bu timestamp sonrasını değerlendirir. Fsck lock `flock` ile tutulur;
+stale lock dosyası aktif fsck yoksa engel değildir.
+
+Arka arkaya fsck pass’lerinde yeni inode/directory checksum veya USB/I/O hataları çıkarsa
+`-y` pass’lerini sürdürme. SSD’yi yazma trafiğinden çıkar, backup’ı doğrula; USB güç,
+kablo, bridge ve portu değiştirip SMART/medya testi yapmadan tekrar onarım başlatma.
 
 ## Komutlar (Mac)
 

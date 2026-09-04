@@ -111,6 +111,9 @@ grep -q 'SSD_HEALTH_AUTO=false' "$ROOT/scripts/pi/health-check.sh" \
   || die "C40: health-check SSD_HEALTH_AUTO=false yok"
 grep -q 'SSD_HEALTH_AUTO=false — aksiyon yok' "$ssd_health" \
   || die "C40: ssd-health gozlem kisa-devre yok"
+grep -q 'scripts/pi/ssd-fsck.sh' "$ROOT/scripts/pi/install-privileged-scripts.sh" \
+  || die "C40: privileged ssd-fsck yok"
+grep -q 'SSD_FSCK_AUTO' "$ssd_health" || die "C40: fsck auto flag yok"
 grep -q 'note_fail "ssd-unhealthy"' "$ROOT/scripts/pi/health-check.sh" \
   && die "C40: health-check hâlâ ssd-unhealthy fail"
 grep -q 'offsite/drill SLA atlandi' "$ROOT/scripts/pi/health-check.sh" \

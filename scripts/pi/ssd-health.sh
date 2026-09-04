@@ -79,6 +79,16 @@ if ssd_mount_healthy; then
   if ssd_recent_io_errors; then
     log "WARN: son 15 dk USB/SSD I/O — probe OK, izleniyor"
   fi
+  if declare -F ssd_filesystem_needs_fsck >/dev/null 2>&1 && ssd_filesystem_needs_fsck; then
+    log "WARN: ext4 fsck gerekli — ssd-fsck.sh --run (veya SSD_FSCK_AUTO=true)"
+    if [[ "${SSD_FSCK_AUTO:-false}" == "true" ]] && [[ -x "$SCRIPT_DIR/ssd-fsck.sh" ]]; then
+      log "SSD_FSCK_AUTO — fsck baslatiliyor"
+      if REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/ssd-fsck.sh" --run; then
+        exit 0
+      fi
+      log "WARN: otomatik fsck basarisiz"
+    fi
+  fi
   exit 0
 fi
 ssd_usb_disable_autosuspend || true

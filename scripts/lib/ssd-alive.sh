@@ -5,6 +5,7 @@
 
 SSD_MOUNT="${SSD_MOUNT:-/mnt/ssd}"
 SSD_LABEL="${SSD_LABEL:-pi-data}"
+SSD_FSCK_STATE_PATH="${SSD_FSCK_STATE_PATH:-/var/lib/pi-gateway/ssd-fsck-state.json}"
 # .disk-probe dizindir (setup-ssd-data); yazma probe ayri dosya
 SSD_PROBE_FILE="${SSD_PROBE_FILE:-${SSD_MOUNT}/.pi-gateway-io-probe}"
 SSD_PROBE_TIMEOUT_SEC="${SSD_PROBE_TIMEOUT_SEC:-3}"
@@ -969,8 +970,36 @@ ssd_quirk_present() {
 }
 
 ssd_recent_io_errors() {
-  journalctl -k -b --no-pager --since "15 min ago" 2>/dev/null \
-    | grep -qiE 'I/O error.*sd[a-z]|Buffer I/O error on dev sd|usb .*disconnect|reset SuperSpeed USB|reset high-speed USB'
+  local kmsg
+  kmsg="$(journalctl -k -b --no-pager --since "15 min ago" 2>/dev/null || true)"
+  grep -qiE 'I/O error.*sd[a-z]|Buffer I/O error on (dev|device) sd|usb .*disconnect|reset SuperSpeed USB|reset high-speed USB' <<<"$kmsg"
+}
+
+ssd_fsck_last_success_at() {
+  local state="${SSD_FSCK_STATE_PATH:-/var/lib/pi-gateway/ssd-fsck-state.json}" value
+  [[ -r "$state" ]] || {
+    printf '0\n'
+    return 0
+  }
+  value="$(awk -F: '/"last_success_at"/ {gsub(/[^0-9]/, "", $2); print $2; exit}' "$state" 2>/dev/null || true)"
+  [[ "$value" =~ ^[0-9]+$ ]] || value=0
+  printf '%s\n' "$value"
+}
+
+ssd_filesystem_needs_fsck() {
+  local kmsg dev last_success now
+  last_success="$(ssd_fsck_last_success_at)"
+  now="$(date +%s)"
+  if [[ "$last_success" =~ ^[0-9]+$ ]] && (( last_success > 0 && last_success <= now )); then
+    kmsg="$(journalctl -k -b --no-pager --since "@${last_success}" 2>/dev/null || true)"
+  else
+    kmsg="$(journalctl -k -b --no-pager 2>/dev/null || true)"
+  fi
+  grep -qE 'journal recovery failed|error loading journal|htree_dirblock_to_tree|Buffer I/O error on (dev|device) sd[a-z]|JBD2: Invalid checksum|JBD2: journal recovery failed|EXT4-fs error.*Journal has aborted|device offline error, dev sd' <<<"$kmsg" \
+    && return 0
+  dev="$(findmnt -n -o SOURCE "${SSD_MOUNT}" 2>/dev/null | head -n1 || true)"
+  [[ -n "$dev" ]] && tune2fs -l "$dev" 2>/dev/null | grep -qiE 'Filesystem state:.*not clean' && return 0
+  return 1
 }
 
 # vcgencmd get_throttled — bit0 now, bit16 occurred

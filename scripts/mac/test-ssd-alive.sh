@@ -26,6 +26,41 @@ declare -F ssd_pci_id_ok >/dev/null || die "ssd_pci_id_ok yok"
 declare -F ssd_usb_reboot_once >/dev/null || die "ssd_usb_reboot_once yok"
 ok "API surface"
 
+_detector_tmp="$(mktemp -d)"
+cat >"$_detector_tmp/journalctl" <<'EOF'
+#!/usr/bin/env bash
+for arg in "$@"; do
+  [[ "$arg" == "--since" ]] && exit 0
+done
+printf '%s\n' 'JBD2: Invalid checksum'
+EOF
+chmod +x "$_detector_tmp/journalctl"
+if ! (
+  export PATH="$_detector_tmp:$PATH"
+  export SSD_FSCK_STATE_PATH="$_detector_tmp/state.json"
+  # shellcheck disable=SC1090
+  source "$SSD_ALIVE"
+  set -o pipefail
+  ssd_filesystem_needs_fsck
+); then
+  rm -rf "$_detector_tmp"
+  die "pipefail altinda yeni fsck hatasi yakalanmadi"
+fi
+printf '{"last_success_at":%s}\n' "$(date +%s)" >"$_detector_tmp/state.json"
+if (
+  export PATH="$_detector_tmp:$PATH"
+  export SSD_FSCK_STATE_PATH="$_detector_tmp/state.json"
+  # shellcheck disable=SC1090
+  source "$SSD_ALIVE"
+  set -o pipefail
+  ssd_filesystem_needs_fsck
+); then
+  rm -rf "$_detector_tmp"
+  die "basarili fsck sonrasi eski journal bastirilmadi"
+fi
+rm -rf "$_detector_tmp"
+ok "fsck detector pipefail + state"
+
 [[ "$SSD_PROBE_FILE" == *".pi-gateway-io-probe" ]] || die "probe dosya default yanlis: $SSD_PROBE_FILE"
 [[ "$SSD_USB_AUTHORIZED_RESET" == "false" ]] || die "AUTHORIZED_RESET default false olmali"
 [[ "${SSD_USB_XHCI_REBIND:-}" == "false" ]] || die "XHCI_REBIND default false olmali"
@@ -247,6 +282,7 @@ grep -q 'HERMES_TELEGRAM_GATEWAY' "$PROJECT_DIR/.env.example" \
 [[ "$(grep -c 'TELEGRAM_CHAT_ID' "$PROJECT_DIR/docs/ENV.md" || true)" -eq 1 ]] \
   || die "ENV.md TELEGRAM_CHAT_ID tek satir olmali"
 grep -q 'prune-sd-space.sh' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" || die "priv prune-sd yok"
+grep -q 'scripts/pi/ssd-fsck.sh' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" || die "priv ssd-fsck yok"
 grep -q 'world-writable' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" || die "priv TOCTOU guard yok"
 ok "privileged install"
 

@@ -45,6 +45,7 @@ SCRIPTS=(
   scripts/lib/reap-dead-docker-scopes.sh
   scripts/lib/adguard-api.sh
   scripts/lib/ensure-data-symlink.sh
+  scripts/pi/ssd-fsck.sh
   scripts/pi/ssd-health.sh
   scripts/pi/prune-sd-space.sh
 )

@@ -13,7 +13,7 @@ PI_USER ?= pi
 REMOTE_DIR ?= /home/$(PI_USER)/pi-gateway
 PI_SSH_HOST ?= $(if $(PI_DEPLOY_HOST),$(PI_DEPLOY_HOST),$(if $(PI_HOST),$(PI_HOST),$(PI_STATIC_IP)))
 
-.PHONY: setup validate test render deploy deploy-code deploy-fast install discover mac-dns mac-dns-clear harden status dns-test test-remote backup-pull backup-cron backup-restore-drill restore-check verify-data config-drift pi-access trust-ca tls-certs telegram-menu firewall sync-configs docker-ssd check-pi-env doctor diagnose-remote diagnose-dns audit-dns modem-inventory diagnose-video adguard-tune recover-stack chaos-drill tailscale-acl tailscale-dns
+.PHONY: setup validate test render deploy deploy-code deploy-fast install discover mac-dns mac-dns-clear harden status dns-test test-remote backup-pull backup-cron backup-restore-drill restore-check verify-data config-drift pi-access trust-ca tls-certs telegram-menu firewall sync-configs docker-ssd ssd-fsck ssd-fsck-run check-pi-env doctor diagnose-remote diagnose-dns audit-dns modem-inventory diagnose-video adguard-tune recover-stack chaos-drill tailscale-acl tailscale-dns
 
 check-pi-env:
 	@test -n "$(PI_SSH_HOST)" || (echo "PI_STATIC_IP or PI_DEPLOY_HOST required — edit .env or run make discover" && exit 1)
@@ -156,6 +156,16 @@ adguard-tune: check-pi-env
 
 recover-stack: check-pi-env
 	@ssh -tt "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/recover-stack.sh"'
+
+ssd-fsck: check-pi-env
+	@rsync -az scripts/pi/ssd-fsck.sh scripts/pi/repair-adguard-bbolt.sh scripts/lib/ssd-alive.sh "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/scripts/pi/"
+	@rsync -az scripts/lib/ssd-alive.sh "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/scripts/lib/ssd-alive.sh"
+	@ssh -tt "$(PI_USER)@$(PI_SSH_HOST)" 'chmod +x "$(REMOTE_DIR)/scripts/pi/ssd-fsck.sh" "$(REMOTE_DIR)/scripts/pi/repair-adguard-bbolt.sh" && REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/ssd-fsck.sh" --check || true'
+
+ssd-fsck-run: check-pi-env
+	@rsync -az scripts/pi/ssd-fsck.sh scripts/pi/repair-adguard-bbolt.sh scripts/pi/repair-post-ssd-recovery.sh scripts/pi/ssd-health.sh scripts/pi/health-check.sh scripts/lib/ssd-alive.sh "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/scripts/pi/"
+	@rsync -az scripts/lib/ssd-alive.sh "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/scripts/lib/ssd-alive.sh"
+	@ssh -tt "$(PI_USER)@$(PI_SSH_HOST)" 'chmod +x "$(REMOTE_DIR)/scripts/pi/ssd-fsck.sh" && REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/ssd-fsck.sh" --run --force'
 
 chaos-drill: check-pi-env
 	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'CHAOS_DRY_RUN=true REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/chaos-storage-drill.sh"'
