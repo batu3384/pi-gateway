@@ -338,6 +338,24 @@ elif [[ "${ENABLE_RESTIC:-true}" == "true" ]]; then
     fi
   fi
 fi
+# Local config snapshot (pi-gateway-backup.service)
+if [[ "${ENABLE_RESTIC:-true}" == "true" ]] && ! storage_degraded; then
+  local_max_h="${LOCAL_BACKUP_MAX_AGE_HOURS:-26}"
+  if systemctl is-failed --quiet pi-gateway-backup.service 2>/dev/null; then
+    slo_note "local-backup-failed"
+  fi
+  if [[ "$local_max_h" != "0" ]]; then
+    latest_local="$(find "$REMOTE_DIR/backups" -maxdepth 1 -type d -name '20*' 2>/dev/null | sort | tail -1)"
+    if [[ -z "$latest_local" ]]; then
+      slo_note "local-backup-missing"
+    else
+      local_age_h="$(python3 -c "import os,time; print(int((time.time()-os.path.getmtime('$latest_local'))//3600))")"
+      if (( local_age_h > local_max_h )); then
+        slo_note "local-backup-stale(${local_age_h}h)"
+      fi
+    fi
+  fi
+fi
 # Cloud offsite (B2/R2) when enabled
 if [[ "${RESTIC_OFFSITE_ENABLED:-false}" == "true" ]] && [[ "${ENABLE_RESTIC:-true}" == "true" ]] \
   && ! storage_degraded; then

@@ -9,7 +9,7 @@ PI_USER="${PI_USER:-pi}"
 PI_HOST="${PI_STATIC_IP:-${PI_HOST:-}}"
 REMOTE_DIR="${REMOTE_DIR:-/home/$PI_USER/pi-gateway}"
 LOCAL_REPO="${MAC_BACKUP_DEST:-$HOME/Backups/pi-gateway}/restic"
-RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic@sha256:8f5a62b422a2cb1277ea0dd6e826fe1acf649e5b9f02d60e5268d5fd1976255a}"
+RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510}"
 CHECK_SUBSET="${RESTIC_CHECK_SUBSET:-5%}"
 RESTIC_TIMEOUT_SEC="${RESTIC_TIMEOUT_SEC:-7200}"
 TARGET="${1:-both}"
@@ -46,7 +46,7 @@ case "$TARGET" in
 set -euo pipefail
 source "$REMOTE_DIR/scripts/lib/env-file.sh"
 read_remote_dotenv || { echo "[restore-check] HATA: .env dotenv parser hatasi" >&2; exit 1; }
-RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic@sha256:8f5a62b422a2cb1277ea0dd6e826fe1acf649e5b9f02d60e5268d5fd1976255a}"
+RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510}"
 [[ -d "$RESTIC_REPOSITORY" ]] || { echo "[restore-check] HATA: Pi repo yok"; exit 1; }
 timeout "${RESTIC_TIMEOUT_SEC:-7200}" docker run --rm --network none \
   -e RESTIC_PASSWORD \
@@ -72,7 +72,7 @@ source "$REMOTE_DIR/scripts/lib/env-file.sh"
 read_remote_dotenv || { echo "[restore-check] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 [[ -n "${RESTIC_PASSWORD:-}" ]] || { echo "[restore-check] HATA: RESTIC_PASSWORD bos" >&2; exit 1; }
 RESTIC_REPOSITORY="${RESTIC_REPOSITORY:?RESTIC_REPOSITORY missing}"
-RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic@sha256:8f5a62b422a2cb1277ea0dd6e826fe1acf649e5b9f02d60e5268d5fd1976255a}"
+RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510}"
 [[ -d "$RESTIC_REPOSITORY" ]] || { echo "[restore-check] HATA: Pi repo yok"; exit 1; }
 timeout "${RESTIC_TIMEOUT_SEC:-7200}" docker run --rm --network none \
   -e RESTIC_PASSWORD \

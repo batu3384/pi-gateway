@@ -116,7 +116,7 @@ repo = os.environ.get("RESTIC_REPOSITORY", "/mnt/ssd/pi-gateway-data/backups/res
 pwd = os.environ.get("RESTIC_PASSWORD", "")
 image = os.environ.get(
     "RESTIC_IMAGE",
-    "restic/restic@sha256:8f5a62b422a2cb1277ea0dd6e826fe1acf649e5b9f02d60e5268d5fd1976255a",
+    "restic/restic@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510",
 )
 if pwd and Path(repo).is_dir():
     env_fd, env_path = tempfile.mkstemp(prefix="restic-env-", text=True)

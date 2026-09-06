@@ -55,6 +55,8 @@ if [[ "${ENABLE_NETALERTX:-true}" == "true" ]] \
   crit "NetAlert DB permissions" "$SCRIPT_DIR/ensure-netalert-db-access.sh"
 fi
 soft "Config izinleri" "$SCRIPT_DIR/fix-config-perms.sh"
+soft "SSD SMART timer" "$SCRIPT_DIR/setup-ssd-smart-timer.sh"
+soft "Restic repair" "$SCRIPT_DIR/restic-repair.sh"
 
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx caddy; then
   log ">> Caddy reload"

@@ -100,6 +100,8 @@ ZTE H3600P aynı Layer-2 ağda modem `.1:53` erişimini Pi’ye göndermez. Bu n
 | `make status` | Pi uptime, docker, health |
 | `make dns-test` | DNS block + rewrite test |
 | `make test-remote` | health + smoke (16+ checks) |
+| `make audit-dns` | LAN DNS kapsam auditi (ARP vs query log) |
+| `make remediate-dns` | Kapsam audit + bypass cihaz/modem remediation adımları |
 | `make verify-data` | Hybrid SSD symlink validation |
 | USB SSD power | Direct USB3 + ≥3A PSU; if drops use powered **480M+** hub (not 12M Full-Speed) |
 | `make backup-pull` | Restic + config offsite copy |
@@ -130,6 +132,8 @@ DEPLOY_SMOKE=true make deploy-code
 |------|----------|----------|
 | `full` (default) | validate → rsync → bootstrap → canary → post-deploy → smoke | — |
 | `code` | validate → rsync → `post-deploy-code` | bootstrap, compose recreate, UFW/n8n/Kuma/CrowdSec |
+
+`post-deploy-code`: privileged scripts, DNS perf, AdGuard DNS/filters, IPv6 ULA/RDNSS, `fix-config-perms`, SSD SMART timer, `restic-repair`, Hermes hot path.
 
 Order (full): pre-check → rsync (excluding data) → bootstrap → docker compose → post-deploy → smoke test.
 
@@ -190,10 +194,15 @@ SLO PUSH heartbeats → Uptime Kuma (`docs/SLO.md`).
 
 ## Backup confidence (3-2-1)
 
-1. Pi SSD restic (encrypted) — daily timer (`post-deploy` tam yedek atlar; `POST_DEPLOY_RESTIC=true` zorla)
-2. Mac `make backup-pull` — weekly cron recommended
-3. Optional B2/R2 — `RESTIC_OFFSITE_ENABLED=true` (after local backup)
-4. Monthly `make backup-restore-drill` — proves restore works
+1. Pi SSD restic (encrypted, Docker `restic/restic` **0.19.1** pin) — daily timer (`pi-gateway-backup.service` → `backup.sh` → `restic-backup.sh`)
+2. Config snapshot — same timer: `~/pi-gateway/backups/<stamp>/` (compose + config; `.env` / `caddy/certs` / runtime `AdGuardHome.yaml` yok — restore: `render-config` + `apply-adguard-*`)
+3. Mac `make backup-pull` — weekly cron recommended (`backup-pull` Pi ile aynı restic imajı ile `check`; reinit sonrası remote daha küçükse check geçerse offsite yenilenir)
+4. Optional B2/R2 — `RESTIC_OFFSITE_ENABLED=true` (after local backup)
+5. Monthly `make backup-restore-drill` — proves restore works
+
+Health SLO: `local-backup-failed` / `local-backup-stale` (`LOCAL_BACKUP_MAX_AGE_HOURS`, default 26h), offsite marker, drill age. `systemctl is-failed pi-gateway-backup.service` → SLO fail.
+
+Bozuk repo: `restic-repair.sh` (deploy-code + post-deploy); `check` hâlâ fail → repo `/mnt/ssd/pi-gateway-recovery/restic.corrupt.*` altına taşı, `RESTIC_ALLOW_REINIT=true` veya boş repo + `restic-backup.sh`, sonra `make backup-pull`.
 
 Başarısız restore drill `/var/lib/pi-gateway/last-backup-restore-drill-failure` marker’ı ve `pi_gateway_backup_restore_drill_failed=1` metric’i üretir; son başarılı drill yaşı tek başına güven kanıtı sayılmaz.
 
@@ -261,7 +270,7 @@ Bot outbox: notifications. Hermes inbox: conversational replies when gateway is 
 
 ## Passwords
 
-1. **Pi SSD (encrypted data):** Restic via Docker (`pi-gateway-backup.timer` → `backup.sh` → `restic-backup.sh`). Runs as `PI_USER` with `REMOTE_DIR=~/pi-gateway` — never as root (`/home/root/...` is wrong).
+1. **Pi SSD (encrypted data):** Restic via Docker (`pi-gateway-backup.timer` → `backup.sh` → `restic-backup.sh`). `backup.sh` önce `fix-config-perms` çalıştırır; runtime `AdGuardHome.yaml` snapshot’a alınmaz. Runs as `PI_USER` with `REMOTE_DIR=~/pi-gateway` — never as root (`/home/root/...` is wrong).
 2. **Config snapshot:** same timer writes `~/pi-gateway/backups/<stamp>/` (compose + config + env key names; no plaintext secrets).
 3. **Mac offsite:** `make backup-pull` or `make backup-cron` → `~/Backups/pi-gateway/`
 4. **Pi OS login kilit:** eski `reset-pi-password.sh` yok. Konsol/HDMI veya SD’yi Mac’te mount → `userconf` / raspi-config; SSH key `~/.ssh/authorized_keys` ile kurtar.
@@ -272,6 +281,7 @@ Verify: `systemctl cat pi-gateway-backup.service | grep -E 'User=|REMOTE_DIR'` a
 
 - Prefer **direct Pi USB3 (blue)** with a solid **5V ≥3A** PSU.
 - If undervolt / disconnect: use a **powered USB 3.x or High-Speed (480 Mbps) hub** — not Full-Speed (12 Mbps) “USB 2.0” hubs.
+- SD root doluluk: health timer `DISK_PRUNE_PCT` (65%) üstünde `prune-sd-space.sh`; `%≥DISK_PRUNE_FORCE_PCT` (70) cooldown bypass.
 - Check: `lsusb -t` (SSD line must show `480M` or `5000M`) and `vcgencmd get_throttled` (`0x0` ideal).
 
 ## Related docs

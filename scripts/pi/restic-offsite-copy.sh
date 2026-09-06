@@ -9,7 +9,7 @@ source "$SCRIPT_DIR/../lib/stack-health.sh"
 source "$SCRIPT_DIR/../lib/env-file.sh"
 read_remote_dotenv || { echo "[restic-offsite] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 
-RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic@sha256:8f5a62b422a2cb1277ea0dd6e826fe1acf649e5b9f02d60e5268d5fd1976255a}"
+RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510}"
 RESTIC_OFFSITE_COPY_TIMEOUT_SEC="${RESTIC_OFFSITE_COPY_TIMEOUT_SEC:-3600}"
 OFFSITE_COPY_MARKER="${OFFSITE_COPY_MARKER:-/var/lib/pi-gateway/last-restic-offsite-copy}"
 log() { echo "[restic-offsite] $*"; }

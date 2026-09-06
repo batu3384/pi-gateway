@@ -184,4 +184,7 @@ if int(st_final.get("interval") or 0) != stats_days:
     sys.exit(1)
 print("[adguard-dns] dogrulama OK")
 PY
+if [[ -x "$SCRIPT_DIR/fix-config-perms.sh" ]]; then
+  REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/fix-config-perms.sh" || log "WARN: fix-config-perms"
+fi
 log "Tamamlandi"

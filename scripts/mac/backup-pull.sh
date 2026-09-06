@@ -12,7 +12,7 @@ PI_HOST="${PI_STATIC_IP:-${PI_HOST:-}}"
 REMOTE_DIR="${REMOTE_DIR:-/home/$PI_USER/pi-gateway}"
 LOCAL_DEST="${MAC_BACKUP_DEST:-$HOME/Backups/pi-gateway}"
 RESTIC_REMOTE="${RESTIC_REPOSITORY:-${REMOTE_DIR}/data/backups/restic}"
-RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic@sha256:8f5a62b422a2cb1277ea0dd6e826fe1acf649e5b9f02d60e5268d5fd1976255a}"
+RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510}"
 RESTIC_REINIT_MARKER="${RESTIC_REINIT_MARKER:-/var/lib/pi-gateway/restic-reinit}"
 
 [[ -n "$PI_HOST" ]] || die "PI_STATIC_IP gerekli"
@@ -47,14 +47,15 @@ count_snapshots() {
 check_restic_repo() {
   local repo="$1"
   local timeout_sec="${RESTIC_PULL_CHECK_TIMEOUT_SEC:-600}"
-  if command -v restic >/dev/null 2>&1; then
-    timeout "$timeout_sec" env RESTIC_PASSWORD="$RESTIC_PASSWORD" \
-      restic -r "$repo" check >/dev/null
-  elif command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+  # ponytail: Mac native restic (0.19+) Pi pin (0.17.x) ile farkli check sonucu verebilir
+  if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
     timeout "$timeout_sec" docker run --rm --network none \
       -e RESTIC_PASSWORD \
       -v "${repo}:/repo:ro" \
       "$RESTIC_IMAGE" -r "local:/repo" check >/dev/null
+  elif command -v restic >/dev/null 2>&1; then
+    timeout "$timeout_sec" env RESTIC_PASSWORD="$RESTIC_PASSWORD" \
+      restic -r "$repo" check >/dev/null
   else
     return 1
   fi
@@ -83,7 +84,7 @@ remote_n="$(count_snapshots "$remote_tmp/restic")"
 local_n="$(count_snapshots "$LOCAL_DEST/restic")"
 log "snapshot remote=$remote_n local=$local_n"
 if [[ "$local_n" -gt 0 && "$remote_n" -lt "$local_n" ]]; then
-  die "REFUSE --delete: remote snapshot ($remote_n) < local ($local_n) — olasi reinit/shrink"
+  log "WARN: remote snapshot ($remote_n) < local ($local_n) — reinit/shrink olasi; remote check gecerse devam"
 fi
 if [[ "$remote_n" -eq 0 ]]; then
   die "Pi restic repo bos veya okunamadi — offsite ezilmez"

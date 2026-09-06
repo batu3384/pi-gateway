@@ -12,7 +12,7 @@ Tracked work lives here and in [GitHub Issues](https://github.com/batu3384/pi-ga
 |------|--------|-------|
 | JMicron SSD hardware stability | Now | `152d:0583` enumerate flaps; software FSM hardened Aug 2026 — ASMedia enclosure or USB2/power still ops decision |
 | Wiki sync from `wiki/` | Now | `scripts/sync-wiki.sh`; source in repo |
-| Offsite backup SLA monitoring | Now | `make backup-pull`, SLO stamps in `state.json`; soft-fail in health-check |
+| Offsite backup SLA monitoring | Done | `make backup-pull`, local backup SLO, restic 0.19.1 pin |
 
 ## Next
 

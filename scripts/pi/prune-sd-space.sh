@@ -8,6 +8,7 @@ source "$SCRIPT_DIR/../lib/env-file.sh"
 read_remote_dotenv || { echo "[prune-sd] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 STORAGE_DEGRADED_FLAG="${STORAGE_DEGRADED_FLAG:-/run/pi-gateway/storage-degraded}"
 DISK_PRUNE_PCT="${DISK_PRUNE_PCT:-65}"
+DISK_PRUNE_FORCE_PCT="${DISK_PRUNE_FORCE_PCT:-70}"
 STAMP="/var/lib/pi-gateway/last-sd-prune"
 log() { echo "[prune-sd] $*"; }
 root_usage_pct() {
@@ -41,8 +42,8 @@ if (( usage < DISK_PRUNE_PCT )); then
 fi
 if [[ -f "$STAMP" ]]; then
   age_h="$(python3 -c "import os,time; print(int((time.time()-os.path.getmtime('$STAMP'))//3600))")"
-  if (( age_h < 24 )); then
-    log "atlandi: son prune ${age_h}h once (24h cooldown)"
+  if (( age_h < 24 )) && (( usage < DISK_PRUNE_FORCE_PCT )); then
+    log "atlandi: son prune ${age_h}h once (24h cooldown; force >=${DISK_PRUNE_FORCE_PCT}%)"
     exit 0
   fi
 fi

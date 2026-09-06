@@ -14,11 +14,18 @@ DEST="$REMOTE_DIR/backups/$STAMP"
 STAGING="$REMOTE_DIR/backups/.staging-$STAMP-$$"
 mkdir -p "$STAGING"
 trap 'rm -rf "$STAGING"' EXIT
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# AdGuard container root:root yapabilir — snapshot icin duzelt (deploy/pull ile ayni exclude)
+if [[ -x "$SCRIPT_DIR/fix-config-perms.sh" ]]; then
+  REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/fix-config-perms.sh" || true
+fi
 cp "$REMOTE_DIR/compose/docker-compose.yml" "$STAGING/"
 mkdir -p "$STAGING/config"
 # TLS private key plaintext snapshot'ta yok — restic sifreli repo tutar
+# AdGuardHome.yaml runtime state — restore: render-config + apply-adguard-*
 rsync -a \
   --exclude 'caddy/certs/' \
+  --exclude 'adguard/AdGuardHome.yaml' \
   "$REMOTE_DIR/config/" "$STAGING/config/"
 # .env sifreleri duz metin yedeklenmez — anahtar listesi yeterli (restic sifreli repo)
 if [[ -f "$REMOTE_DIR/.env" ]]; then
@@ -32,8 +39,7 @@ if (( KEEP > 0 )); then
     [[ -n "$old" && -d "$old" ]] && rm -rf "$old"
   done < <(find "$REMOTE_DIR/backups" -maxdepth 1 -type d -name '20*' 2>/dev/null | sort | head -n "-$KEEP")
 fi
-echo "Backup saved: $DEST (.env ve caddy/certs yok; restic sifreli data+certs)"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+echo "Backup saved: $DEST (.env, caddy/certs, AdGuardHome.yaml yok; restic sifreli data+certs)"
 # shellcheck source=../lib/notify.sh
 source "$SCRIPT_DIR/../lib/notify.sh"
 _PG_ENV_LIB="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}/../lib/env-file.sh"

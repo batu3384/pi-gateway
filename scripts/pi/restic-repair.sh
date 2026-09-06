@@ -18,7 +18,7 @@ if is_ssd_root_mode; then
 else
   RESTIC_REPOSITORY="${RESTIC_REPOSITORY:-/mnt/ssd/pi-gateway-data/backups/restic}"
 fi
-RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic@sha256:8f5a62b422a2cb1277ea0dd6e826fe1acf649e5b9f02d60e5268d5fd1976255a}"
+RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510}"
 RESTIC_TIMEOUT_SEC="${RESTIC_TIMEOUT_SEC:-7200}"
 
 [[ -d "$RESTIC_REPOSITORY" ]] || { log "repo yok — atlandi"; exit 0; }
@@ -44,6 +44,12 @@ if run_restic snapshots --last >/dev/null 2>&1; then
   log "snapshots OK"
 else
   log "HATA: repo hala okunamiyor — restic-backup veya RESTIC_ALLOW_REINIT gerekli"
+  exit 1
+fi
+if run_restic check >/dev/null 2>&1; then
+  log "check OK"
+else
+  log "HATA: restic check basarisiz — corrupt repo; yedek klasorunu .corrupt.* tasiyip RESTIC_ALLOW_REINIT=true ile yeniden init"
   exit 1
 fi
 timeout 120 sudo chown -R "${USER}:${USER}" "$RESTIC_REPOSITORY" 2>/dev/null \

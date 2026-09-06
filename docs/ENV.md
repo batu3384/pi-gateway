@@ -142,6 +142,9 @@ Experimental `ssd-root`: `docs/SSD-ROOT.md` + `scripts/mac/migrate-sd-boot-ssd-r
 | `POST_DEPLOY_RESTIC` | `false`: post-deploy tam yedek atlar (timer). Repo boşsa yine ilk snapshot. `true` = her deploy yedekler. |
 | `RESTIC_PASSWORD` | Repo password |
 | `RESTIC_REPOSITORY` | Path on SSD (not offsite by itself) |
+| `RESTIC_IMAGE` | Pinned `restic/restic@sha256:…` (0.19.1); Pi/Mac backup check aynı sürüm |
+| `LOCAL_BACKUP_MAX_AGE_HOURS` | Default `26`; `0` = local config snapshot age SLO kapalı |
+| `DISK_PRUNE_PCT` / `DISK_PRUNE_FORCE_PCT` | `65` / `70` — SD root prune (`prune-sd-space.sh`); force bypasses 24h cooldown |
 | `MAC_BACKUP_DEST` | Mac `backup-pull` destination |
 | `OFFSITE_BACKUP_MAX_AGE_DAYS` | Default `7`; `0` disables age check |
 | `BACKUP_DRILL_MAX_AGE_DAYS` | Default `30`; restore drill SLA (`make backup-restore-drill`); `0` off |

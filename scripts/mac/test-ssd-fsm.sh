@@ -74,6 +74,8 @@ grep -q 'overlayfs snapshotter' "$prune" || die "C36: Docker 29+ snapshotter not
 ! grep -q 'docker data-root SD degil' "$prune" \
   || die "C36: eski docker-root skip (yanlis Docker 29+)"
 ok "C36 prune containerd-on-SD aware"
+grep -q 'DISK_PRUNE_FORCE_PCT' "$prune" || die "C36c: prune force pct yok"
+ok "C36c prune force cooldown bypass"
 grep -q 'pi_gateway_containerd_on_ssd' "$ROOT/scripts/pi/export-gateway-state.sh" \
   || die "C36b: containerd_on_ssd metric yok"
 grep -q 'pi_gateway_containerd_on_ssd' "$ROOT/config/grafana/provisioning/dashboards/json/pi-gateway.json" \

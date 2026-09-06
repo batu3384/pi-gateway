@@ -124,6 +124,8 @@ Panel tüneli aynı (`http://100.x`). DNS evde DHCP; dışarıda ISP — Tailsca
 
 **Kontrol:** `make audit-dns` — ARP'taki her cihaz query log'da görünmeli. Yoksa liste değil, bypass (eski lease, Private DNS, iCloud Relay, IPv6 RDNSS).
 
+**Remediation:** `make remediate-dns` — strict audit + bypass cihaz listesi + modem panel adımları (Telegram opsiyonel). Haftalık özet: `dns-coverage-weekly.sh` timer.
+
 ### Neden bazi cihazlar bypass eder?
 
 1. **Eski DHCP lease** — modem DNS degisti ama telefon/TV eski DNS'i tutuyor

@@ -56,8 +56,11 @@ grep -A25 'repo kurtarilamadi' "$restic" | grep -q 'notify_backup_ok' \
   && die "C2: reinit yolunda notify_backup_ok"
 grep -q 'restic-reinit\|RESTIC_REINIT' "$restic" || die "C2: reinit marker yok"
 grep -q 'stage_root\|atomic' "$pull" || die "C2: backup-pull staging yok"
-grep -q 'snapshot\|refuse\|REINIT\|fewer\|az' "$pull" || die "C2: pull shrink/reinit gate yok"
+grep -q 'snapshot\|refuse\|REINIT\|fewer\|az\|reinit/shrink' "$pull" || die "C2: pull shrink/reinit gate yok"
 grep -q 'check_restic_repo' "$pull" || die "C2: backup-pull restic check yok"
+grep -q 'RESTIC_IMAGE' "$pull" || die "C2: backup-pull RESTIC_IMAGE yok"
+grep -A8 '^check_restic_repo' "$pull" | grep -q 'docker run' \
+  || die "C2: backup-pull docker-first restic check yok"
 grep -q 'check --no-lock' "$restore" || die "C2: read-only restore-check lock acmaya calisiyor"
 grep -q 'command -v restic' "$restore" || die "C2: native restic fallback yok"
 grep -q 'host restic ve Docker kullanılamıyor' "$restore" || die "C2: restore-check arac yok guard yok"
@@ -275,6 +278,12 @@ ok "C21b Tailscale Serve ACL gate"
 # C22: backup service must expose Restic failure to systemd
 grep -q 'restic_failed=1\|exit "\$restic_failed"' "$backup_snapshot" \
   || die "C22: backup Restic failure swallowed"
+grep -q 'fix-config-perms' "$backup_snapshot" \
+  || die "C22a: backup fix-config-perms yok"
+grep -q 'adguard/AdGuardHome.yaml' "$backup_snapshot" \
+  || die "C22a: backup AdGuardHome exclude yok"
+grep -q 'local-backup-failed' "$health" \
+  || die "C22a: health local-backup-failed gate yok"
 ok "C22 backup failure visible"
 
 # C22b: failed restore drills must remain visible after the last success

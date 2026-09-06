@@ -71,6 +71,8 @@ make deploy-code # daily: rsync + privileged + Hermes (alias: deploy-fast)
 make dns-test    # DNS checks from Mac
 make backup-pull # offsite restic copy to Mac
 make restore-check # restic check (Pi + Mac offsite)
+make audit-dns     # LAN DNS coverage audit
+make remediate-dns # bypass remediation playbook
 make diagnose-remote # Tailscale/SSH/UFW teşhisi
 make recover-stack   # manuel stack kurtarma
 ```

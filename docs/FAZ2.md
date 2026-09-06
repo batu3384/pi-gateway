@@ -36,5 +36,5 @@ make restore-check
 
 Snapshot list:
 ```bash
-ssh "$PI_USER@$PI_STATIC_IP" 'docker run --rm -e RESTIC_PASSWORD=... -v /mnt/ssd/pi-gateway-data/backups/restic:/repo restic/restic:0.17.3 -r file:///repo snapshots'
+ssh "$PI_USER@$PI_STATIC_IP" 'docker run --rm -e RESTIC_PASSWORD=... -v /mnt/ssd/pi-gateway-data/backups/restic:/repo restic/restic@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510 -r file:///repo snapshots'
 ```
