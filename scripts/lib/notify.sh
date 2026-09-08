@@ -382,6 +382,12 @@ notify_monitoring_stack_warn() {
   notify_send_with_transition "monitoring-stack" "fail" "⚠️ İzleme Yığını Sorunu" "$body" "HTML"
 }
 
+notify_monitoring_stack_ok() {
+  notify_send_with_transition \
+    "monitoring-stack" "ok" "✅ İzleme Yığını Normale Döndü" \
+    "Prometheus, Grafana ve node-exporter yeniden çalışıyor." "HTML"
+}
+
 notify_container_restart_warn() {
   local name="$1"
   local recent="$2"
@@ -399,6 +405,10 @@ notify_container_restart_warn() {
       hints="• Pi: <code>docker logs ${name} --tail 40</code>
 • DNS: <code>health-check.sh</code>"
       ;;
+    crowdsec)
+      hints="• Pi: <code>docker logs crowdsec --tail 40</code>
+• Bozuk hub index: <code>REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/setup-crowdsec.sh --reset</code>"
+      ;;
     *)
       hints="• Pi: <code>docker logs ${name} --tail 40</code>"
       ;;
@@ -407,7 +417,7 @@ notify_container_restart_warn() {
   body="$(notify_html_alert \
     "Konteyner: $(notify_escape_html "$name")
 Son ${window_min} dk restart: ${recent}
-${lifetime:+Ömür boyu sayaç: ${lifetime}
+Toplam Docker restart: ${lifetime:-bilinmiyor}
 }Durum: $(notify_escape_html "$status")" \
     "$hints")"
   notify_send_with_transition "container-restart-${name}" "fail" "⚠️ Konteyner Restart Döngüsü" "$body" "HTML"

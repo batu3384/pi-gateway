@@ -229,6 +229,8 @@ grep -q 'pi-gateway-container-watchdog.timer' "$PROJECT_DIR/scripts/pi/setup-hom
   || die "home-ops container-watchdog timer yok"
 grep -q 'notify_monitoring_stack_warn' "$PROJECT_DIR/scripts/lib/notify.sh" \
   || die "notify monitoring-stack yok"
+grep -q 'notify_monitoring_stack_ok' "$PROJECT_DIR/scripts/lib/notify.sh" \
+  || die "notify monitoring-stack recovery yok"
 grep -q 'notify_prometheus_repair' "$PROJECT_DIR/scripts/lib/notify.sh" \
   || die "notify prometheus-repair yok"
 grep -q 'check_live_regressions' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \

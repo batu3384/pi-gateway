@@ -488,6 +488,7 @@ if [[ "$sd_fail" -eq 1 ]]; then
   logger -t "$LOG_TAG" "SD fail — notify check-sd-health"
 elif [[ ${#FAILURES[@]} -eq 0 ]]; then
   logger -t "$LOG_TAG" "OK dns stack healthy"
+  notify_monitoring_stack_ok || true
   # Çekirdek DNS: OnFailure (notify_health_systemd_*) — health-dns çift bubble yok
   notify_optional_recovered || true
   notify_slo_backup_ok || true
@@ -500,6 +501,7 @@ else
   has_optional=0
   has_slo=0
   has_ops_slo=0
+  _monitoring_details=()
   for f in "${FAILURES[@]}"; do
     case "$f" in
       ssd-unmounted|ssd-unhealthy|storage-degraded*|data-ssd-symlink*|data-native-missing)
@@ -518,23 +520,21 @@ else
         has_core=1
         ;;
     esac
+    case "$f" in
+      optional-prometheus-down|optional-grafana-down|optional-node-exporter-down)
+        _monitoring_details+=("$f")
+        ;;
+    esac
   done
+  if [[ ${#_monitoring_details[@]} -gt 0 ]]; then
+    notify_monitoring_stack_warn "$host" "${_monitoring_details[*]}" || true
+  else
+    notify_monitoring_stack_ok || true
+  fi
   if [[ "$has_ssd" -eq 1 ]]; then
     notify_ssd_degraded "$host" "$details"
   elif [[ "$has_core" -eq 1 ]]; then
     logger -t "$LOG_TAG" "core fail — Telegram OnFailure (health-dns yok)"
-    _monitoring_details=()
-    for f in "${FAILURES[@]}"; do
-      case "$f" in
-        optional-prometheus-down|optional-grafana-down|optional-node-exporter-down)
-          _monitoring_details+=("$f")
-          ;;
-      esac
-    done
-    if [[ ${#_monitoring_details[@]} -gt 0 ]]; then
-      notify_monitoring_stack_warn "$host" "${_monitoring_details[*]}" || true
-    fi
-    unset _monitoring_details
   elif [[ "$has_optional" -eq 1 ]]; then
     notify_optional_warn "$host" "$details"
   else

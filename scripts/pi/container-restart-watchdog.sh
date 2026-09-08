@@ -178,8 +178,6 @@ for name in watch:
         should_alert = False
         if not was_alerting:
             should_alert = True
-        elif window_total > int(entry.get("last_alert_window_total", 0)):
-            should_alert = True
         elif now - last_alert >= repeat_sec:
             should_alert = True
         if should_alert:

@@ -107,9 +107,19 @@ grep -q 'adguard-bbolt-repair-failed' "$ROOT/scripts/pi/health-check.sh" \
   || die "health bbolt failure status yok"
 grep -q 'restart_events' "$ROOT/scripts/pi/container-restart-watchdog.sh" \
   || die "container-watch restart_events yok"
+if grep -q 'window_total > int(entry.get("last_alert_window_total"' \
+  "$ROOT/scripts/pi/container-restart-watchdog.sh"; then
+  die "container-watch restart artisi Telegram spam yapabilir"
+fi
+grep -q 'Toplam Docker restart' "$ROOT/scripts/lib/notify.sh" \
+  || die "container restart sayaç etiketi yok"
 bash "$ROOT/scripts/pi/crowdsec-ban-diary.sh" --self-check || die "crowdsec-diary self-check"
 grep -q 'notify_container_restart_warn' "$ROOT/scripts/lib/notify.sh" \
   || die "notify container-restart yok"
+grep -q 'notify_monitoring_stack_ok' "$ROOT/scripts/lib/notify.sh" \
+  || die "notify monitoring recovery yok"
+grep -q 'setup-crowdsec.sh --reset' "$ROOT/scripts/lib/notify.sh" \
+  || die "crowdsec repair hint yok"
 ok "timer wiring"
 
 grep -q 'LOCAL_MAG' "$ROOT/scripts/lib/quake-alert.py" || die "deprem esik yok"
