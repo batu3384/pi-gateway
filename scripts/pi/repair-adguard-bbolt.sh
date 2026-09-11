@@ -9,7 +9,7 @@ REPAIR_RESTART_ONLY_RC=12
 log() { echo "[repair-adguard-bbolt] $*"; }
 
 adguard_bbolt_broken() {
-  local containers status health logs
+  local containers status health logs started
   containers="$(docker ps -a --format '{{.Names}}' 2>/dev/null || true)"
   grep -qx adguard <<<"$containers" || return 1
   status="$(docker inspect adguard --format '{{.State.Status}}' 2>/dev/null || true)"
@@ -17,7 +17,12 @@ adguard_bbolt_broken() {
   if [[ "$health" == "healthy" ]]; then
     return 1
   fi
-  logs="$(docker logs adguard 2>&1 | tail -40 || true)"
+  started="$(docker inspect -f '{{.State.StartedAt}}' adguard 2>/dev/null || true)"
+  if [[ -n "$started" ]]; then
+    logs="$(docker logs adguard --since "$started" 2>&1 || true)"
+  else
+    logs="$(docker logs adguard --since 5m 2>&1 || true)"
+  fi
   grep -qiE 'freelist|bbolt|panic.*sessions|panic.*stats' <<<"$logs" || return 1
   if [[ "$status" == "restarting" || "$status" == "exited" || "$health" == "unhealthy" ]]; then
     return 0

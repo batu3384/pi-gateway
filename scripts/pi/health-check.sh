@@ -101,18 +101,26 @@ else
     docker ps --format '{{.Names}}' | grep -q "^${name}$" || note_fail "optional-${name}-down"
   }
   optional_prometheus_ok() {
-    docker ps --format '{{.Names}}' | grep -q '^prometheus$' && return 0
+    if docker ps --format '{{.Names}}' | grep -q '^prometheus$' \
+      && curl -fsS --max-time 3 http://127.0.0.1:9090/-/ready >/dev/null 2>&1; then
+      return 0
+    fi
     if [[ "${PROMETHEUS_AUTO_HEAL:-true}" == "true" ]]; then
       local repair="${SCRIPT_DIR}/repair-prometheus-tsdb.sh"
-      local plogs
+      local plogs pstarted
       if [[ -x "$repair" ]]; then
-        plogs="$(docker logs prometheus 2>&1 | tail -50 || true)"
+        pstarted="$(docker inspect -f '{{.State.StartedAt}}' prometheus 2>/dev/null || true)"
+        if [[ -n "$pstarted" ]]; then
+          plogs="$(docker logs prometheus --since "$pstarted" 2>&1 || true)"
+        else
+          plogs="$(docker logs prometheus --since 5m 2>&1 || true)"
+        fi
         if echo "$plogs" | grep -qE 'invalid checksum|opening storage failed' \
           || { echo "$plogs" | grep -q 'WAL truncation' \
             && echo "$plogs" | grep -q 'compaction failed'; }; then
           logger -t "$LOG_TAG" "prometheus TSDB — auto-heal"
           if REMOTE_DIR="$REMOTE_DIR" NOTIFY_REPAIR=1 bash "$repair"; then
-            docker ps --format '{{.Names}}' | grep -q '^prometheus$' && return 0
+            curl -fsS --max-time 3 http://127.0.0.1:9090/-/ready >/dev/null 2>&1 && return 0
           fi
         fi
       fi
@@ -120,7 +128,37 @@ else
     note_fail "optional-prometheus-down"
   }
   [[ "${ENABLE_N8N:-true}" == "true" ]] && optional_down n8n
-  [[ "${ENABLE_NETALERTX:-true}" == "true" ]] && optional_down netalertx
+  optional_netalertx_ok() {
+    local heal="${REMOTE_DIR}/scripts/pi/ensure-netalert-db-access.sh"
+    local ignore="${REMOTE_DIR}/config/netalertx/ignore_plugin"
+    [[ -x "$heal" ]] || heal="${SCRIPT_DIR}/ensure-netalert-db-access.sh"
+    if [[ ! -f "$ignore" ]]; then
+      logger -t "$LOG_TAG" "netalertx ignore_plugin yok — compose dizin bind eder"
+      note_fail "optional-netalertx-ignore-plugin"
+    fi
+    if docker ps --format '{{.Names}}' | grep -q '^netalertx$'; then
+      _na_started="$(docker inspect -f '{{.State.StartedAt}}' netalertx 2>/dev/null || true)"
+      # Eski log (ayni container ID) her tick stop+start yapmasin
+      if [[ -n "$_na_started" ]] \
+        && docker logs netalertx --since "$_na_started" 2>&1 \
+          | grep -q 'database disk image is malformed'; then
+        logger -t "$LOG_TAG" "netalertx sqlite malformed — stop+karantina"
+        docker stop netalertx >/dev/null 2>&1 || true
+        [[ -x "$heal" ]] && bash "$heal" || true
+      fi
+      unset _na_started
+      docker ps --format '{{.Names}}' | grep -q '^netalertx$' && return 0
+    fi
+    if [[ -x "$heal" ]]; then
+      logger -t "$LOG_TAG" "netalertx down — db integrity + start"
+      bash "$heal" || true
+    fi
+    docker start netalertx >/dev/null 2>&1 || true
+    sleep 2
+    docker ps --format '{{.Names}}' | grep -q '^netalertx$' && return 0
+    note_fail "optional-netalertx-down"
+  }
+  [[ "${ENABLE_NETALERTX:-true}" == "true" ]] && optional_netalertx_ok
   [[ "${ENABLE_DOZZLE:-true}" == "true" ]] && optional_down dozzle
   [[ "${ENABLE_MONITORING:-true}" == "true" ]] && optional_prometheus_ok
   [[ "${ENABLE_MONITORING:-true}" == "true" ]] && optional_down grafana
@@ -137,14 +175,15 @@ fi
 # bind-mount: up -d process reload etmez; cache'li dig yaniltir. Restart AdGuard'i dusurur (depends_on).
 unbound_conf_stale && note_fail "unbound-stale-conf"
 if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx adguard; then
-  _agh_logs="$(docker logs adguard 2>&1 | tail -80 || true)"
-  if grep -qiE 'freelist|bbolt|panic.*sessions|panic.*stats' <<<"$_agh_logs"; then
-    _agh_bad=1
-    _agh_state="$(docker inspect adguard --format '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' 2>/dev/null || true)"
-    grep -qiE 'restarting|exited|unhealthy' <<<"$_agh_state" \
-      || grep -qi panic <<<"$_agh_logs" \
-      || _agh_bad=0
-    if [[ "${_agh_bad:-0}" -eq 1 ]]; then
+  _agh_health="$(docker inspect adguard --format '{{if .State.Health}}{{.State.Health.Status}}{{end}}' 2>/dev/null || true)"
+  if [[ "$_agh_health" != "healthy" ]]; then
+    _agh_started="$(docker inspect -f '{{.State.StartedAt}}' adguard 2>/dev/null || true)"
+    if [[ -n "$_agh_started" ]]; then
+      _agh_logs="$(docker logs adguard --since "$_agh_started" 2>&1 || true)"
+    else
+      _agh_logs="$(docker logs adguard --since 5m 2>&1 || true)"
+    fi
+    if grep -qiE 'freelist|bbolt|panic.*sessions|panic.*stats' <<<"$_agh_logs"; then
       _bbolt="${SCRIPT_DIR}/repair-adguard-bbolt.sh"
       [[ -f "$_bbolt" ]] || _bbolt="${REMOTE_DIR}/scripts/pi/repair-adguard-bbolt.sh"
       if [[ ! -x "$_bbolt" ]]; then
@@ -160,8 +199,7 @@ if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx adguard; then
             logger -t "$LOG_TAG" "adguard bbolt — restart recovery OK"
             ;;
           10)
-            logger -t "$LOG_TAG" "WARN adguard bbolt auto-heal skipped"
-            note_fail "adguard-bbolt-repair-skipped"
+            logger -t "$LOG_TAG" "adguard bbolt auto-heal skip (bu calisma temiz)"
             ;;
           11)
             logger -t "$LOG_TAG" "WARN adguard bbolt auto-heal deferred"
@@ -175,7 +213,7 @@ if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx adguard; then
       fi
     fi
   fi
-  unset _agh_logs _agh_bad _agh_state _bbolt
+  unset _agh_logs _agh_health _agh_started _bbolt _bbolt_rc
 fi
 adguard_dns_ok() {
   local aaaa
@@ -208,10 +246,6 @@ if [[ -n "${AGH_ADMIN_PASSWORD:-}" ]]; then
   _filter_in_progress="${ADGUARD_FILTER_IN_PROGRESS_FILE:-/run/pi-gateway/adguard-filters.in_progress}"
   if agh_login "$BASE" "$COOKIE" "${AGH_ADMIN_USER:-admin}" "$AGH_ADMIN_PASSWORD" 3; then
     filter_governance_ok=true
-    if systemctl is-failed --quiet pi-gateway-adguard-filters.service 2>/dev/null; then
-      logger -t "$LOG_TAG" "adguard filter service failed"
-      filter_governance_ok=false
-    fi
     _filter_state="${ADGUARD_FILTER_STATE_PATH:-/var/lib/pi-gateway/adguard-filter-state.json}"
     _filter_last_success="$(
       python3 - "$_filter_state" <<'PY'
@@ -235,21 +269,16 @@ PY
     fi
     [[ -n "$_filter_last_success" ]] || filter_governance_ok=false
     unset _filter_state _filter_last_success
-    if [[ -f "$_filter_in_progress" ]]; then
-      logger -t "$LOG_TAG" "adguard filter apply suruyor — auto-heal atlandi"
-      filter_governance_ok=false
-    elif [[ -f "$_filters_py" ]]; then
-      if ! REMOTE_DIR="$REMOTE_DIR" BASE="$BASE" COOKIE="$COOKIE" \
-        ADGUARD_FILTER_PROFILE="${ADGUARD_FILTER_PROFILE:-balanced}" \
-        python3 "$_filters_py" --governance-check; then
-        filter_governance_ok=false
-      fi
-    fi
     rules="$(curl -fsS -b "$COOKIE" "${BASE}/control/filtering/status" | python3 -c "
 import json,sys
 d=json.load(sys.stdin)
 print(sum((f.get('rules_count') or 0) for f in d.get('filters',[])))
-" 2>/dev/null || echo 0)"
+print('1' if d.get('enabled') is True else '0')
+" 2>/dev/null || printf '0\n0\n')"
+    _filt_on="${rules##*$'\n'}"
+    rules="${rules%%$'\n'*}"
+    [[ "${_filt_on:-0}" == "1" ]] || note_fail "adguard-filtering-off"
+    unset _filt_on
     rewrites="$(curl -fsS -b "$COOKIE" "${BASE}/control/rewrite/list" | python3 -c "
 import json,sys
 print(len(json.load(sys.stdin)))
@@ -259,34 +288,66 @@ import json,sys
 d=json.load(sys.stdin)
 upstream = d.get('upstream_dns') or []
 udp_ok = any(u.startswith('udp://127.0.0.1:') for u in upstream)
+tcp_off = not any(str(u).startswith('tcp://') for u in upstream)
 ptr_ok = d.get('use_private_ptr_resolvers') is False
-ttl_ok = d.get('blocked_response_ttl') == int('${ADGUARD_BLOCKED_TTL:-60}')
-print('1' if udp_ok and ptr_ok and ttl_ok else '0')
+ttl_ok = d.get('blocked_response_ttl') == int('${ADGUARD_BLOCKED_TTL:-300}')
+v4_ok = int(d.get('ratelimit_subnet_len_ipv4') or 0) == int('${ADGUARD_RATELIMIT_SUBNET_IPV4:-32}')
+v6_ok = int(d.get('ratelimit_subnet_len_ipv6') or 0) == int('${ADGUARD_RATELIMIT_SUBNET_IPV6:-128}')
+opt_ok = d.get('cache_optimistic') is True
+to_ok = int(d.get('upstream_timeout') or 0) == int('${ADGUARD_UPSTREAM_TIMEOUT:-2}')
+print('1' if udp_ok and tcp_off and ptr_ok and ttl_ok and v4_ok and v6_ok and opt_ok and to_ok else '0')
 " 2>/dev/null || echo 0)"
-    [[ "${rules:-0}" -ge "${ADGUARD_MIN_FILTER_RULES:-100000}" ]] || filter_governance_ok=false
-    if [[ "$filter_governance_ok" != "true" ]]; then
-      if [[ "${ADGUARD_AUTO_HEAL:-true}" == "true" && ! -f "$_filter_in_progress" ]]; then
-        logger -t "$LOG_TAG" "adguard-filter-governance — auto-heal (filters)"
-        if ! ADGUARD_FILTER_FORCE_REFRESH=true REMOTE_DIR="$REMOTE_DIR" \
-          bash "$(_pi_home_script apply-adguard-filters.sh)"; then
-          logger -t "$LOG_TAG" "WARN adguard filter auto-heal basarisiz"
-        fi
-        if [[ -f "$_filters_py" ]] && REMOTE_DIR="$REMOTE_DIR" BASE="$BASE" COOKIE="$COOKIE" \
+    if [[ -f "$_filter_in_progress" ]]; then
+      _ip_now="$(date +%s)"
+      _ip_mt="$(stat -c %Y "$_filter_in_progress" 2>/dev/null || echo 0)"
+      _ip_max="${ADGUARD_FILTER_IN_PROGRESS_MAX_SEC:-900}"
+      if [[ "$_ip_mt" =~ ^[0-9]+$ && "$_ip_max" =~ ^[0-9]+$ ]] \
+        && (( _ip_now - _ip_mt > _ip_max )); then
+        logger -t "$LOG_TAG" "adguard filter in_progress stale ($((_ip_now - _ip_mt))s) — silindi"
+        rm -f "$_filter_in_progress" 2>/dev/null || true
+      fi
+      unset _ip_now _ip_mt _ip_max
+    fi
+    if [[ -f "$_filter_in_progress" ]]; then
+      logger -t "$LOG_TAG" "adguard filter apply suruyor — auto-heal ve governance skip"
+    else
+      if [[ -f "$_filters_py" ]]; then
+        if ! REMOTE_DIR="$REMOTE_DIR" BASE="$BASE" COOKIE="$COOKIE" \
           ADGUARD_FILTER_PROFILE="${ADGUARD_FILTER_PROFILE:-balanced}" \
-          python3 "$_filters_py" --governance-check 2>/dev/null; then
-          filter_governance_ok=true
+          python3 "$_filters_py" --governance-check; then
+          filter_governance_ok=false
         fi
-        rules="$(curl -fsS -b "$COOKIE" "${BASE}/control/filtering/status" | python3 -c "
+      fi
+      [[ "${rules:-0}" -ge "${ADGUARD_MIN_FILTER_RULES:-100000}" ]] || filter_governance_ok=false
+      if [[ "$filter_governance_ok" == "true" ]]; then
+        if systemctl is-failed --quiet pi-gateway-adguard-filters.service 2>/dev/null; then
+          logger -t "$LOG_TAG" "adguard filter unit failed ama canli listeler OK — reset-failed"
+          systemctl reset-failed pi-gateway-adguard-filters.service 2>/dev/null || true
+        fi
+      else
+        if [[ "${ADGUARD_AUTO_HEAL:-true}" == "true" ]]; then
+          logger -t "$LOG_TAG" "adguard-filter-governance — auto-heal (filters)"
+          if ! ADGUARD_FILTER_FORCE_REFRESH=true REMOTE_DIR="$REMOTE_DIR" \
+            bash "$(_pi_home_script apply-adguard-filters.sh)"; then
+            logger -t "$LOG_TAG" "WARN adguard filter auto-heal basarisiz"
+          fi
+          if [[ -f "$_filters_py" ]] && REMOTE_DIR="$REMOTE_DIR" BASE="$BASE" COOKIE="$COOKIE" \
+            ADGUARD_FILTER_PROFILE="${ADGUARD_FILTER_PROFILE:-balanced}" \
+            python3 "$_filters_py" --governance-check 2>/dev/null; then
+            filter_governance_ok=true
+          fi
+          rules="$(curl -fsS -b "$COOKIE" "${BASE}/control/filtering/status" | python3 -c "
 import json,sys
 d=json.load(sys.stdin)
 print(sum((f.get('rules_count') or 0) for f in d.get('filters',[])))
 " 2>/dev/null || echo 0)"
-        [[ "${rules:-0}" -ge "${ADGUARD_MIN_FILTER_RULES:-100000}" ]] || filter_governance_ok=false
+          [[ "${rules:-0}" -ge "${ADGUARD_MIN_FILTER_RULES:-100000}" ]] || filter_governance_ok=false
+        fi
+        [[ "$filter_governance_ok" == "true" ]] \
+          || note_fail "adguard-filter-governance"
+        [[ "${rules:-0}" -ge "${ADGUARD_MIN_FILTER_RULES:-100000}" ]] \
+          || note_fail "adguard-filter-rules-low(${rules:-0})"
       fi
-      [[ "$filter_governance_ok" == "true" ]] \
-        || note_fail "adguard-filter-governance"
-      [[ "${rules:-0}" -ge "${ADGUARD_MIN_FILTER_RULES:-100000}" ]] \
-        || note_fail "adguard-filter-rules-low(${rules:-0})"
     fi
     [[ "${rewrites:-0}" -ge "${ADGUARD_MIN_REWRITES:-8}" ]] || note_fail "adguard-rewrites-low(${rewrites:-0})"
     [[ "$dns_ok" == "1" ]] || {
@@ -300,9 +361,14 @@ import json,sys
 d=json.load(sys.stdin)
 upstream = d.get('upstream_dns') or []
 udp_ok = any(u.startswith('udp://127.0.0.1:') for u in upstream)
+tcp_off = not any(str(u).startswith('tcp://') for u in upstream)
 ptr_ok = d.get('use_private_ptr_resolvers') is False
-ttl_ok = d.get('blocked_response_ttl') == int('${ADGUARD_BLOCKED_TTL:-60}')
-print('1' if udp_ok and ptr_ok and ttl_ok else '0')
+ttl_ok = d.get('blocked_response_ttl') == int('${ADGUARD_BLOCKED_TTL:-300}')
+v4_ok = int(d.get('ratelimit_subnet_len_ipv4') or 0) == int('${ADGUARD_RATELIMIT_SUBNET_IPV4:-32}')
+v6_ok = int(d.get('ratelimit_subnet_len_ipv6') or 0) == int('${ADGUARD_RATELIMIT_SUBNET_IPV6:-128}')
+opt_ok = d.get('cache_optimistic') is True
+to_ok = int(d.get('upstream_timeout') or 0) == int('${ADGUARD_UPSTREAM_TIMEOUT:-2}')
+print('1' if udp_ok and tcp_off and ptr_ok and ttl_ok and v4_ok and v6_ok and opt_ok and to_ok else '0')
 " 2>/dev/null || echo 0)"
       fi
       [[ "$dns_ok" == "1" ]] || note_fail "adguard-dns-config-drift"

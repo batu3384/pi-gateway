@@ -735,10 +735,13 @@ def poll_validation(
             errors, warnings = validate_filter_status(
                 status_after, desired, metadata, max_total_rules
             )
-            if not errors and refresh_required and not refresh_verified(
-                previous_status or {}, status_after, desired
-            ):
-                errors = ["refresh sonucu dogrulanamadi"]
+            if not errors:
+                if refresh_required and not refresh_verified(
+                    previous_status or {}, status_after, desired
+                ):
+                    # 304 / ayni last_updated: liste saglikli, timestamp artmasi sart degil.
+                    log("refresh last_updated ayni (304) — governance OK")
+                break
             status_failures = 0
         except (AguardApiError, RuntimeError) as exc:
             status_failures += 1
@@ -1101,6 +1104,11 @@ def self_check() -> None:
     assert refresh_verified(
         {"filters": [{"url": "https://example.test/list.txt", "last_updated": 1}]},
         {"filters": [{"url": "https://example.test/list.txt", "last_updated": 2}]},
+        [("Test", "https://example.test/list.txt")],
+    )
+    assert not refresh_verified(
+        {"filters": [{"url": "https://example.test/list.txt", "last_updated": 5}]},
+        {"filters": [{"url": "https://example.test/list.txt", "last_updated": 5}]},
         [("Test", "https://example.test/list.txt")],
     )
     validate_source_url("https://adguardteam.github.io/list.txt")

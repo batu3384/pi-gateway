@@ -41,18 +41,12 @@ soft "IPv6 ULA DNS" "$SCRIPT_DIR/ensure-ipv6-ula.sh"
 soft "IPv6 RDNSS RA" "$SCRIPT_DIR/setup-rdnss-ra.sh"
 if [[ "${ENABLE_NETALERTX:-true}" == "true" ]] \
   && docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx netalertx; then
-  netalert_gid="${NETALERTX_GID:-$(id -g)}"
-  netalert_current_gid="$(
-    docker inspect netalertx --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null \
-      | sed -n 's/^PGID=//p' | head -1
-  )"
-  if [[ "$netalert_current_gid" != "$netalert_gid" ]]; then
-    log ">> NetAlertX recreate (PGID=${netalert_gid})"
-    (cd "$REMOTE_DIR/compose" && docker compose --env-file ../.env \
-      --profile netalert up -d --no-deps --force-recreate netalertx) \
-      || { log "HATA: NetAlertX recreate"; exit 1; }
-  fi
-  crit "NetAlert DB permissions" "$SCRIPT_DIR/ensure-netalert-db-access.sh"
+  log ">> NetAlertX compose (cpu/mem limit + db)"
+  (cd "$REMOTE_DIR/compose" && docker compose --env-file ../.env \
+    --profile netalert up -d --no-deps netalertx) \
+    || log "WARN: NetAlertX compose up"
+  soft "NetAlert DB" "$SCRIPT_DIR/ensure-netalert-db-access.sh"
+  soft "NetAlertX setup" "$SCRIPT_DIR/setup-netalertx.sh"
 fi
 soft "Config izinleri" "$SCRIPT_DIR/fix-config-perms.sh"
 soft "SSD SMART timer" "$SCRIPT_DIR/setup-ssd-smart-timer.sh"

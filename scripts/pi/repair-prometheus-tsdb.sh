@@ -38,8 +38,13 @@ prometheus_ready() {
 }
 
 prometheus_tsdb_corrupt() {
-  local logs
-  logs="$(docker logs prometheus 2>&1 | tail -50)"
+  local logs started
+  started="$(docker inspect -f '{{.State.StartedAt}}' prometheus 2>/dev/null || true)"
+  if [[ -n "$started" ]]; then
+    logs="$(docker logs prometheus --since "$started" 2>&1 || true)"
+  else
+    logs="$(docker logs prometheus --since 5m 2>&1 || true)"
+  fi
   echo "$logs" | grep -qE 'invalid checksum|opening storage failed' && return 0
   if ! prometheus_ready; then
     echo "$logs" | grep -q 'WAL truncation' && echo "$logs" | grep -q 'compaction failed'

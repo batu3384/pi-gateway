@@ -54,8 +54,13 @@ pull_if() {
 phase_dns() {
   log "phase 1/3: DNS (unbound + adguard)"
   pull_if unbound adguard
-  # bind-mount unbound.conf process reload etmez — DoT + modem :53 drop icin recreate sart
-  compose up -d --force-recreate unbound
+  # bind-mount unbound.conf process reload etmez — yalniz stale/yok iken recreate
+  if ! docker inspect unbound >/dev/null 2>&1 || unbound_conf_stale; then
+    log "unbound recreate (yok veya conf stale)"
+    compose up -d --no-deps --force-recreate unbound
+  else
+    compose up -d --no-deps unbound
+  fi
   compose up -d adguard
   wait_container_healthy unbound 40 || true
   wait_container_healthy adguard 90 || true

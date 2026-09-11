@@ -26,9 +26,16 @@ grep -q '/dns /ssd /backup' "$card" || die "status card komut footer yok"
 grep -q 'journalctl' "$metrics" || die "ssd-usb-metrics journalctl yok"
 grep -q 'last_alert_sig' "$metrics" || die "ssd-usb-metrics alert dedup yok"
 grep -q 'notify_ssd_usb_flap_ok' "$metrics" || die "ssd-usb-metrics recovery notify yok"
+grep -q 'asili fail' "$metrics" || die "ssd-usb-metrics asili fail recover yok"
+grep -q 'update --notify' "$ROOT/scripts/pi/export-gateway-state.sh" \
+  || die "export-state ssd usb notify yok"
 python3 "$metrics" --self-check || die "ssd-usb-metrics self-check"
 grep -q 'notify_restic_offsite_missing' "$ROOT/scripts/lib/notify.sh" || die "offsite missing notify yok"
 grep -q 'NOTIFY_USB_FLAP_REPEAT_SEC' "$ROOT/scripts/lib/notify.sh" || die "usb flap repeat yok"
+grep -q 'gonderilmis fail sonrasi recover' "$ROOT/scripts/pi/test-notify-transitions.sh" \
+  || die "notified fail recover yok"
+grep -q 'NOTIFY_FAIL_DEBOUNCE_SEC' "$ROOT/scripts/lib/notify.sh" || die "fail debounce yok"
+grep -q 'NOTIFY_GLOBAL_MAX_HOUR' "$ROOT/scripts/lib/notify.sh" || die "saatlik tavan yok"
 ! grep -q 'notify_html_alert.*<b>' "$ROOT/scripts/pi/dns-coverage-weekly.sh" \
   || die "dns-weekly double-html risk"
 ok "telegram ops + review fixes"

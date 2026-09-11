@@ -59,11 +59,13 @@ _netalert_gid_changed=0
 _ensure_netalert_host_gid && _netalert_gid_changed=1 || true
 
 [[ "${ENABLE_NETALERTX:-true}" == "true" ]] || { log "NetAlertX kapali"; exit 0; }
+[[ -f "${REMOTE_DIR}/config/netalertx/ignore_plugin" ]] \
+  || { log "HATA: config/netalertx/ignore_plugin yok (compose dizin bind → INTRNT)"; exit 1; }
 [[ -n "${NETALERTX_PASSWORD:-}" ]] || { log "HATA: NETALERTX_PASSWORD veya AGH_ADMIN_PASSWORD gerekli"; exit 1; }
 [[ "${#NETALERTX_PASSWORD}" -ge 12 ]] \
   || { log "HATA: NETALERTX_PASSWORD en az 12 karakter olmali"; exit 1; }
 [[ -n "${AGH_ADMIN_PASSWORD:-}" ]] || { log "HATA: AGH_ADMIN_PASSWORD gerekli (ADGUARDIMP)"; exit 1; }
-docker ps --format '{{.Names}}' | grep -q '^netalertx$' || { log "HATA: netalertx container yok"; exit 1; }
+docker ps -a --format '{{.Names}}' | grep -q '^netalertx$' || { log "HATA: netalertx container yok"; exit 1; }
 case "${N8N_WEBHOOK_SECRET:-}" in
   ""|CHANGE_ME*)
     [[ "${ENABLE_N8N:-true}" != "true" ]] || { log "HATA: N8N_WEBHOOK_SECRET gerekli"; exit 1; }
@@ -104,7 +106,19 @@ _reap_netalert_binds() {
   sleep 1
 }
 mkdir -p "${DATA_DIR}/config" "${DATA_DIR}/db"
-chown -R "20211:$(id -gn)" "${DATA_DIR}" 2>/dev/null || sudo chown -R "20211:$(id -gn)" "${DATA_DIR}" 2>/dev/null || true
+_na_running="$(docker inspect -f '{{.State.Running}}' netalertx 2>/dev/null || echo false)"
+if [[ "$_na_running" != "true" ]]; then
+  chown -R "20211:$(id -gn)" "${DATA_DIR}" 2>/dev/null \
+    || sudo chown -R "20211:$(id -gn)" "${DATA_DIR}" 2>/dev/null || true
+else
+  chown -R "20211:$(id -gn)" "${DATA_DIR}/config" 2>/dev/null \
+    || sudo chown -R "20211:$(id -gn)" "${DATA_DIR}/config" 2>/dev/null || true
+fi
+unset _na_running
+_ensure_db_script="${SCRIPT_DIR}/ensure-netalert-db-access.sh"
+if [[ -x "$_ensure_db_script" ]]; then
+  bash "$_ensure_db_script" || log "WARN: ensure-netalert-db-access (erken)"
+fi
 reap_dead_docker_scopes || true
 if ! curl -fsS -L --max-time 3 "http://${NETALERTX_LISTEN_ADDR}:${NETALERTX_PORT}/" >/dev/null 2>&1 \
   && ! curl -fsS -L --max-time 3 "http://127.0.0.1:${NETALERTX_PORT}/" >/dev/null 2>&1; then
@@ -124,6 +138,7 @@ log "NetAlertX webhook kapali — Telegram plugin sendMessage"
 export NETALERTX_PLUGINS='["ARPSCAN","ADGUARDIMP","NEWDEV","NTFPRCS","DBCLNP","CUSTPROP","SETPWD","SYNC","UI","MAINT","TELEGRAM"]'
 export SCAN_SUBNET
 python3 <<'PY'
+import json
 import os
 import re
 import subprocess
@@ -145,7 +160,19 @@ password_hash = __import__("hashlib").sha256(password.encode()).hexdigest()
 agh_user = os.environ.get("AGH_ADMIN_USER", "admin")
 agh_pass = os.environ["AGH_ADMIN_PASSWORD"]
 agh_port = os.environ.get("ADGUARD_WEB_PORT", "8080")
-plugins = os.environ.get("NETALERTX_PLUGINS", "[]")
+raw_plugins = os.environ.get("NETALERTX_PLUGINS", "[]")
+try:
+    plugin_names = json.loads(raw_plugins)
+except json.JSONDecodeError:
+    plugin_names = []
+if not isinstance(plugin_names, list) or not plugin_names:
+    plugin_names = [
+        "ARPSCAN", "ADGUARDIMP", "NEWDEV", "NTFPRCS", "DBCLNP",
+        "CUSTPROP", "SETPWD", "SYNC", "UI", "MAINT", "TELEGRAM",
+    ]
+# app.conf Python literal — JSON cift tirnak parse edilmez (#1023).
+# INTRNT/VNDRPDT/WORKFLOWS necessary_plugins; compose ignore_plugin ile unload.
+plugins = "[" + ",".join("'" + str(n).replace("'", "") + "'" for n in plugin_names) + "]"
 lan = os.environ.get("LAN_DOMAIN", "home")
 proto = os.environ.get("PANEL_PROTOCOL", "https")
 dashboard = f"{proto}://devices.{lan}"
@@ -172,6 +199,7 @@ else:
     raise SystemExit("[netalertx-setup] HATA: app.conf olusmadi — container loglarina bakin")
 updates = {
     "LOADED_PLUGINS": plugins,
+    "DISCOVER_PLUGINS": "False",
     "SCAN_SUBNETS": scan_value,
     "WEBHOOK_URL": webhook,
     "WEBHOOK_REQUEST_METHOD": "'POST'",
@@ -179,13 +207,17 @@ updates = {
     "WEBHOOK_REPORT_TYPE": "'preset'",
     "ICMP_RUN": "'disabled'",
     "ARPSCAN_RUN": "'schedule'",
-    "ARPSCAN_RUN_SCHD": "'*/5 * * * *'",
+    "ARPSCAN_RUN_SCHD": "'*/15 * * * *'",
+    "NBTSCAN_RUN": "'disabled'",
+    "INTRNT_RUN": "'disabled'",
+    "CSVBCKP_RUN": "'disabled'",
+    "WORKFLOWS_RUN": "'disabled'",
     "DIGSCAN_RUN": "'disabled'",
     "AVAHISCAN_RUN": "'disabled'",
     "NSLOOKUP_RUN": "'disabled'",
     "VNDRPDT_RUN": "'disabled'",
     "ADGUARDIMP_RUN": "'schedule'",
-    "ADGUARDIMP_RUN_SCHD": "'*/5 * * * *'",
+    "ADGUARDIMP_RUN_SCHD": "'*/15 * * * *'",
     "ADGUARDIMP_RUN_TIMEOUT": "30",
     "ADGUARDIMP_SERVER": "'127.0.0.1'",
     "ADGUARDIMP_PORT": agh_port,

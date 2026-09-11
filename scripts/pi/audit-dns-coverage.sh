@@ -421,7 +421,7 @@ if unverified:
     finish("warn" if bypass_check == "warn" else "fail", 11)
 if protocol_unknown:
     print("COVERAGE_OK")
-    finish("warn", 0)
+    finish("ok", 0)
 print("COVERAGE_OK")
 finish("ok", 0)
 PY

@@ -167,10 +167,6 @@ def prom_lines(crc: int | None, delta: int, resets: int, io_err: int) -> str:
     )
 
 
-def _alert_signature(delta: int, resets: int, io_err: int) -> str:
-    return f"crc={delta}:r={resets}:io={io_err}"
-
-
 def _threshold_met(delta: int, resets: int, io_err: int) -> bool:
     return delta >= CRC_WARN_DELTA or resets >= RESET_WARN_COUNT or io_err >= IO_WARN_COUNT
 
@@ -204,43 +200,39 @@ def notify_if_needed(state: dict[str, Any]) -> int:
     delta = int(state.get("crc_delta") or 0)
     resets = int(state.get("usb_resets_24h") or 0)
     io_err = int(state.get("io_errors_24h") or 0)
-    if not _threshold_met(delta, resets, io_err):
-        if state.get("last_alert_sig"):
-            remote = os.environ.get("REMOTE_DIR", os.path.expanduser("~/pi-gateway"))
-            notify_sh = os.path.join(remote, "scripts/lib/notify.sh")
-            if os.path.isfile(notify_sh):
-                try:
-                    subprocess.run(
-                        ["bash", "-c", f'source "{notify_sh}"; notify_ssd_usb_flap_ok'],
-                        env=os.environ.copy(),
-                        check=True,
-                        timeout=30,
-                    )
-                    state["last_alert_sig"] = None
-                    save_state(state)
-                except (subprocess.SubprocessError, OSError):
-                    return 1
-        return 0
-    sig = _alert_signature(delta, resets, io_err)
-    if sig == state.get("last_alert_sig"):
-        return 0
     remote = os.environ.get("REMOTE_DIR", os.path.expanduser("~/pi-gateway"))
     notify_sh = os.path.join(remote, "scripts/lib/notify.sh")
     if not os.path.isfile(notify_sh):
         return 0
+
+    def _notify(fn: str, extra_env: dict[str, str] | None = None) -> bool:
+        env = os.environ.copy()
+        if extra_env:
+            env.update(extra_env)
+        try:
+            subprocess.run(
+                ["bash", "-c", f'source "{notify_sh}"; {fn}'],
+                env=env,
+                check=False,
+                timeout=30,
+            )
+            return True
+        except (subprocess.SubprocessError, OSError):
+            return False
+
+    if not _threshold_met(delta, resets, io_err):
+        # last_alert_sig yokken de asili fail state temizlensin
+        if not _notify("notify_ssd_usb_flap_ok"):
+            return 1
+        state["last_alert_sig"] = None
+        save_state(state)
+        return 0
+
+    # Tam sayi imza yok — her I/O +1 Telegram spam olmasin. Repeat notify.sh.
     detail = f"CRC +{delta}, USB reset {resets}, I/O {io_err} (son {WINDOW_SEC // 3600}s)"
-    env = os.environ.copy()
-    env["SSD_USB_NOTIFY_DETAIL"] = detail
-    try:
-        subprocess.run(
-            ["bash", "-c", f'source "{notify_sh}"; notify_ssd_usb_flap "$SSD_USB_NOTIFY_DETAIL"'],
-            env=env,
-            check=False,
-            timeout=30,
-        )
-    except (subprocess.SubprocessError, OSError):
+    if not _notify('notify_ssd_usb_flap "$SSD_USB_NOTIFY_DETAIL"', {"SSD_USB_NOTIFY_DETAIL": detail}):
         return 1
-    state["last_alert_sig"] = sig
+    state["last_alert_sig"] = "fail"
     save_state(state)
     return 0
 

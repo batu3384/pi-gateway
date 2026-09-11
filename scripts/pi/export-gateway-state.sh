@@ -272,7 +272,7 @@ fi
 _ssd_usb_py="${SCRIPT_DIR}/../lib/ssd-usb-metrics.py"
 [[ -f "$_ssd_usb_py" ]] || _ssd_usb_py="${REMOTE_DIR}/scripts/lib/ssd-usb-metrics.py"
 if [[ -f "$_ssd_usb_py" ]]; then
-  python3 "$_ssd_usb_py" export 2>/dev/null || true
+  python3 "$_ssd_usb_py" update --notify 2>/dev/null || true
   if [[ -f /var/lib/pi-gateway/metrics/ssd_usb.prom ]]; then
     if [[ "$(id -u)" -eq 0 ]]; then
       cat /var/lib/pi-gateway/metrics/ssd_usb.prom >>"$METRICS_FILE"

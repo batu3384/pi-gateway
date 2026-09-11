@@ -13,7 +13,7 @@ Result: Ads served from the same domain (YouTube `googlevideo.com`, some in-app 
 
 ## Current DNS stack
 
-Profile: `ADGUARD_FILTER_PROFILE=balanced` (default, TIF Medium) or `aggressive` (TIF Full + CNAME original; more RAM). Repo default stays `balanced`. Live Pi can use `aggressive`. Fake list **not** stacked — Pro++ already includes it. **AdGuard DNS Popup Hosts** (`filter_59`) **not** stacked — Pro++ already covers popups.
+Profile: `ADGUARD_FILTER_PROFILE=balanced` (default, TIF Medium + CNAME original) or `aggressive` (TIF Full; more RAM). Repo default stays `balanced`. Live Pi can use `aggressive`. Fake list **not** stacked — Pro++ already includes it. **AdGuard DNS Popup Hosts** (`filter_59`) **not** stacked — Pro++ already covers popups.
 
 HaGeZi **TIF** (threat intel) ≠ **Multi Ultimate** (ad list). TIF levels: Mini / Medium / Full. Multi Ultimate replaces Pro++ and breaks META/Xbox — not used. Do not stack TIF Full + TIF Medium. TIF Full: apply script WARNs if `MemAvailable` < 400MiB — switch to `balanced` (TIF Medium), do not add more lists.
 
@@ -24,7 +24,7 @@ HaGeZi **TIF** (threat intel) ≠ **Multi Ultimate** (ad list). TIF levels: Mini
 5. **Perflyst/Dandelion Smart TV** (`filter_7`) + **native.lgwebos** — CTV / LG webOS. Not HaGeZi Multi.
 6. **AWAvenue Ads Rule** — Android advertising SDKs (DNS-level; not the AdGuard browser Mobile Ads filter)
 7. **User rules** — `config/adguard/user-rules.txt` (`$important` pins + sniper; `@@` allowlist for WhatsApp / Instagram graph + fallback / ColorOS appconf hosts). Apply compares disk **and** AGH `user_rules` (hash-only skip dropped rules). `set_rules` then `cache_clear`.
-8. **AdGuard CNAME original trackers** (aggressive only) — `combined_original_trackers.txt`. AGH already follows CNAME in responses; this list is the *original* tracker hostnames AdGuard recommends for CNAME-capable resolvers. Do **not** add `combined_disguised_trackers.txt` (first-party alias names; microsite/clickthrough FP). ~4KB.
+8. **AdGuard CNAME original trackers** (balanced + aggressive) — `combined_original_trackers.txt` (~4KB). AGH already follows CNAME in responses; this list is the *original* tracker hostnames. Do **not** add `combined_disguised_trackers.txt` (first-party alias names; microsite/clickthrough FP). TIF Full stays aggressive-only.
 
 OISD Big and AdGuard DNS filter (`filter_1`) omitted: duplicate Pro++; waste Pi RAM.
 AdGuard browser Mobile Ads (`filters.adtidy.org/.../11.txt`) is CSS/path — skip for AdGuard Home. Do **not** add Multi Ultimate / NRD / abused-TLD / TIF-IP-in-DNS.
@@ -50,9 +50,9 @@ upstream tarafından imzalanmadığı için digest/delta guard tam supply-chain 
 değildir. `googlevideo.com`, `ytimg.com`, Instagram CDN, WhatsApp medya alan adları
 korunur; yeni mega-list eklenmez.
 
-**DNS knobs** (`apply-adguard-dns.sh`, env): `ADGUARD_RATELIMIT=50` (Tailscale burst; düşürme), `ADGUARD_CACHE_SIZE=16777216` (16MiB), `ADGUARD_QUERYLOG_INTERVAL_DAYS=7` + `ADGUARD_STATS_INTERVAL_DAYS=7`. Fresh install template aynı. TLD/IDN blanket block yok (FP). Kaçan reklam: manuel “reklam şimdi” + querylog — otomatik haftalık LLM rapor yok.
+**DNS knobs** (`apply-adguard-dns.sh`, env): `ADGUARD_RATELIMIT=50` per client (`ADGUARD_RATELIMIT_SUBNET_IPV4=32` / `IPV6=128`; AGH default /24 = tüm LAN tek kova), `ADGUARD_CACHE_SIZE=67108864` (64MiB), `ADGUARD_BLOCKED_TTL=300`, Unbound `serve-expired`. `ADGUARD_QUERYLOG_INTERVAL_DAYS=7` + `ADGUARD_STATS_INTERVAL_DAYS=7`. Fresh install template aynı. TLD/IDN blanket block yok (FP). Kaçan reklam: manuel “reklam şimdi” + querylog — otomatik haftalık LLM rapor yok.
 
-**Grafana:** `export-adguard-metrics.sh` (health timer, textfile) → blocked ratio, top clients / blocked domains, per-list `rules_count` / `last_updated` age, filter apply failure, rollback failure ve last verified apply timestamp. `audit-dns-coverage.sh` her health tick’inde `/var/lib/pi-gateway/dns-coverage-state.json` yazar; dashboard `pi_gateway_dns_coverage_percent`, `pi_gateway_dns_coverage_status` (1=OK, 2=WARN, 3=FAIL, 4=UNKNOWN), `pi_gateway_dns_coverage_protocol_unknown` ve IPv6 `pi_gateway_ipv6_rdnss_configured` metriklerini gösterir. Query protocol API’de yoksa status WARN olur; kanıt `600s` aşarsa UNKNOWN olur. A silent 403 on one list shows as that series going stale, not only `ADGUARD_MIN_FILTER_RULES`.
+**Grafana:** `export-adguard-metrics.sh` (health timer, textfile) → blocked ratio, top clients / blocked domains, per-list `rules_count` / `last_updated` age, filter apply failure, rollback failure ve last verified apply timestamp. `audit-dns-coverage.sh` her health tick’inde `/var/lib/pi-gateway/dns-coverage-state.json` yazar; dashboard `pi_gateway_dns_coverage_percent`, `pi_gateway_dns_coverage_status` (1=OK, 2=WARN, 3=FAIL, 4=UNKNOWN), `pi_gateway_dns_coverage_protocol_unknown` ve IPv6 `pi_gateway_ipv6_rdnss_configured` metriklerini gösterir. Query protocol API’de yoksa `protocol_unknown` metriği 1 olur; kapsam yüzdesi yeterliyse status **ok** kalır. Kanıt `600s` aşarsa UNKNOWN olur. A silent 403 on one list shows as that series going stale, not only `ADGUARD_MIN_FILTER_RULES`.
 
 **DNSSEC:** Unbound default validator. Proof (not assumption): `diagnose-dns-bypass.sh` / smoke — Unbound `:5335` AD flag on `cloudflare.com`; `dnssec-failed.org` SERVFAIL (`+time=8`, first miss can exceed 3s). Health timer checks AD only (no flaky third-party bogus domain every 2 min). AGH may copy AD to clients; contract is Unbound.
 

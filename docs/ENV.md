@@ -16,7 +16,9 @@
 | `ADGUARD_BOOT_WAIT_SEC` | 180 |
 | `ADGUARD_MIN_FILTER_RULES` | 100000 |
 | `ADGUARD_MIN_REWRITES` | 8 |
-| `ADGUARD_BLOCKED_TTL` | 300; engellenen NXDOMAIN cache (60 → daha sık AGH işi) |
+| `ADGUARD_UPSTREAM_TIMEOUT` | `2`; ölü isim 5s bekletmesin (Unbound DoT) |
+| `ADGUARD_RATELIMIT_SUBNET_IPV4` / `IPV6` | `32` / `128`; AGH default /24 ve /56 tüm evi tek kova yapar |
+| `ADGUARD_CACHE_SIZE` | `67108864` (64MiB cevap cache; kural motorundan ayrı) |
 | `ADGUARD_AUTO_HEAL` | `false`; filter drift → `apply-adguard-filters` + global `cache_clear` |
 | `ADGUARD_DNS_AUTO_HEAL` | `true`; DNS drift → yalnız `apply-adguard-dns.sh` (TTL/upstream, cache_clear yok) |
 | `ADGUARD_FILTER_PREFLIGHT` / `ADGUARD_FILTER_PREFLIGHT_TIMEOUT_SEC` | `true` / `20`; HTTPS, izinli host, redirect ve filter syntax kontrolü |
@@ -28,7 +30,7 @@
 | `ADGUARD_FILTER_API_READY_WAIT_SEC` | `120`; stack restart sonrası AGH filtering API readiness bekleme |
 | `ADGUARD_FILTER_STATE_PATH` | Boşsa `/var/lib/pi-gateway/adguard-filter-state.json` |
 | `ADGUARD_FILTER_SOURCE_CACHE_PATH` | Boşsa `/var/lib/pi-gateway/adguard-filter-source-cache.json` (ETag/If-Modified-Since) |
-| `ADGUARD_FILTER_PROFILE` | `balanced` (TIF Medium). `balanced-core` = Pro++ + TIF Medium + DoH (3 liste, düşük RAM). `aggressive` = TIF Full + CNAME original trackers; AGH ≥2GB RAM. Fake **and** Popup Hosts not stacked (inside Pro++). TIF Full: `apply-adguard-filters` WARNs if MemAvailable <400MiB — effective profile `balanced` olur ve state bunu belirtir. See `docs/DNS-BLOCKING.md`. |
+| `ADGUARD_FILTER_PROFILE` | `balanced` (TIF Medium + CNAME original). `balanced-core` = Pro++ + TIF Medium + DoH (3 liste, düşük RAM). `aggressive` = TIF Full; AGH ≥2GB RAM. Fake **and** Popup Hosts not stacked (inside Pro++). TIF Full: `apply-adguard-filters` WARNs if MemAvailable <400MiB — effective profile `balanced` olur ve state bunu belirtir. See `docs/DNS-BLOCKING.md`. |
 | `config/adguard/filter-lists.json` `budgets` | Profil başına toplam kural üst sınırı; upstream `@latest` büyümesi bu sınırı aşarsa apply başarısız olur ve stale listeler kaldırılmaz |
 | `ROUTER_DNS_SECONDARY` | Yalnız `MAC_DNS_GATEWAY_FALLBACK=true` iken. **Bos** veya `LAN_GATEWAY`. Public resolver WAN `:53` drop ile ölür. |
 | `MAC_DNS_GATEWAY_FALLBACK` | `false` (varsayılan): `make mac-dns` modem `.1` eklemez; **yalnız LAN IP** olan Ethernet/Wi-Fi. Hotspot'a Pi+ULA yazmaz (`make mac-dns-clear`). `true`: Pi down yedek; modem LAN `:53` reklam kaçırır. |

@@ -16,18 +16,19 @@ dns:
   port: 53
   upstream_dns:
     - udp://127.0.0.1:5335
-    - tcp://127.0.0.1:5335
   bootstrap_dns:
     - 127.0.0.1:5335
   protection_enabled: true
   filtering_enabled: true
   # Tailscale Override burst: 20 dusuk (SERVFAIL). apply-adguard-dns ADGUARD_RATELIMIT ile override.
   ratelimit: 50
+  ratelimit_subnet_len_ipv4: 32
+  ratelimit_subnet_len_ipv6: 128
   refuse_any: true
   upstream_mode: load_balance
-  upstream_timeout: 5s
-  blocked_response_ttl: 60
-  cache_size: 16777216
+  upstream_timeout: 2s
+  blocked_response_ttl: 300
+  cache_size: 67108864
   cache_ttl_min: 300
   cache_ttl_max: 86400
   cache_optimistic: true

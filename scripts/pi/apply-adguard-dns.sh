@@ -24,15 +24,18 @@ agh_login "$BASE" "$COOKIE" "$AGH_ADMIN_USER" "$AGH_ADMIN_PASSWORD" || {
   exit 1
 }
 curl -fsS -b "$COOKIE" "${BASE}/control/dns_info" > "$DNS_INFO"
-BLOCKED_TTL="${ADGUARD_BLOCKED_TTL:-60}"
-UPSTREAM_TIMEOUT="${ADGUARD_UPSTREAM_TIMEOUT:-5}"
+BLOCKED_TTL="${ADGUARD_BLOCKED_TTL:-300}"
+UPSTREAM_TIMEOUT="${ADGUARD_UPSTREAM_TIMEOUT:-2}"
 # Tailscale Override / LAN burst: 20 dusuk kalabilir (SERVFAIL). Dusurme.
 RATELIMIT="${ADGUARD_RATELIMIT:-50}"
-CACHE_SIZE="${ADGUARD_CACHE_SIZE:-16777216}"
+# AGH default subnet /24 = tum LAN tek kova (donma). /32 = cihaz basi.
+RATE_V4="${ADGUARD_RATELIMIT_SUBNET_IPV4:-32}"
+RATE_V6="${ADGUARD_RATELIMIT_SUBNET_IPV6:-128}"
+CACHE_SIZE="${ADGUARD_CACHE_SIZE:-67108864}"
 # AGH API: gun (integer). YAML template 168h ile uyumlu.
 QUERYLOG_DAYS="${ADGUARD_QUERYLOG_INTERVAL_DAYS:-7}"
 STATS_DAYS="${ADGUARD_STATS_INTERVAL_DAYS:-7}"
-export BLOCKED_TTL UPSTREAM_TIMEOUT RATELIMIT CACHE_SIZE QUERYLOG_DAYS STATS_DAYS BASE COOKIE UNBOUND_PORT DNS_INFO
+export BLOCKED_TTL UPSTREAM_TIMEOUT RATELIMIT RATE_V4 RATE_V6 CACHE_SIZE QUERYLOG_DAYS STATS_DAYS BASE COOKIE UNBOUND_PORT DNS_INFO
 python3 - <<'PY'
 import json, os, subprocess, sys
 
@@ -42,12 +45,17 @@ unbound_port = int(os.environ["UNBOUND_PORT"])
 blocked_ttl = int(os.environ["BLOCKED_TTL"])
 upstream_timeout = int(os.environ["UPSTREAM_TIMEOUT"])
 ratelimit = int(os.environ["RATELIMIT"])
+rate_v4 = int(os.environ["RATE_V4"])
+rate_v6 = int(os.environ["RATE_V6"])
 cache_size = int(os.environ["CACHE_SIZE"])
 querylog_days = int(os.environ["QUERYLOG_DAYS"])
 stats_days = int(os.environ["STATS_DAYS"])
 
 if ratelimit < 1 or cache_size < 1048576:
     print("[adguard-dns] HATA: ratelimit/cache_size gecersiz", file=sys.stderr)
+    sys.exit(1)
+if rate_v4 < 1 or rate_v4 > 32 or rate_v6 < 1 or rate_v6 > 128:
+    print("[adguard-dns] HATA: ratelimit subnet prefix gecersiz", file=sys.stderr)
     sys.exit(1)
 if querylog_days < 1 or querylog_days > 90 or stats_days < 1 or stats_days > 90:
     print("[adguard-dns] HATA: querylog/stats interval 1..90 gun", file=sys.stderr)
@@ -58,7 +66,6 @@ with open(os.environ["DNS_INFO"]) as f:
 desired = dict(current)
 desired["upstream_dns"] = [
     f"udp://127.0.0.1:{unbound_port}",
-    f"tcp://127.0.0.1:{unbound_port}",
 ]
 desired["bootstrap_dns"] = [f"127.0.0.1:{unbound_port}"]
 desired["fallback_dns"] = []
@@ -68,7 +75,12 @@ desired["use_private_ptr_resolvers"] = False
 desired["local_ptr_upstreams"] = []
 desired["default_local_ptr_upstreams"] = []
 desired["ratelimit"] = ratelimit
+desired["ratelimit_subnet_len_ipv4"] = rate_v4
+desired["ratelimit_subnet_len_ipv6"] = rate_v6
 desired["cache_size"] = cache_size
+desired["cache_optimistic"] = True
+desired["cache_ttl_min"] = 300
+desired["cache_ttl_max"] = 86400
 
 
 def dns_field_changed(key):
@@ -152,6 +164,12 @@ upstream = final.get("upstream_dns") or []
 if not any(u.startswith("udp://127.0.0.1:") for u in upstream):
     print("[adguard-dns] HATA: UDP upstream eksik", upstream, file=sys.stderr)
     sys.exit(1)
+if any(str(u).startswith("tcp://") for u in upstream):
+    print("[adguard-dns] HATA: TCP upstream kaldi (localhost UDP yeter)", upstream, file=sys.stderr)
+    sys.exit(1)
+if int(final.get("upstream_timeout") or 0) != upstream_timeout:
+    print("[adguard-dns] HATA: upstream_timeout uyusmuyor", file=sys.stderr)
+    sys.exit(1)
 if final.get("use_private_ptr_resolvers") is not False:
     print("[adguard-dns] HATA: use_private_ptr_resolvers hala acik", file=sys.stderr)
     sys.exit(1)
@@ -161,8 +179,17 @@ if final.get("blocked_response_ttl") != blocked_ttl:
 if int(final.get("ratelimit") or 0) != ratelimit:
     print("[adguard-dns] HATA: ratelimit uyusmuyor", final.get("ratelimit"), file=sys.stderr)
     sys.exit(1)
+if int(final.get("ratelimit_subnet_len_ipv4") or 0) != rate_v4:
+    print("[adguard-dns] HATA: ratelimit_subnet_len_ipv4 uyusmuyor", file=sys.stderr)
+    sys.exit(1)
+if int(final.get("ratelimit_subnet_len_ipv6") or 0) != rate_v6:
+    print("[adguard-dns] HATA: ratelimit_subnet_len_ipv6 uyusmuyor", file=sys.stderr)
+    sys.exit(1)
 if int(final.get("cache_size") or 0) != cache_size:
     print("[adguard-dns] HATA: cache_size uyusmuyor", final.get("cache_size"), file=sys.stderr)
+    sys.exit(1)
+if final.get("cache_optimistic") is not True:
+    print("[adguard-dns] HATA: cache_optimistic kapali", file=sys.stderr)
     sys.exit(1)
 ql_final = json.loads(
     subprocess.check_output(

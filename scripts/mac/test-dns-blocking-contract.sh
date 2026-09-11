@@ -120,6 +120,9 @@ grep -q 'dns_coverage_state_age_seconds' "$PROJECT_DIR/scripts/pi/export-gateway
   || die "export coverage evidence age metric yok"
 grep -q 'dns_coverage_protocol_unknown' "$PROJECT_DIR/scripts/pi/export-gateway-state.sh" \
   || die "export protocol unknown metric yok"
+grep -A3 'if protocol_unknown:' "$PROJECT_DIR/scripts/pi/audit-dns-coverage.sh" \
+  | grep -q 'finish("ok"' \
+  || die "protocol_unknown coverage warn zorlamasin"
 grep -q 'ipv6_rdnss_configured' "$PROJECT_DIR/scripts/pi/export-gateway-state.sh" \
   || die "export IPv6 RDNSS config metric yok"
 grep -q 'ADGUARD_COVERAGE_AUDIT_ENABLED' "$PROJECT_DIR/scripts/pi/health-check.sh" \
@@ -191,6 +194,36 @@ grep -q 'querylog_config' "$PROJECT_DIR/scripts/pi/apply-adguard-dns.sh" \
   || die "apply-adguard-dns querylog_config yok"
 grep -q 'ADGUARD_RATELIMIT=50' "$PROJECT_DIR/.env.example" \
   || die ".env.example ADGUARD_RATELIMIT yok"
+grep -q 'ADGUARD_RATELIMIT_SUBNET_IPV4=32' "$PROJECT_DIR/.env.example" \
+  || die ".env.example ratelimit /32 yok"
+grep -q 'ADGUARD_CACHE_SIZE=67108864' "$PROJECT_DIR/.env.example" \
+  || die ".env.example cache 64MiB yok"
+grep -q 'ratelimit_subnet_len_ipv4' "$PROJECT_DIR/scripts/pi/apply-adguard-dns.sh" \
+  || die "apply-adguard-dns per-client subnet yok"
+grep -q 'ratelimit_subnet_len_ipv4: 32' "$PROJECT_DIR/config/adguard/AdGuardHome.yaml.template" \
+  || die "AGH template ratelimit /32 yok"
+grep -q 'serve-expired: yes' "$PROJECT_DIR/config/unbound/unbound.conf" \
+  || die "unbound serve-expired yok"
+grep -q 'ADGUARD_UPSTREAM_TIMEOUT=2' "$PROJECT_DIR/.env.example" \
+  || die ".env.example upstream timeout 2s yok"
+grep -q 'upstream_timeout: 2s' "$PROJECT_DIR/config/adguard/AdGuardHome.yaml.template" \
+  || die "AGH template timeout 2s yok"
+grep -q 'use-caps-for-id: no' "$PROJECT_DIR/config/unbound/unbound.conf" \
+  || die "unbound 0x20 caps kapali degil"
+grep -q 'docker logs adguard --since' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check adguard logs full dump"
+grep -q 'docker logs prometheus --since' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check prometheus eski checksum"
+grep -q 'docker logs prometheus --since' "$PROJECT_DIR/scripts/pi/repair-prometheus-tsdb.sh" \
+  || die "repair-prometheus eski checksum"
+grep -q 'docker logs adguard --since' "$PROJECT_DIR/scripts/pi/repair-adguard-bbolt.sh" \
+  || die "repair-adguard-bbolt eski panic"
+grep -q 'adguard-filtering-off' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check filtering enabled yok"
+grep -q 'ratelimit_subnet_len_ipv4' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check ratelimit subnet dogrulama yok"
+grep -q 'upstream_timeout' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check upstream_timeout yok"
 grep -q 'ratelimit: 50' "$PROJECT_DIR/config/adguard/AdGuardHome.yaml.template" \
   || die "AGH template ratelimit 50 yok"
 grep -q 'interval: 168h' "$PROJECT_DIR/config/adguard/AdGuardHome.yaml.template" \
@@ -245,6 +278,8 @@ grep -q 'rollback_failed' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
   || die "adguard-filters rollback failure state yok"
 grep -q 'refresh_verified' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
   || die "adguard-filters refresh verification yok"
+grep -q 'refresh last_updated ayni' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
+  || die "filter 304 last_updated kabul yok"
 grep -q 'profil kural butcesi asildi' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
   || die "adguard-filters total rule budget guard yok"
 python3 "$PROJECT_DIR/scripts/lib/adguard-filters.py" --self-check \
@@ -294,6 +329,8 @@ grep -q 'dest boş' "$PROJECT_DIR/docs/DNS-BLOCKING.md" \
   || die "DNS-BLOCKING dest boş :53 yok"
 grep -q 'force-recreate unbound' "$PROJECT_DIR/scripts/pi/canary-compose-update.sh" \
   || die "canary unbound recreate yok (DoT bind-mount)"
+grep -q 'unbound_conf_stale' "$PROJECT_DIR/scripts/pi/canary-compose-update.sh" \
+  || die "canary unbound her deploy recreate"
 grep -q 'condition: service_started' "$PROJECT_DIR/compose/docker-compose.yml" \
   || die "adguard depends_on unbound service_started yok (WAN drop healthcheck)"
 awk '/^  unbound:/,/^  adguard:/' "$PROJECT_DIR/compose/docker-compose.yml" | grep -q 'disable: true' \
@@ -430,6 +467,12 @@ grep -q 'governance-check' "$PROJECT_DIR/scripts/pi/health-check.sh" \
   || die "health-check adguard-filters --governance-check yok"
 grep -q 'filter apply suruyor' "$PROJECT_DIR/scripts/pi/health-check.sh" \
   || die "health-check in_progress auto-heal skip yok"
+grep -q 'governance skip' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check in_progress governance skip yok"
+grep -q 'in_progress stale' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check stale in_progress yok"
+grep -q 'reset-failed pi-gateway-adguard-filters' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check sticky failed unit reset yok"
 grep -q 'modem_inventory import' "$PROJECT_DIR/scripts/pi/audit-dns-coverage.sh" \
   || die "audit shared modem inventory loader yok"
 grep -q 'privacy_mac=true' "$PROJECT_DIR/scripts/pi/audit-dns-coverage.sh" \

@@ -14,7 +14,8 @@
       ["HaGeZi Samsung Tracker", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_61.txt"],
       ["Perflyst/Dandelion Smart TV", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_7.txt"],
       ["AWAvenue Ads Rule", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_53.txt"],
-      ["HaGeZi LG webOS Tracker", "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/native.lgwebos.txt"]
+      ["HaGeZi LG webOS Tracker", "https://cdn.jsdelivr.net/gh/hagezi/dns-blocklists@latest/adblock/native.lgwebos.txt"],
+      ["AdGuard CNAME original trackers", "https://raw.githubusercontent.com/AdguardTeam/cname-trackers/master/data/combined_original_trackers.txt"]
     ],
     "aggressive": [
       ["HaGeZi Pro++", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_51.txt"],

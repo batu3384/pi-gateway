@@ -6,9 +6,13 @@ set -euo pipefail
 NOTIFY_STATE_DIR="${NOTIFY_STATE_DIR:-/var/lib/pi-gateway/notify}"
 NOTIFY_LAST_ALIVE_FILE="${NOTIFY_LAST_ALIVE_FILE:-/var/lib/pi-gateway/last-alive}"
 NOTIFY_COOLDOWN_SEC="${NOTIFY_COOLDOWN_SEC:-300}"
-NOTIFY_REPEAT_SEC="${NOTIFY_REPEAT_SEC:-3600}"
+NOTIFY_REPEAT_SEC="${NOTIFY_REPEAT_SEC:-21600}"
 NOTIFY_SLO_REPEAT_SEC="${NOTIFY_SLO_REPEAT_SEC:-86400}"
 NOTIFY_DISK_REPEAT_SEC="${NOTIFY_DISK_REPEAT_SEC:-86400}"
+# Gürültülü kanallar: ilk fail hemen gitmez, bu kadar süre kalırsa gider
+NOTIFY_FAIL_DEBOUNCE_SEC="${NOTIFY_FAIL_DEBOUNCE_SEC:-900}"
+# Saatlik tavan (kritik kanallar hariç). 0 = kapalı
+NOTIFY_GLOBAL_MAX_HOUR="${NOTIFY_GLOBAL_MAX_HOUR:-6}"
 # Boot notify: last-alive'dan bu kadar kısaysa atla (timer yarışı)
 NOTIFY_BOOT_MIN_DOWN_SEC="${NOTIFY_BOOT_MIN_DOWN_SEC:-90}"
 
@@ -136,11 +140,73 @@ notify_repeat_sec_for() {
   case "$key" in
     health-slo-backup) printf '%s' "$NOTIFY_SLO_REPEAT_SEC" ;;
     ssd-usb-flap) printf '%s' "${NOTIFY_USB_FLAP_REPEAT_SEC:-21600}" ;;
+    health-optional|health-latency|monitoring-stack|health-slo-ops) printf '%s' "${NOTIFY_NOISE_REPEAT_SEC:-21600}" ;;
+    container-restart-*) printf '%s' "${CONTAINER_RESTART_REPEAT_SEC:-21600}" ;;
     disk-*) printf '%s' "$NOTIFY_DISK_REPEAT_SEC" ;;
     restic-ok) printf '%s' "${NOTIFY_BACKUP_OK_COOLDOWN_SEC:-86400}" ;;
     ibb-hki) printf '%s' "${NOTIFY_IBB_REPEAT_SEC:-21600}" ;;
     *) printf '%s' "$NOTIFY_REPEAT_SEC" ;;
   esac
+}
+
+notify_is_noisy_key() {
+  local key="$1"
+  case "$key" in
+    health-optional|health-latency|monitoring-stack|health-slo-ops|container-restart-*|disk-*|ssd-usb-flap)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+notify_is_critical_key() {
+  local key="$1"
+  case "$key" in
+    health-dns|ssd-degraded|health-systemd|boot-lifecycle)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+notify_global_allow() {
+  local key="$1"
+  local cap="$NOTIFY_GLOBAL_MAX_HOUR"
+  local logf now cutoff n
+  [[ "$cap" =~ ^[0-9]+$ ]] || return 0
+  if (( cap == 0 )); then
+    return 0
+  fi
+  notify_is_critical_key "$key" && return 0
+  notify_ensure_dir
+  logf="${NOTIFY_STATE_DIR}/global-sent.log"
+  now="$(date +%s)"
+  cutoff=$((now - 3600))
+  if [[ -f "$logf" ]]; then
+    n="$(awk -v c="$cutoff" '$1+0 >= c {n++} END {print n+0}' "$logf")"
+  else
+    n=0
+  fi
+  if (( n < cap )); then
+    return 0
+  fi
+  return 1
+}
+
+notify_global_commit() {
+  local now logf
+  notify_ensure_dir
+  logf="${NOTIFY_STATE_DIR}/global-sent.log"
+  now="$(date +%s)"
+  echo "$now" >> "$logf"
+  if [[ -f "$logf" ]]; then
+    awk -v c="$((now - 3600))" '$1+0 >= c' "$logf" > "${logf}.tmp" 2>/dev/null \
+      && mv "${logf}.tmp" "$logf" || true
+  fi
 }
 
 notify_rate_ok() {
@@ -165,17 +231,33 @@ notify_rate_commit() {
 notify_transition_peek() {
   local key="$1"
   local new_state="$2"
-  local state_file stamp_file prev now last repeat
+  local state_file stamp_file pending_file prev now last repeat debounce pending
   notify_ensure_dir
   state_file="${NOTIFY_STATE_DIR}/${key}.state"
   stamp_file="${NOTIFY_STATE_DIR}/${key}"
+  pending_file="${NOTIFY_STATE_DIR}/${key}.pending"
   prev="$(cat "$state_file" 2>/dev/null || echo ok)"
   now="$(date +%s)"
   repeat="$(notify_repeat_sec_for "$key")"
+  debounce="${NOTIFY_FAIL_DEBOUNCE_SEC:-0}"
 
   if [[ "$new_state" == "ok" ]]; then
-    [[ "$prev" != "ok" ]] && return 0
-    return 1
+    rm -f "$pending_file"
+    # prev=fail = fail gonderildi; recover mesaji sart (asili kirmizi kart olmasin)
+    [[ "$prev" != "ok" ]] || return 1
+    return 0
+  fi
+
+  if notify_is_noisy_key "$key" && [[ "$prev" != "fail" ]] \
+    && [[ "$debounce" =~ ^[0-9]+$ ]] && (( debounce > 0 )); then
+    pending="$(cat "$pending_file" 2>/dev/null || echo 0)"
+    if [[ ! "$pending" =~ ^[0-9]+$ ]] || (( pending == 0 )); then
+      echo "$now" > "$pending_file" 2>/dev/null || true
+      return 1
+    fi
+    if (( now - pending < debounce )); then
+      return 1
+    fi
   fi
 
   if [[ "$prev" != "fail" ]]; then
@@ -204,10 +286,16 @@ notify_send_with_transition() {
   local title="$3"
   local body="${4:-}"
   local parse_mode="${5:-}"
+  local peek_rc=0
 
   notify_enabled || return 0
   notify_send_lock_acquire || return 0
-  if ! notify_transition_peek "$key" "$new_state"; then
+  notify_transition_peek "$key" "$new_state" || peek_rc=$?
+  if (( peek_rc == 1 )); then
+    notify_send_lock_release
+    return 0
+  fi
+  if ! notify_global_allow "$key"; then
     notify_send_lock_release
     return 0
   fi
@@ -224,6 +312,8 @@ notify_send_with_transition() {
   fi
   if notify_send_message "$text" "$parse_mode"; then
     notify_transition_commit "$key" "$new_state"
+    rm -f "${NOTIFY_STATE_DIR}/${key}.pending"
+    notify_global_commit
   fi
   notify_send_lock_release
 }
@@ -278,6 +368,10 @@ notify_telegram() {
     notify_send_lock_release
     return 0
   fi
+  if ! notify_global_allow "$key"; then
+    notify_send_lock_release
+    return 0
+  fi
 
   local text
   local title_fmt="$title"
@@ -291,6 +385,7 @@ notify_telegram() {
   fi
   if notify_send_message "$text" "$parse_mode"; then
     notify_rate_commit "$key"
+    notify_global_commit
   fi
   notify_send_lock_release
 }

@@ -24,6 +24,8 @@ card="$ROOT/scripts/lib/telegram-status-card.py"
 [[ -f "$card" ]] || die "telegram-status-card.py yok"
 python3 "$card" self-check || die "status-card self-check"
 grep -q 'editMessageText' "$card" || die "editMessageText yok"
+grep -q 'disable_notification' "$card" || die "kart sessiz send yok"
+! grep -q '_clock' "$card" || die "kart saati hash kiriyor"
 grep -q 'telegram-status-card.sh' "$ROOT/scripts/pi/telegram-menu.sh" \
   || die "telegram-menu kart kullanmiyor"
 grep -q 'Ana' "$ROOT/scripts/lib/telegram-panels.py" || die "TR Ana etiket yok"
@@ -105,6 +107,11 @@ grep -q 'adguard-bbolt-repair-deferred' "$ROOT/scripts/pi/health-check.sh" \
   || die "health bbolt deferred status yok"
 grep -q 'adguard-bbolt-repair-failed' "$ROOT/scripts/pi/health-check.sh" \
   || die "health bbolt failure status yok"
+if grep -q 'adguard-bbolt-repair-skipped' "$ROOT/scripts/pi/health-check.sh"; then
+  die "health bbolt skip hala FAIL"
+fi
+grep -q 'Eski TSDB log' "$ROOT/scripts/pi/container-restart-watchdog.sh" \
+  || die "watchdog prometheus eski checksum"
 grep -q 'restart_events' "$ROOT/scripts/pi/container-restart-watchdog.sh" \
   || die "container-watch restart_events yok"
 if grep -q 'window_total > int(entry.get("last_alert_window_total"' \

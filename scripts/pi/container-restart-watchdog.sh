@@ -114,20 +114,35 @@ def prometheus_ready() -> bool:
     return any(line.strip() == "prometheus" for line in out.splitlines())
 
 
-def prometheus_needs_repair() -> bool:
+def container_logs_since_start(name: str) -> str:
+    started = ""
     try:
-        logs = subprocess.check_output(
-            ["docker", "logs", "prometheus", "--tail", "50"],
+        started = subprocess.check_output(
+            ["docker", "inspect", "-f", "{{.State.StartedAt}}", name],
             text=True,
-            stderr=subprocess.STDOUT,
-        )
-    except subprocess.CalledProcessError:
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        started = ""
+    cmd = ["docker", "logs", name]
+    if started:
+        cmd.extend(["--since", started])
+    else:
+        cmd.extend(["--since", "5m"])
+    try:
+        return subprocess.check_output(cmd, text=True, stderr=subprocess.STDOUT)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return ""
+
+
+def prometheus_needs_repair() -> bool:
+    # Eski TSDB log (ayni container ID) her tick WAL silmesin
+    if prometheus_ready():
         return False
+    logs = container_logs_since_start("prometheus")
     if "invalid checksum" in logs or "opening storage failed" in logs:
         return True
-    if not prometheus_ready():
-        return "WAL truncation" in logs and "compaction failed" in logs
-    return False
+    return "WAL truncation" in logs and "compaction failed" in logs
 
 
 def prune_events(events: list, cutoff: float) -> list[dict]:
@@ -213,11 +228,7 @@ for name, window_total, status, lifetime in alerts:
 for name in recovered:
     print(f"OK\t{name}")
 
-if any(a[0] == "prometheus" for a in alerts) and prometheus_needs_repair():
-    print("REPAIR\tprometheus")
-
-# Prometheus ayakta degil + TSDB — restart alarmi olmasa da repair dene
-if not any(a[0] == "prometheus" for a in alerts) and prometheus_needs_repair():
+if prometheus_needs_repair():
     print("REPAIR\tprometheus")
 PY
 )

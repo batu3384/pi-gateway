@@ -359,10 +359,44 @@ grep -q 'NETALERT_NOTIFY_VIA=telegram gerekli' "$PROJECT_DIR/scripts/pi/setup-ne
   || die "setup-netalertx telegram-only degil"
 grep -qE 'VNDRPDT|DIGSCAN|ICMP' "$compose" \
   && die "netalertx compose hala agir plugin"
-grep -q 'TELEGRAM' "$compose" \
-  || die "netalertx compose TELEGRAM plugin yok"
-grep -q 'ADGUARDIMP' "$compose" \
-  || die "netalertx compose ADGUARDIMP yok"
+grep -q "LOADED_PLUGINS: \"\\['ARPSCAN'" "$compose" \
+  || die "netalertx LOADED_PLUGINS Python list degil"
+grep -q 'internet_ip/ignore_plugin' "$compose" \
+  || die "netalertx INTRNT ignore_plugin yok"
+grep -q 'vendor_update/ignore_plugin' "$compose" \
+  || die "netalertx VNDRPDT ignore_plugin yok"
+grep -q 'workflows/ignore_plugin' "$compose" \
+  || die "netalertx WORKFLOWS ignore_plugin yok"
+[[ -f "$PROJECT_DIR/config/netalertx/ignore_plugin" ]] \
+  || die "config/netalertx/ignore_plugin yok"
+grep -q 'docker logs netalertx --since' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check netalertx malformed eski log"
+grep -q 'optional-netalertx-ignore-plugin' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check ignore_plugin yok"
+grep -q '9090/-/ready' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check prometheus ready yok"
+grep -q 'Canlı sqlite chown' "$PROJECT_DIR/scripts/pi/ensure-netalert-db-access.sh" \
+  || die "ensure-netalert-db live chown skip yok"
+grep -q 'Eski TSDB log' "$PROJECT_DIR/scripts/pi/container-restart-watchdog.sh" \
+  || die "watchdog prometheus eski checksum"
+grep -q 'container_logs_since_start' "$PROJECT_DIR/scripts/pi/container-restart-watchdog.sh" \
+  || die "watchdog logs since start yok"
+grep -q 'cpus:' "$compose" \
+  || die "netalertx cpu limiti yok"
+grep -q 'integrity_check' "$PROJECT_DIR/scripts/pi/ensure-netalert-db-access.sh" \
+  || die "netalertx db integrity yok"
+grep -q 'optional_netalertx_ok' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check netalertx auto-heal yok"
+grep -q 'NBTSCAN_RUN' "$PROJECT_DIR/scripts/pi/setup-netalertx.sh" \
+  || die "setup-netalertx NBTSCAN kapali degil"
+grep -q 'INTRNT_RUN' "$PROJECT_DIR/scripts/pi/setup-netalertx.sh" \
+  || die "setup-netalertx INTRNT kapali degil"
+grep -q 'CSVBCKP_RUN' "$PROJECT_DIR/scripts/pi/setup-netalertx.sh" \
+  || die "setup-netalertx CSVBCKP kapali degil"
+grep -q 'DISCOVER_PLUGINS' "$PROJECT_DIR/scripts/pi/setup-netalertx.sh" \
+  || die "setup-netalertx DISCOVER_PLUGINS kilit yok"
+grep -q "'\*/15 \* \* \* \*'" "$PROJECT_DIR/scripts/pi/setup-netalertx.sh" \
+  || die "setup-netalertx ARP 15dk degil"
 grep -q 'TELEGRAM_RUN' "$PROJECT_DIR/scripts/pi/setup-netalertx.sh" \
   || die "setup-netalertx TELEGRAM_RUN yok"
 grep -q "NTFPRCS_INCLUDED_SECTIONS" "$PROJECT_DIR/scripts/pi/setup-netalertx.sh" \

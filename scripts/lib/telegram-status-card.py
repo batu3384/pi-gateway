@@ -10,7 +10,6 @@ import os
 import subprocess
 import sys
 import tempfile
-import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -54,22 +53,25 @@ def _mem_line() -> str:
         return "RAM ?"
     if total <= 0:
         return "RAM ?"
-    used_g = (total - avail) / 1024 / 1024
-    tot_g = total / 1024 / 1024
     pct = 100 * (total - avail) / total
     if pct >= 90:
-        return f"RAM yüksek {used_g:.1f}/{tot_g:.1f}G"
-    return f"RAM normal {used_g:.1f}/{tot_g:.1f}G"
+        return "RAM yüksek"
+    return "RAM normal"
+
+
+def _bucket_ms(value: Any) -> int | None:
+    if not isinstance(value, (int, float)) or value < 0:
+        return None
+    bucket = int(value) // 50 * 50
+    if bucket < 50:
+        return None
+    return bucket
 
 
 def _docker_up(*names: str) -> bool:
     out = _run(["docker", "ps", "--format", "{{.Names}}"])
     have = set(out.splitlines()) if out else set()
     return all(n in have for n in names)
-
-
-def _clock() -> str:
-    return time.strftime("%H:%M")
 
 
 def _panels() -> ModuleType:
@@ -95,17 +97,19 @@ def build_card_text() -> str:
     panel_ms = st.get("panel_latency_ms")
 
     if dns_up and not degraded:
-        head = f"🟢 DNS çalışıyor · {_clock()}"
+        head = "🟢 DNS çalışıyor"
     else:
-        head = f"🔴 DNS sorunlu · {_clock()}"
+        head = "🔴 DNS sorunlu"
 
     ssd_line = "Veri diski yok — kısıtlı mod" if degraded or not ssd_ok else "Veri diski tamam"
     parts = [ssd_line, _mem_line()]
     lat: list[str] = []
-    if isinstance(dns_ms, (int, float)) and dns_ms >= 0:
-        lat.append(f"DNS {int(dns_ms)}ms")
-    if isinstance(panel_ms, (int, float)) and panel_ms >= 0:
-        lat.append(f"Panel {int(panel_ms)}ms")
+    dns_b = _bucket_ms(dns_ms)
+    panel_b = _bucket_ms(panel_ms)
+    if dns_b is not None:
+        lat.append(f"DNS {dns_b}ms")
+    if panel_b is not None:
+        lat.append(f"Panel {panel_b}ms")
     if lat:
         parts.append(" · ".join(lat))
 
@@ -200,7 +204,15 @@ def apply(*, force: bool = False) -> int:
         desc = str(out.get("description") or "").lower()
         if out.get("ok") or "message is not modified" in desc:
             edited = True
-        elif "message to edit not found" in desc or "message can't be edited" in desc:
+        elif any(
+            s in desc
+            for s in (
+                "message to edit not found",
+                "message can't be edited",
+                "message is too old",
+                "message_too_old",
+            )
+        ):
             edited = False
         else:
             print(f"[status-card] edit: {out.get('description')}", file=sys.stderr)
@@ -215,6 +227,7 @@ def apply(*, force: bool = False) -> int:
                 "text": text,
                 "reply_markup": markup,
                 "disable_web_page_preview": "true",
+                "disable_notification": "true",
             },
         )
         if not out.get("ok"):
@@ -243,6 +256,10 @@ def self_check() -> int:
     text = build_card_text()
     assert "<b>Durum</b>" in text, text
     assert "DNS" in text, text
+    assert "DNS çalışıyor" in text or "DNS sorunlu" in text, text
+    assert "DNS çalışıyor ·" not in text and "DNS sorunlu ·" not in text, text
+    assert "RAM yüksek" in text or "RAM normal" in text or "RAM ?" in text, text
+    assert "RAM yüksek " not in text and "RAM normal " not in text, text
     h = card_hash(text, "{}")
     assert len(h) == 64
     old_api = globals()["_api"]

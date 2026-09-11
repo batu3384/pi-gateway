@@ -165,13 +165,21 @@ services:
       PUID: ${NETALERTX_UID:-20211}
       PGID: ${NETALERTX_GID:-1000}
       # Sade: ARP + AdGuard isim + Telegram sendMessage (getUpdates yok)
-      LOADED_PLUGINS: '["ARPSCAN","ADGUARDIMP","NEWDEV","NTFPRCS","DBCLNP","CUSTPROP","SETPWD","SYNC","UI","MAINT","TELEGRAM"]'
+      # Python list; JSON '["x"]' string parse edilince allowlist kırılır (NetAlertX #1023)
+      LOADED_PLUGINS: "['ARPSCAN','ADGUARDIMP','NEWDEV','NTFPRCS','DBCLNP','CUSTPROP','SETPWD','SYNC','UI','MAINT','TELEGRAM']"
       APP_CONF_OVERRIDE: '{"GRAPHQL_PORT":"20214"}'
     volumes:
       - ../data/netalertx:/data
       - /etc/localtime:/etc/localtime:ro
+      # necessary_plugins 3 çekirdeği allowlist'e zorlar; ignore_plugin unload eder
+      - ../config/netalertx/ignore_plugin:/app/front/plugins/internet_ip/ignore_plugin:ro
+      - ../config/netalertx/ignore_plugin:/app/front/plugins/vendor_update/ignore_plugin:ro
+      - ../config/netalertx/ignore_plugin:/app/front/plugins/workflows/ignore_plugin:ro
     tmpfs:
       - /tmp:uid=20211,gid=20211,mode=1700
+    # CPU cap (cgroup memory bu kernel'de yok — Limitation discarded).
+    cpus: "1.0"
+    pids_limit: 256
 
   crowdsec:
     image: crowdsecurity/crowdsec@sha256:091229068a9dab7f8c1ae41086669620da2980c6ccc26f9e358a75aaa7cb4a27

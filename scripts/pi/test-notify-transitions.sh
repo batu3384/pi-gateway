@@ -12,6 +12,8 @@ export NOTIFY_STATE_DIR
 NOTIFY_STATE_DIR="$(mktemp -d)"
 export TELEGRAM_BOT_TOKEN='' TELEGRAM_CHAT_ID=''
 export NOTIFY_REPEAT_SEC=3600
+export NOTIFY_FAIL_DEBOUNCE_SEC=0
+export NOTIFY_GLOBAL_MAX_HOUR=0
 
 fail() { echo "[test-notify] FAIL: $*"; exit 1; }
 ok() { echo "[test-notify] OK: $*"; }
@@ -77,6 +79,36 @@ ok "HTML detail contract"
 NOTIFY_REPEAT_SEC=0
 notify_transition_peek "t" "fail" || fail "repeat fail peek"
 ok "repeat fail"
+
+notify_transition_commit "blip" "fail"
+notify_transition_peek "blip" "ok" || fail "gonderilmis fail sonrasi recover acik"
+ok "notified fail recover"
+
+NOTIFY_FAIL_DEBOUNCE_SEC=3600
+peek_rc=0
+notify_transition_peek "health-optional" "fail" || peek_rc=$?
+[[ "$peek_rc" -eq 1 ]] || fail "debounce fail peek (rc=$peek_rc)"
+peek_rc=0
+notify_transition_peek "health-optional" "ok" || peek_rc=$?
+[[ "$peek_rc" -eq 1 ]] || fail "debounce blip recover yok (rc=$peek_rc)"
+ok "debounce blip recover yok"
+
+NOTIFY_FAIL_DEBOUNCE_SEC=3600
+peek_rc=0
+notify_transition_peek "health-optional" "fail" || peek_rc=$?
+[[ "$peek_rc" -eq 1 ]] || fail "debounce ilk fail susturulmali (rc=$peek_rc)"
+[[ -f "${NOTIFY_STATE_DIR}/health-optional.pending" ]] || fail "debounce pending yok"
+NOTIFY_FAIL_DEBOUNCE_SEC=0
+notify_transition_peek "health-optional" "fail" || fail "debounce 0 fail acik"
+ok "fail debounce"
+
+NOTIFY_GLOBAL_MAX_HOUR=1
+notify_global_commit
+notify_global_commit
+notify_global_allow "health-optional" && fail "saatlik tavan asilmali"
+notify_global_allow "health-dns" || fail "kritik kanal tavan disi"
+NOTIFY_GLOBAL_MAX_HOUR=0
+ok "saatlik tavan"
 
 # Default path kalici olmali (/run reboot'ta silinir)
 grep -q '/var/lib/pi-gateway/notify' "$SCRIPT_DIR/../lib/notify.sh" \
