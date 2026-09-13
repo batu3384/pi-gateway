@@ -37,7 +37,7 @@ compose_up() {
     echo "[recover-compose] mode=core-dns (${core_svc[*]})" >&2
     docker compose --env-file ../.env --profile caddy up -d "${core_svc[@]}"
   else
-    docker compose --env-file ../.env "${profiles[@]}" up -d "$@"
+    docker compose --env-file ../.env "${profiles[@]}" up -d
   fi
 }
 finish_ok() {
@@ -67,17 +67,26 @@ if compose_up; then
   finish_ok
 fi
 echo "[recover-compose] WARN: ikinci deneme basarisiz — son care" >&2
-# Son care: force-recreate — core-dns'de sadece DNS seti (full stack degil)
+# Son care: YALNIZ calismayan servisler force-recreate (--no-deps). Tum stack'i
+# recreate etmek sağlıklı DNS'i durdurur; 2026-09-13'te tek bozuk container'in
+# rm hatasi bu yolla 4 saat DNS kesintisine dondu.
+mapfile -t down_svc < <(comm -23 \
+  <(docker compose --env-file ../.env "${profiles[@]}" config --services 2>/dev/null | sort) \
+  <(docker compose --env-file ../.env "${profiles[@]}" ps --services --status running 2>/dev/null | sort))
+up_profiles=("${profiles[@]}")
 if [[ "${COMPOSE_RECOVER_MODE:-}" == "core-dns" ]]; then
   core_recreate=(unbound adguard)
   [[ "${ENABLE_CADDY:-true}" == "true" ]] && core_recreate+=(homepage caddy)
-  if docker compose --env-file ../.env --profile caddy up -d --force-recreate --remove-orphans \
-    "${core_recreate[@]}"; then
-    finish_ok
-  fi
-else
-  if compose_up --force-recreate --remove-orphans; then
-    finish_ok
-  fi
+  mapfile -t down_svc < <(printf '%s\n' "${down_svc[@]}" \
+    | grep -xF -f <(printf '%s\n' "${core_recreate[@]}") || true)
+  up_profiles=(--profile caddy)
+fi
+if (( ${#down_svc[@]} == 0 )); then
+  echo "[recover-compose] son care: calismayan servis yok" >&2
+  finish_ok
+fi
+echo "[recover-compose] son care force-recreate: ${down_svc[*]}" >&2
+if docker compose --env-file ../.env "${up_profiles[@]}" up -d --force-recreate --no-deps "${down_svc[@]}"; then
+  finish_ok
 fi
 finish_fail

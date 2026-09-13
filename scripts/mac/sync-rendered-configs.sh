@@ -66,7 +66,9 @@ out_path.write_text("\n".join(out_lines) + "\n")
 print("[env-merge] ok")
 PY
 rm -f "$NEW"
-sudo chown "${PI_USER}:${PI_USER}" "${R}/config/adguard/AdGuardHome.yaml" 2>/dev/null || true
+# Container (adguard/homepage root) dosyayi root'a cevirebilir — cp oncesi sahiplik
+sudo chown "${PI_USER}:${PI_USER}" "${R}/config/adguard/AdGuardHome.yaml" \
+  "${R}/config/homepage/services.yaml" 2>/dev/null || true
 cp /tmp/AdGuardHome.yaml "${R}/config/adguard/AdGuardHome.yaml"
 cp /tmp/homepage-services.yaml "${R}/config/homepage/services.yaml"
 [[ -f /tmp/Caddyfile ]] && cp /tmp/Caddyfile "${R}/config/caddy/Caddyfile"

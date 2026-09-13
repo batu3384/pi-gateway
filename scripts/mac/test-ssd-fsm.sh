@@ -128,4 +128,26 @@ grep -q 'offsite-\*' "$ROOT/scripts/pi/health-check.sh" \
   || die "C40: offsite soft-exit yok"
 ok "C40 health-check SSD gozlem-only"
 
+# C41 (2026-09-13 olayi): fsck sirasinda USB reset/remount yok; canli kilit zorla silinmez;
+# son care yalniz calismayan servisleri recreate eder (saglikli DNS durmaz)
+ssd_alive="$ROOT/scripts/lib/ssd-alive.sh"
+compose_up="$ROOT/scripts/pi/recover-compose-up.sh"
+grep -q 'ssd_fsck_in_progress()' "$ssd_alive" || die "C41: ssd_fsck_in_progress yok"
+grep -A4 '^ssd_usb_soft_reset()' "$ssd_alive" | grep -q 'ssd_fsck_in_progress' \
+  || die "C41: soft-reset fsck guard yok"
+grep -A8 '^ssd_try_remount()' "$ssd_alive" | grep -q 'ssd_fsck_in_progress' \
+  || die "C41: remount fsck guard yok"
+grep -q 'zorla temizle' "$ssd_alive" && die "C41: kilit zorla temizleme geri geldi"
+grep -q 'with errors' "$ssd_alive" || die "C41: tune2fs 'clean with errors' tespiti yok"
+grep -q 'checksum invalid' "$ssd_alive" || die "C41: EFSBADCRC kmsg tespiti yok"
+grep -q -- '--status running' "$compose_up" || die "C41: son care calismayan servis filtresi yok"
+grep -q -- '--force-recreate --no-deps "${down_svc\[@\]}"' "$compose_up" \
+  || die "C41: son care --no-deps yok"
+grep -q 'compose_up --force-recreate --remove-orphans' "$compose_up" \
+  && die "C41: son care tum stack force-recreate geri geldi"
+grep -q 'notify_write()' "$ROOT/scripts/lib/notify.sh" || die "C41: notify_write (root→owner) yok"
+grep -qE 'echo (fail|"\$now"|"\$new_state") > "\$\{?NOTIFY_STATE_DIR|echo "\$now" > "\$NOTIFY_LAST_ALIVE' "$ROOT/scripts/lib/notify.sh" \
+  && die "C41: notify state dosyasi notify_write disinda yaziliyor"
+ok "C41 fsck/USB reset yarisi + son care + notify owner"
+
 echo "[test-ssd-fsm] Tum kontroller gecti"

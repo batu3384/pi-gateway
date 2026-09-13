@@ -884,10 +884,24 @@ _ssd_usb_soft_reset_body() {
   return 1
 }
 
+# e2fsck (systemd-fsck@ veya ssd-fsck.sh) calisirken USB reset/remount YASAK.
+# 2026-09-13 19:23: fsck ortasinda usb-storage rebind → I/O error → 759 salvage.
+ssd_fsck_in_progress() {
+  pgrep -x 'e2fsck|fsck\.ext4' >/dev/null 2>&1 && return 0
+  local lock="${SSD_FSCK_LOCK:-/run/pi-gateway/ssd-fsck.lock}"
+  [[ -e "$lock" ]] || return 1
+  flock -n -E 99 "$lock" true 2>/dev/null
+  [[ $? -eq 99 ]]
+}
+
 # Merdiven: LPM off → umount hung → usb-storage rebind → dropout:bus-wide / hang:port tarama → xhci
 ssd_usb_soft_reset() {
+  if ssd_fsck_in_progress; then
+    echo "[ssd-alive] fsck calisiyor — soft-reset atlandi" >&2
+    return 1
+  fi
   local lockdir="${SSD_USB_RESET_LOCK_DIR:-/run/pi-gateway/ssd-usb-reset.lock}"
-  local lock_owned=0 rc mtime now parent waited=0 forced=0
+  local lock_owned=0 rc mtime now parent waited=0
   local max_wait="${SSD_USB_RESET_LOCK_WAIT_SEC:-45}"
   local stale="${SSD_USB_RESET_LOCK_STALE_SEC:-400}"
   parent="$(dirname "$lockdir")"
@@ -915,15 +929,9 @@ ssd_usb_soft_reset() {
         break
       fi
       if [[ -d "$lockdir" ]]; then
+        # Canli kilit zorla silinmez: iki aktor ayni USB'yi resetler (stale=${stale}s yeter)
         if (( waited >= max_wait )); then
-          if [[ "$forced" -eq 0 ]]; then
-            echo "[ssd-alive] kilit bekleme doldu — zorla temizle" >&2
-            _ssd_alive_root rmdir "$lockdir" 2>/dev/null || true
-            forced=1
-            waited=0
-            continue
-          fi
-          echo "[ssd-alive] soft-reset kilit alinamadi (${max_wait}s)" >&2
+          echo "[ssd-alive] soft-reset kilit alinamadi (${max_wait}s) — baska reset suruyor" >&2
           trap - EXIT
           return 1
         fi
@@ -946,6 +954,10 @@ ssd_usb_soft_reset() {
 ssd_try_remount() {
   if ssd_mount_healthy; then
     return 0
+  fi
+  if ssd_fsck_in_progress; then
+    echo "[ssd-alive] fsck calisiyor — remount atlandi" >&2
+    return 1
   fi
   if mountpoint -q "$SSD_MOUNT" 2>/dev/null && ! ssd_mount_healthy; then
     _ssd_alive_root umount -l "$SSD_MOUNT" 2>/dev/null || true
@@ -1025,7 +1037,7 @@ ssd_kmsg_active_dev_only() {
 
 ssd_kmsg_needs_fsck() {
   local kmsg="$1"
-  grep -qE 'journal recovery failed|error loading journal|htree_dirblock_to_tree|Buffer I/O error on (dev|device) sd|JBD2: Invalid checksum|JBD2: journal recovery failed|EXT4-fs error.*Journal has aborted|device offline error, dev sd' <<<"$kmsg"
+  grep -qE 'journal recovery failed|error loading journal|htree_dirblock_to_tree|Buffer I/O error on (dev|device) sd|JBD2: Invalid checksum|JBD2: journal recovery failed|EXT4-fs error.*Journal has aborted|EXT4-fs error \(device sd[a-z]+[0-9]*\): .*(checksum invalid|bad extra_isize|corrupted)|device offline error, dev sd' <<<"$kmsg"
 }
 
 ssd_filesystem_needs_fsck() {
@@ -1034,7 +1046,9 @@ ssd_filesystem_needs_fsck() {
   scoped="$(ssd_kmsg_active_dev_only "$kmsg")"
   ssd_kmsg_needs_fsck "$scoped" && return 0
   dev="$(ssd_mount_block_dev)"
-  [[ -n "$dev" ]] && tune2fs -l "$dev" 2>/dev/null | grep -qiE 'Filesystem state:.*not clean' && return 0
+  # "clean with errors" = superblock hata sayaci >0 (EFSBADCRC) — fsck sart
+  [[ -n "$dev" ]] && _ssd_alive_root tune2fs -l "$dev" 2>/dev/null \
+    | grep -qiE 'Filesystem state:.*(not clean|with errors)' && return 0
   return 1
 }
 

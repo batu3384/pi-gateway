@@ -107,6 +107,30 @@ write_fstab_entry() {
   run_root systemctl daemon-reload 2>/dev/null || true
   log "fstab guncellendi"
 }
+# SD root standart satirlari (/, /boot/firmware) kaybolmus olabilir (Temmuz migrasyonu).
+# /boot/firmware mount degilse kernel/firmware apt guncellemesi boot bolumune yazamaz,
+# ssd_quirk_present cmdline.txt'yi bulamaz (sahte WARN).
+ensure_sd_root_entries() {
+  local root_src boot_part root_id boot_id
+  root_src="$(findmnt -n -o SOURCE / 2>/dev/null || true)"
+  [[ "$root_src" == /dev/mmcblk* ]] || return 0
+  boot_part="${root_src%p*}p1"
+  [[ -b "$boot_part" ]] || return 0
+  if ! awk '$2 == "/" && $1 !~ /^#/ {f=1} END {exit !f}' /etc/fstab; then
+    root_id="$(partition_id "$root_src")" || return 0
+    run_root bash -c "echo '${root_id} / ext4 defaults,noatime 0 1' >> /etc/fstab"
+    log "fstab / satiri eklendi (${root_id})"
+  fi
+  if [[ -d /boot/firmware ]] \
+    && ! awk '$2 == "/boot/firmware" && $1 !~ /^#/ {f=1} END {exit !f}' /etc/fstab; then
+    boot_id="$(partition_id "$boot_part")" || return 0
+    run_root bash -c "echo '${boot_id} /boot/firmware vfat defaults 0 2' >> /etc/fstab"
+    log "fstab /boot/firmware satiri eklendi (${boot_id})"
+    run_root systemctl daemon-reload 2>/dev/null || true
+    mountpoint -q /boot/firmware || run_root mount /boot/firmware 2>/dev/null \
+      || log "WARN: /boot/firmware mount basarisiz"
+  fi
+}
 main() {
   REMOTE_DIR="${REMOTE_DIR:-/home/${SUDO_USER:-${USER:-pi}}/pi-gateway}"
   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -120,6 +144,7 @@ main() {
     log "STORAGE_TYPE=${STORAGE_TYPE} — ayri /mnt/ssd fstab gerekmez, atlandi"
     exit 0
   fi
+  ensure_sd_root_entries || log "WARN: SD root fstab satirlari kontrol edilemedi"
   local part attempt
   local max_attempts="${ENSURE_FSTAB_MAX_ATTEMPTS:-15}"
   [[ "$max_attempts" =~ ^[0-9]+$ ]] || max_attempts=15

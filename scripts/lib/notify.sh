@@ -72,6 +72,18 @@ notify_ensure_dir() {
   fi
 }
 
+# root (recover-ro/hotplug) yazdigi state dosyasi batu health'i kilitlemesin
+notify_own() {
+  [[ "$(id -u)" -eq 0 ]] || return 0
+  local owner="${NOTIFY_OWNER:-${PI_USER:-pi}}"
+  chown "$owner:$owner" "$@" 2>/dev/null || true
+}
+# notify_write <dosya> <icerik> — root yazdiysa sahipligi owner'a devret
+notify_write() {
+  printf '%s\n' "$2" > "$1" 2>/dev/null || return 1
+  notify_own "$1"
+}
+
 notify_send_lock_acquire() {
   notify_ensure_dir
   command -v flock >/dev/null 2>&1 || return 0
@@ -79,6 +91,7 @@ notify_send_lock_acquire() {
     unset NOTIFY_LOCK_FD
     return 0
   }
+  notify_own "${NOTIFY_STATE_DIR}/send.lock"
   flock -x "$NOTIFY_LOCK_FD" || {
     exec {NOTIFY_LOCK_FD}>&-
     unset NOTIFY_LOCK_FD
@@ -99,7 +112,7 @@ notify_touch_alive() {
   local now
   notify_ensure_dir
   now="$(date +%s)"
-  echo "$now" > "$NOTIFY_LAST_ALIVE_FILE" 2>/dev/null || true
+  notify_write "$NOTIFY_LAST_ALIVE_FILE" "$now" || true
 }
 
 # Telegram sesi (kullanıcıya):
@@ -120,7 +133,7 @@ notify_boot_up() {
   body="$(notify_html_alert "$detail" "" "Durum: $(notify_escape_html "$gateway")")"
   notify_ensure_dir
   # Her boot ayrı olay: önceki state fail gibi (ok→ok susturulmasın).
-  echo fail > "${NOTIFY_STATE_DIR}/boot-lifecycle.state" 2>/dev/null || true
+  notify_write "${NOTIFY_STATE_DIR}/boot-lifecycle.state" fail || true
   notify_send_with_transition "boot-lifecycle" "ok" "✅ Sistem Başlatıldı" "$body" "HTML"
 }
 
@@ -131,7 +144,7 @@ notify_hermes_inbox_up() {
   gateway="$(panel_url gateway)"
   body="$(notify_html_alert "Yeni mesajları gönderebilirsiniz." "" "Durum: $(notify_escape_html "$gateway")")"
   notify_ensure_dir
-  echo fail > "${NOTIFY_STATE_DIR}/hermes-inbox.state" 2>/dev/null || true
+  notify_write "${NOTIFY_STATE_DIR}/hermes-inbox.state" fail || true
   notify_send_with_transition "hermes-inbox" "ok" "✅ Asistan Sohbeti Aktif" "$body" "HTML"
 }
 
@@ -207,6 +220,7 @@ notify_global_commit() {
     awk -v c="$((now - 3600))" '$1+0 >= c' "$logf" > "${logf}.tmp" 2>/dev/null \
       && mv "${logf}.tmp" "$logf" || true
   fi
+  notify_own "$logf"
 }
 
 notify_rate_ok() {
@@ -225,7 +239,7 @@ notify_rate_ok() {
 notify_rate_commit() {
   local key="$1"
   notify_ensure_dir
-  date +%s > "${NOTIFY_STATE_DIR}/${key}" 2>/dev/null || true
+  notify_write "${NOTIFY_STATE_DIR}/${key}" "$(date +%s)" || true
 }
 
 notify_transition_peek() {
@@ -252,7 +266,7 @@ notify_transition_peek() {
     && [[ "$debounce" =~ ^[0-9]+$ ]] && (( debounce > 0 )); then
     pending="$(cat "$pending_file" 2>/dev/null || echo 0)"
     if [[ ! "$pending" =~ ^[0-9]+$ ]] || (( pending == 0 )); then
-      echo "$now" > "$pending_file" 2>/dev/null || true
+      notify_write "$pending_file" "$now" || true
       return 1
     fi
     if (( now - pending < debounce )); then
@@ -276,8 +290,8 @@ notify_transition_commit() {
   state_file="${NOTIFY_STATE_DIR}/${key}.state"
   stamp_file="${NOTIFY_STATE_DIR}/${key}"
   now="$(date +%s)"
-  echo "$new_state" > "$state_file" 2>/dev/null || true
-  echo "$now" > "$stamp_file" 2>/dev/null || true
+  notify_write "$state_file" "$new_state" || true
+  notify_write "$stamp_file" "$now" || true
 }
 
 notify_send_with_transition() {
@@ -587,10 +601,19 @@ notify_health_systemd_fail() {
   action="• Pi: <code>journalctl -t pi-gateway-health -n 30</code>
 • Durmuş kaplar: <code>docker ps --filter status=exited</code>"
   body="$(notify_html_alert "$human" "$action")"
+  # DNS cekirdegi ayri anahtar: health-systemd zaten "fail" (kucuk sorun) iken
+  # adguard/unbound cokmesi 6 saat susturulmasin (2026-09-13: 4 saat sessiz kesinti).
+  notify_details_dns_core_fail "$details" && notify_dns_fail "$host" "$human"
   notify_send_with_transition "health-systemd" "fail" "⚠️ Sistem Sağlık Uyarısı" "$body" "HTML"
 }
 
+notify_details_dns_core_fail() {
+  # health-check note_fail dizeleri: "container adguard down", "adguard-dns-block", "unbound:5335"
+  [[ "${1:-}" =~ container\ (adguard|unbound)\ down|adguard-dns-block|unbound:[0-9]+ ]]
+}
+
 notify_health_systemd_ok() {
+  notify_dns_recovered "${HOSTNAME:-pi}"
   notify_send_with_transition \
     "health-systemd" "ok" "✅ Sistem Sağlık Kontrolü Düzeldi" \
     "Önceki çekirdek sağlık uyarısı sona erdi." "HTML"
@@ -737,7 +760,7 @@ notify_stack_recovered() {
     "Durum: ${esc_gw}")"
   notify_ensure_dir
   # Recover her zaman "ok" — önceki state fail gibi görünsün ki peek açılsın.
-  echo fail > "${NOTIFY_STATE_DIR}/stack-recovered.state" 2>/dev/null || true
+  notify_write "${NOTIFY_STATE_DIR}/stack-recovered.state" fail || true
   notify_send_with_transition "stack-recovered" "ok" "✅ Otomatik Kurtarma Tamamlandı" "$body" "HTML"
 }
 

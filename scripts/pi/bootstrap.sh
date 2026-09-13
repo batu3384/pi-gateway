@@ -260,8 +260,4 @@ sudo mkdir -p /run/pi-gateway/notify 2>/dev/null || true
 sudo chown "$USER:$USER" /run/pi-gateway/notify 2>/dev/null || true
 sudo chmod 775 /run/pi-gateway/notify 2>/dev/null || true
 chmod +x "$REMOTE_DIR"/scripts/pi/*.sh "$REMOTE_DIR"/scripts/lib/*.sh 2>/dev/null || true
-bash "$REMOTE_DIR/scripts/pi/harden-host.sh" --sudo-only || {
-  echo "[bootstrap] HATA: sudo sertlestirmesi basarisiz"
-  exit 1
-}
 echo "[bootstrap] complete"

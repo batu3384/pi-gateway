@@ -110,6 +110,22 @@ notify_global_allow "health-dns" || fail "kritik kanal tavan disi"
 NOTIFY_GLOBAL_MAX_HOUR=0
 ok "saatlik tavan"
 
+# health-systemd zaten fail (kucuk sorun) iken DNS cekirdegi cokmesi susturulmamali
+NOTIFY_REPEAT_SEC=3600
+sent=""
+notify_send_message() { sent+="$1"$'\n'; return 0; }
+panel_url() { printf 'http://x'; }
+notify_health_systemd_fail pi "failures=adguard-rewrites-low(3)"
+[[ "$sent" == *"Sistem Sağlık"* && "$sent" != *"Ev DNS"* ]] || fail "kucuk sorun DNS alarmi uretti"
+sent=""
+notify_health_systemd_fail pi "failures=container adguard down; unbound:5335"
+[[ "$sent" == *"Ev DNS Kesintisi"* ]] || fail "DNS cekirdek cokmesi susturuldu"
+sent=""
+notify_health_systemd_ok
+[[ "$sent" == *"Ev DNS Normale"* ]] || fail "DNS recover yok"
+unset -f notify_send_message panel_url
+ok "DNS cekirdek eskalasyon"
+
 # Default path kalici olmali (/run reboot'ta silinir)
 grep -q '/var/lib/pi-gateway/notify' "$SCRIPT_DIR/../lib/notify.sh" \
   || fail "NOTIFY_STATE_DIR kalici path degil"

@@ -63,27 +63,13 @@ mask_headless_noise() {
   fi
 }
 
-harden_sudo() {
-  local user="${PI_USER:-${SUDO_USER:-}}"
+# Eski 99-pi-gateway-password (sifreli sudo) kaldirilir: User=PI_USER timer'lari
+# (health, ibb, watchdog, ssd-alive state) sudo -n bekler; PI_USER docker grubunda
+# zaten root esdegeri — sifre kapisi guvenlik katmadi, otomasyonu kirdi (2026-09-13).
+remove_sudo_password_gate() {
   local file="/etc/sudoers.d/99-pi-gateway-password"
-  if [[ -z "$user" || "$user" == "root" ]]; then
-    user="$(basename "$(dirname "$REMOTE_DIR")")"
-  fi
-  [[ -n "$user" && "$user" != "root" ]] || {
-    log "HATA: sudo sahibi belirlenemedi"
-    return 1
-  }
-  local tmp
-  tmp="$(mktemp)"
-  printf '%s ALL=(ALL:ALL) PASSWD: ALL\n' "$user" >"$tmp"
-  if ! sudo visudo -cf "$tmp" >/dev/null; then
-    rm -f "$tmp"
-    log "HATA: sudoers doğrulaması başarısız"
-    return 1
-  fi
-  sudo install -o root -g root -m 440 "$tmp" "$file"
-  rm -f "$tmp"
-  log "sudo NOPASSWD kapatildi ($file)"
+  [[ -e "$file" ]] || return 0
+  sudo rm -f "$file" && log "eski sudo PASSWD politikasi kaldirildi ($file)"
 }
 
 main() {
@@ -93,11 +79,8 @@ main() {
       fix_adguard_config_perms
       harden_ssh_password || log "WARN: SSH harden atlandi"
       mask_headless_noise
+      remove_sudo_password_gate
       log "Hazirlik sertlestirmesi tamamlandi"
-      return 0
-      ;;
-    --sudo-only)
-      harden_sudo
       return 0
       ;;
     ""|--final)
@@ -111,7 +94,7 @@ main() {
   fix_adguard_config_perms
   harden_ssh_password || log "WARN: SSH harden atlandi"
   mask_headless_noise
-  harden_sudo
+  remove_sudo_password_gate
   # UFW post-deploy sonunda uygulanir (caddy-only kurallari ezilmesin)
   log "Tamamlandi"
 }

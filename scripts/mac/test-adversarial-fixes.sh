@@ -305,10 +305,12 @@ grep -q 'after=.*sha256sum\|install hash uyusmazligi' "$install_priv" \
   || die "C23: installed hash verification yok"
 ok "C23 privileged install integrity"
 
-# C23b: flashed images and host hardening require sudo authentication
+# C23b: flashed images require sudo authentication; host must NOT re-add PASSWD gate
+# (User=PI_USER timers rely on sudo -n; PI_USER is in docker group = root anyway)
 ! grep -q 'NOPASSWD:ALL' "$flash" || die "C23b: flash hâlâ NOPASSWD:ALL veriyor"
-grep -q 'PASSWD: ALL' "$harden" || die "C23b: harden sudo PASSWD policy yok"
-ok "C23b sudo password gate"
+! grep -q 'PASSWD: ALL' "$harden" || die "C23b: harden PASSWD politikasi geri geldi (timer sudo -n kirilir)"
+grep -q 'remove_sudo_password_gate' "$harden" || die "C23b: eski 99-pi-gateway-password temizligi yok"
+ok "C23b sudo password gate removed"
 
 # C24: Restic helper image is immutable by default
 grep -q 'restic/restic@sha256:' "$restic" "$pull" "$restore" \

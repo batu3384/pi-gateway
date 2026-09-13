@@ -48,12 +48,22 @@ _quarantine_corrupt_db() {
   done
 }
 
+# Crash-loop'ta container hep "running" (entrypoint OUI indirir, sonra sqlite patlar):
+# canli db'ye integrity_check yanlis pozitif verir — kaniti loglardan al.
+_running_db_malformed() {
+  # grep -c (tum girdiyi okur): grep -q + pipefail → docker logs SIGPIPE=141 → yanlis negatif
+  [[ "$(docker logs --since 15m netalertx 2>&1 | grep -c 'database disk image is malformed')" -gt 0 ]]
+}
+
 if [[ -f "$DB_FILE" ]]; then
   _running="$(docker inspect -f '{{.State.Running}}' netalertx 2>/dev/null || echo false)"
   if [[ "$_running" != "true" ]]; then
     if ! _db_integrity_ok "$DB_FILE"; then
       _quarantine_corrupt_db
     fi
+  elif _running_db_malformed; then
+    _quarantine_corrupt_db
+    _running="false"
   fi
 else
   _running="false"
