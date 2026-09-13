@@ -35,6 +35,15 @@ crit "Privileged scripts" "$SCRIPT_DIR/install-privileged-scripts.sh"
 crit "DNS perf profile" "$SCRIPT_DIR/ensure-dns-perf-profile.sh"
 crit "AdGuard DNS" "$SCRIPT_DIR/apply-adguard-dns.sh"
 crit "AdGuard filters" "$SCRIPT_DIR/apply-adguard-filters.sh"
+# Tek dosya bind mount + rsync rename = eski inode; restart yetmez, recreate sart
+# (yoksa health unbound-stale-conf). Kisa kesinti AGH DoT fallback ile kapanir.
+# shellcheck source=../lib/stack-health.sh
+source "${SCRIPT_DIR}/../lib/stack-health.sh"
+if unbound_conf_stale; then
+  log ">> Unbound recreate (conf degisti)"
+  (cd "$REMOTE_DIR/compose" && docker compose --env-file ../.env up -d --force-recreate --no-deps unbound) \
+    || log "WARN: unbound recreate"
+fi
 sudo systemctl reset-failed pi-gateway-adguard-filters.service 2>/dev/null || \
   log "WARN: AdGuard filter failed state reset"
 soft "IPv6 ULA DNS" "$SCRIPT_DIR/ensure-ipv6-ula.sh"
