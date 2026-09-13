@@ -26,8 +26,9 @@ agh_login "$BASE" "$COOKIE" "$AGH_ADMIN_USER" "$AGH_ADMIN_PASSWORD" || {
 curl -fsS -b "$COOKIE" "${BASE}/control/dns_info" > "$DNS_INFO"
 BLOCKED_TTL="${ADGUARD_BLOCKED_TTL:-300}"
 UPSTREAM_TIMEOUT="${ADGUARD_UPSTREAM_TIMEOUT:-2}"
-# Tailscale Override / LAN burst: 20 dusuk kalabilir (SERVFAIL). Dusurme.
-RATELIMIT="${ADGUARD_RATELIMIT:-50}"
+# 0 = kapali. :53 UFW ile LAN+Tailscale'e kisitli; amplifikasyon riski yok. Sayfa acilisi
+# (30 domain x A/AAAA/HTTPS) 50/s'i asar → sessiz drop → istemci modem DNS2'ye (filtresiz) kacar.
+RATELIMIT="${ADGUARD_RATELIMIT:-0}"
 # AGH default subnet /24 = tum LAN tek kova (donma). /32 = cihaz basi.
 RATE_V4="${ADGUARD_RATELIMIT_SUBNET_IPV4:-32}"
 RATE_V6="${ADGUARD_RATELIMIT_SUBNET_IPV6:-128}"
@@ -51,7 +52,7 @@ cache_size = int(os.environ["CACHE_SIZE"])
 querylog_days = int(os.environ["QUERYLOG_DAYS"])
 stats_days = int(os.environ["STATS_DAYS"])
 
-if ratelimit < 1 or cache_size < 1048576:
+if ratelimit < 0 or cache_size < 1048576:
     print("[adguard-dns] HATA: ratelimit/cache_size gecersiz", file=sys.stderr)
     sys.exit(1)
 if rate_v4 < 1 or rate_v4 > 32 or rate_v6 < 1 or rate_v6 > 128:
@@ -68,7 +69,9 @@ desired["upstream_dns"] = [
     f"udp://127.0.0.1:{unbound_port}",
 ]
 desired["bootstrap_dns"] = [f"127.0.0.1:{unbound_port}"]
-desired["fallback_dns"] = []
+# Unbound olurse AGH SERVFAIL → cihazlar modem DNS2 (.1, filtresiz) → reklam.
+# IP tabanli DoT (cert IP SAN var): bootstrap'a bagimli degil; modem WAN :53 drop'unu asar.
+desired["fallback_dns"] = ["tls://9.9.9.9", "tls://1.1.1.1"]
 desired["blocked_response_ttl"] = blocked_ttl
 desired["upstream_timeout"] = upstream_timeout
 desired["use_private_ptr_resolvers"] = False

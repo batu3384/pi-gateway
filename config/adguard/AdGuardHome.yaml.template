@@ -20,8 +20,8 @@ dns:
     - 127.0.0.1:5335
   protection_enabled: true
   filtering_enabled: true
-  # Tailscale Override burst: 20 dusuk (SERVFAIL). apply-adguard-dns ADGUARD_RATELIMIT ile override.
-  ratelimit: 50
+  # 0 = kapali (UFW :53 LAN/Tailscale sinirli). apply-adguard-dns ADGUARD_RATELIMIT ile override.
+  ratelimit: 0
   ratelimit_subnet_len_ipv4: 32
   ratelimit_subnet_len_ipv6: 128
   refuse_any: true

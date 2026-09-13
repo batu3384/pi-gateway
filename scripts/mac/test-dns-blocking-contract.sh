@@ -192,8 +192,12 @@ grep -q 'ADGUARD_RATELIMIT' "$PROJECT_DIR/scripts/pi/apply-adguard-dns.sh" \
   || die "apply-adguard-dns RATELIMIT yok"
 grep -q 'querylog_config' "$PROJECT_DIR/scripts/pi/apply-adguard-dns.sh" \
   || die "apply-adguard-dns querylog_config yok"
-grep -q 'ADGUARD_RATELIMIT=50' "$PROJECT_DIR/.env.example" \
-  || die ".env.example ADGUARD_RATELIMIT yok"
+grep -q 'ADGUARD_RATELIMIT=0' "$PROJECT_DIR/.env.example" \
+  || die ".env.example ADGUARD_RATELIMIT=0 yok"
+grep -q 'ADGUARD_RATELIMIT:-0' "$PROJECT_DIR/scripts/pi/apply-adguard-dns.sh" \
+  || die "apply-adguard-dns ratelimit default 0 degil"
+grep -q 'if ratelimit < 0 ' "$PROJECT_DIR/scripts/pi/apply-adguard-dns.sh" \
+  || die "apply-adguard-dns ratelimit=0 reddediyor"
 grep -q 'ADGUARD_RATELIMIT_SUBNET_IPV4=32' "$PROJECT_DIR/.env.example" \
   || die ".env.example ratelimit /32 yok"
 grep -q 'ADGUARD_CACHE_SIZE=67108864' "$PROJECT_DIR/.env.example" \
@@ -210,6 +214,9 @@ grep -q 'upstream_timeout: 2s' "$PROJECT_DIR/config/adguard/AdGuardHome.yaml.tem
   || die "AGH template timeout 2s yok"
 grep -q 'use-caps-for-id: no' "$PROJECT_DIR/config/unbound/unbound.conf" \
   || die "unbound 0x20 caps kapali degil"
+# Unbound olurse filtreli DoT fallback (IP tabanli; bootstrap'a bagimsiz) — modem DNS2'ye kacis yok
+grep -q 'desired\["fallback_dns"\] = \["tls://9.9.9.9", "tls://1.1.1.1"\]' "$PROJECT_DIR/scripts/pi/apply-adguard-dns.sh" \
+  || die "apply-adguard-dns IP-DoT fallback_dns yok"
 grep -q 'docker logs adguard --since' "$PROJECT_DIR/scripts/pi/health-check.sh" \
   || die "health-check adguard logs full dump"
 grep -q 'docker logs prometheus --since' "$PROJECT_DIR/scripts/pi/health-check.sh" \
@@ -224,11 +231,11 @@ grep -q 'ratelimit_subnet_len_ipv4' "$PROJECT_DIR/scripts/pi/health-check.sh" \
   || die "health-check ratelimit subnet dogrulama yok"
 grep -q 'upstream_timeout' "$PROJECT_DIR/scripts/pi/health-check.sh" \
   || die "health-check upstream_timeout yok"
-grep -q 'ratelimit: 50' "$PROJECT_DIR/config/adguard/AdGuardHome.yaml.template" \
-  || die "AGH template ratelimit 50 yok"
+grep -q 'ratelimit: 0' "$PROJECT_DIR/config/adguard/AdGuardHome.yaml.template" \
+  || die "AGH template ratelimit 0 yok"
 grep -q 'interval: 168h' "$PROJECT_DIR/config/adguard/AdGuardHome.yaml.template" \
   || die "AGH template querylog 168h yok"
-grep -q 'ADGUARD_RATELIMIT=50' "$PROJECT_DIR/docs/DNS-BLOCKING.md" \
+grep -q 'ADGUARD_RATELIMIT=0' "$PROJECT_DIR/docs/DNS-BLOCKING.md" \
   || die "DNS-BLOCKING knobs dokuman yok"
 awk '/^adguard-tune:/,/^recover-stack:/' "$PROJECT_DIR/Makefile" | grep -q 'apply-adguard-dns.sh' \
   || die "Makefile adguard-tune apply-adguard-dns sync yok"
