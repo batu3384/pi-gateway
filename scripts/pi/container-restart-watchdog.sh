@@ -15,7 +15,7 @@ REPEAT_SEC="${CONTAINER_RESTART_REPEAT_SEC:-21600}"
 WINDOW_SEC="${CONTAINER_RESTART_WINDOW_SEC:-900}"
 STABLE_SEC="${CONTAINER_RESTART_STABLE_SEC:-600}"
 STATE="${CONTAINER_WATCH_STATE_PATH:-/var/lib/pi-gateway/container-watch-state.json}"
-WATCH="${CONTAINER_WATCH_LIST:-prometheus grafana n8n adguard unbound caddy crowdsec netalertx}"
+WATCH="${CONTAINER_WATCH_LIST:-docker-socket-proxy n8n prometheus grafana adguard unbound caddy crowdsec netalertx}"
 
 log() { echo "[container-watch] $*"; }
 
@@ -23,6 +23,8 @@ if [[ "${1:-}" == "--self-check" ]]; then
   [[ "$THRESHOLD" =~ ^[0-9]+$ ]] || exit 1
   [[ "$WINDOW_SEC" =~ ^[0-9]+$ ]] || exit 1
   grep -q 'notify_container_restart' "$SCRIPT_DIR/../lib/notify.sh" || exit 1
+  grep -q 'docker start' "$0" || exit 1
+  grep -q 'docker-socket-proxy' "$0" || exit 1
   python3 - "$THRESHOLD" "$WINDOW_SEC" <<'PY' || exit 1
 import sys
 threshold, window = int(sys.argv[1]), int(sys.argv[2])
@@ -42,6 +44,7 @@ notify_enabled || exit 0
 
 mapfile -t _lines < <(python3 - "$STATE" "$THRESHOLD" "$REPEAT_SEC" "$WINDOW_SEC" "$STABLE_SEC" "$WATCH" <<'PY'
 import json
+import os
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -164,11 +167,29 @@ def prune_events(events: list, cutoff: float) -> list[dict]:
 state = load_state()
 alerts: list[tuple[str, int, str, int]] = []
 recovered: list[str] = []
+started: list[str] = []
+degraded = Path(os.environ.get("STORAGE_DEGRADED_FLAG", "/run/pi-gateway/storage-degraded")).is_file()
 
 for name in watch:
     restarts, status, running = inspect(name)
     if restarts < 0:
         continue
+    if (not running) and status in ("exited", "created", "dead") and not degraded:
+        try:
+            subprocess.run(
+                ["docker", "start", name],
+                check=False,
+                timeout=8,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+        restarts, status, running = inspect(name)
+        if running:
+            started.append(name)
+        if restarts < 0:
+            continue
     entry = state.get(name, {})
     if not isinstance(entry, dict):
         entry = {}
@@ -222,6 +243,9 @@ for name in watch:
 
 save_state(state)
 
+for name in started:
+    print(f"START\t{name}")
+
 for name, window_total, status, lifetime in alerts:
     print(f"ALERT\t{name}\t{window_total}\t{status}\t{lifetime}")
 
@@ -236,6 +260,9 @@ PY
 for line in "${_lines[@]:-}"; do
   IFS=$'\t' read -r kind arg1 arg2 arg3 arg4 <<<"$line"
   case "$kind" in
+    START)
+      log "durmus konteyner baslatildi: ${arg1}"
+      ;;
     ALERT)
       log "uyari: ${arg1} window=${arg2} lifetime=${arg4:-?} status=${arg3}"
       notify_container_restart_warn "$arg1" "$arg2" "$arg3" "${arg4:-}" || true

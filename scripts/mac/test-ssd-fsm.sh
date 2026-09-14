@@ -150,4 +150,24 @@ grep -qE 'echo (fail|"\$now"|"\$new_state") > "\$\{?NOTIFY_STATE_DIR|echo "\$now
   && die "C41: notify state dosyasi notify_write disinda yaziliyor"
 ok "C41 fsck/USB reset yarisi + son care + notify owner"
 
+# C42: hotplug debounce stack dusukken restore atlamasin; optional_down Restarting≠Up
+grep -A8 'hotplug_debounced' "$hotplug" | grep -q 'stack_core_ok' \
+  || die "C42: debounce stack_core_ok yok (20:42 skip restore)"
+grep -qE 'Names}} \{\{.Status}}' "$ROOT/scripts/pi/health-check.sh" \
+  || die "C42: optional_down Status yok"
+grep -qE '\^\$\{name} Up' "$ROOT/scripts/pi/health-check.sh" \
+  || die "C42: optional_down Up eslesmesi yok"
+ok "C42 hotplug debounce + optional_down Up"
+
+# C43: Restarting≠core; sandbox alpine yok; watchdog durmusu baslatir
+grep -q 'true running' "$ROOT/scripts/lib/stack-health.sh" \
+  || die "C43: container_health_ok Running sarti yok"
+! grep -q 'alpine:latest' "$ROOT/scripts/lib/stack-health.sh" \
+  || die "C43: docker_sandbox_ok alpine:latest"
+grep -q 'docker start' "$ROOT/scripts/pi/container-restart-watchdog.sh" \
+  || die "C43: watchdog durmus konteyner start yok"
+grep -q 'docker-socket-proxy' "$ROOT/scripts/lib/stack-health.sh" \
+  || die "C43: degraded_stop proxy yok"
+ok "C43 sandbox/watchdog/Restarting"
+
 echo "[test-ssd-fsm] Tum kontroller gecti"

@@ -613,7 +613,10 @@ notify_details_dns_core_fail() {
 }
 
 notify_health_systemd_ok() {
-  notify_dns_recovered "${HOSTNAME:-pi}"
+  local st
+  notify_ensure_dir
+  st="$(cat "${NOTIFY_STATE_DIR}/health-dns.state" 2>/dev/null || echo ok)"
+  [[ "$st" == "fail" ]] && notify_dns_recovered "${HOSTNAME:-pi}"
   notify_send_with_transition \
     "health-systemd" "ok" "✅ Sistem Sağlık Kontrolü Düzeldi" \
     "Önceki çekirdek sağlık uyarısı sona erdi." "HTML"

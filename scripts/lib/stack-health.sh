@@ -115,11 +115,18 @@ docker_ssd_root_ok() {
   fi
   return 0
 }
-# libnetwork sandbox store (local-kv.db) — SSD I/O sonrasi false-green mount yakalar
+# libnetwork sandbox store (local-kv.db) — SSD I/O sonrasi false-green mount yakalar.
+# Konteyner run/pull yok: recovery sirasinda imaj cekmek SSD flap'te asilir.
 docker_sandbox_ok() {
   command -v docker >/dev/null 2>&1 || return 1
   systemctl is-active --quiet docker 2>/dev/null || return 1
-  timeout 30 docker run --rm --network none alpine:latest true 2>/dev/null
+  local net="pi-gw-sb-$$"
+  if timeout 8 docker network create --internal "$net" >/dev/null 2>&1; then
+    docker network rm "$net" >/dev/null 2>&1 || true
+    return 0
+  fi
+  docker network rm "$net" >/dev/null 2>&1 || true
+  return 1
 }
 # bind-mount unbound.conf process reload etmez. Recreate AdGuard'ı düşürür (depends_on).
 unbound_conf_stale() {
@@ -175,7 +182,7 @@ degraded_stop_optional_apps() {
   (
     cd "${remote_dir}/compose"
     docker compose --env-file "${remote_dir}/.env" stop \
-      n8n uptime-kuma crowdsec dozzle netalertx \
+      n8n uptime-kuma crowdsec dozzle docker-socket-proxy netalertx \
       prometheus grafana node-exporter 2>/dev/null || true
   )
 }
@@ -219,13 +226,14 @@ stack_dns_core_ok() {
   container_health_ok 'unbound' || return 1
   return 0
 }
-# 0 = saglikli, 1 = unhealthy/missing (Health=none = healthcheck yok, ayakta say)
+# 0 = ayakta (Running + healthy|none). Restarting docker ps'te görünür — false-green olmasin.
 container_health_ok() {
   local name="$1"
-  local status
-  docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$name" || return 1
-  status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$name" 2>/dev/null)" || return 1
-  [[ "$status" == "healthy" || "$status" == "none" ]]
+  local running health
+  running="$(docker inspect -f '{{.State.Running}} {{.State.Status}}' "$name" 2>/dev/null)" || return 1
+  [[ "$running" == "true running" ]] || return 1
+  health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$name" 2>/dev/null)" || return 1
+  [[ "$health" == "healthy" || "$health" == "none" ]]
 }
 # 0 = core ayakta, 1 = bozuk (isim = donus kodu)
 stack_core_ok() {

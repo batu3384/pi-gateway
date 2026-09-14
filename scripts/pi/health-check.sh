@@ -98,7 +98,9 @@ else
   fi
   optional_down() {
     local name="$1"
-    docker ps --format '{{.Names}}' | grep -q "^${name}$" || note_fail "optional-${name}-down"
+    # "Restarting" docker ps'te görünür — crash-loop (dozzle+proxy) false-green olmasin
+    docker ps --format '{{.Names}} {{.Status}}' | grep -qE "^${name} Up" \
+      || note_fail "optional-${name}-down"
   }
   optional_prometheus_ok() {
     if docker ps --format '{{.Names}}' | grep -q '^prometheus$' \

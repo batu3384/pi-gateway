@@ -66,9 +66,13 @@ if ssd_mount_healthy; then
     log "SSD saglikli ve stack core + docker sandbox ayakta — atlaniyor"
     exit 0
   fi
+  # Debounce yalniz stack ayaktayken: 2026-09-14 20:42 USB flap sonrasi
+  # 19s icinde reentry, core dusukken 30s debounce restore'u atladı (n8n stop
+  # exit 0 + unless-stopped geri gelmez; dozzle proxy yokken crash-loop).
   if hotplug_debounced \
-    && [[ ! -f "${STORAGE_DEGRADED_FLAG:-/run/pi-gateway/storage-degraded}" ]]; then
-    log "debounce (${SSD_HOTPLUG_DEBOUNCE_SEC}s) — atlaniyor"
+    && [[ ! -f "${STORAGE_DEGRADED_FLAG:-/run/pi-gateway/storage-degraded}" ]] \
+    && stack_core_ok 2>/dev/null; then
+    log "debounce (${SSD_HOTPLUG_DEBOUNCE_SEC}s) — stack ayakta, atlaniyor"
     exit 0
   fi
   touch_hotplug_run

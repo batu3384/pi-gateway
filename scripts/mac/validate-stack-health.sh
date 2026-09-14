@@ -207,6 +207,12 @@ ok "recover root RO erken cikis yok"
 
 grep -q 'container_health_ok' "$stack_health" \
   || die "stack_core_ok container health kontrolu yok"
+grep -q 'true running' "$stack_health" \
+  || die "container_health_ok Restarting'i Up sayiyor"
+! grep -q 'alpine:latest' "$stack_health" \
+  || die "docker_sandbox_ok alpine:latest pull recovery'yi asar"
+grep -q 'docker network create --internal' "$stack_health" \
+  || die "docker_sandbox_ok libnetwork probe yok"
 ok "stack_core_ok health kontrolu"
 
 grep -q 'PI_SSD_CONFIRM_FORMAT' "$PROJECT_DIR/scripts/pi/setup-ssd-data.sh" \
