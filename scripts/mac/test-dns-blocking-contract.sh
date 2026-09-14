@@ -328,6 +328,8 @@ grep -q '9.9.9.9@853' "$PROJECT_DIR/config/unbound/unbound.conf" \
   || die "unbound DoT Quad9 853 yok"
 grep -qE '^[[:space:]]*port: 5335' "$PROJECT_DIR/config/unbound/unbound.conf" \
   || die "unbound.conf port 5335 yok (imaj default 53)"
+! grep -qE '^[[:space:]]*interface:' "$PROJECT_DIR/config/unbound/unbound.conf" \
+  || die "unbound custom conf interface duplicate (klutchell zaten 0.0.0.0)"
 grep -q '1.0.0.1 9.9.9.9' "$PROJECT_DIR/scripts/pi/diagnose-dns-bypass.sh" \
   || die "diagnose 1.0.0.1/9.9.9.9 WAN drop yok"
 grep -q 'WAN drop' "$PROJECT_DIR/scripts/pi/diagnose-dns-bypass.sh" \
