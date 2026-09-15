@@ -427,7 +427,34 @@ ok "C28b recover-ro SKIP_COMPOSE_UP"
 # C31: USB overlay olumu — host DoT :53 + hung docker timeout
 python3 "$ROOT/scripts/lib/dns-dot-proxy.py" --self-check \
   || die "C31: dns-dot-proxy self-check"
-grep -q 'dns-host-fallback.sh' "$compose_up" || die "C31: recover-compose fallback stop yok"
+grep -q 'stop --force' "$compose_up" || die "C31: recover-compose fallback --force yok"
+grep -q '_restore_dns_fallback' "$compose_up" || die "C31: recover-compose EXIT trap yok"
+grep -q 'timeout 8 /usr/bin/docker info' "$compose_up" \
+  || die "C31: recover-compose docker CLI gate yok"
+grep -q 'COMPOSE_UP_TIMEOUT' "$compose_up" || die "C31: recover-compose compose timeout yok"
+grep -q 'stop atlandi' "$ROOT/scripts/pi/dns-host-fallback.sh" \
+  || die "C31: fallback rewrite-guard yok"
+grep -q 'dns_fallback("ensure")' "$ROOT/scripts/pi/container-restart-watchdog.sh" \
+  || die "C31: watchdog ensure yok"
+grep -q 'rewrite_ok' "$ROOT/scripts/pi/container-restart-watchdog.sh" \
+  || die "C31: watchdog AGH rewrite wait yok"
+grep -q 'agh_force_stopped' "$ROOT/scripts/pi/container-restart-watchdog.sh" \
+  || die "C31: watchdog force-stop finally yok"
+grep -q 'finally:' "$ROOT/scripts/pi/container-restart-watchdog.sh" \
+  || die "C31: watchdog finally yok"
+grep -E '^notify_enabled \|\| exit 0$' "$ROOT/scripts/pi/container-restart-watchdog.sh" \
+  && die "C31: watchdog Telegram gate (DNS self-heal bagli)"
+grep -q 'dns_fallback("stop")' "$ROOT/scripts/pi/container-restart-watchdog.sh" \
+  && die "C31: watchdog kosulsuz fallback stop (USB deligi)"
+grep -q 'timeout 8 command docker' "$health" \
+  && die "C31: timeout+command builtin (docker-unresponsive false-positive)"
+grep -q 'timeout 8 /usr/bin/docker' "$health" \
+  || die "C31: health docker timeout /usr/bin/docker yok"
+grep -q 'dns-host-fallback.sh' "$health" || die "C31: health dns-host-fallback yok"
+grep -q 'Restart=on-failure' "$ROOT/host/systemd/pi-gateway-dns-fallback.service" \
+  || die "C31: fallback Restart=on-failure yok"
+grep -q 'TimeoutStartSec=180' "$ROOT/host/systemd/pi-gateway-container-watchdog.service" \
+  || die "C31: watchdog TimeoutStartSec 180 yok"
 grep -q 'dns_fallback' "$ROOT/scripts/pi/container-restart-watchdog.sh" \
   || die "C31: watchdog dns_fallback yok"
 grep -q 'TimeoutStartSec=180' "$health_unit" || die "C31: health TimeoutStartSec yok"

@@ -11,9 +11,22 @@ read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv pars
 source "$SCRIPT_DIR/../lib/compose-profiles.sh"
 # shellcheck source=../lib/stack-health.sh
 source "$SCRIPT_DIR/../lib/stack-health.sh"
-if [[ -x "$SCRIPT_DIR/dns-host-fallback.sh" ]]; then
-  bash "$SCRIPT_DIR/dns-host-fallback.sh" stop || true
-fi
+
+dns_fallback() {
+  [[ -x "$SCRIPT_DIR/dns-host-fallback.sh" ]] || return 0
+  bash "$SCRIPT_DIR/dns-host-fallback.sh" "$@" || true
+}
+
+# --force sonrası beklenmedik exit :53'ü boş bırakmasın (USB/hotplug).
+_dns_force_stopped=0
+_restore_dns_fallback() {
+  [[ "${_dns_force_stopped}" == "1" ]] || return 0
+  _dns_force_stopped=0
+  echo "[recover-compose] EXIT trap — host DNS fallback" >&2
+  dns_fallback start
+}
+trap '_restore_dns_fallback' EXIT
+
 cd "$REMOTE_DIR/compose"
 mapfile -t profiles < <(compose_profiles)
 # SSD yok/stale: asla full app stack (ephemeral SD data clobber riski)
@@ -28,22 +41,57 @@ if needs_ssd_storage && [[ "$ssd_ok" -ne 1 ]]; then
     COMPOSE_RECOVER_MODE=core-dns
   else
     echo "[recover-compose] HATA: SSD yok ve DNS degraded kapali — compose atlandi" >&2
+    dns_fallback start
     exit 1
   fi
 fi
+
+if ! timeout 8 /usr/bin/docker info >/dev/null 2>&1; then
+  echo "[recover-compose] HATA: docker CLI yok — fallback koru, compose yok" >&2
+  dns_fallback start
+  exit 1
+fi
+
+dns_fallback stop --force
+_dns_force_stopped=1
+
 compose_up() {
+  local t="${COMPOSE_UP_TIMEOUT:-90}"
   if [[ "${COMPOSE_RECOVER_MODE:-}" == "core-dns" ]]; then
     local -a core_svc=(unbound adguard)
     if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
       core_svc+=(homepage caddy)
     fi
     echo "[recover-compose] mode=core-dns (${core_svc[*]})" >&2
-    docker compose --env-file ../.env --profile caddy up -d "${core_svc[@]}"
+    timeout "$t" docker compose --env-file ../.env --profile caddy up -d "${core_svc[@]}"
   else
-    docker compose --env-file ../.env "${profiles[@]}" up -d
+    timeout "$t" docker compose --env-file ../.env "${profiles[@]}" up -d
   fi
 }
+
+_wait_agh_rewrite() {
+  local _ip="${PI_STATIC_IP:-127.0.0.1}"
+  local _dom="${LAN_DOMAIN:-home}"
+  local _i
+  for _i in $(seq 1 "${AGH_REWRITE_WAIT_SEC:-60}"); do
+    if timeout 2 dig +time=1 +tries=1 +short @"$_ip" "gateway.${_dom}" A 2>/dev/null \
+      | grep -qx "$_ip"; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
 finish_ok() {
+  # Önce :53 — dozzle/reap hung docker :53'ü boş bırakmasın.
+  if _wait_agh_rewrite; then
+    dns_fallback ensure
+  else
+    echo "[recover-compose] WARN AGH rewrite yok — host DNS fallback" >&2
+    dns_fallback start
+  fi
+  _dns_force_stopped=0
   # shellcheck source=../lib/reap-dead-docker-scopes.sh
   source "$SCRIPT_DIR/../lib/reap-dead-docker-scopes.sh"
   reap_dead_docker_scopes || true
@@ -52,16 +100,16 @@ finish_ok() {
     && [[ ! -f "${REMOTE_DIR}/data/dozzle/users.yml" ]]; then
     echo "[recover-compose] dozzle users.yml eksik — setup-dozzle" >&2
     bash "$SCRIPT_DIR/setup-dozzle.sh" || true
-    docker compose --env-file ../.env --profile dozzle up -d dozzle 2>/dev/null || true
+    timeout "${COMPOSE_UP_TIMEOUT:-90}" docker compose --env-file ../.env --profile dozzle \
+      up -d dozzle 2>/dev/null || true
   fi
   mark_stack_recover_cooldown
   exit 0
 }
 finish_fail() {
   echo "[recover-compose] HATA: compose recover basarisiz — cooldown yazilmiyor" >&2
-  if [[ -x "$SCRIPT_DIR/dns-host-fallback.sh" ]]; then
-    bash "$SCRIPT_DIR/dns-host-fallback.sh" start || true
-  fi
+  dns_fallback start
+  _dns_force_stopped=0
   exit 1
 }
 if compose_up; then
@@ -92,7 +140,8 @@ if (( ${#down_svc[@]} == 0 )); then
   finish_ok
 fi
 echo "[recover-compose] son care force-recreate: ${down_svc[*]}" >&2
-if docker compose --env-file ../.env "${up_profiles[@]}" up -d --force-recreate --no-deps "${down_svc[@]}"; then
+if timeout "${COMPOSE_UP_TIMEOUT:-90}" docker compose --env-file ../.env "${up_profiles[@]}" \
+  up -d --force-recreate --no-deps "${down_svc[@]}"; then
   finish_ok
 fi
 finish_fail

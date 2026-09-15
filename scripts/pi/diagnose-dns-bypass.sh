@@ -204,6 +204,25 @@ fi
 echo ""
 echo "=== Modem DHCP DNS (sniff) ==="
 GATEWAY_IP="${LAN_GATEWAY:-${PI_IP%.*}.1}"
+_inv="${MODEM_INVENTORY_PATH:-${REMOTE_DIR}/data/modem-inventory.json}"
+if [[ -f "$_inv" ]]; then
+  python3 - "$_inv" "$PI_IP" <<'PY' || true
+import json, sys
+path, pi = sys.argv[1], sys.argv[2]
+try:
+    data = json.loads(open(path, encoding="utf-8").read())
+except (OSError, json.JSONDecodeError):
+    raise SystemExit(0)
+lan = data.get("lan_dhcp") or {}
+if not lan.get("dns1"):
+    raise SystemExit(0)
+print(f"Panel LAN DNS1={lan.get('dns1')} DNS2={lan.get('dns2') or '-'} lease={lan.get('lease_sec')}s relay={lan.get('relay_enable')}")
+if lan.get("dns1") != pi:
+    print(f"WARN panel DNS1 {lan.get('dns1')} != Pi {pi}")
+if lan.get("relay_enable"):
+    print("WARN DHCP relay acik")
+PY
+fi
 if check_dhcp_dns_offer "$PI_IP" "$GATEWAY_IP" "${PI_INTERFACE:-eth0}"; then
   pass "Modem DHCP birincil DNS = Pi"
 else

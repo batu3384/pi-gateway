@@ -34,11 +34,13 @@ RATE_V4="${ADGUARD_RATELIMIT_SUBNET_IPV4:-32}"
 RATE_V6="${ADGUARD_RATELIMIT_SUBNET_IPV6:-128}"
 CACHE_SIZE="${ADGUARD_CACHE_SIZE:-67108864}"
 # 0 = upstream TTL (Unbound zaten cache). 300 eski "min 5dk" yanlis IP'yi kilitler.
-CACHE_TTL_MIN="${ADGUARD_CACHE_TTL_MIN:-0}"
+CACHE_TTL_MIN="${ADGUARD_CACHE_TTL_MIN:-60}"
+# IPv6 Happy Eyeballs: yavaş AAAA (WAN) video açılışını bekletir. true = yalnız A.
+AAAA_DISABLED="${ADGUARD_AAAA_DISABLED:-true}"
 # AGH API: gun (integer). YAML template 168h ile uyumlu.
 QUERYLOG_DAYS="${ADGUARD_QUERYLOG_INTERVAL_DAYS:-7}"
 STATS_DAYS="${ADGUARD_STATS_INTERVAL_DAYS:-7}"
-export BLOCKED_TTL UPSTREAM_TIMEOUT RATELIMIT RATE_V4 RATE_V6 CACHE_SIZE CACHE_TTL_MIN QUERYLOG_DAYS STATS_DAYS BASE COOKIE UNBOUND_PORT DNS_INFO
+export BLOCKED_TTL UPSTREAM_TIMEOUT RATELIMIT RATE_V4 RATE_V6 CACHE_SIZE CACHE_TTL_MIN AAAA_DISABLED QUERYLOG_DAYS STATS_DAYS BASE COOKIE UNBOUND_PORT DNS_INFO
 python3 - <<'PY'
 import json, os, subprocess, sys
 
@@ -52,6 +54,11 @@ rate_v4 = int(os.environ["RATE_V4"])
 rate_v6 = int(os.environ["RATE_V6"])
 cache_size = int(os.environ["CACHE_SIZE"])
 cache_ttl_min = int(os.environ["CACHE_TTL_MIN"])
+aaaa_disabled = os.environ.get("AAAA_DISABLED", "true").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+)
 querylog_days = int(os.environ["QUERYLOG_DAYS"])
 stats_days = int(os.environ["STATS_DAYS"])
 
@@ -88,6 +95,9 @@ desired["cache_size"] = cache_size
 desired["cache_optimistic"] = True
 desired["cache_ttl_min"] = cache_ttl_min
 desired["cache_ttl_max"] = 86400
+# AGH JSON disable_ipv6; YAML tag aaaa_disabled. API aaaa_disabled yok — ignore + health false-green.
+desired.pop("aaaa_disabled", None)
+desired["disable_ipv6"] = aaaa_disabled
 
 
 def dns_field_changed(key):
@@ -114,6 +124,19 @@ else:
     )
     for k in changed:
         print(f"[adguard-dns] guncellendi: {k}={desired[k]!r}")
+    if "disable_ipv6" in changed:
+        subprocess.run(
+            ["curl", "-fsS", "-b", cookie, "-X", "POST", f"{base}/control/cache_clear"],
+            check=False,
+        )
+        print("[adguard-dns] cache_clear (AAAA)")
+
+if aaaa_disabled and os.environ.get("AAAA_FLUSH", "") == "1":
+    subprocess.run(
+        ["curl", "-fsS", "-b", cookie, "-X", "POST", f"{base}/control/cache_clear"],
+        check=False,
+    )
+    print("[adguard-dns] cache_clear (AAAA_FLUSH)")
 
 # Querylog / stats retention (gun)
 ql = json.loads(
@@ -200,6 +223,9 @@ if final.get("cache_optimistic") is not True:
     sys.exit(1)
 if int(final.get("cache_ttl_min") or 0) != cache_ttl_min:
     print("[adguard-dns] HATA: cache_ttl_min uyusmuyor", final.get("cache_ttl_min"), file=sys.stderr)
+    sys.exit(1)
+if bool(final.get("disable_ipv6")) is not aaaa_disabled:
+    print("[adguard-dns] HATA: disable_ipv6 uyusmuyor", final.get("disable_ipv6"), file=sys.stderr)
     sys.exit(1)
 fallback = [str(u) for u in (final.get("fallback_dns") or [])]
 if "tls://dns.adguard-dns.com" not in fallback or "tls://9.9.9.9" not in fallback:

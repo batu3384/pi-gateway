@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AGH :53 olunca dur; USB/docker hang'de host DoT proxy baslat.
+# AGH rewrite yokken :53 asla bos birakma. stop yalniz AGH cevapliyorsa veya --force.
 set -euo pipefail
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -35,13 +35,18 @@ agh_rewrite_ok() {
 }
 
 cmd_stop() {
+  local force="${1:-0}"
+  if [[ "$force" != "1" ]] && ! agh_rewrite_ok; then
+    log "stop atlandi — AGH rewrite yok (:53 koru)"
+    return 0
+  fi
   run_sys systemctl stop "$UNIT" 2>/dev/null || true
   run_sys systemctl reset-failed "$UNIT" 2>/dev/null || true
 }
 
 cmd_start() {
   if agh_rewrite_ok; then
-    cmd_stop
+    cmd_stop 1
     log "AGH :53 ayakta"
     return 0
   fi
@@ -57,23 +62,28 @@ cmd_start() {
 
 cmd_ensure() {
   if agh_rewrite_ok; then
-    cmd_stop
+    cmd_stop 1
     return 0
   fi
   cmd_start
 }
 
-case "${1:-ensure}" in
+action="${1:-ensure}"
+force=0
+[[ "${2:-}" == "--force" ]] && force=1
+case "$action" in
   start) cmd_start ;;
-  stop) cmd_stop ;;
+  stop) cmd_stop "$force" ;;
   ensure) cmd_ensure ;;
   --self-check)
+    grep -q 'stop atlandi' "$0" || exit 1
+    grep -q -- '--force' "$0" || exit 1
     grep -q 'dns-dot-proxy.py' "$0" || exit 1
     [[ -f "${SCRIPT_DIR}/../lib/dns-dot-proxy.py" ]] || exit 1
     python3 "${SCRIPT_DIR}/../lib/dns-dot-proxy.py" --self-check
     ;;
   *)
-    log "HATA: kullanim: start|stop|ensure|--self-check"
+    log "HATA: kullanim: start|stop [--force]|ensure|--self-check"
     exit 2
     ;;
 esac

@@ -67,6 +67,82 @@ class AdapterError(RuntimeError):
     """Expected router/session/response failure."""
 
 
+def _is_session_timeout(payload: str) -> bool:
+    """SPA JS 'sessiontimeout' içerir — yalnız kısa hata gövdesi oturum düşürür."""
+    low = payload.lower()
+    if "if_errorstr" in low and "sessiontimeout" in low.replace(" ", ""):
+        return True
+    if len(payload) > 4096:
+        return False
+    return "sessiontimeout" in low and "ajax_response" in low
+
+
+def _page_session_token(html: str) -> str:
+    match = re.search(r'_sessionTmpToken\s*=\s*"((?:\\x[0-9a-fA-F]{2})+)"', html)
+    if match:
+        try:
+            return bytes.fromhex(match.group(1).replace("\\x", "")).decode("ascii")
+        except ValueError:
+            return ""
+    match = re.search(r'_sessionTmpToken\s*=\s*"([^"]+)"', html)
+    return match.group(1) if match else ""
+
+
+def _para_rows(payload: str) -> list[dict[str, str]]:
+    try:
+        root = ET.fromstring(payload)
+    except ET.ParseError as exc:
+        raise AdapterError(f"XML parse failed: {exc}") from exc
+    error = _text(root.findtext(".//IF_ERRORSTR"))
+    if error and error.upper() not in SUCCESS_MARKERS:
+        raise AdapterError(f"router response error: {error}")
+    rows: list[dict[str, str]] = []
+    for instance in root.iter():
+        if _local_name(instance.tag) != "instance":
+            continue
+        children = list(instance)
+        fields: dict[str, str] = {}
+        for index in range(0, len(children) - 1, 2):
+            key = _field_name(children[index].text)
+            if key:
+                fields[key] = _text(children[index + 1].text)
+        if fields:
+            rows.append(fields)
+    return rows
+
+
+def parse_lan_dhcp(group_xml: str, relay_xml: str, gateway_ip: str) -> dict[str, Any]:
+    groups = _para_rows(group_xml)
+    lan: dict[str, str] = {}
+    for row in groups:
+        if row.get("ipaddress") == gateway_ip:
+            lan = row
+            break
+    if not lan:
+        for row in groups:
+            if "default" in row.get("name", "").lower():
+                lan = row
+                break
+    if not lan and groups:
+        lan = groups[0]
+    relays = _para_rows(relay_xml)
+    relay = relays[0] if relays else {}
+    try:
+        lease_sec = int(lan.get("leasetime") or 0)
+    except ValueError:
+        lease_sec = 0
+    return {
+        "dns1": normalize_ip(lan.get("dnsserver1", "")),
+        "dns2": normalize_ip(lan.get("dnsserver2", "")),
+        "lease_sec": lease_sec,
+        "pool_min": normalize_ip(lan.get("minaddress", "")),
+        "pool_max": normalize_ip(lan.get("maxaddress", "")),
+        "server_enable": lan.get("enable") in {"1", "true", "yes"},
+        "relay_enable": relay.get("dhcprelayenable") in {"1", "true", "yes"},
+        "relay_ip": normalize_ip(relay.get("relayip", "")),
+    }
+
+
 def _local_name(tag: str) -> str:
     return tag.rsplit("}", 1)[-1].lower()
 
@@ -301,7 +377,7 @@ class ZteH3600P:
                 payload = response.read(2_000_000).decode("utf-8", "replace")
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             raise AdapterError(f"router request failed: {exc}") from exc
-        if "sessiontimeout" in payload.lower():
+        if _is_session_timeout(payload):
             raise AdapterError("router session expired")
         return payload
 
@@ -399,17 +475,48 @@ class ZteH3600P:
             raise AdapterError("no valid device records in router responses")
         return devices
 
+    def fetch_lan_dhcp(self) -> dict[str, Any]:
+        html = self.request("/", params={"_type": "menuView", "_tag": "lanMgrIpv4"})
+        token = _page_session_token(html) or self.session_token
+        if not token:
+            raise AdapterError("lan dhcp session token empty")
+        group_xml = self.request(
+            "/",
+            params={
+                "_type": "menuData",
+                "_tag": "Localnet_Lan_group_lua.lua",
+                "_sessionTOKEN": token,
+            },
+        )
+        relay_xml = self.request(
+            "/",
+            params={
+                "_type": "menuData",
+                "_tag": "Localnet_Lan_dhcp_enable_lua.lua",
+                "_sessionTOKEN": token,
+            },
+        )
+        gateway_ip = os.environ.get("LAN_GATEWAY") or os.environ.get("MODEM_GATEWAY") or "192.168.1.1"
+        return parse_lan_dhcp(group_xml, relay_xml, gateway_ip)
 
-def write_snapshot(path: str, base_url: str, devices: list[dict[str, Any]]) -> None:
+
+def write_snapshot(
+    path: str,
+    base_url: str,
+    devices: list[dict[str, Any]],
+    lan_dhcp: dict[str, Any] | None = None,
+) -> None:
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    snapshot = {
+    snapshot: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "source": "zte-h3600p",
         "fetched_at": datetime.now(timezone.utc).isoformat(),
         "router": {"url": base_url},
         "devices": devices,
     }
+    if lan_dhcp:
+        snapshot["lan_dhcp"] = lan_dhcp
     fd, temp_path = tempfile.mkstemp(
         prefix=f".{destination.name}.", suffix=".tmp", dir=destination.parent
     )
@@ -462,6 +569,38 @@ def self_check() -> None:
     assert merged[0]["privacy_mac"] is True
     assert merged[0]["confidence"] == "high"
     assert hashlib.sha256(b"secret-token").hexdigest()
+    assert _is_session_timeout(
+        "<ajax_response_xml_root><IF_ERRORSTR>SessionTimeout</IF_ERRORSTR></ajax_response_xml_root>"
+    )
+    assert not _is_session_timeout("x" * 5000 + "sessiontimeout")
+    group_xml = """
+    <ajax_response_xml_root><IF_ERRORSTR>SUCC</IF_ERRORSTR>
+      <OBJ_LANGROUP_ID><Instance>
+        <ParaName>IPAddress</ParaName><ParaValue>192.0.2.1</ParaValue>
+        <ParaName>DNSServer1</ParaName><ParaValue>192.0.2.10</ParaValue>
+        <ParaName>DNSServer2</ParaName><ParaValue>0.0.0.0</ParaValue>
+        <ParaName>Name</ParaName><ParaValue>Default Group</ParaValue>
+        <ParaName>MinAddress</ParaName><ParaValue>192.0.2.100</ParaValue>
+        <ParaName>MaxAddress</ParaName><ParaValue>192.0.2.200</ParaValue>
+        <ParaName>LeaseTime</ParaName><ParaValue>3600</ParaValue>
+        <ParaName>Enable</ParaName><ParaValue>1</ParaValue>
+      </Instance></OBJ_LANGROUP_ID>
+    </ajax_response_xml_root>
+    """
+    relay_xml = """
+    <ajax_response_xml_root><IF_ERRORSTR>SUCC</IF_ERRORSTR>
+      <OBJ_DHCPRELAY_ID><Instance>
+        <ParaName>DHCPRelayEnable</ParaName><ParaValue>0</ParaValue>
+        <ParaName>RelayIP</ParaName><ParaValue>192.0.2.10</ParaValue>
+      </Instance></OBJ_DHCPRELAY_ID>
+    </ajax_response_xml_root>
+    """
+    lan = parse_lan_dhcp(group_xml, relay_xml, "192.0.2.1")
+    assert lan["dns1"] == "192.0.2.10"
+    assert lan["dns2"] == "0.0.0.0"
+    assert lan["relay_enable"] is False
+    assert lan["lease_sec"] == 3600
+    assert _page_session_token(r'_sessionTmpToken = "\x31\x32";') == "12"
     print("[zte-h3600p] self-check OK")
 
 
@@ -497,16 +636,32 @@ def main() -> int:
         )
 
     client = ZteH3600P(args.url, args.username, args.password, args.timeout)
+    lan_dhcp: dict[str, Any] = {}
     try:
         client.login()
+        try:
+            lan_dhcp = client.fetch_lan_dhcp()
+        except AdapterError as exc:
+            print(f"[zte-h3600p] WARN lan dhcp: {exc}", file=sys.stderr)
         devices = client.fetch_devices()
-        write_snapshot(args.output, args.url, devices)
+        write_snapshot(args.output, args.url, devices, lan_dhcp=lan_dhcp or None)
     except AdapterError as exc:
         print(f"[zte-h3600p] snapshot not updated: {exc}", file=sys.stderr)
         return 1
     finally:
         client.logout()
-    print(f"[zte-h3600p] snapshot updated: {len(devices)} devices")
+    pi_ip = os.environ.get("PI_STATIC_IP", "").strip()
+    if lan_dhcp.get("dns1") and pi_ip and lan_dhcp["dns1"] != pi_ip:
+        print(
+            f"[zte-h3600p] WARN panel DNS1={lan_dhcp['dns1']} != Pi {pi_ip}",
+            file=sys.stderr,
+        )
+    if lan_dhcp.get("relay_enable"):
+        print("[zte-h3600p] WARN DHCP relay acik — LAN DISCOVER yutulur", file=sys.stderr)
+    extra = ""
+    if lan_dhcp.get("dns1"):
+        extra = f" dns1={lan_dhcp['dns1']} dns2={lan_dhcp.get('dns2') or '-'}"
+    print(f"[zte-h3600p] snapshot updated: {len(devices)} devices{extra}")
     return 0
 
 

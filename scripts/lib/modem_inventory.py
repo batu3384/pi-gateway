@@ -60,6 +60,7 @@ def _empty(path: str) -> dict[str, Any]:
         "devices_by_mac": {},
         "ips": set(),
         "devices": [],
+        "lan_dhcp": {},
     }
 
 
@@ -154,6 +155,7 @@ def load_modem_inventory(path: str = "", stale_sec: int | None = None) -> dict[s
             "devices_by_ip": devices_by_ip,
             "devices_by_mac": devices_by_mac,
             "ips": ips,
+            "lan_dhcp": data.get("lan_dhcp") if isinstance(data.get("lan_dhcp"), dict) else {},
         }
     )
     return snapshot
@@ -207,6 +209,7 @@ def self_check() -> None:
         assert inventory["fresh"] and device["mac"] == "aa:bb:cc:dd:ee:01"
         assert device["privacy_mac"] is False
         assert modem_name(inventory, ip="192.168.1.50") == "Telefon"
+        assert inventory.get("lan_dhcp") == {}
         stale = load_modem_inventory(path, stale_sec=0)
         assert not stale["fresh"] and not modem_device(stale, ip="192.168.1.50")
     print("[modem-inventory] self-check OK")

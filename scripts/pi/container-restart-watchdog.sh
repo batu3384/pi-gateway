@@ -25,6 +25,10 @@ if [[ "${1:-}" == "--self-check" ]]; then
   grep -q 'notify_container_restart' "$SCRIPT_DIR/../lib/notify.sh" || exit 1
   grep -q 'docker start' "$0" || exit 1
   grep -q 'docker-socket-proxy' "$0" || exit 1
+  grep -E '^notify_enabled \|\| exit 0$' "$0" && exit 1
+  grep -q 'rewrite_ok' "$0" || exit 1
+  grep -q 'agh_force_stopped' "$0" || exit 1
+  grep -q 'finally:' "$0" || exit 1
   python3 - "$THRESHOLD" "$WINDOW_SEC" <<'PY' || exit 1
 import sys
 threshold, window = int(sys.argv[1]), int(sys.argv[2])
@@ -40,13 +44,12 @@ PY
   exit 0
 fi
 
-notify_enabled || exit 0
-
 mapfile -t _lines < <(python3 - "$STATE" "$THRESHOLD" "$REPEAT_SEC" "$WINDOW_SEC" "$STABLE_SEC" "$WATCH" <<'PY'
 import json
 import os
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -172,99 +175,135 @@ started: list[str] = []
 degraded = Path(os.environ.get("STORAGE_DEGRADED_FLAG", "/run/pi-gateway/storage-degraded")).is_file()
 
 
-def dns_fallback(action: str) -> None:
+def rewrite_ok() -> bool:
+    ip = os.environ.get("PI_STATIC_IP", "127.0.0.1")
+    domain = os.environ.get("LAN_DOMAIN", "home")
+    try:
+        out = subprocess.check_output(
+            [
+                "dig",
+                "+time=1",
+                "+tries=1",
+                "+short",
+                f"@{ip}",
+                f"gateway.{domain}",
+                "A",
+            ],
+            text=True,
+            timeout=3,
+            stderr=subprocess.DEVNULL,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+    return any(line.strip() == ip for line in out.splitlines())
+
+
+def dns_fallback(*args: str) -> None:
     remote = os.environ.get("REMOTE_DIR", "")
     script = os.path.join(remote, "scripts/pi/dns-host-fallback.sh")
-    if not os.path.isfile(script):
+    if not os.path.isfile(script) or not args:
         return
-    subprocess.run(
-        ["bash", script, action],
+    proc = subprocess.run(
+        ["bash", script, *args],
         check=False,
         timeout=20,
         stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
     )
+    if proc.returncode:
+        print(f"WARN\tdns-fallback\t{proc.returncode}\t{' '.join(args)}", flush=True)
 
 
-dns_fallback("stop")
-
-for name in watch:
-    restarts, status, running = inspect(name)
-    if restarts < 0:
-        continue
-    if (not running) and status in ("exited", "created", "dead") and not degraded:
-        try:
-            subprocess.run(
-                ["docker", "start", name],
-                check=False,
-                timeout=8,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            pass
+agh_force_stopped = False
+try:
+    for name in watch:
         restarts, status, running = inspect(name)
-        if running:
-            started.append(name)
         if restarts < 0:
             continue
-    entry = state.get(name, {})
-    if not isinstance(entry, dict):
-        entry = {}
+        if (not running) and status in ("exited", "created", "dead") and not degraded:
+            if name == "adguard":
+                dns_fallback("stop", "--force")
+                agh_force_stopped = True
+            try:
+                subprocess.run(
+                    ["docker", "start", name],
+                    check=False,
+                    timeout=8,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            except (subprocess.TimeoutExpired, FileNotFoundError):
+                pass
+            restarts, status, running = inspect(name)
+            if running:
+                started.append(name)
+            elif name == "adguard":
+                dns_fallback("start")
+                agh_force_stopped = False
+            if restarts < 0:
+                continue
+        entry = state.get(name, {})
+        if not isinstance(entry, dict):
+            entry = {}
 
-    last_seen = int(entry.get("last_seen_restarts", restarts))
-    events = prune_events(entry.get("restart_events") or [], now - window_sec)
-    if restarts > last_seen:
-        events.append({"at": now, "delta": restarts - last_seen})
+        last_seen = int(entry.get("last_seen_restarts", restarts))
+        events = prune_events(entry.get("restart_events") or [], now - window_sec)
+        if restarts > last_seen:
+            events.append({"at": now, "delta": restarts - last_seen})
 
-    window_total = sum(e["delta"] for e in events)
-    restarting = status == "restarting"
-    bad = restarting or window_total >= threshold
-    was_alerting = bool(entry.get("alerting"))
-    last_alert = float(entry.get("last_alert_at") or 0)
+        window_total = sum(e["delta"] for e in events)
+        restarting = status == "restarting"
+        bad = restarting or window_total >= threshold
+        was_alerting = bool(entry.get("alerting"))
+        last_alert = float(entry.get("last_alert_at") or 0)
 
-    # Eski kümülatif alarm state — pencere sifirsa temizle
-    if entry.get("last_alert_at") and not was_alerting and window_total == 0 and not restarting:
-        entry.pop("last_alert_at", None)
-        entry.pop("last_alert_restarts", None)
-
-    if bad:
-        should_alert = False
-        if not was_alerting:
-            should_alert = True
-        elif now - last_alert >= repeat_sec:
-            should_alert = True
-        if should_alert:
-            alerts.append((name, window_total, status, restarts))
-            entry["alerting"] = True
-            entry["last_alert_at"] = now
-            entry["last_alert_window_total"] = window_total
-            entry.pop("stable_since", None)
-    elif was_alerting and running and status == "running":
-        stable_since = float(entry.get("stable_since") or 0)
-        if not stable_since:
-            entry["stable_since"] = now
-        elif now - stable_since >= stable_sec:
-            recovered.append(name)
-            entry["alerting"] = False
+        # Eski kümülatif alarm state — pencere sifirsa temizle
+        if entry.get("last_alert_at") and not was_alerting and window_total == 0 and not restarting:
             entry.pop("last_alert_at", None)
-            entry.pop("last_alert_window_total", None)
+            entry.pop("last_alert_restarts", None)
+
+        if bad:
+            should_alert = False
+            if not was_alerting:
+                should_alert = True
+            elif now - last_alert >= repeat_sec:
+                should_alert = True
+            if should_alert:
+                alerts.append((name, window_total, status, restarts))
+                entry["alerting"] = True
+                entry["last_alert_at"] = now
+                entry["last_alert_window_total"] = window_total
+                entry.pop("stable_since", None)
+        elif was_alerting and running and status == "running":
+            stable_since = float(entry.get("stable_since") or 0)
+            if not stable_since:
+                entry["stable_since"] = now
+            elif now - stable_since >= stable_sec:
+                recovered.append(name)
+                entry["alerting"] = False
+                entry.pop("last_alert_at", None)
+                entry.pop("last_alert_window_total", None)
+                entry.pop("stable_since", None)
+        else:
             entry.pop("stable_since", None)
-    else:
-        entry.pop("stable_since", None)
 
-    entry["restart_events"] = events
-    entry["last_seen_restarts"] = restarts
-    entry["last_status"] = status
-    entry["checked_at"] = datetime.now(timezone.utc).isoformat()
-    state[name] = entry
+        entry["restart_events"] = events
+        entry["last_seen_restarts"] = restarts
+        entry["last_status"] = status
+        entry["checked_at"] = datetime.now(timezone.utc).isoformat()
+        state[name] = entry
 
-save_state(state)
-_, _, adg_up = inspect("adguard")
-if adg_up:
-    dns_fallback("stop")
-else:
-    dns_fallback("start")
+    save_state(state)
+    if agh_force_stopped:
+        for _ in range(int(os.environ.get("AGH_REWRITE_WAIT_SEC", "45"))):
+            if rewrite_ok():
+                break
+            time.sleep(1)
+    dns_fallback("ensure")
+    if rewrite_ok():
+        agh_force_stopped = False
+finally:
+    if agh_force_stopped and not rewrite_ok():
+        dns_fallback("start")
 
 for name in started:
     print(f"START\t{name}")
@@ -301,6 +340,9 @@ for line in "${_lines[@]:-}"; do
       else
         log "WARN prometheus repair basarisiz"
       fi
+      ;;
+    WARN)
+      log "WARN: ${arg1} ${arg2:-} ${arg3:-}"
       ;;
   esac
 done

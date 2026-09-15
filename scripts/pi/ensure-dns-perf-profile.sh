@@ -23,7 +23,8 @@ set_kv() {
 for pair in \
   "ADGUARD_BLOCKED_TTL:300" \
   "ADGUARD_CACHE_SIZE:67108864" \
-  "ADGUARD_CACHE_TTL_MIN:0" \
+  "ADGUARD_CACHE_TTL_MIN:60" \
+  "ADGUARD_AAAA_DISABLED:true" \
   "ADGUARD_RATELIMIT:0" \
   "ADGUARD_RATELIMIT_SUBNET_IPV4:32" \
   "ADGUARD_RATELIMIT_SUBNET_IPV6:128" \
@@ -31,7 +32,8 @@ for pair in \
   "ADGUARD_AUTO_HEAL:false" \
   "ADGUARD_DNS_AUTO_HEAL:true" \
   "GATEWAY_VIDEO_DNS_PROBE:false" \
-  "ADGUARD_COVERAGE_AUDIT_ENABLED:false"; do
+  "ADGUARD_COVERAGE_AUDIT_ENABLED:false" \
+  "DNS_HOST_FALLBACK:true"; do
   k="${pair%%:*}"
   v="${pair#*:}"
   cur="$(grep -m1 "^${k}=" "$ENV" 2>/dev/null | cut -d= -f2- || true)"

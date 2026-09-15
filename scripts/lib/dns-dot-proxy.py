@@ -18,6 +18,15 @@ UPSTREAMS = (
 DOT_TIMEOUT = 3.0
 LISTEN_PORT = int(os.environ.get("DNS_FALLBACK_PORT", "53"))
 MAX_DNS = 4096
+QTYPE_AAAA = 28
+DISABLE_AAAA = os.environ.get("DNS_FALLBACK_DISABLE_AAAA", "true").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+)
+# ponytail: thread-per-query. Ceiling LAN storm; upgrade ThreadPoolExecutor.
+MAX_INFLIGHT = int(os.environ.get("DNS_FALLBACK_MAX_INFLIGHT", "64"))
+_INFLIGHT = threading.Semaphore(MAX_INFLIGHT)
 ALLOWED = (
     ipaddress.ip_network("127.0.0.0/8"),
     ipaddress.ip_network("10.0.0.0/8"),
@@ -36,6 +45,43 @@ def allowed(addr: str) -> bool:
     except ValueError:
         return False
     return any(ip in net for net in ALLOWED)
+
+
+def _skip_qname(q: bytes, i: int) -> int:
+    n = len(q)
+    while i < n:
+        lab = q[i]
+        if lab == 0:
+            return i + 1
+        if lab & 0xC0 == 0xC0:
+            return i + 2
+        i += 1 + lab
+    return n
+
+
+def qtype(q: bytes) -> int:
+    if len(q) < 16:
+        return 0
+    i = _skip_qname(q, 12)
+    if i + 2 > len(q):
+        return 0
+    return int.from_bytes(q[i : i + 2], "big")
+
+
+def nodata(q: bytes) -> bytes:
+    """NOERROR + empty answer (NODATA). Happy Eyeballs AAAA bekletmesin."""
+    if len(q) < 16:
+        return b""
+    end = _skip_qname(q, 12) + 4
+    if end > len(q) or end < 16:
+        return b""
+    return q[:2] + b"\x81\x80" + q[4:6] + b"\x00\x00\x00\x00\x00\x00" + q[12:end]
+
+
+def _answer(q: bytes) -> bytes:
+    if DISABLE_AAAA and qtype(q) == QTYPE_AAAA:
+        return nodata(q)
+    return query_dot(q)
 
 
 def query_dot(q: bytes) -> bytes:
@@ -81,7 +127,7 @@ def _handle_udp(sock: socket.socket, data: bytes, src: tuple) -> None:
     if not allowed(host):
         return
     try:
-        ans = query_dot(data)
+        ans = _answer(data)
     except OSError:
         return
     if ans:
@@ -111,7 +157,7 @@ def _handle_tcp(conn: socket.socket, addr: tuple) -> None:
             if not chunk:
                 return
             q += chunk
-        ans = query_dot(q)
+        ans = _answer(q)
         if ans:
             conn.sendall(struct.pack("!H", len(ans)) + ans)
     except OSError:
@@ -140,8 +186,18 @@ def _bind(family: int, kind: int) -> socket.socket | None:
     return sock
 
 
+def _spawn(target, args) -> None:
+    if not _INFLIGHT.acquire(blocking=False):
+        return
+    def _run() -> None:
+        try:
+            target(*args)
+        finally:
+            _INFLIGHT.release()
+    threading.Thread(target=_run, daemon=True).start()
+
+
 def serve() -> int:
-    # ponytail: thread-per-query. Ceiling LAN storm; upgrade ThreadPoolExecutor.
     sel = selectors.DefaultSelector()
     bound = 0
     for family, kind in (
@@ -168,17 +224,13 @@ def serve() -> int:
                     data, src = sock.recvfrom(MAX_DNS)
                 except OSError:
                     continue
-                threading.Thread(
-                    target=_handle_udp, args=(sock, data, src), daemon=True
-                ).start()
+                _spawn(_handle_udp, (sock, data, src))
             else:
                 try:
                     conn, addr = sock.accept()
                 except OSError:
                     continue
-                threading.Thread(
-                    target=_handle_tcp, args=(conn, addr), daemon=True
-                ).start()
+                _spawn(_handle_tcp, (conn, addr))
 
 
 def self_check() -> None:
@@ -190,6 +242,17 @@ def self_check() -> None:
     assert not allowed("1.1.1.1")
     packed = struct.pack("!H", 12) + b"abcdefghijkl"
     assert struct.unpack("!H", packed[:2])[0] == 12
+    aaaa_q = bytes.fromhex("000101000001000000000000016100001c0001")
+    assert qtype(aaaa_q) == QTYPE_AAAA
+    aaaa_r = nodata(aaaa_q)
+    assert aaaa_r[:2] == aaaa_q[:2]
+    assert aaaa_r[2] & 0x80
+    assert aaaa_r[6:8] == b"\x00\x00"
+    a_q = bytes.fromhex("00010100000100000000000001610000010001")
+    assert qtype(a_q) == 1
+    assert MAX_INFLIGHT >= 1
+    assert _INFLIGHT.acquire(blocking=False)
+    _INFLIGHT.release()
     print("[dns-dot-proxy] self-check OK")
 
 

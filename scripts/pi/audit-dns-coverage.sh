@@ -307,6 +307,17 @@ elif modem["present"]:
 else:
     inventory_state = "missing"
 print(f"Modem envanter: {inventory_state} — {modem_path}")
+lan = modem.get("lan_dhcp") or {}
+if lan.get("dns1"):
+    print(
+        "Modem panel DHCP "
+        f"DNS1={lan.get('dns1')} DNS2={lan.get('dns2') or '-'} "
+        f"lease={lan.get('lease_sec')}s relay={lan.get('relay_enable')}"
+    )
+    if lan.get("dns1") != pi_ip:
+        print(f"  [BYPASS] panel DNS1 {lan.get('dns1')} != Pi {pi_ip}")
+    if lan.get("relay_enable"):
+        print("  [BYPASS] DHCP relay acik — LAN DISCOVER yutulur")
 print(f"LAN cihaz (ARP, gateway haric): {total} (REACHABLE/DELAY: {len(online_ips)}, idle STALE: {len(idle_ips)})")
 if report_ips:
     print("  " + ", ".join(f"{ip}{host_label(ip)}" for ip in sorted(report_ips)))

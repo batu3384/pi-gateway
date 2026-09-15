@@ -25,9 +25,11 @@ _pi_home_script() {
   fi
 }
 DOCKER_OK=1
+DOCKER_INVENTORY=1
+# timeout(1) builtin `command` calistiramaz — PATH'teki docker binary sart.
 docker() {
   [[ "${DOCKER_OK}" == "1" ]] || return 1
-  timeout 8 command docker "$@"
+  timeout 8 /usr/bin/docker "$@"
 }
 LOG_TAG="pi-gateway-health"
 PI_STATIC_IP="${PI_STATIC_IP:-127.0.0.1}"
@@ -54,10 +56,18 @@ if ! SD_HEALTH_AUTO_RECOVER=false SSD_HEALTH_AUTO=false REMOTE_DIR="$REMOTE_DIR"
   fail=1
   sd_fail=1
 fi
-if ! timeout 8 command docker info >/dev/null 2>&1; then
-  DOCKER_OK=0
-  note_fail "docker-unresponsive"
-  bash "$(_pi_home_script dns-host-fallback.sh)" start || true
+if ! timeout 8 /usr/bin/docker info >/dev/null 2>&1; then
+  if timeout 2 dig +time=1 +tries=1 +short @"${PI_STATIC_IP}" "gateway.${LAN_DOMAIN}" A 2>/dev/null \
+    | grep -qx "${PI_STATIC_IP}"; then
+    logger -t "$LOG_TAG" "WARN docker-cli-timeout — DNS ayakta, recover yok"
+    DOCKER_OK=0
+    DOCKER_INVENTORY=0
+  else
+    DOCKER_OK=0
+    DOCKER_INVENTORY=0
+    note_fail "docker-unresponsive"
+    bash "$(_pi_home_script dns-host-fallback.sh)" start || true
+  fi
 elif [[ "$STACK_AUTO_RECOVER" == "true" ]] && {
   storage_restore_pending || ! stack_fully_healthy || ! root_rw_ok
 }; then
@@ -70,6 +80,7 @@ elif [[ "$STACK_AUTO_RECOVER" == "true" ]] && {
     fi
   fi
 fi
+if [[ "${DOCKER_INVENTORY}" == "1" ]]; then
 if ! docker ps --format '{{.Names}}' | grep -q '^unbound$'; then
   note_fail "container unbound down"
 fi
@@ -175,6 +186,7 @@ else
   [[ "${ENABLE_MONITORING:-true}" == "true" ]] && optional_down grafana
   [[ "${ENABLE_MONITORING:-true}" == "true" ]] && optional_down node-exporter
 fi
+fi
 if ! dig +time=2 +tries=1 @127.0.0.1 -p "${UNBOUND_PORT}" cloudflare.com A >/dev/null 2>&1; then
   note_fail "unbound:${UNBOUND_PORT}"
 elif ! unbound_dnssec_ad_ok "${UNBOUND_PORT}"; then
@@ -233,7 +245,12 @@ adguard_dns_ok() {
     || return 1
   aaaa="$(dig +time=2 +tries=1 +short @"${PI_STATIC_IP}" doubleclick.net AAAA 2>/dev/null || true)"
   aaaa="${aaaa%%$'\n'*}"
-  [[ -z "$aaaa" || "$aaaa" == "::" || "$aaaa" == "::1" ]]
+  [[ -z "$aaaa" || "$aaaa" == "::" || "$aaaa" == "::1" ]] || return 1
+  if [[ "${ADGUARD_AAAA_DISABLED:-true}" =~ ^(true|1|yes)$ ]]; then
+    aaaa="$(dig +time=2 +tries=1 +short @"${PI_STATIC_IP}" cloudflare.com AAAA 2>/dev/null || true)"
+    aaaa="${aaaa%%$'\n'*}"
+    [[ -z "$aaaa" ]]
+  fi
 }
 if ! adguard_dns_ok; then
   if [[ "${ADGUARD_AUTO_HEAL:-false}" == "true" ]]; then
@@ -307,10 +324,12 @@ v4_ok = int(d.get('ratelimit_subnet_len_ipv4') or 0) == int('${ADGUARD_RATELIMIT
 v6_ok = int(d.get('ratelimit_subnet_len_ipv6') or 0) == int('${ADGUARD_RATELIMIT_SUBNET_IPV6:-128}')
 opt_ok = d.get('cache_optimistic') is True
 to_ok = int(d.get('upstream_timeout') or 0) == int('${ADGUARD_UPSTREAM_TIMEOUT:-2}')
-ttl_min_ok = int(d.get('cache_ttl_min') or 0) == int('${ADGUARD_CACHE_TTL_MIN:-0}')
+ttl_min_ok = int(d.get('cache_ttl_min') or 0) == int('${ADGUARD_CACHE_TTL_MIN:-60}')
+aaaa_want = '${ADGUARD_AAAA_DISABLED:-true}'.lower() in ('true','1','yes')
+aaaa_ok = bool(d.get('disable_ipv6')) is aaaa_want
 fb = [str(u) for u in (d.get('fallback_dns') or [])]
 fb_ok = 'tls://dns.adguard-dns.com' in fb and 'tls://9.9.9.9' in fb
-print('1' if udp_ok and tcp_off and ptr_ok and ttl_ok and v4_ok and v6_ok and opt_ok and to_ok and ttl_min_ok and fb_ok else '0')
+print('1' if udp_ok and tcp_off and ptr_ok and ttl_ok and v4_ok and v6_ok and opt_ok and to_ok and ttl_min_ok and aaaa_ok and fb_ok else '0')
 " 2>/dev/null || echo 0)"
     if [[ -f "$_filter_in_progress" ]]; then
       _ip_now="$(date +%s)"
@@ -383,10 +402,12 @@ v4_ok = int(d.get('ratelimit_subnet_len_ipv4') or 0) == int('${ADGUARD_RATELIMIT
 v6_ok = int(d.get('ratelimit_subnet_len_ipv6') or 0) == int('${ADGUARD_RATELIMIT_SUBNET_IPV6:-128}')
 opt_ok = d.get('cache_optimistic') is True
 to_ok = int(d.get('upstream_timeout') or 0) == int('${ADGUARD_UPSTREAM_TIMEOUT:-2}')
-ttl_min_ok = int(d.get('cache_ttl_min') or 0) == int('${ADGUARD_CACHE_TTL_MIN:-0}')
+ttl_min_ok = int(d.get('cache_ttl_min') or 0) == int('${ADGUARD_CACHE_TTL_MIN:-60}')
+aaaa_want = '${ADGUARD_AAAA_DISABLED:-true}'.lower() in ('true','1','yes')
+aaaa_ok = bool(d.get('disable_ipv6')) is aaaa_want
 fb = [str(u) for u in (d.get('fallback_dns') or [])]
 fb_ok = 'tls://dns.adguard-dns.com' in fb and 'tls://9.9.9.9' in fb
-print('1' if udp_ok and tcp_off and ptr_ok and ttl_ok and v4_ok and v6_ok and opt_ok and to_ok and ttl_min_ok and fb_ok else '0')
+print('1' if udp_ok and tcp_off and ptr_ok and ttl_ok and v4_ok and v6_ok and opt_ok and to_ok and ttl_min_ok and aaaa_ok and fb_ok else '0')
 " 2>/dev/null || echo 0)"
       fi
       [[ "$dns_ok" == "1" ]] || note_fail "adguard-dns-config-drift"

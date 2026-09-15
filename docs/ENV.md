@@ -19,7 +19,8 @@
 | `ADGUARD_UPSTREAM_TIMEOUT` | `2`; ölü isim 5s bekletmesin (Unbound DoT) |
 | `ADGUARD_RATELIMIT_SUBNET_IPV4` / `IPV6` | `32` / `128`; AGH default /24 ve /56 tüm evi tek kova yapar |
 | `ADGUARD_CACHE_SIZE` | `67108864` (64MiB cevap cache; kural motorundan ayrı) |
-| `ADGUARD_CACHE_TTL_MIN` | `0` (upstream TTL). `300` yanlış IP’yi 5 dk kilitler |
+| `ADGUARD_CACHE_TTL_MIN` | `60`. `300` yanlış IP’yi 5 dk kilitler; `0` YouTube `rr---sn-*` soğuk DoT |
+| `ADGUARD_AAAA_DISABLED` | `true`. AGH API `disable_ipv6` (YAML `aaaa_disabled`). Yavaş WAN Happy Eyeballs. IPv6-only host: `false` |
 | `DNS_HOST_FALLBACK` | `true`; AGH/docker düşünce host `:53` DoT (AdGuard DNS + Quad9). USB overlay ölümü |
 | `ADGUARD_AUTO_HEAL` | `false`; filter drift → `apply-adguard-filters` + global `cache_clear` |
 | `ADGUARD_DNS_AUTO_HEAL` | `true`; DNS drift → yalnız `apply-adguard-dns.sh` (TTL/upstream, cache_clear yok) |

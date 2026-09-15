@@ -159,32 +159,86 @@ grep -q '@latest' "$PROJECT_DIR/config/adguard/filter-lists.json" \
   && die "filter-lists.json @latest pin yok"
 grep -q 'c30a9937e79f18bb31dcf4d45ac4988c3ddc8e7a' "$PROJECT_DIR/config/adguard/filter-lists.json" \
   || die "filter-lists.json HaGeZi SHA pin yok"
-grep -q 'ADGUARD_CACHE_TTL_MIN=0' "$PROJECT_DIR/.env.example" \
-  || die ".env.example ADGUARD_CACHE_TTL_MIN=0 yok"
-grep -q 'ADGUARD_CACHE_TTL_MIN:0' "$PROJECT_DIR/scripts/pi/ensure-dns-perf-profile.sh" \
+grep -q 'ADGUARD_CACHE_TTL_MIN=60' "$PROJECT_DIR/.env.example" \
+  || die ".env.example ADGUARD_CACHE_TTL_MIN=60 yok"
+grep -q 'ADGUARD_CACHE_TTL_MIN:60' "$PROJECT_DIR/scripts/pi/ensure-dns-perf-profile.sh" \
   || die "ensure-dns-perf ADGUARD_CACHE_TTL_MIN yok"
 grep -q 'ADGUARD_RATELIMIT:0' "$PROJECT_DIR/scripts/pi/ensure-dns-perf-profile.sh" \
   || die "ensure-dns-perf ADGUARD_RATELIMIT yok"
-grep -q 'cache-min-ttl: 0' "$PROJECT_DIR/config/unbound/unbound.conf" \
-  || die "unbound cache-min-ttl 0 degil"
-grep -q 'cache_ttl_min: 0' "$PROJECT_DIR/config/adguard/AdGuardHome.yaml.template" \
-  || die "AGH template cache_ttl_min 0 degil"
+grep -q 'cache-min-ttl: 60' "$PROJECT_DIR/config/unbound/unbound.conf" \
+  || die "unbound cache-min-ttl 60 degil"
+grep -q 'cache_ttl_min: 60' "$PROJECT_DIR/config/adguard/AdGuardHome.yaml.template" \
+  || die "AGH template cache_ttl_min 60 degil"
+grep -q 'aaaa_disabled: true' "$PROJECT_DIR/config/adguard/AdGuardHome.yaml.template" \
+  || die "AGH template aaaa_disabled yok"
+grep -Fq 'desired["disable_ipv6"]' "$PROJECT_DIR/scripts/pi/apply-adguard-dns.sh" \
+  || die "apply-adguard-dns disable_ipv6 yok"
+grep -q 'cloudflare.com AAAA' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check canli AAAA NODATA yok"
+grep -q "disable_ipv6" "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check disable_ipv6 fail-closed yok"
+grep -q 'cache_clear (AAAA' "$PROJECT_DIR/scripts/pi/apply-adguard-dns.sh" \
+  || die "apply-adguard-dns AAAA cache_clear yok"
+grep -q 'ADGUARD_AAAA_DISABLED:true' "$PROJECT_DIR/scripts/pi/ensure-dns-perf-profile.sh" \
+  || die "ensure-dns-perf ADGUARD_AAAA_DISABLED yok"
+grep -q 'ADGUARD_AAAA_DISABLED=true' "$PROJECT_DIR/.env.example" \
+  || die ".env.example ADGUARD_AAAA_DISABLED yok"
+grep -q 'QTYPE_AAAA' "$PROJECT_DIR/scripts/lib/dns-dot-proxy.py" \
+  || die "dns-dot-proxy AAAA NODATA yok"
+python3 - "$PROJECT_DIR/scripts/pi/recover-compose-up.sh" <<'PY' || die "recover-compose :53 wait dozzle oncesi degil"
+from pathlib import Path
+import sys
+t = Path(sys.argv[1]).read_text()
+body = t[t.find("finish_ok()") : t.find("finish_fail()")]
+if body.find("_wait_agh_rewrite") > body.find("setup-dozzle"):
+    raise SystemExit(1)
+PY
 grep -q 'RandomizedDelaySec=45s' "$PROJECT_DIR/host/systemd/pi-gateway-health.timer" \
   || die "health timer RandomizedDelaySec yok"
 grep -q 'TimeoutStartSec=180' "$PROJECT_DIR/host/systemd/pi-gateway-health.service" \
   || die "health TimeoutStartSec yok"
 grep -q 'timeout 8 docker inspect' "$PROJECT_DIR/scripts/lib/stack-health.sh" \
   || die "container_health_ok docker inspect timeout yok"
+grep -q 'stop --force' "$PROJECT_DIR/scripts/pi/recover-compose-up.sh" \
+  || die "recover-compose fallback stop --force yok"
+grep -q '_restore_dns_fallback' "$PROJECT_DIR/scripts/pi/recover-compose-up.sh" \
+  || die "recover-compose EXIT trap yok"
+grep -q 'timeout 8 /usr/bin/docker info' "$PROJECT_DIR/scripts/pi/recover-compose-up.sh" \
+  || die "recover-compose docker CLI gate yok"
+grep -q 'AGH_REWRITE_WAIT_SEC:-60' "$PROJECT_DIR/scripts/pi/recover-compose-up.sh" \
+  || die "recover-compose AGH rewrite wait 60s yok"
+grep -q 'stop atlandi' "$PROJECT_DIR/scripts/pi/dns-host-fallback.sh" \
+  || die "dns-host-fallback rewrite-guard stop yok"
+grep -q 'DOCKER_INVENTORY' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check docker-cli-timeout DNS koruma yok"
+grep -q 'dns-host-fallback.sh' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check dns-host-fallback yok"
+grep -q 'Restart=on-failure' "$PROJECT_DIR/host/systemd/pi-gateway-dns-fallback.service" \
+  || die "dns-fallback Restart=on-failure yok"
+grep -q 'Restart=no' "$PROJECT_DIR/host/systemd/pi-gateway-dns-fallback.service" \
+  && die "dns-fallback Restart=no (crash :53 deligi)"
+grep -q 'DNS_HOST_FALLBACK:true' "$PROJECT_DIR/scripts/pi/ensure-dns-perf-profile.sh" \
+  || die "ensure-dns-perf DNS_HOST_FALLBACK pin yok"
+grep -q 'MAX_INFLIGHT' "$PROJECT_DIR/scripts/lib/dns-dot-proxy.py" \
+  || die "dns-dot-proxy inflight tavan yok"
 bash "$PROJECT_DIR/scripts/pi/dns-host-fallback.sh" --self-check \
   || die "dns-host-fallback self-check"
 grep -q 'dns-dot-proxy.py' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" \
   || die "install-privileged dns-dot-proxy yok"
-grep -q 'dns-host-fallback.sh' "$PROJECT_DIR/scripts/pi/health-check.sh" \
-  || die "health-check dns-host-fallback yok"
+grep -q 'timeout 8 /usr/bin/docker' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check hung-docker timeout /usr/bin/docker yok"
+grep -q 'timeout 8 command docker' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  && die "health-check timeout+command builtin (systemd docker-unresponsive false-positive)"
 grep -q 'DNS_HOST_FALLBACK=true' "$PROJECT_DIR/.env.example" \
   || die ".env.example DNS_HOST_FALLBACK yok"
 python3 "$PROJECT_DIR/scripts/lib/zte-h3600p.py" --self-check \
   || die "zte-h3600p self-check"
+grep -q 'fetch_lan_dhcp' "$PROJECT_DIR/scripts/lib/zte-h3600p.py" \
+  || die "zte-h3600p fetch_lan_dhcp yok"
+grep -q 'Localnet_Lan_group_lua.lua' "$PROJECT_DIR/scripts/lib/zte-h3600p.py" \
+  || die "zte-h3600p LAN group lua yok"
+grep -q '_is_session_timeout' "$PROJECT_DIR/scripts/lib/zte-h3600p.py" \
+  || die "zte-h3600p session timeout false-positive koruma yok"
 python3 "$PROJECT_DIR/scripts/lib/modem_inventory.py" --self-check \
   || die "modem_inventory self-check"
 python3 "$PROJECT_DIR/scripts/lib/netalert-devices.py" --self-check \
