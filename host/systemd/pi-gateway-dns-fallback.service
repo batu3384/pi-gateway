@@ -1,0 +1,15 @@
+[Unit]
+Description=Pi Gateway host DNS fallback (DoT) when AdGuard is down
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
+ExecStart=/usr/bin/python3 /usr/local/lib/pi-gateway/scripts/lib/dns-dot-proxy.py
+Restart=no
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

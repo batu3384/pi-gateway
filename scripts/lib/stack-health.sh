@@ -230,9 +230,9 @@ stack_dns_core_ok() {
 container_health_ok() {
   local name="$1"
   local running health
-  running="$(docker inspect -f '{{.State.Running}} {{.State.Status}}' "$name" 2>/dev/null)" || return 1
+  running="$(timeout 8 docker inspect -f '{{.State.Running}} {{.State.Status}}' "$name" 2>/dev/null)" || return 1
   [[ "$running" == "true running" ]] || return 1
-  health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$name" 2>/dev/null)" || return 1
+  health="$(timeout 8 docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$name" 2>/dev/null)" || return 1
   [[ "$health" == "healthy" || "$health" == "none" ]]
 }
 # 0 = core ayakta, 1 = bozuk (isim = donus kodu)

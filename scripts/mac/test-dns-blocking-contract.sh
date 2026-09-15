@@ -155,6 +155,34 @@ grep -q '"budgets"' "$PROJECT_DIR/config/adguard/filter-lists.json" \
   || die "filter total rule budget yok"
 python3 -m json.tool "$PROJECT_DIR/config/adguard/filter-lists.json" >/dev/null \
   || die "filter-lists.json gecersiz JSON"
+grep -q '@latest' "$PROJECT_DIR/config/adguard/filter-lists.json" \
+  && die "filter-lists.json @latest pin yok"
+grep -q 'c30a9937e79f18bb31dcf4d45ac4988c3ddc8e7a' "$PROJECT_DIR/config/adguard/filter-lists.json" \
+  || die "filter-lists.json HaGeZi SHA pin yok"
+grep -q 'ADGUARD_CACHE_TTL_MIN=0' "$PROJECT_DIR/.env.example" \
+  || die ".env.example ADGUARD_CACHE_TTL_MIN=0 yok"
+grep -q 'ADGUARD_CACHE_TTL_MIN:0' "$PROJECT_DIR/scripts/pi/ensure-dns-perf-profile.sh" \
+  || die "ensure-dns-perf ADGUARD_CACHE_TTL_MIN yok"
+grep -q 'ADGUARD_RATELIMIT:0' "$PROJECT_DIR/scripts/pi/ensure-dns-perf-profile.sh" \
+  || die "ensure-dns-perf ADGUARD_RATELIMIT yok"
+grep -q 'cache-min-ttl: 0' "$PROJECT_DIR/config/unbound/unbound.conf" \
+  || die "unbound cache-min-ttl 0 degil"
+grep -q 'cache_ttl_min: 0' "$PROJECT_DIR/config/adguard/AdGuardHome.yaml.template" \
+  || die "AGH template cache_ttl_min 0 degil"
+grep -q 'RandomizedDelaySec=45s' "$PROJECT_DIR/host/systemd/pi-gateway-health.timer" \
+  || die "health timer RandomizedDelaySec yok"
+grep -q 'TimeoutStartSec=180' "$PROJECT_DIR/host/systemd/pi-gateway-health.service" \
+  || die "health TimeoutStartSec yok"
+grep -q 'timeout 8 docker inspect' "$PROJECT_DIR/scripts/lib/stack-health.sh" \
+  || die "container_health_ok docker inspect timeout yok"
+bash "$PROJECT_DIR/scripts/pi/dns-host-fallback.sh" --self-check \
+  || die "dns-host-fallback self-check"
+grep -q 'dns-dot-proxy.py' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" \
+  || die "install-privileged dns-dot-proxy yok"
+grep -q 'dns-host-fallback.sh' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check dns-host-fallback yok"
+grep -q 'DNS_HOST_FALLBACK=true' "$PROJECT_DIR/.env.example" \
+  || die ".env.example DNS_HOST_FALLBACK yok"
 python3 "$PROJECT_DIR/scripts/lib/zte-h3600p.py" --self-check \
   || die "zte-h3600p self-check"
 python3 "$PROJECT_DIR/scripts/lib/modem_inventory.py" --self-check \
@@ -214,9 +242,13 @@ grep -q 'upstream_timeout: 2s' "$PROJECT_DIR/config/adguard/AdGuardHome.yaml.tem
   || die "AGH template timeout 2s yok"
 grep -q 'use-caps-for-id: no' "$PROJECT_DIR/config/unbound/unbound.conf" \
   || die "unbound 0x20 caps kapali degil"
-# Unbound olurse filtreli DoT fallback (IP tabanli; bootstrap'a bagimsiz) — modem DNS2'ye kacis yok
-grep -q 'desired\["fallback_dns"\] = \["tls://9.9.9.9", "tls://1.1.1.1"\]' "$PROJECT_DIR/scripts/pi/apply-adguard-dns.sh" \
-  || die "apply-adguard-dns IP-DoT fallback_dns yok"
+# Unbound olurse filtreli DoT fallback (AdGuard DNS + Quad9) — modem DNS2 / 1.1.1.1 yok
+grep -q 'tls://dns.adguard-dns.com' "$PROJECT_DIR/scripts/pi/apply-adguard-dns.sh" \
+  || die "apply-adguard-dns AdGuard DoT fallback yok"
+grep -q 'tls://9.9.9.9' "$PROJECT_DIR/scripts/pi/apply-adguard-dns.sh" \
+  || die "apply-adguard-dns Quad9 DoT fallback yok"
+grep 'desired\["fallback_dns"\]' "$PROJECT_DIR/scripts/pi/apply-adguard-dns.sh" | grep -q '1.1.1.1' \
+  && die "apply-adguard-dns fallback hâlâ 1.1.1.1"
 grep -q 'docker logs adguard --since' "$PROJECT_DIR/scripts/pi/health-check.sh" \
   || die "health-check adguard logs full dump"
 grep -q 'docker logs prometheus --since' "$PROJECT_DIR/scripts/pi/health-check.sh" \

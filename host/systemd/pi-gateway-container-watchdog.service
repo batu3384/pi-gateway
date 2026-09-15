@@ -11,6 +11,7 @@ WorkingDirectory=/home/PI_USER/pi-gateway
 Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
 Environment=HOME=/home/PI_USER
 ExecStart=/home/PI_USER/pi-gateway/scripts/pi/container-restart-watchdog.sh
+TimeoutStartSec=120
 Nice=10
 StandardOutput=journal
 StandardError=journal

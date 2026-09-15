@@ -23,6 +23,8 @@ set_kv() {
 for pair in \
   "ADGUARD_BLOCKED_TTL:300" \
   "ADGUARD_CACHE_SIZE:67108864" \
+  "ADGUARD_CACHE_TTL_MIN:0" \
+  "ADGUARD_RATELIMIT:0" \
   "ADGUARD_RATELIMIT_SUBNET_IPV4:32" \
   "ADGUARD_RATELIMIT_SUBNET_IPV6:128" \
   "ADGUARD_UPSTREAM_TIMEOUT:2" \
@@ -36,13 +38,14 @@ for pair in \
   [[ "$cur" == "$v" ]] || set_kv "$k" "$v"
 done
 
+# Pi 4B + Grafana/n8n: TIF Full RAM. Koru: ADGUARD_ALLOW_AGGRESSIVE=true
 profile="${ADGUARD_FILTER_PROFILE:-balanced}"
 if [[ "$profile" == "aggressive" ]]; then
   if [[ "${ADGUARD_ALLOW_AGGRESSIVE:-false}" == "true" ]]; then
     log "aggressive profil korunuyor (ADGUARD_ALLOW_AGGRESSIVE=true)"
     exit 0
   fi
-  log "WARN: aggressive → balanced (DNS performansi)"
+  log "WARN: aggressive → balanced (DNS performansi; ADGUARD_ALLOW_AGGRESSIVE=true ile tut)"
   set_kv ADGUARD_FILTER_PROFILE balanced
   REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/apply-adguard-filters.sh"
   log "profil=balanced (uygulandi)"

@@ -5,6 +5,7 @@ Description=Pi Gateway data symlink repair (boot window)
 OnBootSec=1min
 OnUnitActiveSec=5min
 AccuracySec=30s
+RandomizedDelaySec=20s
 Unit=pi-data-symlink-repair.service
 
 [Install]

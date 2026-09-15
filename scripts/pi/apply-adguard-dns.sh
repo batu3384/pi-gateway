@@ -33,10 +33,12 @@ RATELIMIT="${ADGUARD_RATELIMIT:-0}"
 RATE_V4="${ADGUARD_RATELIMIT_SUBNET_IPV4:-32}"
 RATE_V6="${ADGUARD_RATELIMIT_SUBNET_IPV6:-128}"
 CACHE_SIZE="${ADGUARD_CACHE_SIZE:-67108864}"
+# 0 = upstream TTL (Unbound zaten cache). 300 eski "min 5dk" yanlis IP'yi kilitler.
+CACHE_TTL_MIN="${ADGUARD_CACHE_TTL_MIN:-0}"
 # AGH API: gun (integer). YAML template 168h ile uyumlu.
 QUERYLOG_DAYS="${ADGUARD_QUERYLOG_INTERVAL_DAYS:-7}"
 STATS_DAYS="${ADGUARD_STATS_INTERVAL_DAYS:-7}"
-export BLOCKED_TTL UPSTREAM_TIMEOUT RATELIMIT RATE_V4 RATE_V6 CACHE_SIZE QUERYLOG_DAYS STATS_DAYS BASE COOKIE UNBOUND_PORT DNS_INFO
+export BLOCKED_TTL UPSTREAM_TIMEOUT RATELIMIT RATE_V4 RATE_V6 CACHE_SIZE CACHE_TTL_MIN QUERYLOG_DAYS STATS_DAYS BASE COOKIE UNBOUND_PORT DNS_INFO
 python3 - <<'PY'
 import json, os, subprocess, sys
 
@@ -49,10 +51,11 @@ ratelimit = int(os.environ["RATELIMIT"])
 rate_v4 = int(os.environ["RATE_V4"])
 rate_v6 = int(os.environ["RATE_V6"])
 cache_size = int(os.environ["CACHE_SIZE"])
+cache_ttl_min = int(os.environ["CACHE_TTL_MIN"])
 querylog_days = int(os.environ["QUERYLOG_DAYS"])
 stats_days = int(os.environ["STATS_DAYS"])
 
-if ratelimit < 0 or cache_size < 1048576:
+if ratelimit < 0 or cache_size < 1048576 or cache_ttl_min < 0:
     print("[adguard-dns] HATA: ratelimit/cache_size gecersiz", file=sys.stderr)
     sys.exit(1)
 if rate_v4 < 1 or rate_v4 > 32 or rate_v6 < 1 or rate_v6 > 128:
@@ -68,10 +71,11 @@ desired = dict(current)
 desired["upstream_dns"] = [
     f"udp://127.0.0.1:{unbound_port}",
 ]
-desired["bootstrap_dns"] = [f"127.0.0.1:{unbound_port}"]
+desired["bootstrap_dns"] = [f"127.0.0.1:{unbound_port}", "9.9.9.9"]
 # Unbound olurse AGH SERVFAIL → cihazlar modem DNS2 (.1, filtresiz) → reklam.
-# IP tabanli DoT (cert IP SAN var): bootstrap'a bagimli degil; modem WAN :53 drop'unu asar.
-desired["fallback_dns"] = ["tls://9.9.9.9", "tls://1.1.1.1"]
+# DoT :853 (WAN dest:53 drop). Quad9 malware; AdGuard DNS reklam. Cloudflare fallback yok.
+# bootstrap 9.9.9.9: Unbound dusukken hostname fallback cozulsun.
+desired["fallback_dns"] = ["tls://dns.adguard-dns.com", "tls://9.9.9.9"]
 desired["blocked_response_ttl"] = blocked_ttl
 desired["upstream_timeout"] = upstream_timeout
 desired["use_private_ptr_resolvers"] = False
@@ -82,7 +86,7 @@ desired["ratelimit_subnet_len_ipv4"] = rate_v4
 desired["ratelimit_subnet_len_ipv6"] = rate_v6
 desired["cache_size"] = cache_size
 desired["cache_optimistic"] = True
-desired["cache_ttl_min"] = 300
+desired["cache_ttl_min"] = cache_ttl_min
 desired["cache_ttl_max"] = 86400
 
 
@@ -193,6 +197,16 @@ if int(final.get("cache_size") or 0) != cache_size:
     sys.exit(1)
 if final.get("cache_optimistic") is not True:
     print("[adguard-dns] HATA: cache_optimistic kapali", file=sys.stderr)
+    sys.exit(1)
+if int(final.get("cache_ttl_min") or 0) != cache_ttl_min:
+    print("[adguard-dns] HATA: cache_ttl_min uyusmuyor", final.get("cache_ttl_min"), file=sys.stderr)
+    sys.exit(1)
+fallback = [str(u) for u in (final.get("fallback_dns") or [])]
+if "tls://dns.adguard-dns.com" not in fallback or "tls://9.9.9.9" not in fallback:
+    print("[adguard-dns] HATA: fallback_dns AdGuard+Quad9 DoT degil", fallback, file=sys.stderr)
+    sys.exit(1)
+if any("1.1.1.1" in str(u) for u in fallback):
+    print("[adguard-dns] HATA: fallback_dns hâlâ 1.1.1.1", fallback, file=sys.stderr)
     sys.exit(1)
 ql_final = json.loads(
     subprocess.check_output(

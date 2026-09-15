@@ -424,4 +424,17 @@ grep -A6 'setup-docker-ssd.sh' "$recover" | grep -q 'SKIP_COMPOSE_UP=true' \
   || die "C28b: recover-ro SKIP_COMPOSE_UP yok"
 ok "C28b recover-ro SKIP_COMPOSE_UP"
 
+# C31: USB overlay olumu — host DoT :53 + hung docker timeout
+python3 "$ROOT/scripts/lib/dns-dot-proxy.py" --self-check \
+  || die "C31: dns-dot-proxy self-check"
+grep -q 'dns-host-fallback.sh' "$compose_up" || die "C31: recover-compose fallback stop yok"
+grep -q 'dns_fallback' "$ROOT/scripts/pi/container-restart-watchdog.sh" \
+  || die "C31: watchdog dns_fallback yok"
+grep -q 'TimeoutStartSec=180' "$health_unit" || die "C31: health TimeoutStartSec yok"
+grep -q 'timeout 8 docker inspect' "$ROOT/scripts/lib/stack-health.sh" \
+  || die "C31: inspect timeout yok"
+grep -q '@latest' "$ROOT/config/adguard/filter-lists.json" \
+  && die "C31: filter @latest pin yok"
+ok "C31 host DNS fallback + pin + docker timeout"
+
 echo "[test-adversarial] Tum kontroller gecti"

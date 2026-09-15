@@ -19,6 +19,8 @@
 | `ADGUARD_UPSTREAM_TIMEOUT` | `2`; ölü isim 5s bekletmesin (Unbound DoT) |
 | `ADGUARD_RATELIMIT_SUBNET_IPV4` / `IPV6` | `32` / `128`; AGH default /24 ve /56 tüm evi tek kova yapar |
 | `ADGUARD_CACHE_SIZE` | `67108864` (64MiB cevap cache; kural motorundan ayrı) |
+| `ADGUARD_CACHE_TTL_MIN` | `0` (upstream TTL). `300` yanlış IP’yi 5 dk kilitler |
+| `DNS_HOST_FALLBACK` | `true`; AGH/docker düşünce host `:53` DoT (AdGuard DNS + Quad9). USB overlay ölümü |
 | `ADGUARD_AUTO_HEAL` | `false`; filter drift → `apply-adguard-filters` + global `cache_clear` |
 | `ADGUARD_DNS_AUTO_HEAL` | `true`; DNS drift → yalnız `apply-adguard-dns.sh` (TTL/upstream, cache_clear yok) |
 | `ADGUARD_FILTER_PREFLIGHT` / `ADGUARD_FILTER_PREFLIGHT_TIMEOUT_SEC` | `true` / `20`; HTTPS, izinli host, redirect ve filter syntax kontrolü |
@@ -31,7 +33,7 @@
 | `ADGUARD_FILTER_STATE_PATH` | Boşsa `/var/lib/pi-gateway/adguard-filter-state.json` |
 | `ADGUARD_FILTER_SOURCE_CACHE_PATH` | Boşsa `/var/lib/pi-gateway/adguard-filter-source-cache.json` (ETag/If-Modified-Since) |
 | `ADGUARD_FILTER_PROFILE` | `balanced` (TIF Medium + CNAME original). `balanced-core` = Pro++ + TIF Medium + DoH (3 liste, düşük RAM). `aggressive` = TIF Full; AGH ≥2GB RAM. Fake **and** Popup Hosts not stacked (inside Pro++). TIF Full: `apply-adguard-filters` WARNs if MemAvailable <400MiB — effective profile `balanced` olur ve state bunu belirtir. See `docs/DNS-BLOCKING.md`. |
-| `config/adguard/filter-lists.json` `budgets` | Profil başına toplam kural üst sınırı; upstream `@latest` büyümesi bu sınırı aşarsa apply başarısız olur ve stale listeler kaldırılmaz |
+| `config/adguard/filter-lists.json` `budgets` | Profil başına toplam kural üst sınırı; pin’li HaGeZi SHA büyümesi bu sınırı aşarsa apply başarısız olur ve stale listeler kaldırılmaz |
 | `ROUTER_DNS_SECONDARY` | Yalnız `MAC_DNS_GATEWAY_FALLBACK=true` iken. **Bos** veya `LAN_GATEWAY`. Public resolver WAN `:53` drop ile ölür. |
 | `MAC_DNS_GATEWAY_FALLBACK` | `false` (varsayılan): `make mac-dns` modem `.1` eklemez; **yalnız LAN IP** olan Ethernet/Wi-Fi. Hotspot'a Pi+ULA yazmaz (`make mac-dns-clear`). `true`: Pi down yedek; modem LAN `:53` reklam kaçırır. |
 | `DHCP_RANGE_START` / `DHCP_RANGE_END` / `LAN_SUBNET_MASK` | Yalnız `NETWORK_MODE=adguard-dhcp`. Örnek: `192.168.1.50`–`200`, `255.255.255.0`. |

@@ -45,12 +45,12 @@ bütçesi ve maksimum yaş taşır. `apply-adguard-filters.sh` değişiklikten �
 izinli source host, redirect ve bounded content/syntax preflight; sonra her listenin
 `enabled`, `rules_count`, `last_updated` ve kritik medya regression setini kontrol eder.
 Sonuç `/var/lib/pi-gateway/adguard-filter-state.json` içine yazılır. Başarılı scheduled
-apply yaş SLA’sı 26 saattir; liste yaş sınırı 168 saattir. `@latest` kaynakları
-upstream tarafından imzalanmadığı için digest/delta guard tam supply-chain garantisi
-değildir. `googlevideo.com`, `ytimg.com`, Instagram CDN, WhatsApp medya alan adları
+apply yaş SLA’sı 26 saattir; liste yaş sınırı 168 saattir. HaGeZi/CNAME URL’ler
+commit SHA pin’li (`filter-lists.json` `pins`); sürpriz `@latest` şişmesi yok. Digest/delta
+guard tam supply-chain garantisi değildir. `googlevideo.com`, `ytimg.com`, Instagram CDN, WhatsApp medya alan adları
 korunur; yeni mega-list eklenmez.
 
-**DNS knobs** (`apply-adguard-dns.sh`, env): `ADGUARD_RATELIMIT=0` (kapalı; :53 UFW ile LAN/Tailscale sınırlı — sayfa açılışı 50/s'i aşar, sessiz drop istemciyi modem DNS2'ye kaçırır; `ADGUARD_RATELIMIT_SUBNET_IPV4=32` / `IPV6=128` açılırsa cihaz başı kova), `ADGUARD_CACHE_SIZE=67108864` (64MiB), `ADGUARD_BLOCKED_TTL=300`, Unbound `serve-expired`. `ADGUARD_QUERYLOG_INTERVAL_DAYS=7` + `ADGUARD_STATS_INTERVAL_DAYS=7`. Fresh install template aynı. TLD/IDN blanket block yok (FP). Kaçan reklam: manuel “reklam şimdi” + querylog — otomatik haftalık LLM rapor yok.
+**DNS knobs** (`apply-adguard-dns.sh`, env): `ADGUARD_RATELIMIT=0` (kapalı; :53 UFW ile LAN/Tailscale sınırlı — sayfa açılışı 50/s'i aşar, sessiz drop istemciyi modem DNS2'ye kaçırır; `ADGUARD_RATELIMIT_SUBNET_IPV4=32` / `IPV6=128` açılırsa cihaz başı kova), `ADGUARD_CACHE_SIZE=67108864` (64MiB), `ADGUARD_CACHE_TTL_MIN=0` (Unbound TTL), `ADGUARD_BLOCKED_TTL=300`, Unbound `serve-expired`. Fallback DoT: `dns.adguard-dns.com` + Quad9 (1.1.1.1 yok). USB/docker ölümü: `DNS_HOST_FALLBACK=true` host `:53` DoT. `ADGUARD_QUERYLOG_INTERVAL_DAYS=7` + `ADGUARD_STATS_INTERVAL_DAYS=7`. Fresh install template aynı. TLD/IDN blanket block yok (FP). Kaçan reklam: manuel “reklam şimdi” + querylog — otomatik haftalık LLM rapor yok.
 
 **Grafana:** `export-adguard-metrics.sh` (health timer, textfile) → blocked ratio, top clients / blocked domains, per-list `rules_count` / `last_updated` age, filter apply failure, rollback failure ve last verified apply timestamp. `audit-dns-coverage.sh` her health tick’inde `/var/lib/pi-gateway/dns-coverage-state.json` yazar; dashboard `pi_gateway_dns_coverage_percent`, `pi_gateway_dns_coverage_status` (1=OK, 2=WARN, 3=FAIL, 4=UNKNOWN), `pi_gateway_dns_coverage_protocol_unknown` ve IPv6 `pi_gateway_ipv6_rdnss_configured` metriklerini gösterir. Query protocol API’de yoksa `protocol_unknown` metriği 1 olur; kapsam yüzdesi yeterliyse status **ok** kalır. Kanıt `600s` aşarsa UNKNOWN olur. A silent 403 on one list shows as that series going stale, not only `ADGUARD_MIN_FILTER_RULES`.
 
@@ -77,13 +77,13 @@ Modem panelinde DNS ayari **tek basina tum cihazlari otomatik Pi'ye baglamaz**.
 **DoT kilidi (port 853):** LAN istemcileri modem uzerinden `1.1.1.1:853` ile Pi'yi atlayabilir. Pi Unbound upstream icin WAN `:853` gerekir — **tum LAN icin kör drop yapmayin**. ZTE H3600P: WAN → Guvenlik → IP Filtre → dest port **853** TCP+UDP Dusur; **kaynak haric = Pi IP** (`PI_STATIC_IP`) mumkunse. Istisna yoksa modem 853 kurali uygulamayin (Unbound kirilir). Alternatif: cihaz Ozel DNS kapali + `doh.txt`.
 
 **Filtre governance:** Her listenin `min_rules`, `max_rules` ve `max_age_hours`
-kontrolüne ek olarak profil toplam kural bütçesi vardır. `@latest` kaynakları
+kontrolüne ek olarak profil toplam kural bütçesi vardır. Pin’li HaGeZi SHA
 ETag/If-Modified-Since ve örnek hash ile preflight edilir; büyük örnek değişimi
 ve toplam bütçe aşımı refresh'i durdurur. Başarılı apply sonrası son iyi örnek hash'i
 saklanır. Bu, upstream kaynağı imzalamaz; hatalı küçük değişiklikler için query-log
 ve regression kontrolleri yine gereklidir. Regression seti `googlevideo.com`,
 `ytimg.com`, Instagram CDN, `whatsapp.net`, ColorOS app-config ve `lgappstv.com`
-allow; `lgads.tv` block. `videooplayer.xyz` player+reklam aynı host — sniper video kırıyor, yok.
+allow; `lgads.tv` block. `videooplayer.xyz` player+reklam aynı host — sniper video kırıyor, yok. Yeni HaGeZi sürümü: `filter-lists.json` `pins.hagezi` SHA bump.
 
 **Modem ikincil DNS:** ZTE H3600P (Superonline) DNS2 panelde boş/`0.0.0.0` veya **Pi** olsa bile DHCP OFFER'a gateway (`.1`) ekler. Panel DNS2 kabloyu değiştirmez. `.1` modem **INPUT** resolver reklam engellemez (WAN dest:53 ve LAN-ingress dest `.1:53` FORWARD; modem kendi `:53` cevaplar). Canlı: `dig @192.168.1.1 doubleclick.net` gerçek IP. Bu ZTE'de DHCP relay LAN DISCOVER yutuyor — `adguard-dhcp` ev IP keser; kilit = modem DHCP açık + DNS1=Pi + `make mac-dns` (yalnız LAN). IPv6: aşağıdaki RDNSS lifetime 0.
 

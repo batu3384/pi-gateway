@@ -87,8 +87,9 @@ def inspect(name: str) -> tuple[int, str, bool]:
             ["docker", "inspect", "-f", fmt, name],
             text=True,
             stderr=subprocess.DEVNULL,
+            timeout=8,
         ).strip()
-    except (subprocess.CalledProcessError, FileNotFoundError):
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
         return -1, "missing", False
     parts = out.split("|", 2)
     if len(parts) != 3:
@@ -170,6 +171,23 @@ recovered: list[str] = []
 started: list[str] = []
 degraded = Path(os.environ.get("STORAGE_DEGRADED_FLAG", "/run/pi-gateway/storage-degraded")).is_file()
 
+
+def dns_fallback(action: str) -> None:
+    remote = os.environ.get("REMOTE_DIR", "")
+    script = os.path.join(remote, "scripts/pi/dns-host-fallback.sh")
+    if not os.path.isfile(script):
+        return
+    subprocess.run(
+        ["bash", script, action],
+        check=False,
+        timeout=20,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+dns_fallback("stop")
+
 for name in watch:
     restarts, status, running = inspect(name)
     if restarts < 0:
@@ -242,6 +260,11 @@ for name in watch:
     state[name] = entry
 
 save_state(state)
+_, _, adg_up = inspect("adguard")
+if adg_up:
+    dns_fallback("stop")
+else:
+    dns_fallback("start")
 
 for name in started:
     print(f"START\t{name}")

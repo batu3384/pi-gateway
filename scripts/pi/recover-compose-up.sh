@@ -11,6 +11,9 @@ read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv pars
 source "$SCRIPT_DIR/../lib/compose-profiles.sh"
 # shellcheck source=../lib/stack-health.sh
 source "$SCRIPT_DIR/../lib/stack-health.sh"
+if [[ -x "$SCRIPT_DIR/dns-host-fallback.sh" ]]; then
+  bash "$SCRIPT_DIR/dns-host-fallback.sh" stop || true
+fi
 cd "$REMOTE_DIR/compose"
 mapfile -t profiles < <(compose_profiles)
 # SSD yok/stale: asla full app stack (ephemeral SD data clobber riski)
@@ -56,6 +59,9 @@ finish_ok() {
 }
 finish_fail() {
   echo "[recover-compose] HATA: compose recover basarisiz — cooldown yazilmiyor" >&2
+  if [[ -x "$SCRIPT_DIR/dns-host-fallback.sh" ]]; then
+    bash "$SCRIPT_DIR/dns-host-fallback.sh" start || true
+  fi
   exit 1
 }
 if compose_up; then

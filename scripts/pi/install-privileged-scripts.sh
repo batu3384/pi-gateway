@@ -44,6 +44,8 @@ SCRIPTS=(
   scripts/lib/hermes-session-hygiene.py
   scripts/lib/reap-dead-docker-scopes.sh
   scripts/lib/adguard-api.sh
+  scripts/lib/dns-dot-proxy.py
+  scripts/pi/dns-host-fallback.sh
   scripts/lib/ensure-data-symlink.sh
   scripts/pi/ssd-fsck.sh
   scripts/pi/ssd-health.sh
@@ -120,3 +122,41 @@ if command -v sha256sum >/dev/null 2>&1; then
 fi
 
 log "OK root-owned lib: $LIB_DIR"
+
+install_unit() {
+  local unit="$1"
+  local src="${REMOTE_DIR}/host/systemd/${unit}"
+  local dst="/etc/systemd/system/${unit}"
+  local tmp owner
+  [[ -f "$src" ]] || {
+    log "HATA: unit yok — $src"
+    exit 1
+  }
+  owner="${SUDO_USER:-${USER:-pi}}"
+  if [[ "$owner" == "root" && "$REMOTE_DIR" =~ /home/([^/]+)/ ]]; then
+    owner="${BASH_REMATCH[1]}"
+  fi
+  tmp="$(mktemp)"
+  sed -e "s|/home/PI_USER/pi-gateway|${REMOTE_DIR}|g" \
+      -e "s|/home/PI_USER|/home/${owner}|g" \
+      -e "s|User=PI_USER|User=${owner}|g" \
+      -e "s|Group=PI_USER|Group=${owner}|g" \
+      -e "s|Environment=PI_USER=PI_USER|Environment=PI_USER=${owner}|g" \
+      "$src" >"$tmp"
+  run_root install -o root -g root -m 644 "$tmp" "$dst"
+  rm -f "$tmp"
+}
+
+for unit in \
+  pi-gateway-health.service pi-gateway-health.timer \
+  pi-gateway-container-watchdog.service pi-gateway-container-watchdog.timer \
+  pi-data-symlink.timer \
+  pi-gateway-dns-fallback.service
+do
+  install_unit "$unit"
+done
+run_root systemctl daemon-reload
+run_root systemctl reset-failed pi-gateway-dns-fallback.service 2>/dev/null || true
+run_root systemctl restart pi-gateway-health.timer \
+  pi-gateway-container-watchdog.timer pi-data-symlink.timer 2>/dev/null || true
+log "OK systemd health/watchdog/fallback units"
