@@ -26,7 +26,7 @@ if [[ "${MODEM_INVENTORY_ENABLED:-false}" != "true" ]]; then
 else
   # ZTE permits one admin session; sync owns login, fetch, and logout.
   if ! sudo MODEM_CREDENTIAL_FILE="${MODEM_CREDENTIAL_FILE:-/etc/pi-gateway/modem-inventory.env}" \
-    MODEM_URL="${MODEM_URL:-http://192.168.1.1}" \
+    MODEM_URL="${MODEM_URL:-https://192.168.1.1}" \
     MODEM_ALLOW_HTTP="${MODEM_ALLOW_HTTP:-false}" \
     MODEM_INVENTORY_ENABLED=true REMOTE_DIR="$REMOTE_DIR" \
     bash "$SCRIPT_DIR/sync-modem-inventory.sh"; then

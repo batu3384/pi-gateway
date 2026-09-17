@@ -608,7 +608,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="ZTE H3600P read-only inventory snapshot")
     parser.add_argument("--self-check", action="store_true")
     parser.add_argument("--output", default="")
-    parser.add_argument("--url", default=os.environ.get("MODEM_URL", "http://192.168.1.1"))
+    parser.add_argument("--url", default=os.environ.get("MODEM_URL", "https://192.168.1.1"))
     parser.add_argument("--username", default=os.environ.get("MODEM_USERNAME", ""))
     parser.add_argument("--password", default=os.environ.get("MODEM_PASSWORD", ""))
     parser.add_argument("--timeout", type=float, default=float(os.environ.get("MODEM_HTTP_TIMEOUT_SEC", "8")))

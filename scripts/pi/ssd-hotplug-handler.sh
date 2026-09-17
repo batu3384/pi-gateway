@@ -34,6 +34,16 @@ _HOTPLUG_REMOTE_DIR="$REMOTE_DIR"
 REMOTE_DIR="$_HOTPLUG_REMOTE_DIR"
 # shellcheck source=../lib/stack-health.sh
 source "$SCRIPT_DIR/../lib/stack-health.sh"
+# Overlay docker SSD'de: kopma = AGH ölür. Recover :53'ü çalmadan önce tut.
+_dns_keep_alive() {
+  [[ -x "$SCRIPT_DIR/dns-host-fallback.sh" ]] || return 0
+  bash "$SCRIPT_DIR/dns-host-fallback.sh" start || true
+}
+if needs_ssd_storage && [[ "${ENABLE_DOCKER_SSD:-false}" == "true" ]] \
+  && ! ssd_mount_healthy; then
+  log "SSD sagliksiz — host DNS fallback"
+  _dns_keep_alive
+fi
 if ssd_find_usb_sysfs >/dev/null 2>&1; then
   if ssd_usb_learn_live_port 2>/dev/null; then
     log "USB enumerate — port kaydi guncellendi"
@@ -144,6 +154,7 @@ if ssd_mount_healthy; then
   exit 0
 fi
 log "SSD mount yok / sagliksiz"
+_dns_keep_alive
 run_root rm -f "$SSD_HOTPLUG_STATE_FILE" 2>/dev/null || true
 # Soft-reset bir kez daha (cihaz yarim enumerate) — reentry korumasi
 if [[ "${SSD_HOTPLUG_REENTRY:-0}" != "1" ]] && ssd_usb_soft_reset && ssd_mount_healthy; then

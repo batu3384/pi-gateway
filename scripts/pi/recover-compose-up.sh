@@ -52,21 +52,59 @@ if ! timeout 8 /usr/bin/docker info >/dev/null 2>&1; then
   exit 1
 fi
 
-dns_fallback stop --force
-_dns_force_stopped=1
+_agh_rewrite_ok() {
+  local _ip="${PI_STATIC_IP:-127.0.0.1}"
+  local _dom="${LAN_DOMAIN:-home}"
+  timeout 2 dig +time=1 +tries=1 +short @"$_ip" "gateway.${_dom}" A 2>/dev/null \
+    | grep -qx "$_ip"
+}
 
-compose_up() {
+_compose_up_svcs() {
   local t="${COMPOSE_UP_TIMEOUT:-90}"
   if [[ "${COMPOSE_RECOVER_MODE:-}" == "core-dns" ]]; then
-    local -a core_svc=(unbound adguard)
-    if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
-      core_svc+=(homepage caddy)
-    fi
-    echo "[recover-compose] mode=core-dns (${core_svc[*]})" >&2
-    timeout "$t" docker compose --env-file ../.env --profile caddy up -d "${core_svc[@]}"
+    timeout "$t" docker compose --env-file ../.env --profile caddy up -d "$@"
   else
-    timeout "$t" docker compose --env-file ../.env "${profiles[@]}" up -d
+    timeout "$t" docker compose --env-file ../.env "${profiles[@]}" up -d "$@"
   fi
+}
+
+# :53'ü compose boyunca boş bırakma — adguard host-network bind edene kadar fallback.
+compose_up() {
+  local -a core_svc=(unbound adguard)
+  local -a pre
+  local s
+  if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
+    core_svc+=(homepage caddy)
+  fi
+  if [[ "${COMPOSE_RECOVER_MODE:-}" == "core-dns" ]]; then
+    echo "[recover-compose] mode=core-dns (${core_svc[*]})" >&2
+  fi
+  if _agh_rewrite_ok; then
+    dns_fallback ensure
+    if [[ "${COMPOSE_RECOVER_MODE:-}" == "core-dns" ]]; then
+      _compose_up_svcs "${core_svc[@]}"
+    else
+      _compose_up_svcs
+    fi
+    return
+  fi
+  dns_fallback start
+  if [[ "${COMPOSE_RECOVER_MODE:-}" == "core-dns" ]]; then
+    pre=()
+    for s in "${core_svc[@]}"; do
+      [[ "$s" != adguard ]] && pre+=("$s")
+    done
+  else
+    mapfile -t pre < <(docker compose --env-file ../.env "${profiles[@]}" config --services 2>/dev/null | grep -vx adguard || true)
+  fi
+  if ((${#pre[@]} == 0)); then
+    echo "[recover-compose] WARN adguard-haric servis yok — :53 fallback" >&2
+    return 1
+  fi
+  _compose_up_svcs "${pre[@]}" || return $?
+  dns_fallback stop --force
+  _dns_force_stopped=1
+  _compose_up_svcs adguard
 }
 
 _wait_agh_rewrite() {

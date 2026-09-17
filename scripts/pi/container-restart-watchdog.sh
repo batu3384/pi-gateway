@@ -29,6 +29,7 @@ if [[ "${1:-}" == "--self-check" ]]; then
   grep -q 'rewrite_ok' "$0" || exit 1
   grep -q 'agh_force_stopped' "$0" || exit 1
   grep -q 'finally:' "$0" || exit 1
+  grep -q 'docker_cli_ok' "$0" || exit 1
   python3 - "$THRESHOLD" "$WINDOW_SEC" <<'PY' || exit 1
 import sys
 threshold, window = int(sys.argv[1]), int(sys.argv[2])
@@ -82,6 +83,20 @@ def save_state(data: dict) -> None:
             stdout=subprocess.DEVNULL,
         )
         subprocess.run(["sudo", "chmod", "664", str(path)], check=False)
+
+def docker_cli_ok() -> bool:
+    try:
+        subprocess.run(
+            ["timeout", "8", "/usr/bin/docker", "info"],
+            check=True,
+            timeout=12,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+
 
 def inspect(name: str) -> tuple[int, str, bool]:
     fmt = "{{.RestartCount}}|{{.State.Status}}|{{.State.Running}}"
@@ -214,13 +229,20 @@ def dns_fallback(*args: str) -> None:
 
 
 agh_force_stopped = False
+if not docker_cli_ok():
+    dns_fallback("start")
 try:
     for name in watch:
         restarts, status, running = inspect(name)
         if restarts < 0:
+            if name == "adguard":
+                dns_fallback("start")
             continue
         if (not running) and status in ("exited", "created", "dead") and not degraded:
             if name == "adguard":
+                if not docker_cli_ok():
+                    dns_fallback("start")
+                    continue
                 dns_fallback("stop", "--force")
                 agh_force_stopped = True
             try:

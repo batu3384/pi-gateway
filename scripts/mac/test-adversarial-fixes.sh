@@ -464,4 +464,40 @@ grep -q '@latest' "$ROOT/config/adguard/filter-lists.json" \
   && die "C31: filter @latest pin yok"
 ok "C31 host DNS fallback + pin + docker timeout"
 
+# C32: USB overlay olumu — fallback ONCE recover; compose adguard son
+grep -q 'SSD sagliksiz — host DNS fallback' "$hotplug" \
+  || die "C32: hotplug SSD-unhealthy fallback yok"
+grep -q '_dns_keep_alive' "$hotplug" || die "C32: hotplug _dns_keep_alive yok"
+keep_alive_n="$(grep -c '_dns_keep_alive' "$hotplug" || true)"
+[[ "${keep_alive_n:-0}" -ge 3 ]] || die "C32: hotplug fallback tek cagri (kopma yolu yok)"
+grep -q 'start --wait-die' "$hotplug" \
+  && die "C32: hotplug wait-die remount bloğu geri geldi"
+grep -q -- '--wait-die' "$ROOT/scripts/pi/dns-host-fallback.sh" \
+  || die "C32: dns-host-fallback --wait-die yok"
+cmd_start_body="$(awk '/^cmd_start\(/,/^cmd_ensure\(/' "$ROOT/scripts/pi/dns-host-fallback.sh")"
+echo "$cmd_start_body" | grep -q 'cmd_stop' \
+  && die "C32: cmd_start rewrite-ok stop (USB arm yok)"
+grep -q 'docker_overlay_at_risk' "$ROOT/scripts/pi/dns-host-fallback.sh" \
+  || die "C32: overlay_at_risk yok (ensure waiter'i oldurur)"
+grep -q 'DNS_FALLBACK_BIND_RETRY_SEC' "$ROOT/scripts/lib/dns-dot-proxy.py" \
+  || die "C32: dns-dot-proxy bind-wait yok"
+grep -q ':53 mesgul' "$ROOT/scripts/lib/dns-dot-proxy.py" \
+  || die "C32: dns-dot-proxy EADDRINUSE wait yok"
+grep -q 'if name == "adguard" and not rewrite_ok()' "$ROOT/scripts/pi/container-restart-watchdog.sh" \
+  && die "C32: watchdog inspect-fail rewrite gate (USB arm yok)"
+grep -q 'docker-cli-timeout' "$health" || die "C32: health docker-cli-timeout yok"
+grep -q 'rewrite yoksa recover' "$health" \
+  || die "C32: health rewrite-fail fallback-before-recover yok"
+grep -q 'agh_rewrite_ok()' "$health" || die "C32: health agh_rewrite_ok yok"
+grep -q 'AGH API skip' "$health" || die "C32: health filter-0 skip yok"
+grep -q '_compose_up_svcs adguard' "$compose_up" \
+  || die "C32: recover-compose adguard son asama yok"
+grep -q 'grep -vx adguard' "$compose_up" \
+  || die "C32: recover-compose adguard-haric up yok"
+grep -q 'adguard-haric servis yok' "$compose_up" \
+  || die "C32: recover-compose bos pre :53 koruma yok"
+grep -q 'docker_cli_ok' "$ROOT/scripts/pi/container-restart-watchdog.sh" \
+  || die "C32: watchdog docker_cli_ok yok"
+ok "C32 USB :53 keep-alive (hotplug/health/compose/watchdog)"
+
 echo "[test-adversarial] Tum kontroller gecti"

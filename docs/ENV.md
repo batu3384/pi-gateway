@@ -40,7 +40,7 @@
 | `DHCP_RANGE_START` / `DHCP_RANGE_END` / `LAN_SUBNET_MASK` | Yalnız `NETWORK_MODE=adguard-dhcp`. Örnek: `192.168.1.50`–`200`, `255.255.255.0`. |
 | `MODEM_IPV6_DNS_LL` | `fe80::1`. radvd RFC 8106 lifetime 0 (modem RDNSS un-advertise). |
 | `MODEM_INVENTORY_ENABLED` | `false` (önerilen: modem credential dosyası hazırlandıktan sonra `true`) |
-| `MODEM_URL` | `http://192.168.1.1` |
+| `MODEM_URL` | `https://192.168.1.1` |
 | `MODEM_ALLOW_HTTP` | `false`; HTTPS desteklemeyen modem için açıkça `true` yapılır, login LAN’da şifreli değildir |
 | `MODEM_TLS_CA_FILE` | HTTPS modem sertifikası/CA PEM yolu; boşsa sistem CA store kullanılır |
 | `MODEM_TLS_INSECURE` | `false`; yalnız self-signed modem sertifikası için açıkça `true`, authenticity doğrulanmaz |

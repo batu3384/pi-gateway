@@ -37,6 +37,10 @@ bash "$PROJECT_DIR/scripts/pi/audit-modem-performance.sh" --self-check \
   || die "modem audit HTTP opt-in bypass"
 grep -q 'MODEM_ALLOW_HTTP' "$PROJECT_DIR/scripts/pi/sync-modem-inventory.sh" \
   || die "modem HTTP policy yok"
+grep -q 'MODEM_URL:=https://192.168.1.1' "$PROJECT_DIR/scripts/pi/sync-modem-inventory.sh" \
+  || die "modem URL varsayilan HTTPS yok"
+grep -q 'MODEM_URL=https://192.168.1.1' "$PROJECT_DIR/.env.example" \
+  || die ".env.example MODEM_URL HTTPS yok"
 grep -q 'python DISCOVER' "$PROJECT_DIR/scripts/lib/dhcp-dns-offer.sh" \
   || die "dhcp-dns python DISCOVER fallback yok"
 grep -q 'bilinmeyen DNS bypass' "$PROJECT_DIR/scripts/lib/dhcp-dns-offer.sh" \
@@ -201,6 +205,18 @@ grep -q 'timeout 8 docker inspect' "$PROJECT_DIR/scripts/lib/stack-health.sh" \
   || die "container_health_ok docker inspect timeout yok"
 grep -q 'stop --force' "$PROJECT_DIR/scripts/pi/recover-compose-up.sh" \
   || die "recover-compose fallback stop --force yok"
+grep -q '_compose_up_svcs adguard' "$PROJECT_DIR/scripts/pi/recover-compose-up.sh" \
+  || die "recover-compose adguard son asama yok"
+grep -q 'grep -vx adguard' "$PROJECT_DIR/scripts/pi/recover-compose-up.sh" \
+  || die "recover-compose adguard-haric up yok"
+grep -q 'SSD sagliksiz — host DNS fallback' "$PROJECT_DIR/scripts/pi/ssd-hotplug-handler.sh" \
+  || die "hotplug SSD-unhealthy fallback yok"
+grep -q '_dns_keep_alive' "$PROJECT_DIR/scripts/pi/ssd-hotplug-handler.sh" \
+  || die "hotplug _dns_keep_alive yok"
+grep -q 'start --wait-die' "$PROJECT_DIR/scripts/pi/ssd-hotplug-handler.sh" \
+  && die "hotplug wait-die remount bloğu"
+grep -q 'rewrite yoksa recover' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health rewrite-fail fallback-before-recover yok"
 grep -q '_restore_dns_fallback' "$PROJECT_DIR/scripts/pi/recover-compose-up.sh" \
   || die "recover-compose EXIT trap yok"
 grep -q 'timeout 8 /usr/bin/docker info' "$PROJECT_DIR/scripts/pi/recover-compose-up.sh" \
@@ -209,6 +225,10 @@ grep -q 'AGH_REWRITE_WAIT_SEC:-60' "$PROJECT_DIR/scripts/pi/recover-compose-up.s
   || die "recover-compose AGH rewrite wait 60s yok"
 grep -q 'stop atlandi' "$PROJECT_DIR/scripts/pi/dns-host-fallback.sh" \
   || die "dns-host-fallback rewrite-guard stop yok"
+grep -q 'docker_overlay_at_risk' "$PROJECT_DIR/scripts/pi/dns-host-fallback.sh" \
+  || die "dns-host-fallback overlay_at_risk yok"
+grep -q 'DNS_FALLBACK_BIND_RETRY_SEC' "$PROJECT_DIR/scripts/lib/dns-dot-proxy.py" \
+  || die "dns-dot-proxy bind-wait yok"
 grep -q 'DOCKER_INVENTORY' "$PROJECT_DIR/scripts/pi/health-check.sh" \
   || die "health-check docker-cli-timeout DNS koruma yok"
 grep -q 'dns-host-fallback.sh' "$PROJECT_DIR/scripts/pi/health-check.sh" \

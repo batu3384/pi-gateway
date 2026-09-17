@@ -37,6 +37,10 @@ LAN_DOMAIN="${LAN_DOMAIN:-home}"
 ADGUARD_WEB_PORT="${ADGUARD_WEB_PORT:-8080}"
 UNBOUND_PORT="${UNBOUND_PORT:-5335}"
 STACK_AUTO_RECOVER="${STACK_AUTO_RECOVER:-true}"
+agh_rewrite_ok() {
+  timeout 2 dig +time=1 +tries=1 +short @"${PI_STATIC_IP}" "gateway.${LAN_DOMAIN}" A 2>/dev/null \
+    | grep -qx "${PI_STATIC_IP}"
+}
 fail=0
 FAILURES=()
 sd_fail=0
@@ -57,8 +61,7 @@ if ! SD_HEALTH_AUTO_RECOVER=false SSD_HEALTH_AUTO=false REMOTE_DIR="$REMOTE_DIR"
   sd_fail=1
 fi
 if ! timeout 8 /usr/bin/docker info >/dev/null 2>&1; then
-  if timeout 2 dig +time=1 +tries=1 +short @"${PI_STATIC_IP}" "gateway.${LAN_DOMAIN}" A 2>/dev/null \
-    | grep -qx "${PI_STATIC_IP}"; then
+  if agh_rewrite_ok; then
     logger -t "$LOG_TAG" "WARN docker-cli-timeout — DNS ayakta, recover yok"
     DOCKER_OK=0
     DOCKER_INVENTORY=0
@@ -66,9 +69,15 @@ if ! timeout 8 /usr/bin/docker info >/dev/null 2>&1; then
     DOCKER_OK=0
     DOCKER_INVENTORY=0
     note_fail "docker-unresponsive"
-    bash "$(_pi_home_script dns-host-fallback.sh)" start || true
   fi
-elif [[ "$STACK_AUTO_RECOVER" == "true" ]] && {
+  # rewrite OK olsa bile arm (USB overlay ölecek; proxy bind-wait)
+  bash "$(_pi_home_script dns-host-fallback.sh)" start || true
+fi
+# rewrite yoksa recover :53 bos birakmasin (docker info hâlâ OK olabilir — USB overlay)
+if ! agh_rewrite_ok; then
+  bash "$(_pi_home_script dns-host-fallback.sh)" start || true
+fi
+if [[ "${DOCKER_OK}" == "1" ]] && [[ "$STACK_AUTO_RECOVER" == "true" ]] && {
   storage_restore_pending || ! stack_fully_healthy || ! root_rw_ok
 }; then
   if stack_recover_suppressed; then
@@ -264,10 +273,11 @@ if ! adguard_dns_ok; then
   note_fail "adguard-dns-block"
 fi
 bash "$(_pi_home_script dns-host-fallback.sh)" ensure || true
-if ! dig +time=2 +tries=1 @"${PI_STATIC_IP}" "gateway.${LAN_DOMAIN}" A +short 2>/dev/null | grep -qx "${PI_STATIC_IP}"; then
+if ! agh_rewrite_ok; then
   note_fail "adguard-rewrite-gateway.${LAN_DOMAIN}"
+  logger -t "$LOG_TAG" "AGH API skip — rewrite yok (USB/filter-0 false-fail)"
 fi
-if [[ -n "${AGH_ADMIN_PASSWORD:-}" ]]; then
+if [[ -n "${AGH_ADMIN_PASSWORD:-}" ]] && agh_rewrite_ok; then
   COOKIE="$(mktemp)"
   BASE="http://127.0.0.1:${ADGUARD_WEB_PORT}"
   _filters_py="${SCRIPT_DIR}/../lib/adguard-filters.py"

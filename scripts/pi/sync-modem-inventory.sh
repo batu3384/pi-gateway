@@ -30,7 +30,7 @@ if [[ "${MODEM_INVENTORY_ENABLED:-false}" != "true" ]]; then
   exit 0
 fi
 
-: "${MODEM_URL:=http://192.168.1.1}"
+: "${MODEM_URL:=https://192.168.1.1}"
 : "${MODEM_INVENTORY_PATH:=${REMOTE_DIR}/data/modem-inventory.json}"
 : "${MODEM_USERNAME:?MODEM_USERNAME credential eksik}"
 : "${MODEM_PASSWORD:?MODEM_PASSWORD credential eksik}"

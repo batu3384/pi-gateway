@@ -2,6 +2,7 @@
 """Host :53 → DNS-over-TLS. Docker/AGH olunca systemd unit durur."""
 from __future__ import annotations
 
+import errno
 import ipaddress
 import os
 import selectors
@@ -10,6 +11,7 @@ import ssl
 import struct
 import sys
 import threading
+import time
 
 UPSTREAMS = (
     ("9.9.9.9", 853, "dns.quad9.net"),
@@ -17,6 +19,9 @@ UPSTREAMS = (
 )
 DOT_TIMEOUT = 3.0
 LISTEN_PORT = int(os.environ.get("DNS_FALLBACK_PORT", "53"))
+# ponytail: EADDRINUSE retry. Tavan sonsuz bekleme; unit stop = AGH geri.
+BIND_RETRY_SEC = float(os.environ.get("DNS_FALLBACK_BIND_RETRY_SEC", "0.5"))
+BIND_WAIT_SEC = float(os.environ.get("DNS_FALLBACK_BIND_WAIT_SEC", "0"))
 MAX_DNS = 4096
 QTYPE_AAAA = 28
 DISABLE_AAAA = os.environ.get("DNS_FALLBACK_DISABLE_AAAA", "true").strip().lower() in (
@@ -178,7 +183,12 @@ def _bind(family: int, kind: int) -> socket.socket | None:
             sock.bind(("0.0.0.0", LISTEN_PORT))
     except OSError as exc:
         sock.close()
-        print(f"[dns-dot-proxy] bind fail {family}/{kind}: {exc}", file=sys.stderr)
+        if getattr(exc, "errno", None) not in (
+            errno.EADDRINUSE,
+            errno.EAFNOSUPPORT,
+            errno.EADDRNOTAVAIL,
+        ):
+            print(f"[dns-dot-proxy] bind fail {family}/{kind}: {exc}", file=sys.stderr)
         return None
     if kind == socket.SOCK_STREAM:
         sock.listen(32)
@@ -198,22 +208,36 @@ def _spawn(target, args) -> None:
 
 
 def serve() -> int:
-    sel = selectors.DefaultSelector()
+    deadline = None if BIND_WAIT_SEC <= 0 else time.monotonic() + BIND_WAIT_SEC
+    logged_wait = False
+    sel: selectors.DefaultSelector | None = None
     bound = 0
-    for family, kind in (
-        (socket.AF_INET, socket.SOCK_DGRAM),
-        (socket.AF_INET, socket.SOCK_STREAM),
-        (socket.AF_INET6, socket.SOCK_DGRAM),
-        (socket.AF_INET6, socket.SOCK_STREAM),
-    ):
-        sock = _bind(family, kind)
-        if sock is None:
-            continue
-        sel.register(sock, selectors.EVENT_READ, kind)
-        bound += 1
-    if bound == 0:
-        print("[dns-dot-proxy] HATA: :53 bind yok (AGH elinde?)", file=sys.stderr)
-        return 75
+    while True:
+        sel = selectors.DefaultSelector()
+        bound = 0
+        for family, kind in (
+            (socket.AF_INET, socket.SOCK_DGRAM),
+            (socket.AF_INET, socket.SOCK_STREAM),
+            (socket.AF_INET6, socket.SOCK_DGRAM),
+            (socket.AF_INET6, socket.SOCK_STREAM),
+        ):
+            sock = _bind(family, kind)
+            if sock is None:
+                continue
+            sel.register(sock, selectors.EVENT_READ, kind)
+            bound += 1
+        if bound > 0:
+            break
+        sel.close()
+        sel = None
+        if deadline is not None and time.monotonic() >= deadline:
+            print("[dns-dot-proxy] HATA: :53 bind yok (AGH elinde?)", file=sys.stderr)
+            return 75
+        if not logged_wait:
+            print("[dns-dot-proxy] :53 mesgul — AGH olunce bind", flush=True)
+            logged_wait = True
+        time.sleep(max(BIND_RETRY_SEC, 0.05))
+    assert sel is not None
     print(f"[dns-dot-proxy] listen :{LISTEN_PORT} sockets={bound}", flush=True)
     while True:
         for key, _ in sel.select():
@@ -251,6 +275,8 @@ def self_check() -> None:
     a_q = bytes.fromhex("00010100000100000000000001610000010001")
     assert qtype(a_q) == 1
     assert MAX_INFLIGHT >= 1
+    assert BIND_RETRY_SEC > 0
+    assert BIND_WAIT_SEC >= 0
     assert _INFLIGHT.acquire(blocking=False)
     _INFLIGHT.release()
     print("[dns-dot-proxy] self-check OK")
