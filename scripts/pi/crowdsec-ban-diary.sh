@@ -24,7 +24,8 @@ fi
 
 docker ps --format '{{.Names}}' | grep -qx crowdsec || exit 0
 
-body="$(docker exec crowdsec cscli decisions list -o json 2>/dev/null | python3 "$FORMAT_PY")"
+raw="$(docker exec crowdsec cscli decisions list -o json 2>/dev/null || true)"
+body="$(printf '%s\n' "$raw" | python3 "$FORMAT_PY" || true)"
 [[ -n "${body// }" ]] || { log "ban yok — atlandi"; exit 0; }
 
 body | bash "$ARCHIVE" crowdsec-diary >/dev/null

@@ -121,6 +121,8 @@ fi
 grep -q 'Toplam Docker restart' "$ROOT/scripts/lib/notify.sh" \
   || die "container restart sayaç etiketi yok"
 bash "$ROOT/scripts/pi/crowdsec-ban-diary.sh" --self-check || die "crowdsec-diary self-check"
+grep -q 'cscli decisions list -o json 2>/dev/null || true' "$ROOT/scripts/pi/crowdsec-ban-diary.sh" \
+  || die "crowdsec-diary cscli fail unit'i dusurur"
 grep -q 'notify_container_restart_warn' "$ROOT/scripts/lib/notify.sh" \
   || die "notify container-restart yok"
 grep -q 'notify_monitoring_stack_ok' "$ROOT/scripts/lib/notify.sh" \

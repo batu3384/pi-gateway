@@ -34,6 +34,7 @@ crit() {
 crit "Privileged scripts" "$SCRIPT_DIR/install-privileged-scripts.sh"
 crit "DNS perf profile" "$SCRIPT_DIR/ensure-dns-perf-profile.sh"
 crit "AdGuard DNS" "$SCRIPT_DIR/apply-adguard-dns.sh"
+crit "AdGuard rewrites" "$SCRIPT_DIR/apply-adguard-rewrites.sh"
 crit "AdGuard filters" "$SCRIPT_DIR/apply-adguard-filters.sh"
 # Tek dosya bind mount + rsync rename = eski inode; restart yetmez, recreate sart
 # (yoksa health unbound-stale-conf). Kisa kesinti AGH DoT fallback ile kapanir.

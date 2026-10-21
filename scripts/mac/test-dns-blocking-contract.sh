@@ -175,6 +175,8 @@ grep -q 'cache_ttl_min: 60' "$PROJECT_DIR/config/adguard/AdGuardHome.yaml.templa
   || die "AGH template cache_ttl_min 60 degil"
 grep -q 'aaaa_disabled: true' "$PROJECT_DIR/config/adguard/AdGuardHome.yaml.template" \
   || die "AGH template aaaa_disabled yok"
+grep -q 'AdGuardHome.yaml mevcut' "$PROJECT_DIR/scripts/mac/sync-rendered-configs.sh" \
+  || die "sync AdGuardHome.yaml canli rewrite'i ezer"
 grep -Fq 'desired["disable_ipv6"]' "$PROJECT_DIR/scripts/pi/apply-adguard-dns.sh" \
   || die "apply-adguard-dns disable_ipv6 yok"
 grep -q 'cloudflare.com AAAA' "$PROJECT_DIR/scripts/pi/health-check.sh" \
@@ -692,6 +694,8 @@ grep -q -- '--data-binary @-' "$PROJECT_DIR/scripts/lib/adguard-api.sh" \
   || die "AdGuard login encoded payload pipe yok"
 grep -q 'apply-adguard-filters.sh' "$PROJECT_DIR/scripts/pi/post-deploy-code.sh" \
   || die "post-deploy-code apply-adguard-filters yok"
+grep -q 'apply-adguard-rewrites.sh' "$PROJECT_DIR/scripts/pi/post-deploy-code.sh" \
+  || die "post-deploy-code apply-adguard-rewrites yok"
 grep -q 'setup-rdnss-ra.sh' "$PROJECT_DIR/scripts/pi/post-deploy-code.sh" \
   || die "post-deploy-code setup-rdnss-ra yok"
 grep -q 'pi_gateway_adguard_blocked_ratio' "$PROJECT_DIR/config/grafana/provisioning/dashboards/json/pi-gateway.json" \

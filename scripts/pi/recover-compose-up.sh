@@ -55,7 +55,7 @@ fi
 _agh_rewrite_ok() {
   local _ip="${PI_STATIC_IP:-127.0.0.1}"
   local _dom="${LAN_DOMAIN:-home}"
-  timeout 2 dig +time=1 +tries=1 +short @"$_ip" "gateway.${_dom}" A 2>/dev/null \
+  timeout 2 dig +tcp +time=1 +tries=1 +short @"$_ip" "gateway.${_dom}" A 2>/dev/null \
     | grep -qx "$_ip"
 }
 
@@ -112,7 +112,7 @@ _wait_agh_rewrite() {
   local _dom="${LAN_DOMAIN:-home}"
   local _i
   for _i in $(seq 1 "${AGH_REWRITE_WAIT_SEC:-60}"); do
-    if timeout 2 dig +time=1 +tries=1 +short @"$_ip" "gateway.${_dom}" A 2>/dev/null \
+    if timeout 2 dig +tcp +time=1 +tries=1 +short @"$_ip" "gateway.${_dom}" A 2>/dev/null \
       | grep -qx "$_ip"; then
       return 0
     fi

@@ -69,7 +69,13 @@ rm -f "$NEW"
 # Container (adguard/homepage root) dosyayi root'a cevirebilir — cp oncesi sahiplik
 sudo chown "${PI_USER}:${PI_USER}" "${R}/config/adguard/AdGuardHome.yaml" \
   "${R}/config/homepage/services.yaml" 2>/dev/null || true
-cp /tmp/AdGuardHome.yaml "${R}/config/adguard/AdGuardHome.yaml"
+# Canli AGH yaml API state (rewrite). Render edilmis Mac kopyasi her deploy'da siler.
+if [[ -s "${R}/config/adguard/AdGuardHome.yaml" ]]; then
+  echo "[sync] AdGuardHome.yaml mevcut — uzerine yazilmadi"
+else
+  cp /tmp/AdGuardHome.yaml "${R}/config/adguard/AdGuardHome.yaml"
+fi
+rm -f /tmp/AdGuardHome.yaml
 cp /tmp/homepage-services.yaml "${R}/config/homepage/services.yaml"
 [[ -f /tmp/Caddyfile ]] && cp /tmp/Caddyfile "${R}/config/caddy/Caddyfile"
 REMOTE_DIR="${R}" bash "${R}/scripts/pi/fix-config-perms.sh"

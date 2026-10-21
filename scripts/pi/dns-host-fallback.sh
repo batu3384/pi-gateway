@@ -34,7 +34,8 @@ run_sys() {
 agh_rewrite_ok() {
   local ip="${PI_STATIC_IP:-127.0.0.1}"
   local domain="${LAN_DOMAIN:-home}"
-  timeout 2 dig +time=1 +tries=1 +short @"$ip" "gateway.${domain}" A 2>/dev/null \
+  # TCP: UDP'yi fallback calmissa bile AGH'yi gor. UDP probe kilitler.
+  timeout 2 dig +tcp +time=1 +tries=1 +short @"$ip" "gateway.${domain}" A 2>/dev/null \
     | grep -qx "$ip"
 }
 
@@ -109,6 +110,7 @@ case "$action" in
     grep -q 'docker_overlay_at_risk' "$0" || exit 1
     grep -q 'armed (AGH' "$0" || exit 1
     grep -q 'dns-dot-proxy.py' "$0" || exit 1
+    grep -q 'bind_ready' "${SCRIPT_DIR}/../lib/dns-dot-proxy.py" || exit 1
     [[ -f "${SCRIPT_DIR}/../lib/dns-dot-proxy.py" ]] || exit 1
     python3 "${SCRIPT_DIR}/../lib/dns-dot-proxy.py" --self-check
     ;;

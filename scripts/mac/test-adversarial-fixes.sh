@@ -417,6 +417,8 @@ ok "C29 hotplug no redundant docker restart"
 grep -q 'STORAGE_DEGRADED_FLAG' "$prune_sd_space" || die "C30: prune degraded flag yok"
 grep -A8 'prune_safe' "$prune_sd_space" | grep -q 'degraded' \
   || die "C30: prune degraded docker guard yok"
+grep -q 'docker image prune -a' "$prune_sd_space" \
+  && die "C30: prune -a pinli restic imajini siler"
 ok "C30 prune degraded docker guard"
 
 # C28b: recover-ro uses SKIP_COMPOSE_UP (no double compose with setup-docker-ssd)
@@ -485,7 +487,14 @@ grep -q ':53 mesgul' "$ROOT/scripts/lib/dns-dot-proxy.py" \
   || die "C32: dns-dot-proxy EADDRINUSE wait yok"
 grep -q 'if name == "adguard" and not rewrite_ok()' "$ROOT/scripts/pi/container-restart-watchdog.sh" \
   && die "C32: watchdog inspect-fail rewrite gate (USB arm yok)"
-grep -q 'docker-cli-timeout' "$health" || die "C32: health docker-cli-timeout yok"
+grep -q 'bind_ready' "$ROOT/scripts/lib/dns-dot-proxy.py" \
+  || die "C32: dns-dot-proxy bind_ready yok (kismi :53)"
+grep -q 'if bound > 0' "$ROOT/scripts/lib/dns-dot-proxy.py" \
+  && die "C32: kismi bind (bound > 0) geri geldi"
+grep -F '+tcp' "$ROOT/scripts/pi/dns-host-fallback.sh" >/dev/null \
+  || die "C32: rewrite TCP yok (UDP fallback kilit)"
+grep -q 'gateway-state kapali' "$health" \
+  || die "C32: health gateway-state start yok"
 grep -q 'rewrite yoksa recover' "$health" \
   || die "C32: health rewrite-fail fallback-before-recover yok"
 grep -q 'agh_rewrite_ok()' "$health" || die "C32: health agh_rewrite_ok yok"

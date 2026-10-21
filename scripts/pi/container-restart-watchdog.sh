@@ -197,6 +197,7 @@ def rewrite_ok() -> bool:
         out = subprocess.check_output(
             [
                 "dig",
+                "+tcp",
                 "+time=1",
                 "+tries=1",
                 "+short",

@@ -171,7 +171,7 @@ def _handle_tcp(conn: socket.socket, addr: tuple) -> None:
         conn.close()
 
 
-def _bind(family: int, kind: int) -> socket.socket | None:
+def _bind(family: int, kind: int) -> tuple[socket.socket | None, int | None]:
     sock = socket.socket(family, kind)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     if family == socket.AF_INET6:
@@ -183,17 +183,35 @@ def _bind(family: int, kind: int) -> socket.socket | None:
             sock.bind(("0.0.0.0", LISTEN_PORT))
     except OSError as exc:
         sock.close()
-        if getattr(exc, "errno", None) not in (
+        err = exc.errno
+        if err not in (
             errno.EADDRINUSE,
             errno.EAFNOSUPPORT,
             errno.EADDRNOTAVAIL,
         ):
             print(f"[dns-dot-proxy] bind fail {family}/{kind}: {exc}", file=sys.stderr)
-        return None
+        return None, err
     if kind == socket.SOCK_STREAM:
         sock.listen(32)
     sock.setblocking(False)
-    return sock
+    return sock, None
+
+
+def bind_ready(results: list[tuple[bool, int | None, bool]]) -> bool:
+    """(bound, errno, required). Kismi bind yasak: bir soket mesgulse hepsini birak."""
+    got = need = 0
+    conflict = False
+    for bound, err, required in results:
+        if required:
+            need += 1
+        if bound:
+            if required:
+                got += 1
+            continue
+        if err in (errno.EAFNOSUPPORT, errno.EADDRNOTAVAIL) and not required:
+            continue
+        conflict = True
+    return (not conflict) and need > 0 and got == need
 
 
 def _spawn(target, args) -> None:
@@ -207,38 +225,51 @@ def _spawn(target, args) -> None:
     threading.Thread(target=_run, daemon=True).start()
 
 
+def _drop_bind(sel: selectors.BaseSelector, held: list[socket.socket]) -> None:
+    for sock in held:
+        try:
+            sel.unregister(sock)
+        except KeyError:
+            pass
+        sock.close()
+    sel.close()
+
+
 def serve() -> int:
     deadline = None if BIND_WAIT_SEC <= 0 else time.monotonic() + BIND_WAIT_SEC
     logged_wait = False
-    sel: selectors.DefaultSelector | None = None
-    bound = 0
+    slots = (
+        (socket.AF_INET, socket.SOCK_DGRAM, True),
+        (socket.AF_INET, socket.SOCK_STREAM, True),
+        (socket.AF_INET6, socket.SOCK_DGRAM, False),
+        (socket.AF_INET6, socket.SOCK_STREAM, False),
+    )
+    sel: selectors.BaseSelector | None = None
     while True:
         sel = selectors.DefaultSelector()
-        bound = 0
-        for family, kind in (
-            (socket.AF_INET, socket.SOCK_DGRAM),
-            (socket.AF_INET, socket.SOCK_STREAM),
-            (socket.AF_INET6, socket.SOCK_DGRAM),
-            (socket.AF_INET6, socket.SOCK_STREAM),
-        ):
-            sock = _bind(family, kind)
-            if sock is None:
-                continue
-            sel.register(sock, selectors.EVENT_READ, kind)
-            bound += 1
-        if bound > 0:
+        held: list[socket.socket] = []
+        results: list[tuple[bool, int | None, bool]] = []
+        for family, kind, required in slots:
+            sock, err = _bind(family, kind)
+            if sock is not None:
+                sel.register(sock, selectors.EVENT_READ, kind)
+                held.append(sock)
+                results.append((True, None, required))
+            else:
+                results.append((False, err, required))
+        if bind_ready(results):
             break
-        sel.close()
+        _drop_bind(sel, held)
         sel = None
         if deadline is not None and time.monotonic() >= deadline:
             print("[dns-dot-proxy] HATA: :53 bind yok (AGH elinde?)", file=sys.stderr)
             return 75
         if not logged_wait:
-            print("[dns-dot-proxy] :53 mesgul — AGH olunce bind", flush=True)
+            print("[dns-dot-proxy] :53 mesgul — tam bind bekle (kismi yok)", flush=True)
             logged_wait = True
         time.sleep(max(BIND_RETRY_SEC, 0.05))
     assert sel is not None
-    print(f"[dns-dot-proxy] listen :{LISTEN_PORT} sockets={bound}", flush=True)
+    print(f"[dns-dot-proxy] listen :{LISTEN_PORT} sockets={len(held)}", flush=True)
     while True:
         for key, _ in sel.select():
             sock = key.fileobj
@@ -277,6 +308,29 @@ def self_check() -> None:
     assert MAX_INFLIGHT >= 1
     assert BIND_RETRY_SEC > 0
     assert BIND_WAIT_SEC >= 0
+    assert bind_ready(
+        [(True, None, True), (True, None, True), (True, None, False), (True, None, False)]
+    )
+    assert bind_ready(
+        [
+            (True, None, True),
+            (True, None, True),
+            (False, errno.EAFNOSUPPORT, False),
+            (False, errno.EAFNOSUPPORT, False),
+        ]
+    )
+    # UDP bos, TCP AGH'de: yarim bind servis etme (canli 2026-10-21).
+    assert not bind_ready(
+        [
+            (True, None, True),
+            (False, errno.EADDRINUSE, True),
+            (True, None, False),
+            (False, errno.EADDRINUSE, False),
+        ]
+    )
+    assert not bind_ready(
+        [(False, errno.EADDRINUSE, True), (False, errno.EADDRINUSE, True)]
+    )
     assert _INFLIGHT.acquire(blocking=False)
     _INFLIGHT.release()
     print("[dns-dot-proxy] self-check OK")

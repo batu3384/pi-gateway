@@ -31,8 +31,9 @@ prune_safe() {
     log "containerd SSD'de (${containerd_root}) — image prune atlandi"
     return 0
   fi
-  log "containerd SD'de (${containerd_root}) — unused image prune"
-  docker image prune -a -f 2>/dev/null || true
+  log "containerd SD'de (${containerd_root}) — dangling image prune"
+  # prune -a kullanilmaz: pinli restic imaji konteynersizken silinir, gece yedek kirilir.
+  docker image prune -f 2>/dev/null || true
 }
 usage="$(root_usage_pct)"
 [[ -n "${usage:-}" ]] || { log "df / okunamadi"; exit 1; }

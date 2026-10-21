@@ -38,7 +38,7 @@ ADGUARD_WEB_PORT="${ADGUARD_WEB_PORT:-8080}"
 UNBOUND_PORT="${UNBOUND_PORT:-5335}"
 STACK_AUTO_RECOVER="${STACK_AUTO_RECOVER:-true}"
 agh_rewrite_ok() {
-  timeout 2 dig +time=1 +tries=1 +short @"${PI_STATIC_IP}" "gateway.${LAN_DOMAIN}" A 2>/dev/null \
+  timeout 2 dig +tcp +time=1 +tries=1 +short @"${PI_STATIC_IP}" "gateway.${LAN_DOMAIN}" A 2>/dev/null \
     | grep -qx "${PI_STATIC_IP}"
 }
 fail=0
@@ -749,6 +749,13 @@ if [[ "${ADGUARD_COVERAGE_AUDIT_ENABLED:-false}" == "true" ]] && [[ -x "$_covera
 fi
 _export="${SCRIPT_DIR}/export-gateway-state.sh"
 [[ -x "$_export" ]] || _export="${REMOTE_DIR}/scripts/pi/export-gateway-state.sh"
+if [[ "${DOCKER_OK}" == "1" ]] && docker ps -a --format '{{.Names}}' | grep -qx gateway-state; then
+  if ! docker ps --format '{{.Names}}' | grep -qx gateway-state; then
+    logger -t "$LOG_TAG" "gateway-state kapali — start"
+    docker start gateway-state >/dev/null 2>&1 \
+      || logger -t "$LOG_TAG" "WARN gateway-state start basarisiz"
+  fi
+fi
 if [[ -x "$_export" ]]; then
   REMOTE_DIR="$REMOTE_DIR" bash "$_export" >/dev/null 2>&1 \
     || logger -t "$LOG_TAG" "WARN export-gateway-state failed"
