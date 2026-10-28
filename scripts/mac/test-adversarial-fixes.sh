@@ -395,6 +395,7 @@ ok "W10 smoke placeholder fail"
 grep -q 'pi-gateway docker-netalertx-graphql' "$firewall" || die "W2: graphql UFW temizligi yok"
 grep -q "ufw allow from \"\$compose_subnet\" to any port \"\$graphql_port\"" "$firewall" \
   && die "W2: graphql kopruye acik"
+grep -q 'genis subnet atlandi' "$firewall" || die "W2: /12 docker subnet kilidi yok"
 grep -q 'pi-gateway dhcp' "$firewall" || die "W2: adguard-dhcp UFW UDP/67 yok"
 ok "W2 netalert graphql ufw"
 

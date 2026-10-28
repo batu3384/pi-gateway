@@ -165,10 +165,16 @@ setup_ufw() {
   else
     log "WARN: compose_default subnet bulunamadi — docker-adguard UFW kurali atlandi"
   fi
-  # Ek docker bridge subnet'leri (172.16/12 yerine gercek CIDR)
+  # Ek docker bridge subnet'leri. /12 ve daha genis = tum docker ozel ag; Caddy /16 yeter.
+  delete_ufw_rules_matching 'pi-gateway docker' '172.16.0.0/12'
   while IFS= read -r _dock_subnet; do
     [[ -n "$_dock_subnet" ]] || continue
     [[ "$_dock_subnet" == "$compose_subnet" ]] && continue
+    _prefix="${_dock_subnet##*/}"
+    if [[ "$_prefix" =~ ^[0-9]+$ ]] && (( _prefix < 16 )); then
+      log "WARN: genis subnet atlandi $_dock_subnet"
+      continue
+    fi
     sudo ufw allow from "$_dock_subnet" to any port 8080 proto tcp comment 'pi-gateway docker-bridge-adguard'
     if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
       sudo ufw allow from "$_dock_subnet" to any port "${NETALERTX_PORT:-20211}" proto tcp comment 'pi-gateway docker-bridge-netalertx'
