@@ -73,6 +73,16 @@ def qtype(q: bytes) -> int:
     return int.from_bytes(q[i : i + 2], "big")
 
 
+def servfail(q: bytes) -> bytes:
+    """RCODE=2. Kuyruk doluysa sessiz drop yerine istemci tekrar denesin."""
+    if len(q) < 12:
+        return b""
+    end = _skip_qname(q, 12) + 4
+    if end > len(q) or end < 12:
+        return b""
+    return q[:2] + b"\x81\x82" + q[4:6] + b"\x00\x00\x00\x00\x00\x00" + q[12:end]
+
+
 def nodata(q: bytes) -> bytes:
     """NOERROR + empty answer (NODATA). Happy Eyeballs AAAA bekletmesin."""
     if len(q) < 16:
@@ -214,15 +224,16 @@ def bind_ready(results: list[tuple[bool, int | None, bool]]) -> bool:
     return (not conflict) and need > 0 and got == need
 
 
-def _spawn(target, args) -> None:
+def _spawn(target, args) -> bool:
     if not _INFLIGHT.acquire(blocking=False):
-        return
+        return False
     def _run() -> None:
         try:
             target(*args)
         finally:
             _INFLIGHT.release()
     threading.Thread(target=_run, daemon=True).start()
+    return True
 
 
 def _drop_bind(sel: selectors.BaseSelector, held: list[socket.socket]) -> None:
@@ -279,13 +290,20 @@ def serve() -> int:
                     data, src = sock.recvfrom(MAX_DNS)
                 except OSError:
                     continue
-                _spawn(_handle_udp, (sock, data, src))
+                if not _spawn(_handle_udp, (sock, data, src)):
+                    fail = servfail(data)
+                    if fail:
+                        try:
+                            sock.sendto(fail, src)
+                        except OSError:
+                            pass
             else:
                 try:
                     conn, addr = sock.accept()
                 except OSError:
                     continue
-                _spawn(_handle_tcp, (conn, addr))
+                if not _spawn(_handle_tcp, (conn, addr)):
+                    conn.close()
 
 
 def self_check() -> None:
@@ -303,6 +321,9 @@ def self_check() -> None:
     assert aaaa_r[:2] == aaaa_q[:2]
     assert aaaa_r[2] & 0x80
     assert aaaa_r[6:8] == b"\x00\x00"
+    busy = servfail(aaaa_q)
+    assert busy[2:4] == b"\x81\x82"
+    assert busy[6:8] == b"\x00\x00"
     a_q = bytes.fromhex("00010100000100000000000001610000010001")
     assert qtype(a_q) == 1
     assert MAX_INFLIGHT >= 1

@@ -193,6 +193,10 @@ grep -q 'ADGUARD_AAAA_DISABLED=true' "$PROJECT_DIR/.env.example" \
   || die ".env.example ADGUARD_AAAA_DISABLED yok"
 grep -q 'QTYPE_AAAA' "$PROJECT_DIR/scripts/lib/dns-dot-proxy.py" \
   || die "dns-dot-proxy AAAA NODATA yok"
+grep -q 'def servfail' "$PROJECT_DIR/scripts/lib/dns-dot-proxy.py" \
+  || die "dns-dot-proxy kuyruk dolu SERVFAIL yok"
+grep -q 'modem DNS2' "$PROJECT_DIR/config/homepage/services.yaml.template" \
+  || die "homepage DNS2 aciklamasi yok"
 python3 - "$PROJECT_DIR/scripts/pi/recover-compose-up.sh" <<'PY' || die "recover-compose :53 wait dozzle oncesi degil"
 from pathlib import Path
 import sys

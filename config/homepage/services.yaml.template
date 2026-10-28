@@ -1,5 +1,5 @@
 title: Pi Gateway
-description: Ev agi DNS ve homelab paneli
+description: Ev agi DNS. Yavas video cogu zaman modem DNS2 veya IPv6 RA; Pi CPU degil.
 
 server:
   base: docker
