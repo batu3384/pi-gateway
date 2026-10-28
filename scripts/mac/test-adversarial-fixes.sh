@@ -391,8 +391,10 @@ grep -A20 'ENABLE_CADDY' "$smoke" | grep -q 'caddy-auth-configured\|CHANGE_ME\|p
   || die "W10: placeholder fail path yok"
 ok "W10 smoke placeholder fail"
 
-# W2: NetAlertX GraphQL UFW
-grep -q 'GRAPHQL\|20214\|NETALERTX_GRAPHQL' "$firewall" || die "W2: GraphQL UFW yok"
+# W2: NetAlertX UI kopruden; GraphQL 20214 degil (n8n ayni subnet)
+grep -q 'pi-gateway docker-netalertx-graphql' "$firewall" || die "W2: graphql UFW temizligi yok"
+grep -q "ufw allow from \"\$compose_subnet\" to any port \"\$graphql_port\"" "$firewall" \
+  && die "W2: graphql kopruye acik"
 grep -q 'pi-gateway dhcp' "$firewall" || die "W2: adguard-dhcp UFW UDP/67 yok"
 ok "W2 netalert graphql ufw"
 

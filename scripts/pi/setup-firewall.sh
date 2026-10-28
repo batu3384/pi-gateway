@@ -158,9 +158,9 @@ setup_ufw() {
     if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
       delete_ufw_rules_matching 'pi-gateway docker-netalertx'
       netalert_port="${NETALERTX_PORT:-20211}"
-      graphql_port="${NETALERTX_GRAPHQL_PORT:-20214}"
       sudo ufw allow from "$compose_subnet" to any port "$netalert_port" proto tcp comment 'pi-gateway docker-netalertx'
-      sudo ufw allow from "$compose_subnet" to any port "$graphql_port" proto tcp comment 'pi-gateway docker-netalertx-graphql'
+      # 20214 GraphQL Caddy kullanmaz. n8n ayni koprude; acik birakma.
+      delete_ufw_rules_matching 'pi-gateway docker-netalertx-graphql'
     fi
   else
     log "WARN: compose_default subnet bulunamadi — docker-adguard UFW kurali atlandi"
