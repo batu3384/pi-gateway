@@ -24,8 +24,11 @@ fi
 
 docker ps --format '{{.Names}}' | grep -qx crowdsec || exit 0
 
-raw="$(docker exec crowdsec cscli decisions list -o json 2>/dev/null || true)"
-body="$(printf '%s\n' "$raw" | python3 "$FORMAT_PY" || true)"
+if ! raw="$(docker exec crowdsec cscli decisions list -o json 2>/dev/null)"; then
+  log "HATA: cscli decisions"
+  exit 1
+fi
+body="$(printf '%s\n' "$raw" | python3 "$FORMAT_PY")" || { log "HATA: diary format"; exit 1; }
 [[ -n "${body// }" ]] || { log "ban yok — atlandi"; exit 0; }
 
 body | bash "$ARCHIVE" crowdsec-diary >/dev/null

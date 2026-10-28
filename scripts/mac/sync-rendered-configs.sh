@@ -76,10 +76,24 @@ else
   cp /tmp/AdGuardHome.yaml "${R}/config/adguard/AdGuardHome.yaml"
 fi
 rm -f /tmp/AdGuardHome.yaml
-cp /tmp/homepage-services.yaml "${R}/config/homepage/services.yaml"
-[[ -f /tmp/Caddyfile ]] && cp /tmp/Caddyfile "${R}/config/caddy/Caddyfile"
+homepage_changed=0
+if [[ ! -f "${R}/config/homepage/services.yaml" ]] || ! cmp -s /tmp/homepage-services.yaml "${R}/config/homepage/services.yaml"; then
+  cp /tmp/homepage-services.yaml "${R}/config/homepage/services.yaml"
+  homepage_changed=1
+  echo "[sync] homepage services guncellendi"
+else
+  echo "[sync] homepage services ayni — restart yok"
+fi
+if [[ -f /tmp/Caddyfile ]]; then
+  if [[ ! -f "${R}/config/caddy/Caddyfile" ]] || ! cmp -s /tmp/Caddyfile "${R}/config/caddy/Caddyfile"; then
+    cp /tmp/Caddyfile "${R}/config/caddy/Caddyfile"
+    echo "[sync] Caddyfile guncellendi"
+  else
+    echo "[sync] Caddyfile ayni"
+  fi
+fi
 REMOTE_DIR="${R}" bash "${R}/scripts/pi/fix-config-perms.sh"
-if docker ps --format '{{.Names}}' | grep -q '^homepage$'; then
+if [[ "$homepage_changed" == "1" ]] && docker ps --format '{{.Names}}' | grep -q '^homepage$'; then
   docker restart homepage >/dev/null 2>&1 || true
 fi
 REMOTE

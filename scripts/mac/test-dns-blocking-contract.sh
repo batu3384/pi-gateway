@@ -177,6 +177,8 @@ grep -q 'aaaa_disabled: true' "$PROJECT_DIR/config/adguard/AdGuardHome.yaml.temp
   || die "AGH template aaaa_disabled yok"
 grep -q 'AdGuardHome.yaml mevcut' "$PROJECT_DIR/scripts/mac/sync-rendered-configs.sh" \
   || die "sync AdGuardHome.yaml canli rewrite'i ezer"
+grep -q 'homepage services ayni' "$PROJECT_DIR/scripts/mac/sync-rendered-configs.sh" \
+  || die "sync homepage ayni dosyada restart ediyor"
 grep -Fq 'desired["disable_ipv6"]' "$PROJECT_DIR/scripts/pi/apply-adguard-dns.sh" \
   || die "apply-adguard-dns disable_ipv6 yok"
 grep -q 'cloudflare.com AAAA' "$PROJECT_DIR/scripts/pi/health-check.sh" \

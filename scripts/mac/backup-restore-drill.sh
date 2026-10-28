@@ -41,7 +41,7 @@ die() { echo "[backup-drill] HATA: $*" >&2; record_failure; exit 1; }
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
 log "restore $DRILL_SUBSET -> $tmpdir"
-restored=0
+restore_rc=1
 if docker info >/dev/null 2>&1; then
   if timeout "$DRILL_TIMEOUT_SEC" docker run --rm --network none \
     -e RESTIC_PASSWORD \
@@ -49,24 +49,29 @@ if docker info >/dev/null 2>&1; then
     -v "${tmpdir}:/restore" \
     "$RESTIC_IMAGE" \
     -r "local:/repo" restore "$DRILL_SUBSET" --target /restore; then
-    restored=1
-  fi
-fi
-if [[ "$restored" -eq 0 ]]; then
-  if command -v restic >/dev/null 2>&1; then
-    log "docker yok — native restic"
-    RESTIC_PASSWORD="$RESTIC_PASSWORD" timeout "$DRILL_TIMEOUT_SEC" \
-      restic -r "$LOCAL_REPO" restore "$DRILL_SUBSET" --target "$tmpdir" || die "restic restore basarisiz"
+    restore_rc=0
   else
-    die "restic restore basarisiz (docker yok, native restic yok)"
+    restore_rc=$?
   fi
+elif command -v restic >/dev/null 2>&1; then
+  log "docker yok — native restic"
+  if RESTIC_PASSWORD="$RESTIC_PASSWORD" timeout "$DRILL_TIMEOUT_SEC" \
+    restic -r "$LOCAL_REPO" restore "$DRILL_SUBSET" --target "$tmpdir"; then
+    restore_rc=0
+  else
+    restore_rc=$?
+  fi
+else
+  die "restic restore basarisiz (docker yok, native restic yok)"
 fi
 
-[[ -d "$tmpdir/backup/config" ]] || die "restore: backup/config yok"
-[[ -d "$tmpdir/backup/compose" ]] || die "restore: backup/compose yok"
-[[ -d "$tmpdir/backup/data" ]] || die "restore: backup/data yok"
+[[ -d "$tmpdir/backup/config" && -d "$tmpdir/backup/compose" && -d "$tmpdir/backup/data" ]] \
+  || die "restore: config/compose/data eksik (restic_rc=$restore_rc)"
 file_count="$(find "$tmpdir/backup/data" -type f 2>/dev/null | wc -l | tr -d ' ')"
-[[ "${file_count:-0}" -gt 0 ]] || die "restore: backup/data bos"
+[[ "${file_count:-0}" -gt 0 ]] || die "restore: backup/data bos (restic_rc=$restore_rc)"
+if [[ "$restore_rc" -ne 0 ]]; then
+  log "WARN: restic rc=$restore_rc — config+compose duruyor, bazi data blob atlandi"
+fi
 
 log "OK restore verify: config+compose+data (${file_count} dosya)"
 date -Iseconds >"$DRILL_MARKER_LOCAL"

@@ -63,9 +63,8 @@ cmd_stop() {
 
 cmd_start() {
   local wait_die="${1:-0}"
-  local i
   if [[ "$wait_die" == "1" ]]; then
-    for i in $(seq 1 "${DNS_FALLBACK_WAIT_DIE_SEC:-12}"); do
+    for _ in $(seq 1 "${DNS_FALLBACK_WAIT_DIE_SEC:-12}"); do
       agh_rewrite_ok || break
       sleep 1
     done
