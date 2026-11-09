@@ -77,6 +77,7 @@ else
 fi
 rm -f /tmp/AdGuardHome.yaml
 homepage_changed=0
+caddy_changed=0
 if [[ ! -f "${R}/config/homepage/services.yaml" ]] || ! cmp -s /tmp/homepage-services.yaml "${R}/config/homepage/services.yaml"; then
   cp /tmp/homepage-services.yaml "${R}/config/homepage/services.yaml"
   homepage_changed=1
@@ -88,6 +89,7 @@ if [[ -f /tmp/Caddyfile ]]; then
   if [[ ! -f "${R}/config/caddy/Caddyfile" ]] || ! cmp -s /tmp/Caddyfile "${R}/config/caddy/Caddyfile"; then
     cp /tmp/Caddyfile "${R}/config/caddy/Caddyfile"
     echo "[sync] Caddyfile guncellendi"
+    caddy_changed=1
   else
     echo "[sync] Caddyfile ayni"
   fi
@@ -95,6 +97,10 @@ fi
 REMOTE_DIR="${R}" bash "${R}/scripts/pi/fix-config-perms.sh"
 if [[ "$homepage_changed" == "1" ]] && docker ps --format '{{.Names}}' | grep -q '^homepage$'; then
   docker restart homepage >/dev/null 2>&1 || true
+fi
+if [[ "$caddy_changed" == "1" ]] && docker ps --format '{{.Names}}' | grep -qx '^caddy$'; then
+  docker exec caddy caddy reload --config /etc/caddy/Caddyfile >/dev/null 2>&1 \
+    || echo "[sync] WARN: caddy reload basarisiz"
 fi
 REMOTE
 

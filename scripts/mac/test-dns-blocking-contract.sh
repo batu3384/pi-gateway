@@ -179,6 +179,10 @@ grep -q 'AdGuardHome.yaml mevcut' "$PROJECT_DIR/scripts/mac/sync-rendered-config
   || die "sync AdGuardHome.yaml canli rewrite'i ezer"
 grep -q 'homepage services ayni' "$PROJECT_DIR/scripts/mac/sync-rendered-configs.sh" \
   || die "sync homepage ayni dosyada restart ediyor"
+grep -q 'caddy reload' "$PROJECT_DIR/scripts/mac/sync-rendered-configs.sh" \
+  || die "sync Caddyfile degisince reload yok"
+grep -q 'def _tcp_busy' "$PROJECT_DIR/scripts/lib/dns-dot-proxy.py" \
+  || die "dns-dot-proxy TCP kuyruk SERVFAIL yok"
 grep -Fq 'desired["disable_ipv6"]' "$PROJECT_DIR/scripts/pi/apply-adguard-dns.sh" \
   || die "apply-adguard-dns disable_ipv6 yok"
 grep -q 'cloudflare.com AAAA' "$PROJECT_DIR/scripts/pi/health-check.sh" \

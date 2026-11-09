@@ -149,7 +149,32 @@ def _handle_udp(sock: socket.socket, data: bytes, src: tuple) -> None:
         sock.sendto(ans, src)
 
 
-def _handle_tcp(conn: socket.socket, addr: tuple) -> None:
+def _tcp_busy(conn: socket.socket) -> None:
+    """Kuyruk dolu: sorguyu oku, TCP SERVFAIL yaz, kapat."""
+    try:
+        conn.settimeout(DOT_TIMEOUT)
+        hdr = b""
+        while len(hdr) < 2:
+            chunk = conn.recv(2 - len(hdr))
+            if not chunk:
+                return
+            hdr += chunk
+        (n,) = struct.unpack("!H", hdr)
+        if n == 0 or n > MAX_DNS:
+            return
+        q = b""
+        while len(q) < n:
+            chunk = conn.recv(n - len(q))
+            if not chunk:
+                return
+            q += chunk
+        fail = servfail(q)
+        if fail:
+            conn.sendall(struct.pack("!H", len(fail)) + fail)
+    except OSError:
+        return
+    finally:
+        conn.close()
     host = addr[0]
     if host.startswith("::ffff:"):
         host = host[7:]
@@ -303,7 +328,7 @@ def serve() -> int:
                 except OSError:
                     continue
                 if not _spawn(_handle_tcp, (conn, addr)):
-                    conn.close()
+                    _tcp_busy(conn)
 
 
 def self_check() -> None:

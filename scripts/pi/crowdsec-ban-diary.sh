@@ -24,10 +24,13 @@ fi
 
 docker ps --format '{{.Names}}' | grep -qx crowdsec || exit 0
 
-if ! raw="$(docker exec crowdsec cscli decisions list -o json 2>/dev/null)"; then
-  log "HATA: cscli decisions"
+errf="$(mktemp)"
+if ! raw="$(docker exec crowdsec cscli decisions list -o json 2>"$errf")"; then
+  log "HATA: cscli decisions: $(tr '\n' ' ' <"$errf" | head -c 200)"
+  rm -f "$errf"
   exit 1
 fi
+rm -f "$errf"
 body="$(printf '%s\n' "$raw" | python3 "$FORMAT_PY")" || { log "HATA: diary format"; exit 1; }
 [[ -n "${body// }" ]] || { log "ban yok — atlandi"; exit 0; }
 

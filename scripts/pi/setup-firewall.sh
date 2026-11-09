@@ -71,6 +71,23 @@ delete_lan_admin_port() {
     attempt=$((attempt + 1))
   done
 }
+delete_wide_pi_gateway_docker_rules() {
+  # /16 altı ( /8 /12 ) docker kaynaklı admin kuralı. Numara kayınca baştan tara.
+  local line cidr prefix num
+  line="$(sudo ufw status numbered 2>/dev/null | grep -F 'pi-gateway docker' | while read -r row; do
+    cidr="$(printf '%s\n' "$row" | grep -oE '[0-9a-fA-F:.]+/[0-9]+' | head -1)"
+    prefix="${cidr##*/}"
+    [[ "$prefix" =~ ^[0-9]+$ ]] || continue
+    (( prefix < 16 )) || continue
+    printf '%s\n' "$row"
+    break
+  done)"
+  [[ -n "$line" ]] || return 0
+  num="$(printf '%s\n' "$line" | ufw_rule_num)"
+  [[ -n "$num" ]] || return 0
+  sudo ufw --force delete "$num" >/dev/null 2>&1 || return 0
+  delete_wide_pi_gateway_docker_rules
+}
 delete_ufw_rules_matching() {
   local pattern="$1"
   local extra="${2:-}"
@@ -151,6 +168,8 @@ setup_ufw() {
   delete_ufw_rules_matching 'pi-gateway docker-adguard'
   delete_ufw_rules_matching 'pi-gateway docker-bridge-adguard'
   delete_ufw_rules_matching 'pi-gateway docker-caddy-adguard'
+  # GraphQL 20214 Caddy kullanmaz. compose subnet olmasa da eski kurali sil.
+  delete_ufw_rules_matching 'pi-gateway docker-netalertx-graphql'
   # AdGuard host network — compose_default + genis docker bridge (subnet drift)
   compose_subnet="$(docker network inspect compose_default -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}' 2>/dev/null || true)"
   if [[ -n "$compose_subnet" ]]; then
@@ -159,14 +178,12 @@ setup_ufw() {
       delete_ufw_rules_matching 'pi-gateway docker-netalertx'
       netalert_port="${NETALERTX_PORT:-20211}"
       sudo ufw allow from "$compose_subnet" to any port "$netalert_port" proto tcp comment 'pi-gateway docker-netalertx'
-      # 20214 GraphQL Caddy kullanmaz. n8n ayni koprude; acik birakma.
-      delete_ufw_rules_matching 'pi-gateway docker-netalertx-graphql'
     fi
   else
     log "WARN: compose_default subnet bulunamadi — docker-adguard UFW kurali atlandi"
   fi
-  # Ek docker bridge subnet'leri. /12 ve daha genis = tum docker ozel ag; Caddy /16 yeter.
-  delete_ufw_rules_matching 'pi-gateway docker' '172.16.0.0/12'
+  # Ek docker bridge subnet'leri. /16 altı kaynak admin portuna yazılmaz.
+  delete_wide_pi_gateway_docker_rules
   while IFS= read -r _dock_subnet; do
     [[ -n "$_dock_subnet" ]] || continue
     [[ "$_dock_subnet" == "$compose_subnet" ]] && continue
