@@ -153,6 +153,7 @@ if grep -q 'if ! run_restic snapshots' "$restic" && \
   die "C12: corrupt snapshot failure still directly init"
 fi
 ok "C12 Restic corrupt-repo gate"
+grep -q 'blocks.bak' "$restic" || die "C12: prometheus bak yedek disi degil"
 
 # C13: atomic/offsite pull must not combine delete with ignore-errors
 grep -q 'rsync.*--delete.*--ignore-errors' "$pull" && \

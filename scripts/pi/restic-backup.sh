@@ -81,6 +81,11 @@ do_backup() {
     --host "$RESTIC_BACKUP_HOST" \
     --exclude '/backup/data/backups/restic' \
     --exclude '/backup/data/**/work/data' \
+    --exclude '/backup/data/prometheus/blocks.bak.*' \
+    --exclude '/backup/data/prometheus.bak.corrupt.*' \
+    --exclude '/backup/data/uptime-kuma/kuma.db.corrupt-*' \
+    --exclude '/backup/data/uptime-kuma/kuma.db.pre-recover' \
+    --exclude '/backup/data/uptime-kuma/error.log' \
     --exclude '*.tmp'
 }
 REINIT_DONE=0
