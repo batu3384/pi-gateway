@@ -71,6 +71,8 @@ file_count="$(find "$tmpdir/backup/data" -type f 2>/dev/null | wc -l | tr -d ' '
 [[ "${file_count:-0}" -gt 0 ]] || die "restore: backup/data bos (restic_rc=$restore_rc)"
 if [[ "$restore_rc" -ne 0 ]]; then
   log "WARN: restic rc=$restore_rc — config+compose duruyor, bazi data blob atlandi"
+  log "kismi restore — basari damgasi yazilmadi"
+  exit 0
 fi
 
 log "OK restore verify: config+compose+data (${file_count} dosya)"

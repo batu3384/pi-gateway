@@ -289,6 +289,8 @@ ok "C22 backup failure visible"
 # C22b: failed restore drills must remain visible after the last success
 grep -q 'bazi data blob atlandi' "$backup_drill" \
   || die "C22b: drill config kapisi blob hatasini ayirmiyor"
+grep -q 'basari damgasi yazilmadi' "$backup_drill" \
+  || die "C22b: kismi restore basari damgasi yaziyor"
 grep -q 'DRILL_FAILURE_MARKER_PI\|record_failure' "$backup_drill" \
   || die "C22b: restore drill failure marker yok"
 grep -q 'drill_failure_marker\|backup-restore-drill-failed' "$health" \
