@@ -240,7 +240,8 @@ grep -q '__CADDY_BASIC_AUTH__' "$PROJECT_DIR/config/caddy/Caddyfile.template" \
 grep -A3 'http://status\.__LAN_DOMAIN__' "$PROJECT_DIR/config/caddy/Caddyfile.template" | grep -q '__CADDY_BASIC_AUTH__' \
   || die "status Caddy auth yok"
 grep -A6 'devices.__LAN_DOMAIN__' "$PROJECT_DIR/config/caddy/Caddyfile.tls.template" | grep -q '__CADDY_BASIC_AUTH__' \
-  || die "devices Caddy auth yok"
+  && die "devices Caddy auth VAR — olmamali (NetAlertX kendi sifresi; Caddy auth = API popup dongusu, smoke netalertx-caddy-no-basic-auth)"
+ok "devices Caddy auth yok (dogru)"
 ok "gateway/status Caddy auth"
 
 grep -q 'RENDER_MARKER' "$PROJECT_DIR/scripts/pi/setup-n8n-workflows.sh" \
