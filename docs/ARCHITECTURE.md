@@ -91,7 +91,7 @@ Tam ev kilidi = başka L2 (OpenWrt) veya cihaz DNS. İkisi de bu hedefte yok. Mi
 | Network inventory | NetAlertX | LAN device discovery, new/offline alerts |
 | Recovery | recover-stack.sh | Restart unhealthy / degraded stack |
 | Security | UFW + CrowdSec | LAN-scoped admin ports, SSH protection |
-| Host | log2ram, sysctl tuning, watchdog | SD longevity, UDP performance |
+| Host | journald persistent cap (200M), sysctl tuning, watchdog | SD longevity, UDP performance |
 | Remote | Tailscale (host) | Panels `100.x` + owner DNS to AdGuard `:53` |
 | Storage | `/mnt/ssd/pi-gateway-data` (symlink `~/pi-gateway/data`) | AdGuard, Kuma, n8n, backups |
 
