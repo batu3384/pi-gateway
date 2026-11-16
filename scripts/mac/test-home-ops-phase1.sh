@@ -14,10 +14,6 @@ ok "health-dns çift kesildi + kart"
 n8n="$ROOT/scripts/pi/setup-n8n-workflows.sh"
 grep -q 'deactivate_workflow "Pi Gateway — Uptime Kuma Alert"' "$n8n" \
   || die "n8n Kuma deactivate yok"
-grep -q 'delete_notification' "$ROOT/scripts/pi/setup-uptime-kuma.sh" \
-  || die "Kuma notification silme yok"
-grep -q 'n8n-kuma-telegram-off' "$ROOT/scripts/pi/smoke-test.sh" \
-  || die "smoke kuma telegram-off yok"
 ok "Kuma Telegram kapali"
 
 card="$ROOT/scripts/lib/telegram-status-card.py"
@@ -34,7 +30,6 @@ ok "durum karti + TR menu"
 
 python3 "$ROOT/scripts/lib/gateway-probes.py" --self-check || die "gateway-probes"
 python3 "$ROOT/scripts/lib/quake-alert.py" --self-check || die "quake-alert"
-bash "$ROOT/scripts/pi/kuma-monthly-report.sh" --self-check || die "kuma-report"
 bash "$ROOT/scripts/pi/isp-speedtest.sh" --self-check || die "speedtest"
 bash "$ROOT/scripts/pi/export-adguard-metrics.sh" --self-check || die "adguard-metrics"
 bash "$ROOT/scripts/pi/ibb-air-quality.sh" --self-check || die "ibb-air"
@@ -66,7 +61,6 @@ grep -q 'who_home' "$ROOT/config/homepage/services.yaml.template" || die "homepa
 grep -q 'def online_devices' "$ROOT/scripts/lib/netalert-devices.py" || die "online_devices yok"
 ok "A5 B2 B3 panolar"
 
-[[ -f "$ROOT/host/systemd/pi-gateway-kuma-report.timer" ]] || die "kuma timer yok"
 [[ -f "$ROOT/host/systemd/pi-gateway-speedtest.timer" ]] || die "speedtest timer yok"
 [[ -f "$ROOT/host/systemd/pi-gateway-ibb.timer" ]] || die "ibb timer yok"
 grep -q 'pi-gateway-ibb.timer' "$ROOT/scripts/pi/setup-home-ops-timers.sh" \

@@ -3,7 +3,9 @@ Description=Pi Gateway CrowdSec UFW sync timer
 
 [Timer]
 OnBootSec=2min
-OnUnitActiveSec=1min
+# ponytail: host firewall-bouncer (canli iptables) birincil; bu timer yalniz
+# bouncer olumunde fallback — 1dk'lik poll 0 kural basiyordu, 5dk yeterli
+OnUnitActiveSec=5min
 AccuracySec=30s
 
 [Install]

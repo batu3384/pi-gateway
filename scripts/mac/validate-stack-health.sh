@@ -246,8 +246,6 @@ ok "gateway/status Caddy auth"
 
 grep -q 'RENDER_MARKER' "$PROJECT_DIR/scripts/pi/setup-n8n-workflows.sh" \
   || die "n8n workflow render marker yok"
-grep -q '__PANEL_PROTOCOL__' "$PROJECT_DIR/config/n8n/uptime-kuma-alert.workflow.json" \
-  || die "n8n uptime workflow PANEL_PROTOCOL yok"
 grep -q 'ensure-n8n-encryption-key' "$PROJECT_DIR/scripts/pi/post-deploy.sh" \
   || die "post-deploy n8n encryption key yok"
 grep -q 'deactivate_workflow "Pi Gateway — Uptime Kuma Alert"' "$PROJECT_DIR/scripts/pi/setup-n8n-workflows.sh" \
@@ -489,10 +487,6 @@ ok "ssd-root-harden script"
 grep -q 'sd_data_native_ok' "$PROJECT_DIR/scripts/lib/stack-health.sh" \
   || die "sd_data_native_ok helper yok"
 ok "sd native data fallback helper"
-
-grep -q 'notification:.*silindi\|delete_notification' "$PROJECT_DIR/scripts/pi/setup-uptime-kuma.sh" \
-  || die "Kuma Telegram/n8n notification silme yok"
-ok "Kuma native Telegram kapali"
 
 grep -q 'notify_transition_peek' "$PROJECT_DIR/scripts/lib/notify.sh" \
   || die "notify transition peek yok"

@@ -195,4 +195,4 @@ tailscale-dns: check-pi-env
 
 n8n-workflows: check-pi-env
 	@chmod +x scripts/pi/setup-n8n-workflows.sh 2>/dev/null || true
-	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-n8n-workflows.sh" && REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-uptime-kuma.sh"'
+	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-n8n-workflows.sh"'

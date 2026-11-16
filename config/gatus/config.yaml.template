@@ -1,0 +1,103 @@
+# Pi Gateway Gatus — config-as-code (Kuma'nin declarative kopyasi)
+# Render: render-config.sh — envsubst: TELEGRAM + GATUS_PUSH tokenlari
+# UI: status.home (Caddy basic auth arkasi). Storage: ../data/gatus (sqlite)
+log:
+  level: info
+
+storage:
+  type: sqlite
+  path: /data/gatus.db
+
+alerting:
+  telegram:
+    token: "${TELEGRAM_BOT_TOKEN}"
+    default-id: "${TELEGRAM_CHAT_ID}"
+    # Sadece gercek kesintilerde; her check hatasi spam olmasin
+    default-enabled: true
+    failure-threshold: 3
+
+# SLO heartbeat'lar: push-slo-heartbeat.sh (health timer) buraya POST eder
+external-endpoints:
+  - name: slo-storage
+    group: slo
+    token: "${GATUS_PUSH_TOKEN_STORAGE}"
+  - name: slo-offsite-backup
+    group: slo
+    token: "${GATUS_PUSH_TOKEN_OFFSITE}"
+  - name: slo-restore-drill
+    group: slo
+    token: "${GATUS_PUSH_TOKEN_DRILL}"
+
+endpoints:
+  - name: AdGuard DNS
+    group: dns
+    url: http://172.17.0.1:8080/
+    interval: 2m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Homepage
+    group: panels
+    url: http://homepage:3000/
+    interval: 2m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Caddy gateway
+    group: panels
+    url: "https://caddy:443/"
+    interval: 2m
+    client:
+      insecure: true
+    conditions:
+      - "[STATUS] < 500"
+
+  - name: Dozzle
+    group: panels
+    url: http://dozzle:8080/
+    interval: 2m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Gatus self
+    group: panels
+    url: http://localhost:8080/
+    interval: 5m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: NetAlertX
+    group: panels
+    url: http://172.17.0.1:20211/
+    interval: 2m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Grafana
+    group: panels
+    url: http://grafana:3000/api/health
+    interval: 2m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: Prometheus
+    group: monitoring
+    url: http://prometheus:9090/-/ready
+    interval: 2m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: node-exporter
+    group: monitoring
+    url: http://node-exporter:9100/metrics
+    interval: 2m
+    conditions:
+      - "[STATUS] == 200"
+
+  - name: gateway-state
+    group: monitoring
+    url: http://gateway-state/state.json
+    interval: 2m
+    conditions:
+      - "[STATUS] == 200"
+      - "[BODY].storage_degraded == 0"

@@ -19,7 +19,7 @@ http://gateway.__LAN_DOMAIN__, http://panel.__LAN_DOMAIN__ {
 http://status.__LAN_DOMAIN__ {
   import security_headers
   __CADDY_BASIC_AUTH__
-  reverse_proxy uptime-kuma:3001
+  reverse_proxy gatus:8080
 }
 
 http://dns.__LAN_DOMAIN__ {

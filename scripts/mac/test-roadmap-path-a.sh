@@ -40,9 +40,8 @@ grep -q 'config-drift' "$ROOT/Makefile" || die "Makefile config-drift yok"
 ok "config drift"
 
 [[ -f "$ROOT/docs/SLO.md" ]] || die "SLO.md yok"
-[[ -f "$ROOT/scripts/pi/setup-slo-monitors.sh" ]] || die "setup-slo-monitors yok"
 [[ -f "$ROOT/scripts/pi/push-slo-heartbeat.sh" ]] || die "push-slo-heartbeat yok"
-grep -q 'setup-slo-monitors' "$ROOT/scripts/pi/post-deploy.sh" || die "post-deploy slo yok"
+grep -q 'GATUS_PUSH_TOKEN_STORAGE' "$ROOT/scripts/pi/push-slo-heartbeat.sh" || die "push-slo gatus token yok"
 ok "SLO monitors"
 
 grep -q 'post-deploy-integration' "$ROOT/scripts/pi/post-deploy.sh" || die "post-deploy integration yok"

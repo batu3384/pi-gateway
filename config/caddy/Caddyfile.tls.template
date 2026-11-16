@@ -17,7 +17,7 @@ status.__LAN_DOMAIN__ {
   tls /etc/caddy/certs/__LAN_DOMAIN__.pem /etc/caddy/certs/__LAN_DOMAIN__-key.pem
   import security_headers
   __CADDY_BASIC_AUTH__
-  reverse_proxy uptime-kuma:3001
+  reverse_proxy gatus:8080
 }
 
 dns.__LAN_DOMAIN__ {

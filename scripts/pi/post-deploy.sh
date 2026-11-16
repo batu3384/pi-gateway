@@ -176,9 +176,6 @@ if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
   run_step_critical "NetAlertX ag envanteri" "$SCRIPT_DIR/setup-netalertx.sh"
   run_step_critical "NetAlert DB erisim" "$SCRIPT_DIR/ensure-netalert-db-access.sh"
 fi
-if docker ps --format '{{.Names}}' | grep -q '^uptime-kuma$'; then
-  run_step_critical "Uptime Kuma monitorler" "$SCRIPT_DIR/setup-uptime-kuma.sh"
-fi
 # LAN IP panel yollari (Tailscale yoksa da)
 if [[ -n "${PI_STATIC_IP:-}" && -f "${REMOTE_DIR}/config/caddy/Caddyfile" ]]; then
   run_step_optional "LAN IP panel yollari" "$SCRIPT_DIR/setup-caddy-lan-ip.sh"
@@ -221,7 +218,7 @@ if [[ "$DEPLOY_DEGRADED" -eq 0 ]]; then
       fi
     fi
   fi
-  run_step_optional "SLO push monitors" "$SCRIPT_DIR/setup-slo-monitors.sh"
+  # SLO heartbeatlar: Gatus external-endpoints (config-as-code); setup scripti kaldırıldı
   run_step_optional "SSD SMART timer" "$SCRIPT_DIR/setup-ssd-smart-timer.sh"
   run_step_optional "Home ops timers" "$SCRIPT_DIR/setup-home-ops-timers.sh"
   run_step_critical "Post-deploy integration" "$SCRIPT_DIR/post-deploy-integration.sh"

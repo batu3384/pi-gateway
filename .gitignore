@@ -23,3 +23,5 @@ credentials/
 __pycache__/
 *.py[cod]
 *.pyc
+config/gatus/config.yaml
+data/gatus/

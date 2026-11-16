@@ -174,6 +174,23 @@ Path(dst).write_text(text)
 PY
 fi
 
+# Gatus: Kuma'nin declarative kopyasi (ENABLE_GATUS=true) — push tokenlari
+# ilk kurulusta uretilir ve .env'te korunur (Kuma slo-push-tokens.env modeli)
+if [[ "${ENABLE_GATUS:-true}" == "true" ]]; then
+  for key in GATUS_PUSH_TOKEN_STORAGE GATUS_PUSH_TOKEN_OFFSITE GATUS_PUSH_TOKEN_DRILL; do
+    if ! grep -q "^${key}=" "$PROJECT_DIR/.env" 2>/dev/null; then
+      printf '\n# Gatus SLO push token (%s)\n%s=%s\n' "$key" "$key" "$(openssl rand -hex 16)" >>"$PROJECT_DIR/.env"
+    fi
+  done
+  for key in GATUS_PUSH_TOKEN_STORAGE GATUS_PUSH_TOKEN_OFFSITE GATUS_PUSH_TOKEN_DRILL TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID; do
+    eval "export $key=\"$(grep "^${key}=" "$PROJECT_DIR/.env" | head -1 | cut -d= -f2-)\""
+  done
+  envsubst '${TELEGRAM_BOT_TOKEN} ${TELEGRAM_CHAT_ID} ${GATUS_PUSH_TOKEN_STORAGE} ${GATUS_PUSH_TOKEN_OFFSITE} ${GATUS_PUSH_TOKEN_DRILL}' \
+    < "$PROJECT_DIR/config/gatus/config.yaml.template" \
+    > "$PROJECT_DIR/config/gatus/config.yaml"
+  log "Rendered Gatus config (ENABLE_GATUS=true)"
+fi
+
 envsubst '${PI_STATIC_IP} ${LAN_PREFIX} ${LAN_GATEWAY} ${PI_INTERFACE} ${PI_IPV6_ULA}' \
   < "$PROJECT_DIR/host/dhcpcd/pi-gateway.conf.template" \
   > "$PROJECT_DIR/host/dhcpcd/pi-gateway.conf"

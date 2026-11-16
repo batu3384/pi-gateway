@@ -145,7 +145,7 @@ if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
   esac
 fi
 run_check "homepage" curl -fsS "http://127.0.0.1:3040"
-run_check "uptime-kuma" curl -fsS "http://127.0.0.1:3001"
+run_check "gatus" curl -fsS "http://127.0.0.1:3001"
 run_check "adguard-ui" curl -fsS "http://127.0.0.1:${ADGUARD_WEB_PORT}/"
 run_check "adguard-no-popup-stack" agh_no_popup_stack
 if [[ "${ENABLE_CADDY:-true}" == "true" ]] && [[ -z "${CADDY_AUTH_PASSWORD:-}" ]]; then
