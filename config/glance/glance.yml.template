@@ -1,0 +1,54 @@
+# Pi Gateway Glance — dashboard (Homepage yerine, 38k stars)
+# Render: render-config.sh — envsubst: LAN_DOMAIN
+# Dokuman: https://github.com/glanceapp/glance/blob/main/docs/configuration.md
+pages:
+  - name: Pi Gateway
+    columns:
+      - size: full
+        widgets:
+          - type: monitor
+            cache: 1m
+            title: Paneller
+            sites:
+              - title: Gatus (status)
+                site: http://gatus:8080/
+              - title: Gateway-state
+                site: http://gateway-state/state.json
+              - title: Dozzle (logs)
+                site: http://dozzle:8080/
+          - type: monitor
+            cache: 1m
+            title: Coredns
+            sites:
+              - title: AdGuard
+                site: http://172.17.0.1:8080/
+              - title: NetAlertX
+                site: http://172.17.0.1:20211/
+
+      - size: full
+        widgets:
+          - type: custom-api
+            title: Gateway durumu
+            url: http://gateway-state/state.json
+            template: |
+              SSD sağlıklı: {{ .JSON.Int "ssd_mount_healthy" }} ·
+              DNS kapsamı: {{ .JSON.String "dns_coverage_status" }} ·
+              Offsite yedek yaşı: {{ .JSON.Int "offsite_backup_age_days" }} gün ·
+              Drill yaşı: {{ .JSON.Int "backup_restore_drill_age_days" }} gün ·
+              Drill fail: {{ .JSON.Int "backup_restore_drill_failed" }} ·
+              Root: {{ .JSON.Int "root_usage_pct" }}% · SSD: {{ .JSON.Int "ssd_usage_pct" }}%
+
+          - type: bookmarks
+            groups:
+              - title: Paneller
+                links:
+                  - title: Gatus (status) — izleme ve SLO
+                    url: https://status.${LAN_DOMAIN}
+                  - title: AdGuard (dns) — DNS filtre yönetimi
+                    url: https://dns.${LAN_DOMAIN}
+                  - title: Grafana — metrik grafikleri
+                    url: https://grafana.${LAN_DOMAIN}
+                  - title: Dozzle (logs) — konteyner logları
+                    url: https://logs.${LAN_DOMAIN}
+                  - title: NetAlertX (devices) — ağ envanteri
+                    url: https://devices.${LAN_DOMAIN}

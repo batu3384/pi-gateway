@@ -95,21 +95,20 @@ services:
       retries: 3
       start_period: 15s
 
-  homepage:
-    image: ghcr.io/gethomepage/homepage@sha256:a0b71c8e757298d02560186bab9fbe3fc2d375c523a62cc1019177b37e48aa28
-    container_name: homepage
+  glance:
+    image: glanceapp/glance@sha256:4d7445bc7971836858ffddee5d7501f1efbabb6e694a45b1dde1a789bb1943bb
+    container_name: glance
     logging: *default-logging
     restart: unless-stopped
     depends_on:
       gateway-state:
         condition: service_started
     ports:
-      - "127.0.0.1:3040:3000"
+      - "127.0.0.1:3040:8080"
     volumes:
-      - ../config/homepage:/app/config
-      # ponytail: docker.sock yok — LAN'da auth'suz panel + sock = Docker API yuzeyi
-    environment:
-      HOMEPAGE_ALLOWED_HOSTS: "gateway.${LAN_DOMAIN:-home},panel.${LAN_DOMAIN:-home},localhost,127.0.0.1"
+      - ../config/glance:/app/config:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   gatus:
     image: ghcr.io/twin/gatus@sha256:085ed63da963728965d00a3c78aa6167e3bf135218485b893201758e079e8415

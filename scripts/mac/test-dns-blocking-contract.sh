@@ -177,8 +177,6 @@ grep -q 'aaaa_disabled: true' "$PROJECT_DIR/config/adguard/AdGuardHome.yaml.temp
   || die "AGH template aaaa_disabled yok"
 grep -q 'AdGuardHome.yaml mevcut' "$PROJECT_DIR/scripts/mac/sync-rendered-configs.sh" \
   || die "sync AdGuardHome.yaml canli rewrite'i ezer"
-grep -q 'homepage services ayni' "$PROJECT_DIR/scripts/mac/sync-rendered-configs.sh" \
-  || die "sync homepage ayni dosyada restart ediyor"
 grep -q 'caddy reload' "$PROJECT_DIR/scripts/mac/sync-rendered-configs.sh" \
   || die "sync Caddyfile degisince reload yok"
 grep -q 'def _tcp_busy' "$PROJECT_DIR/scripts/lib/dns-dot-proxy.py" \
@@ -199,8 +197,6 @@ grep -q 'QTYPE_AAAA' "$PROJECT_DIR/scripts/lib/dns-dot-proxy.py" \
   || die "dns-dot-proxy AAAA NODATA yok"
 grep -q 'def servfail' "$PROJECT_DIR/scripts/lib/dns-dot-proxy.py" \
   || die "dns-dot-proxy kuyruk dolu SERVFAIL yok"
-grep -q 'modem DNS2' "$PROJECT_DIR/config/homepage/services.yaml.template" \
-  || die "homepage DNS2 aciklamasi yok"
 python3 - "$PROJECT_DIR/scripts/pi/recover-compose-up.sh" <<'PY' || die "recover-compose :53 wait dozzle oncesi degil"
 from pathlib import Path
 import sys

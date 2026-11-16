@@ -17,7 +17,6 @@ log "Rendered configs -> ${PI_USER}@${PI_HOST}"
 
 scp "$PROJECT_DIR/.env" "${PI_USER}@${PI_HOST}:/tmp/pi-gateway.env.new"
 scp "$PROJECT_DIR/config/adguard/AdGuardHome.yaml" "${PI_USER}@${PI_HOST}:/tmp/AdGuardHome.yaml"
-scp "$PROJECT_DIR/config/homepage/services.yaml" "${PI_USER}@${PI_HOST}:/tmp/homepage-services.yaml"
 [[ -f "$PROJECT_DIR/config/caddy/Caddyfile" ]] && \
   scp "$PROJECT_DIR/config/caddy/Caddyfile" "${PI_USER}@${PI_HOST}:/tmp/Caddyfile" || true
 
@@ -67,8 +66,7 @@ print("[env-merge] ok")
 PY
 rm -f "$NEW"
 # Container (adguard/homepage root) dosyayi root'a cevirebilir — cp oncesi sahiplik
-sudo chown "${PI_USER}:${PI_USER}" "${R}/config/adguard/AdGuardHome.yaml" \
-  "${R}/config/homepage/services.yaml" 2>/dev/null || true
+sudo chown "${PI_USER}:${PI_USER}" "${R}/config/adguard/AdGuardHome.yaml" 2>/dev/null || true
 # Canli AGH yaml API state (rewrite). Render edilmis Mac kopyasi her deploy'da siler.
 if [[ -s "${R}/config/adguard/AdGuardHome.yaml" ]]; then
   echo "[sync] AdGuardHome.yaml mevcut — uzerine yazilmadi"
@@ -76,15 +74,7 @@ else
   cp /tmp/AdGuardHome.yaml "${R}/config/adguard/AdGuardHome.yaml"
 fi
 rm -f /tmp/AdGuardHome.yaml
-homepage_changed=0
 caddy_changed=0
-if [[ ! -f "${R}/config/homepage/services.yaml" ]] || ! cmp -s /tmp/homepage-services.yaml "${R}/config/homepage/services.yaml"; then
-  cp /tmp/homepage-services.yaml "${R}/config/homepage/services.yaml"
-  homepage_changed=1
-  echo "[sync] homepage services guncellendi"
-else
-  echo "[sync] homepage services ayni — restart yok"
-fi
 if [[ -f /tmp/Caddyfile ]]; then
   if [[ ! -f "${R}/config/caddy/Caddyfile" ]] || ! cmp -s /tmp/Caddyfile "${R}/config/caddy/Caddyfile"; then
     cp /tmp/Caddyfile "${R}/config/caddy/Caddyfile"
@@ -95,9 +85,6 @@ if [[ -f /tmp/Caddyfile ]]; then
   fi
 fi
 REMOTE_DIR="${R}" bash "${R}/scripts/pi/fix-config-perms.sh"
-if [[ "$homepage_changed" == "1" ]] && docker ps --format '{{.Names}}' | grep -q '^homepage$'; then
-  docker restart homepage >/dev/null 2>&1 || true
-fi
 if [[ "$caddy_changed" == "1" ]] && docker ps --format '{{.Names}}' | grep -qx '^caddy$'; then
   docker exec caddy caddy reload --config /etc/caddy/Caddyfile >/dev/null 2>&1 \
     || echo "[sync] WARN: caddy reload basarisiz"

@@ -89,19 +89,14 @@ grep -q '/data/.disk-probe:/host-ssd:ro' "$compose" \
 ok "n8n disk-probe mount"
 
 grep -q '127.0.0.1:3040' "$compose" \
-  || die "homepage 127.0.0.1 bind degil"
+  || die "glance 127.0.0.1 bind degil"
 ok "admin portlar localhost bind"
 
-if grep -q 'HOMEPAGE_ALLOWED_HOSTS: "\*"' "$compose"; then
-  die "HOMEPAGE_ALLOWED_HOSTS hala *"
+# Glance docker.sock olmamali
+if awk '/^  glance:/,/^  [a-z]/ {print}' "$compose" | grep -q 'docker.sock'; then
+  die "glance hala docker.sock mount ediyor"
 fi
-ok "homepage allowed hosts kisitli"
-
-# Homepage docker.sock olmamali
-if awk '/^  homepage:/,/^  [a-z]/ {print}' "$compose" | grep -q 'docker.sock'; then
-  die "homepage hala docker.sock mount ediyor"
-fi
-ok "homepage docker.sock yok"
+ok "glance docker.sock yok"
 
 if awk '/^  dozzle:/,/^  [a-z]/ {print}' "$compose" | grep -q 'docker.sock'; then
   die "dozzle hala dogrudan docker.sock mount ediyor"

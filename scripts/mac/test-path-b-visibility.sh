@@ -12,7 +12,6 @@ grep -q 'node-exporter:' "$ROOT/compose/docker-compose.yml" || die "node-exporte
 [[ -f "$ROOT/config/grafana/provisioning/datasources/prometheus.yml" ]] || die "grafana datasource yok"
 [[ -f "$ROOT/config/grafana/provisioning/dashboards/json/pi-gateway.json" ]] || die "grafana dashboard yok"
 grep -q 'grafana\.' "$ROOT/config/caddy/Caddyfile.tls.template" || die "caddy grafana route yok"
-grep -q 'grafana' "$ROOT/config/homepage/services.yaml.template" || die "homepage grafana yok"
 grep -q 'canary-compose-update' "$ROOT/scripts/mac/deploy.sh" || die "deploy canary wire yok"
 grep -q 'apply-adguard-rewrites.sh' "$ROOT/scripts/pi/canary-compose-update.sh" \
   || die "canary rewrite apply yok"

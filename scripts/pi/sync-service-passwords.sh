@@ -22,7 +22,6 @@ run() {
 [[ -n "${AGH_ADMIN_PASSWORD:-}" ]] || { log "HATA: AGH_ADMIN_PASSWORD bos"; exit 1; }
 
 run "Dozzle" "$SCRIPT_DIR/setup-dozzle.sh"
-run "Uptime Kuma" "$SCRIPT_DIR/setup-uptime-kuma.sh"
 if [[ -x "$SCRIPT_DIR/setup-netalertx.sh" ]]; then
   run "NetAlertX" "$SCRIPT_DIR/setup-netalertx.sh"
 fi

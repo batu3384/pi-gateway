@@ -57,7 +57,6 @@ grep -q 'pi_gateway_adguard_top_client_queries' "$ROOT/config/grafana/provisioni
 grep -q 'pi_gateway_ibb_hki' "$ROOT/config/grafana/provisioning/dashboards/json/pi-gateway.json" \
   || die "grafana ibb hki yok"
 grep -q 'notify_ibb_hki_warn' "$ROOT/scripts/lib/notify.sh" || die "ibb notify yok"
-grep -q 'who_home' "$ROOT/config/homepage/services.yaml.template" || die "homepage kim-evde yok"
 grep -q 'def online_devices' "$ROOT/scripts/lib/netalert-devices.py" || die "online_devices yok"
 ok "A5 B2 B3 panolar"
 

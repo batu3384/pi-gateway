@@ -15,8 +15,6 @@ apply_unified_login() {
   export CADDY_AUTH_PASSWORD="$pass"
   export DOZZLE_ADMIN_USER="$user"
   export DOZZLE_ADMIN_PASSWORD="$pass"
-  export UPTIME_KUMA_ADMIN_USER="$user"
-  export UPTIME_KUMA_ADMIN_PASSWORD="$pass"
   export NETALERTX_PASSWORD="$pass"
   export GRAFANA_ADMIN_USER="$user"
   export GRAFANA_ADMIN_PASSWORD="$pass"

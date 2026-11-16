@@ -25,3 +25,4 @@ __pycache__/
 *.pyc
 config/gatus/config.yaml
 data/gatus/
+config/glance/glance.yml

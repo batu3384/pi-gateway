@@ -113,30 +113,6 @@ text = path.read_text()
 path.write_text(text.replace("__DHCP_BLOCK__", block))
 PY
 
-envsubst '${LAN_DOMAIN} ${PI_STATIC_IP} ${DOZZLE_PORT} ${UPTIME_KUMA_STATUS_SLUG} ${PANEL_PROTOCOL}' \
-  < "$PROJECT_DIR/config/homepage/services.yaml.template" \
-  > "$PROJECT_DIR/config/homepage/services.yaml"
-
-if [[ -f "$PROJECT_DIR/config/homepage/settings.yaml" ]]; then
-  :
-else
-  cat > "$PROJECT_DIR/config/homepage/settings.yaml" <<'EOF'
-title: Pi Gateway
-theme: dark
-color: slate
-headerStyle: clean
-showStats: true
-statusStyle: dot
-target: _self
-EOF
-fi
-
-cat > "$PROJECT_DIR/config/homepage/docker.yaml" <<'EOF'
----
-# Docker sock bilerek baglanmiyor (auth'suz panel + sock = Docker API riski).
-# Konteyner loglari: logs.home (Dozzle, auth'lu).
-EOF
-
 if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
   caddy_tpl="$PROJECT_DIR/config/caddy/Caddyfile.template"
   if [[ "${ENABLE_TLS:-true}" == "true" ]]; then
@@ -173,6 +149,12 @@ text = (text
 Path(dst).write_text(text)
 PY
 fi
+
+# Glance dashboard (Homepage yerine) — sadece LAN_DOMAIN placeholder
+export LAN_DOMAIN
+envsubst '${LAN_DOMAIN}' \
+  < "$PROJECT_DIR/config/glance/glance.yml.template" \
+  > "$PROJECT_DIR/config/glance/glance.yml"
 
 # Gatus: Kuma'nin declarative kopyasi (ENABLE_GATUS=true) — push tokenlari
 # ilk kurulusta uretilir ve .env'te korunur (Kuma slo-push-tokens.env modeli)
