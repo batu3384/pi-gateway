@@ -1,7 +1,15 @@
+# Log rotasyonu: JMicron SSD'de 563MB sınırsız json-log birikmişti (audit W2).
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   unbound:
     image: klutchell/unbound@sha256:a3412dcc5cf5e98dfde226bca68154a80027aaca5c4ffd864fc89140a446ff57
     container_name: unbound
+    logging: *default-logging
     restart: unless-stopped
     volumes:
       - ../config/unbound/unbound.conf:/etc/unbound/custom.conf.d/pi-gateway.conf:ro
@@ -16,6 +24,7 @@ services:
   adguard:
     image: adguard/adguardhome@sha256:a2085b04bbfc4759e68fa1d13d4e1558aede67c783c55820e036a95a36dd3ebf
     container_name: adguard
+    logging: *default-logging
     restart: unless-stopped
     network_mode: host
     # service_healthy waits forever after WAN :53 drop (unbound-host SERVFAIL).
@@ -35,6 +44,7 @@ services:
   docker-socket-proxy:
     image: tecnativa/docker-socket-proxy@sha256:9e4b9e7517a6b660f2cc903a19b257b1852d5b3344794e3ea334ff00ae677ac2
     container_name: docker-socket-proxy
+    logging: *default-logging
     restart: unless-stopped
     profiles: ["dozzle"]
     volumes:
@@ -50,6 +60,7 @@ services:
   caddy:
     image: caddy@sha256:b4e3952384eb9524a887633ce65c752dd7c71314d2c2acf98cd5c715aaa534f0
     container_name: caddy
+    logging: *default-logging
     restart: unless-stopped
     profiles: ["caddy"]
     ports:
@@ -70,6 +81,7 @@ services:
   gateway-state:
     image: nginx:1.27.4-alpine@sha256:4ff102c5d78d254a6f0da062b3cf39eaf07f01eec0927fd21e219d0af8bc0591
     container_name: gateway-state
+    logging: *default-logging
     restart: unless-stopped
     volumes:
       - /var/lib/pi-gateway:/usr/share/nginx/html:ro
@@ -85,6 +97,7 @@ services:
   homepage:
     image: ghcr.io/gethomepage/homepage@sha256:a0b71c8e757298d02560186bab9fbe3fc2d375c523a62cc1019177b37e48aa28
     container_name: homepage
+    logging: *default-logging
     restart: unless-stopped
     depends_on:
       gateway-state:
@@ -100,6 +113,7 @@ services:
   uptime-kuma:
     image: louislam/uptime-kuma@sha256:a8610b3b4c38077922ba51b036691e06887d7cefd91fe620fd3d6d23d03dc240
     container_name: uptime-kuma
+    logging: *default-logging
     restart: unless-stopped
     ports:
       - "127.0.0.1:3001:3001"
@@ -109,6 +123,7 @@ services:
   dozzle:
     image: amir20/dozzle@sha256:0df89c904da71e94a0c9ed3c89a890f01488321b5f10ac1e0c0bedcead9af6e4
     container_name: dozzle
+    logging: *default-logging
     restart: unless-stopped
     profiles: ["dozzle"]
     depends_on:
@@ -126,6 +141,7 @@ services:
   n8n:
     image: docker.n8n.io/n8nio/n8n@sha256:60ad3a0ffd2490c4f0d021b95cb4ef856c4d31fb7fa6a6ffa60fd0f4ed1d89ab
     container_name: n8n
+    logging: *default-logging
     restart: unless-stopped
     profiles: ["n8n"]
     ports:
@@ -151,6 +167,7 @@ services:
   netalertx:
     image: ghcr.io/netalertx/netalertx@sha256:e8d800176d35a2fcc856ddc68c354a6b472e535c6ed42c52d040b715ca9bb127
     container_name: netalertx
+    logging: *default-logging
     restart: unless-stopped
     profiles: ["netalert"]
     network_mode: host
@@ -184,6 +201,7 @@ services:
   crowdsec:
     image: crowdsecurity/crowdsec@sha256:091229068a9dab7f8c1ae41086669620da2980c6ccc26f9e358a75aaa7cb4a27
     container_name: crowdsec
+    logging: *default-logging
     restart: unless-stopped
     network_mode: host
     profiles: ["crowdsec"]
@@ -205,6 +223,7 @@ services:
   cloudflared:
     image: cloudflare/cloudflared@sha256:89ee50efb1e9cb2ae30281a8a404fed95eb8f02f0a972617526f8c5b417acae2
     container_name: cloudflared
+    logging: *default-logging
     restart: unless-stopped
     profiles: ["cloudflare"]
     command: tunnel run
@@ -215,6 +234,7 @@ services:
   node-exporter:
     image: prom/node-exporter:v1.8.2@sha256:4032c6d5bfd752342c3e631c2f1de93ba6b86c41db6b167b9a35372c139e7706
     container_name: node-exporter
+    logging: *default-logging
     restart: unless-stopped
     profiles: ["monitoring"]
     command:
@@ -234,6 +254,7 @@ services:
   prometheus:
     image: prom/prometheus:v2.55.1@sha256:f4def6b3b61109a6eeea59945d578bb7e926c36cb0e036a23e3ceb8b6de024ad
     container_name: prometheus
+    logging: *default-logging
     restart: unless-stopped
     profiles: ["monitoring"]
     depends_on:
@@ -254,6 +275,7 @@ services:
   grafana:
     image: grafana/grafana:11.4.0@sha256:d8ea37798ccc41061a62ab080f2676dda6bf7815558499f901bdb0f533a456fb
     container_name: grafana
+    logging: *default-logging
     restart: unless-stopped
     profiles: ["monitoring"]
     depends_on:
