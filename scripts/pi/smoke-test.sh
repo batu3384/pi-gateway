@@ -194,11 +194,11 @@ if [[ "$DEGRADED" -eq 0 ]]; then
     'docker exec caddy wget -q -O- http://gateway-state/state.json | grep -q storage_degraded'
 fi
 if [[ "${ENABLE_MONITORING:-true}" == "true" ]]; then
-  run_check "prometheus-container" bash -c 'docker ps --format "{{.Names}}" | grep -qx prometheus'
+  run_check "victoriametrics-container" bash -c 'docker ps --format "{{.Names}}" | grep -qx victoriametrics'
   run_check "grafana-container" bash -c 'docker ps --format "{{.Names}}" | grep -qx grafana'
   run_check "node-exporter-container" bash -c 'docker ps --format "{{.Names}}" | grep -qx node-exporter'
-  run_check "prometheus-ready" bash -c \
-    'curl -fsS --max-time 5 http://127.0.0.1:9090/-/ready | grep -qi ready'
+  run_check "victoriametrics-ready" bash -c \
+    'curl -fsS --max-time 5 http://127.0.0.1:9090/health | grep -q OK'
   run_check "grafana-ready" bash -c \
     'curl -fsS --max-time 5 http://127.0.0.1:'"${GRAFANA_PORT:-3030}"'/api/health | grep -q ok'
 fi

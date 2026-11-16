@@ -182,9 +182,9 @@ if grep -qi 'Strict-Transport-Security' "$PROJECT_DIR/config/caddy/Caddyfile.tls
 fi
 ok "Caddy security header (no HSTS)"
 
-grep -q 'No Alertmanager' "$PROJECT_DIR/config/prometheus/prometheus.yml" \
-  || die "prometheus dashboard-only yorum yok"
-ok "prometheus scrape-only notu"
+grep -q 'No Alertmanager' "$PROJECT_DIR/config/victoriametrics/promscrape.yml" \
+  || die "victoriametrics scrape-only yorum yok"
+ok "victoriametrics scrape-only notu"
 
 grep -q 'N8N_WEBHOOK_SECRET' "$PROJECT_DIR/.env.example" \
   || die "N8N_WEBHOOK_SECRET .env.example yok"

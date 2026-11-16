@@ -1,13 +1,12 @@
-# Scrape only — alerts are health-check + Uptime Kuma + Telegram (notify.sh).
+# Scrape only — alerts are health-check + Gatus + Telegram (notify.sh).
 # No Alertmanager. Grafana dashboards consume this.
 global:
   scrape_interval: 30s
-  evaluation_interval: 30s
 
 scrape_configs:
-  - job_name: prometheus
+  - job_name: victoriametrics
     static_configs:
-      - targets: ["localhost:9090"]
+      - targets: ["localhost:8428"]
 
   - job_name: node
     static_configs:

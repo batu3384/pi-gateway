@@ -15,7 +15,7 @@ REPEAT_SEC="${CONTAINER_RESTART_REPEAT_SEC:-21600}"
 WINDOW_SEC="${CONTAINER_RESTART_WINDOW_SEC:-900}"
 STABLE_SEC="${CONTAINER_RESTART_STABLE_SEC:-600}"
 STATE="${CONTAINER_WATCH_STATE_PATH:-/var/lib/pi-gateway/container-watch-state.json}"
-WATCH="${CONTAINER_WATCH_LIST:-docker-socket-proxy n8n prometheus grafana adguard unbound caddy crowdsec netalertx uptime-kuma node-exporter}"
+WATCH="${CONTAINER_WATCH_LIST:-docker-socket-proxy victoriametrics grafana adguard unbound caddy crowdsec netalertx node-exporter}"
 
 log() { echo "[container-watch] $*"; }
 

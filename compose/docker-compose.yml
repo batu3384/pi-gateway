@@ -260,9 +260,9 @@ services:
     ports:
       - "127.0.0.1:9100:9100"
 
-  prometheus:
-    image: prom/prometheus:v2.55.1@sha256:f4def6b3b61109a6eeea59945d578bb7e926c36cb0e036a23e3ceb8b6de024ad
-    container_name: prometheus
+  victoriametrics:
+    image: victoriametrics/victoria-metrics@sha256:da8a90ac0912f16589be2b96a6441a2fca4bca415c83783d972d92e3b5b66970
+    container_name: victoriametrics
     logging: *default-logging
     restart: unless-stopped
     profiles: ["monitoring"]
@@ -270,16 +270,14 @@ services:
       node-exporter:
         condition: service_started
     command:
-      - --config.file=/etc/prometheus/prometheus.yml
-      - --storage.tsdb.path=/prometheus
-      - --storage.tsdb.retention.time=30d
-      - --web.enable-lifecycle
-    user: "${PROMETHEUS_UID:-1000}:${PROMETHEUS_GID:-1000}"
+      - -promscrape.config=/etc/victoriametrics/promscrape.yml
+      - -storageDataPath=/victoria-metrics-data
+      - -retentionPeriod=1
     volumes:
-      - ../config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ../data/prometheus:/prometheus
+      - ../config/victoriametrics/promscrape.yml:/etc/victoriametrics/promscrape.yml:ro
+      - ../data/victoriametrics:/victoria-metrics-data
     ports:
-      - "127.0.0.1:9090:9090"
+      - "127.0.0.1:9090:8428"
 
   grafana:
     image: grafana/grafana:11.4.0@sha256:d8ea37798ccc41061a62ab080f2676dda6bf7815558499f901bdb0f533a456fb
@@ -288,7 +286,7 @@ services:
     restart: unless-stopped
     profiles: ["monitoring"]
     depends_on:
-      prometheus:
+      victoriametrics:
         condition: service_started
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-${AGH_ADMIN_USER:-admin}}
