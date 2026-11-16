@@ -93,6 +93,18 @@ if [[ "${_running}" != "true" ]]; then
   done
 fi
 
+# app.conf PHP (uid 20211) okumali — batu:0600 kalirsa UI 500 (2026-11-16 olayı).
+CONF_DIR="${DATA_DIR}/config"
+CONF_FILE="${CONF_DIR}/app.conf"
+if [[ -f "$CONF_FILE" ]]; then
+  _conf_owner="$(stat -c %u "$CONF_FILE" 2>/dev/null || echo "?")"
+  if [[ "$_conf_owner" != "20211" ]]; then
+    _run chown "20211:${_pi_gn}" "$CONF_FILE"
+    _run chmod 600 "$CONF_FILE"
+    echo "[ensure-netalert-db] app.conf sahipligi duzeltildi ($_conf_owner -> 20211)"
+  fi
+fi
+
 docker start netalertx >/dev/null 2>&1 || true
 
 [[ -f "$DB_FILE" ]] || {

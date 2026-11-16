@@ -191,7 +191,7 @@ if [[ "$DEGRADED" -eq 0 ]]; then
   run_check "gateway-metrics-prom" test -f /var/lib/pi-gateway/metrics/pi_gateway.prom
   run_check "gateway-state-container" bash -c 'docker ps --format "{{.Names}}" | grep -qx gateway-state'
   run_check "gateway-state-http" bash -c \
-    'docker exec gateway-state wget -q -O- http://127.0.0.1/state.json | grep -q storage_degraded'
+    'docker exec caddy wget -q -O- http://gateway-state/state.json | grep -q storage_degraded'
 fi
 if [[ "${ENABLE_MONITORING:-true}" == "true" ]]; then
   run_check "prometheus-container" bash -c 'docker ps --format "{{.Names}}" | grep -qx prometheus'
