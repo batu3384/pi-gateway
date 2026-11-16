@@ -57,7 +57,7 @@
 | `NETALERTX_GID` | `1000` örneği; NetAlertX container PGID host kullanıcı grubuyla eşleşmeli |
 | `ADGUARD_COVERAGE_AUDIT_ENABLED` | `false`; `true` iken health timer 2000 satır audit çalıştırır — rutin için `make audit-dns` yeter |
 | `ADGUARD_DNS_COVERAGE_STATE_PATH` | `/var/lib/pi-gateway/dns-coverage-state.json`; son kapsam kanıtı |
-| `ADGUARD_DNS_COVERAGE_STATE_MAX_AGE_SEC` | `600`; eski kapsam kanıtı metric’te `UNKNOWN` olur |
+| `ADGUARD_DNS_COVERAGE_STATE_MAX_AGE_SEC` | `1200`; eski kapsam kanıtı metric'te `UNKNOWN` olur. Audit timer 15dk (900s) — değer cycle'dan küçükse her döngü sonunda yanlış UNKNOWN düşer |
 
 ZTE H3600P credential'ları repo `.env` içine konmaz. `/etc/pi-gateway/modem-inventory.env`
 dosyasını root sahipli `0600` oluşturun (`MODEM_USERNAME=...`, `MODEM_PASSWORD=...`);
