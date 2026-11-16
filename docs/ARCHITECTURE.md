@@ -19,7 +19,7 @@ Production-grade single-node home dev/DNS server for Raspberry Pi 4B.
 |------|---------------------|------|
 | **dns-core** | `unbound`, `adguard` (always) | LAN DNS — keep up even when SSD degraded |
 | **panels** | `caddy`, homepage, uptime-kuma, `dozzle` | `*.home` UI via Caddy+TLS |
-| **automation** | `n8n`, `netalert`, `crowdsec` | Best-effort apps on SSD data |
+| **automation** | `netalert`, `crowdsec` | Best-effort apps on SSD data |
 | **edge** | `cloudflare` (token) | Optional public edge |
 
 Feature flags: `ENABLE_*` in `.env` → compose profiles (`scripts/lib/compose-profiles.sh`).
@@ -93,7 +93,7 @@ Tam ev kilidi = başka L2 (OpenWrt) veya cihaz DNS. İkisi de bu hedefte yok. Mi
 | Security | UFW + CrowdSec | LAN-scoped admin ports, SSH protection |
 | Host | journald persistent cap (200M), sysctl tuning, watchdog | SD longevity, UDP performance |
 | Remote | Tailscale (host) | Panels `100.x` + owner DNS to AdGuard `:53` |
-| Storage | `/mnt/ssd/pi-gateway-data` (symlink `~/pi-gateway/data`) | AdGuard, Kuma, n8n, backups |
+| Storage | `/mnt/ssd/pi-gateway-data` (symlink `~/pi-gateway/data`) | AdGuard, Kuma, backups |
 
 ## Phased rollout
 
@@ -102,8 +102,8 @@ Tam ev kilidi = başka L2 (OpenWrt) veya cihaz DNS. İkisi de bu hedefte yok. Mi
 | 0 Foundation | Done | Docker, SSD data disk, UFW, CrowdSec, Tailscale hook |
 | 1 DNS stack | Done | Unbound, AdGuard, Homepage, Uptime Kuma, Caddy, Dozzle |
 | 2 Backup | Done | Restic (timer); Forgejo/Syncthing removed |
-| 3 Advanced | Done | CrowdSec, n8n; Cloudflare Tunnel (with token) |
-| 4 Network visibility | Done | NetAlertX — `devices.home`, n8n webhook alerts |
+| 3 Advanced | Done | CrowdSec; Cloudflare Tunnel (with token). n8n kapatildi 2026-11 |
+| 4 Network visibility | Done | NetAlertX — `devices.home`, Telegram alerts |
 
 ## Network modes
 
@@ -137,7 +137,6 @@ USB SSD:      /mnt/ssd/
                 pi-gateway-data/   <- ~/pi-gateway/data symlink
                   adguard/work/
                   uptime-kuma/
-                  n8n/
                   netalertx/
                   backups/restic/
 ```

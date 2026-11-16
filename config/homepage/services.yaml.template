@@ -26,11 +26,6 @@ services:
       description: Container loglari
       icon: dozzle.png
 
-  - n8n:
-      href: ${PANEL_PROTOCOL}://n8n.${LAN_DOMAIN}
-      description: Otomasyon
-      icon: n8n.png
-
   - NetAlertX:
       href: ${PANEL_PROTOCOL}://devices.${LAN_DOMAIN}
       description: Ag cihaz envanteri

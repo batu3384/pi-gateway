@@ -28,12 +28,6 @@ http://dns.__LAN_DOMAIN__ {
   reverse_proxy host.docker.internal:__ADGUARD_WEB_PORT__
 }
 
-http://n8n.__LAN_DOMAIN__ {
-  import security_headers
-  __CADDY_BASIC_AUTH__
-  reverse_proxy n8n:5678
-}
-
 http://logs.__LAN_DOMAIN__ {
   import security_headers
   __CADDY_BASIC_AUTH__

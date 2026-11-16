@@ -68,7 +68,6 @@ Caddy basic_auth her yerde `AGH_ADMIN_USER`.
 | https://status.home | Uptime Kuma | same | same |
 | https://logs.home | Dozzle | same | same |
 | https://dns.home | AdGuard | same | `AGH_ADMIN_*` |
-| https://n8n.home | n8n | same | Owner (ilk kurulum; Caddy auth yeterli) |
 | https://grafana.home | Grafana | same | `AGH_ADMIN_*` |
 | https://devices.home | NetAlertX | — (API dongusu) | `AGH_ADMIN_*` |
 
