@@ -10,6 +10,13 @@ log() { echo "[hermes-tg-patch] $*"; }
 ADAPTER="${HERMES_HOME:-$HOME/.hermes}/hermes-agent/plugins/platforms/telegram/adapter.py"
 [[ -f "$ADAPTER" ]] || { log "HATA: adapter yok: $ADAPTER"; exit 1; }
 
+# v0.23+: upstream soğuk-başlatma wedge'ini kendisi çözdü (#59614 —
+# abandon_app_on_timeout + strict gate + bootstrap watchdog). Eski v0.20
+# patch'i yalnız eski kod şekli varsa uygulanır; yeni işaretler varsa atlanır.
+if grep -q 'abandon_app_on_timeout=require_progress' "$ADAPTER" && \
+   grep -q 'require_progress: bool = False' "$ADAPTER"; then
+  log "v0.23+ upstream fix tespit edildi — adapter patch atlanır"
+else
 python3 - "$ADAPTER" <<'PY'
 import pathlib, sys
 
@@ -132,6 +139,7 @@ if not (ok_req and ok_step):
     raise SystemExit(1)
 print("verified")
 PY
+fi
 
 # Dual-stack Happy-Eyeballs hang (#87015): pin Telegram API to known IPv4
 if ! grep -qE '^[[:space:]]*149\.154\.166\.110[[:space:]]+api\.telegram\.org' /etc/hosts 2>/dev/null; then
