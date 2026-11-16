@@ -273,13 +273,8 @@ _ssd_usb_py="${SCRIPT_DIR}/../lib/ssd-usb-metrics.py"
 [[ -f "$_ssd_usb_py" ]] || _ssd_usb_py="${REMOTE_DIR}/scripts/lib/ssd-usb-metrics.py"
 if [[ -f "$_ssd_usb_py" ]]; then
   python3 "$_ssd_usb_py" update --notify 2>/dev/null || true
-  if [[ -f /var/lib/pi-gateway/metrics/ssd_usb.prom ]]; then
-    if [[ "$(id -u)" -eq 0 ]]; then
-      cat /var/lib/pi-gateway/metrics/ssd_usb.prom >>"$METRICS_FILE"
-    else
-      run_as_needed bash -c "cat /var/lib/pi-gateway/metrics/ssd_usb.prom >>\"$METRICS_FILE\""
-    fi
-  fi
+  # ponytail: ssd_usb.prom textfile dir'de tek yazar kalir; pi_gateway.prom'a append
+  # node-exporter'da "collected before with same name" gather error üretir.
 fi
 echo "[export-state] OK ${METRICS_FILE}"
 
