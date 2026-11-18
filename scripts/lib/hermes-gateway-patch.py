@@ -43,6 +43,10 @@ def patch_shutdown_message(text: str) -> str:
     if _SHUTDOWN_V1 in text:
         return text.replace(_SHUTDOWN_V1, _SHUTDOWN_V2, 1)
     if _SHUTDOWN_UPSTREAM not in text:
+        # Hermes v0.23+: shutdown notice moved to run_shutdown_home_notice.py and is
+        # controlled natively via gateway_restart_notification=false in config.yaml.
+        if "_status_action_gerund" in text or "gateway.busy.action_restarting" in text:
+            return text
         raise SystemExit("VERIFY_FAIL: shutdown hint anchor missing")
     return text.replace(_SHUTDOWN_UPSTREAM, _SHUTDOWN_V2, 1)
 

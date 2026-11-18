@@ -16,14 +16,12 @@ log() { echo "[status-card] $*"; }
 notify_enabled || { log "TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID eksik"; exit 1; }
 [[ -f "$CARD_PY" ]] || { log "HATA: telegram-status-card.py yok"; exit 1; }
 
-if [[ -x "$REMOTE_DIR/scripts/pi/setup-tailscale-panel-ports.sh" ]]; then
-  bash "$REMOTE_DIR/scripts/pi/setup-tailscale-panel-ports.sh" || log "WARN: ts-panel-ports"
-fi
-
 export LAN_DOMAIN PI_STATIC_IP PANEL_PROTOCOL ENABLE_TLS
+export ENABLE_CADDY ENABLE_GATUS ENABLE_DOZZLE ENABLE_MONITORING ENABLE_NETALERTX ENABLE_N8N
+export TS_PANEL_DIRECT_PORTS
 export AGH_ADMIN_USER CADDY_AUTH_USER
 export HERMES_TELEGRAM_GATEWAY
-export DOZZLE_PORT ADGUARD_WEB_PORT N8N_PORT GRAFANA_PORT NETALERTX_PORT
+export GATUS_PORT DOZZLE_PORT ADGUARD_WEB_PORT N8N_PORT GRAFANA_PORT NETALERTX_PORT
 export TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID
 export PI_GATEWAY_HEALTH_OK="${PI_GATEWAY_HEALTH_OK:-1}"
 

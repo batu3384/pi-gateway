@@ -74,6 +74,8 @@ def patch_classifier(text: str) -> str:
             return text.replace(_FALLBACK_TRUE, _FALLBACK_FALSE, 1)
         return text
     if _NEEDLE not in text:
+        if "RETRYABLE_CLIENT_REASONS" in text:
+            return text
         raise SystemExit("VERIFY_FAIL: 429 rate_limit return anchor missing")
     return text.replace(_NEEDLE, _REPL, 1)
 

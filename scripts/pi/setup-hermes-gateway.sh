@@ -79,6 +79,9 @@ grep -qE '^TELEGRAM_ALLOWED_USERS=.+' "$hermes_env" || die "$hermes_env TELEGRAM
 sudo cp "$src" "/etc/systemd/system/$unit"
 sudo sed -i "s|PI_USER|${USER}|g" "/etc/systemd/system/$unit" 2>/dev/null || \
   sudo sed -i '' "s|PI_USER|${USER}|g" "/etc/systemd/system/$unit" 2>/dev/null || true
+if ! grep -q '^SuccessExitStatus=' "/etc/systemd/system/$unit" 2>/dev/null; then
+  sudo sed -i '/^RestartSec=/a SuccessExitStatus=0 1 143' "/etc/systemd/system/$unit" 2>/dev/null || true
+fi
 
 [[ -x "$SCRIPT_DIR/patch-hermes-telegram-pi.sh" ]] || die "patch-hermes-telegram-pi.sh yok"
 bash "$SCRIPT_DIR/patch-hermes-telegram-pi.sh" || die "hermes telegram patch basarisiz — gateway enable yok"
@@ -89,6 +92,7 @@ log "Panel poller kalintisi temizlendi (cutover)"
 
 sudo systemctl daemon-reload
 sudo systemctl enable "$unit"
+sudo systemctl reset-failed "$unit" 2>/dev/null || true
 sudo systemctl restart "$unit"
 
 stable=0

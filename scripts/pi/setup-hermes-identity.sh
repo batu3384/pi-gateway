@@ -38,7 +38,9 @@ log "OK pi-gateway-ops (server-ops silindi)"
 # macOS / GPU / Pi'de yok skill'ler — config deny-list (hermes update silmez)
 # shellcheck disable=SC2016
 python3 - <<'PY'
+import os
 import pathlib
+import tempfile
 try:
     import yaml
 except ImportError:
@@ -55,11 +57,15 @@ deny = [
     "openhue",
     "touchdesigner-mcp",
     "pi-gateway-server-ops",
+    "paneller",
+    "recover-ask",
 ]
-cfg_path = pathlib.Path.home() / ".hermes" / "config.yaml"
+hh = pathlib.Path(os.environ.get("HERMES_HOME") or (pathlib.Path.home() / ".hermes"))
+cfg_path = hh / "config.yaml"
 if not cfg_path.is_file():
     raise SystemExit(0)
-data = yaml.safe_load(cfg_path.read_text()) or {}
+raw_cfg = cfg_path.read_text()
+data = yaml.safe_load(raw_cfg) or {}
 skills = data.get("skills")
 if not isinstance(skills, dict):
     skills = {}
@@ -72,51 +78,91 @@ if merged == cur:
     raise SystemExit(0)
 skills["disabled"] = merged
 bak = cfg_path.with_suffix(".yaml.bak-skills-disabled")
-bak.write_text(cfg_path.read_text())
-cfg_path.write_text(
-    yaml.safe_dump(data, sort_keys=False, allow_unicode=True, default_flow_style=False)
-)
+bak.write_text(raw_cfg)
+dumped = yaml.safe_dump(data, sort_keys=False, allow_unicode=True, default_flow_style=False)
+fd, tmp_name = tempfile.mkstemp(prefix="config.yaml.tmp.", dir=str(cfg_path.parent))
+try:
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(dumped)
+    os.chmod(tmp_name, 0o600)
+    os.replace(tmp_name, cfg_path)
+except Exception:
+    try:
+        os.unlink(tmp_name)
+    except OSError:
+        pass
+    raise
 print("OK skills.disabled +=", ",".join(deny))
 PY
 log "OK skills.disabled (ölü Pi skill)"
 
-# MEMORY: wishlist / eski rapor kuyruğunu sil; SSOT notu bırak
+# MEMORY: wishlist / yanlis / siskin eski kayitlari sil; SSOT notu + <1400 char tavan
 mem="${HERMES_HOME}/memories/MEMORY.md"
 if [[ -f "$mem" ]]; then
-  python3 - <<'PY'
+  python3 - "$mem" <<'PY'
+import os
+import sys
+import tempfile
 from pathlib import Path
-p = Path.home() / ".hermes" / "memories" / "MEMORY.md"
+
+p = Path(sys.argv[1])
 raw = p.read_text(errors="replace")
-drop_prefixes = (
+drop_markers = (
     "Proje kuyruğu",
     "Reklam engelleme projesi",
     "En Yaratıcı",
     "Waow",
     "engineering-report",
     "Mühendislik Analiz",
+    "Vaultwarden, deprem",
+    "fallback_dns",
+    "1.1.1.1, 8.8.8.8",
+    "/usr/local/lib",
+    "manuel rsync",
+    "07:00 sunucu durumu",
+    "07:00'da sunucu",
 )
 parts = [b.strip() for b in raw.split("§") if b.strip()]
 kept = []
+seen = set()
 for b in parts:
-    if any(b.startswith(d) or d in b[:80] for d in drop_prefixes):
+    if any(m.lower() in b.lower() for m in drop_markers):
         continue
-    if "Proje kuyruğu:" in b or "Vaultwarden, deprem" in b:
+    if "Pi Gateway yığın SSOT" in b:
         continue
-    kept.append(b)
+    key = b.strip()
+    if key in seen:
+        continue
+    seen.add(key)
+    kept.append(key)
 ssot = (
-    "Pi Gateway yığın SSOT: AdGuard+Unbound+Caddy+n8n+NetAlertX+CrowdSec+"
-    "Prometheus/Grafana+restic+Hermes. Forgejo/Syncthing YOK. "
-    "Özellik wishlist yok. Detay: ~/.hermes/SOUL.md + skill pi-gateway-ops."
+    "Pi Gateway yığın SSOT: AdGuard+Unbound+Caddy+Glance+Gatus+NetAlertX+CrowdSec+"
+    "VictoriaMetrics/Grafana+restic+Hermes (n8n/Homepage/Kuma/Prometheus/Forgejo/Syncthing YOK). "
+    "Detay: ~/.hermes/SOUL.md + skill pi-gateway-ops."
 )
-kept = [b for b in kept if "Pi Gateway yığın SSOT" not in b]
+budget = 1400
+# En eski non-SSOT kayitlari atarak 1400 char altinda kal
+while kept and len("\n§\n".join([*kept, ssot]) + "\n") > budget:
+    kept.pop(0)
 kept.append(ssot)
 new = "\n§\n".join(kept) + "\n"
 if new != raw:
     p.with_suffix(".md.bak-wishlist-purge").write_text(raw)
-    p.write_text(new)
-    print("OK MEMORY.md wishlist purge")
+    fd, tmp_name = tempfile.mkstemp(prefix="MEMORY.md.tmp.", dir=str(p.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(new)
+        os.chmod(tmp_name, 0o600)
+        os.replace(tmp_name, p)
+    except Exception:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
+    print(f"OK MEMORY.md cleaned ({len(raw)} -> {len(new)} chars)")
 else:
-    print("skip MEMORY.md")
+    print(f"skip MEMORY.md ({len(new)} chars)")
 PY
   log "OK MEMORY wishlist purge" || log "skip MEMORY"
 fi

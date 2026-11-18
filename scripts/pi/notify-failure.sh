@@ -14,8 +14,8 @@ host="$(hostname -s 2>/dev/null || echo pi-gateway)"
 details=""
 
 if [[ "${FAILURE_KIND:-}" == "adguard-filter" ]]; then
-  notify_health_systemd_fail "$host" \
-    "AdGuard filter timer basarisiz; eski son basarili filtreler korunuyor. journalctl -u pi-gateway-adguard-filters.service"
+  notify_adguard_filter_fail "$host" \
+    "AdGuard filtre güncellemesi başarısız; son geçerli kurallar korunuyor. journalctl -u pi-gateway-adguard-filters.service"
   exit 0
 fi
 
@@ -43,7 +43,7 @@ notify_failure_skip_sla_only() {
     for token in $failure_list; do
       case "$token" in
         ssd-unmounted|ssd-unhealthy|storage-degraded*|data-ssd-symlink*|data-native-missing) ;;
-        offsite-*|restic-offsite-*|optional-*|backup-restore-drill*|bulletin-*|hermes-session-*|hermes-token-*|exit_code=*) ;;
+        offsite-*|local-backup-*|restic-offsite-*|optional-*|backup-restore-drill*|bulletin-*|hermes-session-*|hermes-token-*|exit_code=*) ;;
         *) return 1 ;;
       esac
     done
@@ -58,7 +58,7 @@ notify_failure_skip_sla_only() {
     saw_line=1
     case "$line" in
       ssd-unmounted|ssd-unhealthy|storage-degraded*|data-ssd-symlink*|data-native-missing) ;;
-      offsite-*|restic-offsite-*|optional-*|backup-restore-drill*|bulletin-*|hermes-session-*|hermes-token-*|exit_code=0) ;;
+      offsite-*|local-backup-*|restic-offsite-*|optional-*|backup-restore-drill*|bulletin-*|hermes-session-*|hermes-token-*|exit_code=0) ;;
       *) return 1 ;;
     esac
   done < <(printf '%s' "$d" | tr ';' '\n' | sort -u)
@@ -68,6 +68,7 @@ notify_failure_skip_sla_only() {
 if [[ "${1:-}" == "--self-check" ]]; then
   notify_failure_skip_sla_only "exit_code=1; failures=ssd-unmounted" || exit 1
   notify_failure_skip_sla_only "SLO offsite-stale" || exit 1
+  notify_failure_skip_sla_only "exit_code=1; failures=local-backup-missing" || exit 1
   notify_failure_skip_sla_only "exit_code=1; failures=container unbound down" && exit 1
   echo "[notify-failure] self-check OK"
   exit 0

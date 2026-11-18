@@ -54,24 +54,34 @@ def _mem_line() -> str:
     if total <= 0:
         return "RAM ?"
     pct = 100 * (total - avail) / total
-    if pct >= 90:
+    if pct >= 88:
         return "RAM yüksek"
     return "RAM normal"
 
 
-def _bucket_ms(value: Any) -> int | None:
+def _disk_band(st: dict[str, Any]) -> str:
+    root_pct = st.get("root_usage_pct")
+    ssd_pct = st.get("ssd_usage_pct")
+    warns: list[str] = []
+    if isinstance(root_pct, int) and root_pct >= 80:
+        warns.append(f"SD %{(root_pct // 5) * 5}+")
+    if isinstance(ssd_pct, int) and ssd_pct >= 80:
+        warns.append(f"SSD %{(ssd_pct // 5) * 5}+")
+    return " · ".join(warns) if warns else "Alan normal"
+
+
+def _latency_band(value: Any) -> str | None:
     if not isinstance(value, (int, float)) or value < 0:
         return None
-    bucket = int(value) // 50 * 50
-    if bucket < 50:
-        return None
-    return bucket
+    if value < 40:
+        return "DNS hızlı"
+    bucket = (int(value) // 50) * 50
+    return f"DNS ~{max(bucket, 50)}ms"
 
 
-def _docker_up(*names: str) -> bool:
+def _docker_containers() -> set[str]:
     out = _run(["docker", "ps", "--format", "{{.Names}}"])
-    have = set(out.splitlines()) if out else set()
-    return all(n in have for n in names)
+    return set(out.splitlines()) if out else set()
 
 
 def _panels() -> ModuleType:
@@ -87,56 +97,61 @@ def _panels() -> ModuleType:
 def build_card_text() -> str:
     st = _load_json(GATEWAY_STATE)
     health_ok = os.environ.get("PI_GATEWAY_HEALTH_OK", "1") != "0"
-    dns_up = health_ok and _docker_up("adguard", "unbound")
-    if not _docker_up("adguard") and not _docker_up("unbound"):
-        # docker yoksa (Mac self-check) state'e güven
-        dns_up = health_ok and int(st.get("storage_degraded") or 0) == 0
-    ssd_ok = int(st.get("ssd_mount_healthy") or 0) == 1
-    degraded = int(st.get("storage_degraded") or 0) == 1
-    dns_ms = st.get("dns_latency_ms")
-    panel_ms = st.get("panel_latency_ms")
-
-    if dns_up and not degraded:
-        head = "🟢 DNS çalışıyor"
+    running = _docker_containers()
+    if running:
+        dns_containers_up = "adguard" in running and "unbound" in running
     else:
-        head = "🔴 DNS sorunlu"
+        # Mac self-check veya docker CLI erişimi olmayan ortam
+        dns_containers_up = health_ok and int(st.get("storage_degraded") or 0) == 0
 
-    ssd_line = "Veri diski yok — kısıtlı mod" if degraded or not ssd_ok else "Veri diski tamam"
-    parts = [ssd_line, _mem_line()]
-    lat: list[str] = []
-    dns_b = _bucket_ms(dns_ms)
-    panel_b = _bucket_ms(panel_ms)
-    if dns_b is not None:
-        lat.append(f"DNS {dns_b}ms")
-    if panel_b is not None:
-        lat.append(f"Panel {panel_b}ms")
-    if lat:
-        parts.append(" · ".join(lat))
+    has_state = bool(st)
+    ssd_ok = (int(st.get("ssd_mount_healthy") or 0) == 1) if has_state else True
+    degraded = int(st.get("storage_degraded") or 0) == 1
+
+    if not dns_containers_up:
+        head = "🔴 DNS sorunlu"
+    elif degraded or not health_ok:
+        head = "🟡 DNS çalışıyor (uyarı var)"
+    else:
+        head = "🟢 DNS çalışıyor"
+
+    ssd_line = "SSD kısıtlı mod" if (degraded or not ssd_ok) else "SSD sağlıklı"
+    disk_line = _disk_band(st)
+    mem_line = _mem_line()
+    lat_line = _latency_band(st.get("dns_latency_ms"))
+    perf_parts = [mem_line]
+    if lat_line:
+        perf_parts.append(lat_line)
 
     lines = [
         "<b>Durum</b>",
         html.escape(head),
-        html.escape(" · ".join(parts)),
+        "──────────────────",
+        f"• <b>Depolama:</b> {html.escape(ssd_line)} · {html.escape(disk_line)}",
+        f"• <b>Performans:</b> {html.escape(' · '.join(perf_parts))}",
     ]
+
+    cov = st.get("dns_coverage_status")
+    cov_pct = st.get("dns_coverage_percent")
+    if cov in ("ok", "warn", "fail") and isinstance(cov_pct, int) and cov_pct >= 0:
+        cov_badge = "Tam" if cov == "ok" else f"%{(cov_pct // 10) * 10}+"
+        lines.append(f"• <b>DNS Kapsam:</b> {html.escape(cov_badge)}")
 
     try:
         panels = _panels()
         remote_base, remote_mode = panels.remote_access_base()
         user = os.environ.get("AGH_ADMIN_USER") or os.environ.get("CADDY_AUTH_USER") or "admin"
-        lines.append(f"Giriş <code>{html.escape(user)}</code>")
         if remote_mode == "ts-http" and remote_base:
-            lines.append(f"<code>{html.escape(remote_base)}</code> · uzak erişim açık")
-        elif remote_mode == "lan":
-            pi_ip = os.environ.get("PI_STATIC_IP", "").strip()
-            if pi_ip:
-                lines.append(f"Ev ağı <code>{html.escape(pi_ip)}</code>")
+            lines.append(f"• <b>Erişim:</b> <code>{html.escape(remote_base)}</code> · Giriş <code>{html.escape(user)}</code>")
+        elif remote_base:
+            lines.append(f"• <b>Erişim:</b> <code>{html.escape(remote_base)}</code> · Giriş <code>{html.escape(user)}</code>")
+        else:
+            lines.append(f"• <b>Giriş:</b> <code>{html.escape(user)}</code>")
     except Exception:
         pass
 
     lines.append("")
-    lines.append(
-        "<i>Buton → Safari’de Aç. Komutlar: /menu /dns /ssd /backup</i>"
-    )
+    lines.append("<i>Komutlar: /menu /dns /ssd /backup /recover</i>")
     return "\n".join(lines)
 
 
@@ -250,6 +265,7 @@ def apply(*, force: bool = False) -> int:
     print(f"[status-card] OK message_id={msg_id}")
     return 0
 
+
 def self_check() -> int:
     os.environ.setdefault("PI_GATEWAY_HEALTH_OK", "1")
     os.environ.setdefault("LAN_DOMAIN", "home")
@@ -257,9 +273,7 @@ def self_check() -> int:
     assert "<b>Durum</b>" in text, text
     assert "DNS" in text, text
     assert "DNS çalışıyor" in text or "DNS sorunlu" in text, text
-    assert "DNS çalışıyor ·" not in text and "DNS sorunlu ·" not in text, text
     assert "RAM yüksek" in text or "RAM normal" in text or "RAM ?" in text, text
-    assert "RAM yüksek " not in text and "RAM normal " not in text, text
     h = card_hash(text, "{}")
     assert len(h) == 64
     old_api = globals()["_api"]

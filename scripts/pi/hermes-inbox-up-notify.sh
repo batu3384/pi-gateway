@@ -22,6 +22,20 @@ log() { echo "[hermes-up] $*"; logger -t pi-gateway-hermes-up "$*" 2>/dev/null |
 notify_enabled || { log "Telegram yok — atlandi"; exit 0; }
 notify_ensure_dir
 
+# Reboot esnasinda boot-notify.sh zaten tek ozet gonderir — cift bildirim atma
+uptime_sec="$(awk '{print int($1)}' /proc/uptime 2>/dev/null || echo 9999)"
+if [[ "$uptime_sec" =~ ^[0-9]+$ ]] && (( uptime_sec < ${NOTIFY_BOOT_UPTIME_SKIP_SEC:-240} )); then
+  log "skip boot grace (uptime=${uptime_sec}s)"
+  exit 0
+fi
+
+# Rutin deploy/config restart'ta spam atma; yalniz gercek kesinti sonrasi veya acikca istenirse bildir
+prev_state="$(cat "${NOTIFY_STATE_DIR}/hermes-inbox.state" 2>/dev/null || echo ok)"
+if [[ "${NOTIFY_HERMES_UP_ON_RESTART:-false}" != "true" && "$prev_state" != "fail" ]]; then
+  log "skip routine restart (prev_state=${prev_state})"
+  exit 0
+fi
+
 # Crash-loop spam: RestartSec=5 ile her 5s Telegram olmasin
 cooldown="${NOTIFY_HERMES_UP_COOLDOWN_SEC:-120}"
 stamp="${NOTIFY_STATE_DIR}/hermes-inbox"

@@ -3,9 +3,15 @@
 set -euo pipefail
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+STDOUT_MODE=0
+if [[ "${1:-}" == "--stdout" ]]; then
+  STDOUT_MODE=1
+  shift
+fi
 CMD="${1:-}"
 SUB="${2:-}"
 RECOVER_PENDING="${TELEGRAM_RECOVER_PENDING:-/var/lib/pi-gateway/telegram-recover-pending}"
+RECOVER_LAST="${TELEGRAM_RECOVER_LAST:-/run/pi-gateway/telegram-recover.last}"
 RECOVER_COOLDOWN_SEC="${TELEGRAM_RECOVER_COOLDOWN_SEC:-300}"
 RECOVER_CONFIRM_SEC="${TELEGRAM_RECOVER_CONFIRM_SEC:-60}"
 # shellcheck source=../lib/env-file.sh
@@ -16,17 +22,23 @@ load_telegram_from_hermes || true
 source "$SCRIPT_DIR/../lib/notify.sh"
 log() { echo "[telegram-ops] $*"; }
 
-notify_enabled || { log "TELEGRAM eksik"; exit 1; }
-[[ -n "$CMD" ]] || { log "Kullanim: $0 dns|ssd|backup|recover [onay]"; exit 1; }
+if [[ "$STDOUT_MODE" -eq 0 ]]; then
+  notify_enabled || { log "TELEGRAM eksik"; exit 1; }
+fi
+[[ -n "$CMD" ]] || { log "Kullanim: $0 [--stdout] dns|ssd|backup|recover [onay]"; exit 1; }
 
-API="https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}"
 _send() {
   local text="$1"
-  curl -fsS -X POST "${API}/sendMessage" \
-    --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-    --data-urlencode "parse_mode=HTML" \
-    --data-urlencode "text=${text}" \
-    -d "disable_web_page_preview=true" >/dev/null
+  if [[ "$STDOUT_MODE" -eq 1 ]]; then
+    python3 - "$text" <<'PY'
+import html, re, sys
+raw = sys.argv[1]
+plain = re.sub(r"</?(?:b|i|code|pre|strong|em)>", "", raw)
+print(html.unescape(plain))
+PY
+    return 0
+  fi
+  notify_send_message "$text" "HTML"
 }
 
 _cmd_dns() {
@@ -170,40 +182,70 @@ _recover_unlock() {
 _cmd_recover() {
   local confirm="${1:-}"
   local repair="${REMOTE_DIR}/scripts/pi/repair-post-ssd-recovery.sh"
-  [[ -x "$repair" ]] || { _send "<b>Kurtarma</b>\n\nrepair script yok."; return 1; }
+  [[ -x "$repair" ]] || { _send $'<b>Kurtarma</b>\n\nrepair script yok.'; return 1; }
 
   if [[ "$confirm" != "onay" && "$confirm" != "confirm" ]]; then
     mkdir -p "$(dirname "$RECOVER_PENDING")" 2>/dev/null || true
-    date +%s >"$RECOVER_PENDING" 2>/dev/null || true
-    _send "<b>SSD kurtarma</b>
+    if ! date +%s >"$RECOVER_PENDING" 2>/dev/null; then
+      RECOVER_PENDING="/run/pi-gateway/telegram-recover-pending"
+      mkdir -p /run/pi-gateway 2>/dev/null || true
+      date +%s >"$RECOVER_PENDING"
+    fi
+    _send "<b>🛠️ SSD Kurtarma</b>
 
-Docker durur, restic onarımı ve yedek çalışır.
+Docker geçici olarak durdurulur, dosya sistemi / restic onarımı ve yedek doğrulaması çalıştırılır.
 
-Onay için <b>60 sn</b> içinde: <code>/recover onay</code>"
+Onay için <b>60 sn</b> içinde gönderin: <code>/recover onay</code>"
     return 0
   fi
 
-  local pending_ts now
+  local pending_ts now last_ts
+  if [[ ! -f "$RECOVER_PENDING" && -f "/run/pi-gateway/telegram-recover-pending" ]]; then
+    RECOVER_PENDING="/run/pi-gateway/telegram-recover-pending"
+  fi
   pending_ts="$(cat "$RECOVER_PENDING" 2>/dev/null || echo 0)"
   now="$(date +%s)"
   if (( now - pending_ts > RECOVER_CONFIRM_SEC )); then
-    _send "<b>Kurtarma</b>\n\nOnay süresi doldu. Önce <code>/recover</code> gönder."
+    _send $'<b>🛠️ Kurtarma</b>\n\nOnay süresi doldu. Önce <code>/recover</code> gönderin.'
     return 1
   fi
   rm -f "$RECOVER_PENDING" 2>/dev/null || true
 
-  if ! _recover_lock; then
-    _send "<b>Kurtarma</b>\n\nBaşka kurtarma yakın zamanda çalıştı (${RECOVER_COOLDOWN_SEC}s bekle)."
+  last_ts="$(cat "$RECOVER_LAST" 2>/dev/null || echo 0)"
+  if [[ "$last_ts" =~ ^[0-9]+$ ]] && (( now - last_ts < RECOVER_COOLDOWN_SEC )); then
+    _send "<b>Kurtarma</b>
+
+Yakın zamanda çalıştı (${RECOVER_COOLDOWN_SEC}s bekle)."
     return 1
   fi
 
-  _send "<b>SSD kurtarma</b>\n\nYazılımsal onarım başlatıldı…"
-  if REMOTE_DIR="$REMOTE_DIR" bash "$repair"; then
-    _send "<b>SSD kurtarma</b>\n\n✅ Tamamlandı."
+  if ! _recover_lock; then
+    _send "<b>Kurtarma</b>
+
+Kurtarma şu an çalışıyor."
+    return 1
+  fi
+  date +%s >"$RECOVER_LAST" 2>/dev/null || true
+
+  if [[ "$STDOUT_MODE" -eq 0 ]]; then
+    _send $'<b>SSD kurtarma</b>\n\nYazılımsal onarım başlatıldı…'
+  fi
+  local rc=0
+  export REMOTE_DIR
+  if ! mountpoint -q /mnt/ssd 2>/dev/null || [[ -f /run/pi-gateway/storage-degraded ]]; then
+    if [[ -x "${REMOTE_DIR}/scripts/pi/ssd-health.sh" ]]; then
+      SSD_HEALTH_AUTO=true bash "${REMOTE_DIR}/scripts/pi/ssd-health.sh" >/dev/null 2>&1 || rc=1
+    fi
+    if [[ -x "${REMOTE_DIR}/scripts/pi/recover-stack.sh" ]]; then
+      bash "${REMOTE_DIR}/scripts/pi/recover-stack.sh" >/dev/null 2>&1 || rc=1
+    fi
+  fi
+  if bash "$repair" >/dev/null 2>&1 && [[ "$rc" -eq 0 ]]; then
+    _send $'<b>SSD kurtarma</b>\n\n✅ Tamamlandı.'
     _recover_unlock
     return 0
   fi
-  _send "<b>SSD kurtarma</b>\n\n⚠️ Kısmi — journalctl bak."
+  _send $'<b>SSD kurtarma</b>\n\n⚠️ Kısmi — journalctl bak.'
   _recover_unlock
   return 1
 }
@@ -218,4 +260,6 @@ case "$CMD" in
     exit 1
     ;;
 esac
-log "OK $CMD"
+if [[ "$STDOUT_MODE" -eq 0 ]]; then
+  log "OK $CMD"
+fi

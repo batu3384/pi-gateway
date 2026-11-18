@@ -5,6 +5,7 @@
 # getUpdates long-poll is open). Re-run after `hermes update`.
 # Exit 1 if required markers missing after apply (no false already-applied).
 set -euo pipefail
+REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 log() { echo "[hermes-tg-patch] $*"; }
 
 ADAPTER="${HERMES_HOME:-$HOME/.hermes}/hermes-agent/plugins/platforms/telegram/adapter.py"
@@ -141,10 +142,10 @@ print("verified")
 PY
 fi
 
-# Dual-stack Happy-Eyeballs hang (#87015): pin Telegram API to known IPv4
-if ! grep -qE '^[[:space:]]*149\.154\.166\.110[[:space:]]+api\.telegram\.org' /etc/hosts 2>/dev/null; then
-  echo '149.154.166.110 api.telegram.org' | sudo tee -a /etc/hosts >/dev/null
-  log "hosts: api.telegram.org -> 149.154.166.110"
+# Eski tekil IP /etc/hosts sabitlemesini temizle (Telegram DC rotasyonunda SPOF yaratir)
+if grep -qE '^[[:space:]]*149\.154\.166\.110[[:space:]]+api\.telegram\.org' /etc/hosts 2>/dev/null; then
+  sudo sed -i '/149\.154\.166\.110[[:space:]]\+api\.telegram\.org/d' /etc/hosts 2>/dev/null || true
+  log "hosts: eski api.telegram.org statik IP kaldirildi"
 fi
 
 drop=/etc/systemd/system/hermes-gateway.service.d

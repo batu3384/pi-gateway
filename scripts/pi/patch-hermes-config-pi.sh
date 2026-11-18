@@ -16,6 +16,7 @@ if [[ "${HERMES_TELEGRAM_GATEWAY:-}" != "true" ]] \
 fi
 [[ "${HERMES_TELEGRAM_GATEWAY:-}" == "true" ]] || { log "HERMES_TELEGRAM_GATEWAY!=true — atlandi"; exit 0; }
 
+HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 hermes_bin="${HOME}/.local/bin/hermes"
 [[ -x "$hermes_bin" ]] || { log "hermes yok — atlandi"; exit 0; }
 
@@ -23,13 +24,14 @@ CFG_CHANGED=0
 # Nokta = path. Model id (glm-5.3) hermes config set ile yazma — walker glm-5/3 yapar.
 yaml_same() {
   python3 -c '
-import pathlib, sys
+import os, pathlib, sys
 key, want = sys.argv[1], sys.argv[2]
 try:
     import yaml
 except ImportError:
     raise SystemExit(1)
-p = pathlib.Path.home() / ".hermes" / "config.yaml"
+hh = os.environ.get("HERMES_HOME") or str(pathlib.Path.home() / ".hermes")
+p = pathlib.Path(hh) / "config.yaml"
 if not p.is_file():
     raise SystemExit(1)
 cur = yaml.safe_load(p.read_text()) or {}
@@ -69,15 +71,18 @@ export HERMES_STALE_TIMEOUT_SEC="${HERMES_STALE_TIMEOUT_SEC:-600}"
 if python3 - <<'PY'
 import os
 import pathlib
+import tempfile
 
 try:
     import yaml
 except ImportError:
     raise SystemExit(1)
-p = pathlib.Path.home() / ".hermes" / "config.yaml"
+hh = os.environ.get("HERMES_HOME") or str(pathlib.Path.home() / ".hermes")
+p = pathlib.Path(hh) / "config.yaml"
 if not p.is_file():
     raise SystemExit(1)
-data = yaml.safe_load(p.read_text()) or {}
+raw_orig = p.read_text()
+data = yaml.safe_load(raw_orig) or {}
 changed = False
 providers = data.get("providers")
 if not isinstance(providers, dict):
@@ -102,8 +107,20 @@ if zai.get("stale_timeout_seconds") != want:
     changed = True
 if not changed:
     raise SystemExit(1)
-p.with_name("config.yaml.bak-unsplit").write_text(p.read_text())
-p.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=True, default_flow_style=False))
+p.with_name("config.yaml.bak-unsplit").write_text(raw_orig)
+dumped = yaml.safe_dump(data, sort_keys=False, allow_unicode=True, default_flow_style=False)
+fd, tmp_name = tempfile.mkstemp(prefix="config.yaml.tmp.", dir=str(p.parent))
+try:
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(dumped)
+    os.chmod(tmp_name, 0o600)
+    os.replace(tmp_name, p)
+except Exception:
+    try:
+        os.unlink(tmp_name)
+    except OSError:
+        pass
+    raise
 raise SystemExit(0)
 PY
 then
@@ -122,6 +139,10 @@ set_cfg "display.platforms.telegram.streaming" "${HERMES_TELEGRAM_STREAMING:-fal
 _tp="${HERMES_TELEGRAM_TOOL_PROGRESS:-off}"
 case "${_tp}" in off|false|0|no) _tp=false ;; on|true|1|yes) _tp=true ;; esac
 set_cfg "display.platforms.telegram.tool_progress" "$_tp"
+set_cfg "display.interim_assistant_messages" "${HERMES_INTERIM_MESSAGES:-false}"
+set_cfg "platforms.telegram.gateway_restart_notification" "${NOTIFY_HERMES_UP_ON_RESTART:-false}"
+set_cfg "gateway.platforms.telegram.gateway_restart_notification" "${NOTIFY_HERMES_UP_ON_RESTART:-false}"
+set_cfg "stt.language" "${HERMES_STT_LANGUAGE:-tr}"
 set_cfg "cron.wrap_response" "false"
 # GLM-5.3 1M → %50 hiç ateşlenmez. 96k: akşam bülten ~71k sığar, sohbet yine tavanlı.
 _compress_cap="${HERMES_COMPRESS_TOKEN_CAP:-96000}"
@@ -139,6 +160,26 @@ set_cfg "session_reset.bg_process_max_age_hours" "${HERMES_SESSION_BG_MAX_AGE_H:
 set_cfg "code_execution.loop_caps.max_web_searches" "${HERMES_MAX_WEB_SEARCHES:-6}"
 set_cfg "code_execution.loop_caps.max_web_extracts" "${HERMES_MAX_WEB_EXTRACTS:-8}"
 
+_reset_plug_line="$("$hermes_bin" plugins list --plain --no-bundled 2>/dev/null | grep 'hermes-session-reset-policy' || true)"
+if [[ -z "$_reset_plug_line" ]]; then
+  if "$hermes_bin" plugins install hermes-session-reset-policy >/dev/null 2>&1; then
+    CFG_CHANGED=1
+    log "OK plugin install hermes-session-reset-policy"
+    _reset_plug_line="not enabled"
+  else
+    log "WARN: hermes-session-reset-policy kurulamadi"
+  fi
+fi
+if [[ -n "$_reset_plug_line" ]] && [[ "$_reset_plug_line" == *"not enabled"* ]]; then
+  if "$hermes_bin" plugins enable hermes-session-reset-policy >/dev/null 2>&1; then
+    CFG_CHANGED=1
+    log "OK plugin enable hermes-session-reset-policy"
+  else
+    log "WARN: hermes-session-reset-policy etkinlestirilemedi"
+  fi
+fi
+unset _reset_plug_line
+
 # /menu skill Telegram / menüsünde görünsün (cap yüzünden skill'ler düşüyordu)
 _menu_prio_py="${SCRIPT_DIR}/../lib/hermes-telegram-menu-priority.py"
 if [[ -f "$_menu_prio_py" ]]; then
@@ -150,7 +191,7 @@ if [[ -f "$_menu_prio_py" ]]; then
   fi
 fi
 
-hermes_py="${HOME}/.hermes/hermes-agent/venv/bin/python"
+hermes_py="${HERMES_HOME}/hermes-agent/venv/bin/python"
 ddgs_ok=0
 if [[ -x "$hermes_py" ]]; then
   if "$hermes_py" -c "import ddgs" >/dev/null 2>&1; then
@@ -174,6 +215,8 @@ if [[ "$ddgs_ok" -eq 1 ]]; then
 else
   log "WARN: web.search_backend=ddgs yazilmadi (paket yok)"
 fi
+# Keyless MCP extract failover ring (exa -> parallel -> firecrawl -> keenable); ddgs search-only error fix
+set_cfg "web.extract_backend" "${HERMES_WEB_EXTRACT_BACKEND:-exa}"
 
 hygiene_py="${SCRIPT_DIR}/../lib/hermes-session-hygiene.py"
 if [[ -f "$hygiene_py" ]]; then

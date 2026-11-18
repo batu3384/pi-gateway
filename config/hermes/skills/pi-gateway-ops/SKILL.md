@@ -1,7 +1,7 @@
 ---
 name: pi-gateway-ops
 description: "Pi Gateway ev sunucusu ops. Sistem/stack/durum/yedek/DNS/container sorularında kullan. Forgejo/Syncthing YOK."
-version: 2.0.0
+version: 3.0.0
 author: Pi Gateway
 license: MIT
 platforms: [linux]
@@ -11,19 +11,20 @@ metadata:
 ---
 # Pi Gateway ops
 
-Home server: Raspberry Pi 4B 4GB. Repo: `~/pi-gateway`.
+Home server: Raspberry Pi 4B 4GB (Hibrit: OS microSD, veri + Docker `/mnt/ssd`). Repo: `~/pi-gateway`.
 
-## Stack (doğru)
+## Stack (güncel SSOT)
 
-**Var:** AdGuard → Unbound, Caddy, Homepage, Uptime Kuma, Dozzle, n8n (executeCommand+SSH kapalı),
-NetAlertX, CrowdSec, Prometheus+Grafana (scrape), node-exporter, restic, Tailscale, Hermes, quake timer.
+**Aktif:** AdGuard Home → Unbound (DoT `:853`), Caddy (`*.home` TLS), Glance (`gateway.home`), Gatus (`status.home`),
+VictoriaMetrics (`:9090`) + Grafana (`grafana.home`) + node-exporter (`:9100`), Dozzle (`logs.home`),
+NetAlertX (`devices.home`), CrowdSec + UFW, Restic, Tailscale, Raspberry Pi Connect, Hermes, deprem + İBB HKI zamanlayıcıları.
 
-**Yok:** Forgejo, Syncthing, Alertmanager, Immich, Nextcloud, Home Assistant.
+**Emekli / Yok:** Homepage, Uptime Kuma, Prometheus, n8n (`ENABLE_N8N=false`), Forgejo, Syncthing, Alertmanager, Immich, Nextcloud, Home Assistant.
 
 ## Script — iki kopya
 
-- Repo: `/home/batu/pi-gateway/` (veya `__REMOTE_DIR__`)
-- Systemd: `/usr/local/lib/pi-gateway/` — unit’ler buradan çalışır; deploy sonrası geride kalabilir.
+- Repo: `__REMOTE_DIR__` (`~/pi-gateway`)
+- Systemd: `/usr/local/lib/pi-gateway/` — unit’ler buradan çalışır.
 
 Senkron gerekirse:
 ```bash
@@ -39,21 +40,20 @@ docker ps --format "table {{.Names}}\t{{.Status}}"
 REMOTE_DIR=__REMOTE_DIR__ bash __REMOTE_DIR__/scripts/pi/health-check.sh
 ```
 
-Cevap kısa: key metrics, container sayısı, failed unit, disk/inode/RAM. Onarım geçmişi dökme.
+Cevap kısa ve net olsun: temel metrikler, konteyner durumu, varsa failed unit, disk/RAM özeti.
 
 ## Yedek
 
-- Timer: `pi-gateway-backup.timer` → `backup.sh` → restic (SSD).
-- Başarı: `restic snapshot` satırı + `~/pi-gateway/backups/<stamp>/` (secret yok).
-- Offsite skip normal: `RESTIC_OFFSITE_ENABLED=false`.
+- Timer: `pi-gateway-backup.timer` → `backup.sh` → `restic-backup.sh` (`/mnt/ssd/pi-gateway-data/backups/restic`).
+- Başarı: son `restic snapshot` + `~/pi-gateway/backups/<stamp>/` (secret içermez). Rutin gece yedeği sessizdir; yalnız hata olursa bildirim gider.
 
-## Bilinen tuzaklar
+## Bilinen notlar
 
-- AdGuard UI edit → yaml `root:0600` → backup `cp` kırılır: `chown`/`fix-config-perms.sh`.
-- `reset-failed` yedek/SSD oneshot fail’ini gizlemesin (`reset-gateway-units.sh` dar liste).
-- SSH key-only (`00-pi-gateway-ssh.conf`). Script `+x` kaybı → `chmod +x`.
-- LG TV DNS bypass (modem DNS2) — Pi tavanı; “tüm ev kilidi” iddia etme.
+- AdGuard yapılandırma izinleri: `fix-config-perms.sh` sahipliği korur.
+- SSH key-only (`00-pi-gateway-ssh.conf`), TCP BBR + `fq` (`99-pi-gateway-net.conf`), `eth0` ↔ `wlan0` otomatik failover.
+- Modem DHCP DNS1 Pi’yi (`PI_STATIC_IP`) gösterir; sabit IPv6 DNS için `radvd` ULA RDNSS devrededir.
 
-## Panel
+## Panel & Hızlı Komutlar
 
-`/menu` → ayrı skill (`hermes-menu.sh`). Bu skill sohbet/ops içindir.
+`/menu` → sabit durum kartını ve panel butonlarını yeniler (`hermes-menu.sh`).
+`/dns`, `/ssd`, `/backup`, `/recover` → doğrudan ilgili operasyon özetini gönderir.

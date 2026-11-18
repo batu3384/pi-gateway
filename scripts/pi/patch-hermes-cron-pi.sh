@@ -5,6 +5,7 @@ REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 log() { echo "[hermes-cron-patch] $*"; }
 
 SCHEDULER="${HERMES_HOME:-$HOME/.hermes}/hermes-agent/cron/scheduler.py"
+SCHEDULER_DELIVERY="${HERMES_HOME:-$HOME/.hermes}/hermes-agent/cron/scheduler_delivery.py"
 GATEWAY_RUN="${HERMES_HOME:-$HOME/.hermes}/hermes-agent/gateway/run.py"
 PATCH_PY="${REMOTE_DIR}/scripts/lib/hermes-cron-patch.py"
 GW_PATCH_PY="${REMOTE_DIR}/scripts/lib/hermes-gateway-patch.py"
@@ -14,7 +15,7 @@ CLASSIFIER="${HERMES_HOME:-$HOME/.hermes}/hermes-agent/agent/error_classifier.py
 [[ -f "$PATCH_PY" ]] || { log "HATA: hermes-cron-patch.py yok"; exit 1; }
 
 _patch_hash() {
-  cat "$SCHEDULER" "$GATEWAY_RUN" "$CLASSIFIER" 2>/dev/null | sha256sum | awk '{print $1}'
+  cat "$SCHEDULER" "$SCHEDULER_DELIVERY" "$GATEWAY_RUN" "$CLASSIFIER" 2>/dev/null | sha256sum | awk '{print $1}'
 }
 _before="$(_patch_hash)"
 

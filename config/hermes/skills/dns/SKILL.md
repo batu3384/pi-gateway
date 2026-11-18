@@ -1,7 +1,7 @@
 ---
 name: dns
-description: "Pi Gateway DNS kapsam ozeti. ONLY when user message is exactly /dns. Run telegram-ops.sh dns; do not chat."
-version: 1.0.0
+description: "Pi Gateway DNS kapsam ozeti. ONLY when user message is exactly /dns. Run telegram-ops.sh --stdout dns and output ONLY its exact stdout text."
+version: 1.1.0
 author: Pi Gateway
 license: MIT
 platforms: [linux]
@@ -11,6 +11,8 @@ metadata:
 ---
 # DNS kapsam
 
+Run the command below and reply with its exact stdout text only (no extra intro, explanation, or HTML tags):
+
 ```bash
-REMOTE_DIR=__REMOTE_DIR__ bash __REMOTE_DIR__/scripts/pi/telegram-ops.sh dns
+REMOTE_DIR=__REMOTE_DIR__ bash __REMOTE_DIR__/scripts/pi/telegram-ops.sh --stdout dns
 ```

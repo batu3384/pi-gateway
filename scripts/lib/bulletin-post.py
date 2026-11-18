@@ -59,7 +59,12 @@ def extract_titles(text: str) -> list[str]:
 
 def recent_titles(limit: int = 24) -> str:
     d = archive_dir()
-    files = sorted(d.glob("*.md"), key=lambda p: p.stat().st_mtime, reverse=True)[:12]
+    hermes_home = Path(os.environ.get("HERMES_HOME") or (Path.home() / ".hermes"))
+    cron_out = hermes_home / "cron" / "output"
+    cands = list(d.glob("*.md"))
+    if cron_out.is_dir():
+        cands.extend(cron_out.glob("*/*.md"))
+    files = sorted(cands, key=lambda p: p.stat().st_mtime, reverse=True)[:20]
     titles: list[str] = []
     seen: set[str] = set()
     for path in files:
@@ -67,6 +72,8 @@ def recent_titles(limit: int = 24) -> str:
             body = path.read_text(encoding="utf-8")
         except OSError:
             continue
+        if "## Response" in body:
+            body = body.split("## Response", 1)[1]
         for t in extract_titles(body):
             key = t.lower()
             if key in seen:
@@ -128,9 +135,33 @@ def archive(text: str, slug: str) -> Path | None:
         return None
 
 
-def _send_telegram(text: str) -> bool:
+def _hermes_telegram_creds() -> tuple[str, str]:
     token = os.environ.get("TELEGRAM_BOT_TOKEN") or ""
     chat = os.environ.get("TELEGRAM_CHAT_ID") or ""
+    if token and chat:
+        return token, chat
+    env_path = Path(os.environ.get("HERMES_HOME") or (Path.home() / ".hermes")) / ".env"
+    if env_path.is_file():
+        try:
+            for line in env_path.read_text(encoding="utf-8").splitlines():
+                s = line.strip()
+                if not s or s.startswith("#") or "=" not in s:
+                    continue
+                k, _, v = s.partition("=")
+                k, v = k.strip(), v.strip().strip("'\"")
+                if k == "TELEGRAM_BOT_TOKEN" and not token:
+                    token = v
+                elif k == "TELEGRAM_CHAT_ID" and not chat:
+                    chat = v
+                elif k == "TELEGRAM_ALLOWED_USERS" and not chat and v:
+                    chat = v.split(",", 1)[0].strip()
+        except OSError:
+            pass
+    return token, chat
+
+
+def _send_telegram(text: str) -> bool:
+    token, chat = _hermes_telegram_creds()
     if not token or not chat:
         return False
     url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -200,6 +231,20 @@ def main() -> int:
         return 0
     if "--titles" in sys.argv:
         print(recent_titles())
+        return 0
+    if "--send-parts" in sys.argv:
+        raw = sys.stdin.read().strip()
+        if not raw:
+            return 0
+        try:
+            parts = json.loads(raw)
+        except json.JSONDecodeError:
+            return 1
+        if isinstance(parts, list):
+            for chunk in parts:
+                s = str(chunk or "").strip()
+                if s:
+                    _send_telegram(s)
         return 0
     body = sys.stdin.read()
     job = ""

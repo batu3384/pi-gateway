@@ -48,6 +48,8 @@ notify_panel_url() {
   if [[ -f "$panels_py" ]]; then
     url="$(PANEL_PROTOCOL="${PANEL_PROTOCOL:-}" ENABLE_TLS="${ENABLE_TLS:-}" \
       PI_STATIC_IP="${PI_STATIC_IP:-}" LAN_DOMAIN="${LAN_DOMAIN:-home}" \
+      TS_PANEL_DIRECT_PORTS="${TS_PANEL_DIRECT_PORTS:-false}" \
+      ENABLE_N8N="${ENABLE_N8N:-false}" \
       NETALERTX_PORT="${NETALERTX_PORT:-20211}" \
       python3 "$panels_py" panel_url "$panel_id" 2>/dev/null || true)"
   fi
@@ -92,7 +94,7 @@ notify_send_lock_acquire() {
     return 0
   }
   notify_own "${NOTIFY_STATE_DIR}/send.lock"
-  flock -x "$NOTIFY_LOCK_FD" || {
+  flock -w 20 -x "$NOTIFY_LOCK_FD" || {
     exec {NOTIFY_LOCK_FD}>&-
     unset NOTIFY_LOCK_FD
     return 1
@@ -155,7 +157,8 @@ notify_repeat_sec_for() {
     ssd-usb-flap) printf '%s' "${NOTIFY_USB_FLAP_REPEAT_SEC:-21600}" ;;
     health-optional|health-latency|monitoring-stack|health-slo-ops) printf '%s' "${NOTIFY_NOISE_REPEAT_SEC:-21600}" ;;
     container-restart-*) printf '%s' "${CONTAINER_RESTART_REPEAT_SEC:-21600}" ;;
-    disk-*) printf '%s' "$NOTIFY_DISK_REPEAT_SEC" ;;
+    disk-*|memory-low|ssd-smart) printf '%s' "$NOTIFY_DISK_REPEAT_SEC" ;;
+    adguard-filters) printf '%s' "$NOTIFY_SLO_REPEAT_SEC" ;;
     restic-ok) printf '%s' "${NOTIFY_BACKUP_OK_COOLDOWN_SEC:-86400}" ;;
     ibb-hki) printf '%s' "${NOTIFY_IBB_REPEAT_SEC:-21600}" ;;
     *) printf '%s' "$NOTIFY_REPEAT_SEC" ;;
@@ -165,7 +168,7 @@ notify_repeat_sec_for() {
 notify_is_noisy_key() {
   local key="$1"
   case "$key" in
-    health-optional|health-latency|monitoring-stack|health-slo-ops|container-restart-*|disk-*|ssd-usb-flap)
+    health-optional|health-latency|monitoring-stack|health-slo-ops|disk-*|memory-low|ssd-usb-flap|ibb-hki|adguard-filters)
       return 0
       ;;
     *)
@@ -294,6 +297,13 @@ notify_transition_commit() {
   notify_write "$stamp_file" "$now" || true
 }
 
+notify_state_clear() {
+  local key="$1"
+  notify_ensure_dir
+  rm -f "${NOTIFY_STATE_DIR}/${key}.pending" 2>/dev/null || true
+  notify_write "${NOTIFY_STATE_DIR}/${key}.state" "ok" || true
+}
+
 notify_send_with_transition() {
   local key="$1"
   local new_state="$2"
@@ -344,19 +354,20 @@ notify_escape_html() {
 notify_send_message() {
   local text="$1"
   local parse_mode="${2:-}"
-  local response=""
+  local response="" safe_resp="" url_cfg=""
+  url_cfg="$(printf 'url = "https://api.telegram.org/bot%s/sendMessage"\n' "${TELEGRAM_BOT_TOKEN:-}")"
 
   if [[ -n "$parse_mode" ]]; then
-    response="$(curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+    response="$(curl -fsS --connect-timeout 5 --max-time 15 -K - -X POST \
       -d "chat_id=${TELEGRAM_CHAT_ID}" \
       -d "parse_mode=${parse_mode}" \
       --data-urlencode "text=${text}" \
-      -d "disable_web_page_preview=true" 2>&1)" || true
+      -d "disable_web_page_preview=true" <<<"$url_cfg" 2>&1)" || true
   else
-    response="$(curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-    -d "chat_id=${TELEGRAM_CHAT_ID}" \
-    --data-urlencode "text=${text}" \
-    -d "disable_web_page_preview=true" 2>&1)" || true
+    response="$(curl -fsS --connect-timeout 5 --max-time 15 -K - -X POST \
+      -d "chat_id=${TELEGRAM_CHAT_ID}" \
+      --data-urlencode "text=${text}" \
+      -d "disable_web_page_preview=true" <<<"$url_cfg" 2>&1)" || true
   fi
 
   if [[ -n "$response" ]] && python3 -c \
@@ -364,7 +375,11 @@ notify_send_message() {
     <<<"$response" 2>/dev/null; then
     return 0
   fi
-  echo "[notify] Telegram gonderilemedi: ${response:-bilinmeyen hata}" >&2
+  safe_resp="${response:-bilinmeyen hata}"
+  if [[ -n "${TELEGRAM_BOT_TOKEN:-}" ]]; then
+    safe_resp="${safe_resp//"${TELEGRAM_BOT_TOKEN}"/[REDACTED]}"
+  fi
+  echo "[notify] Telegram gonderilemedi: ${safe_resp}" >&2
   return 1
 }
 
@@ -375,6 +390,11 @@ notify_telegram() {
   local parse_mode="${4:-}"
   local cooldown
   cooldown="$(notify_repeat_sec_for "$key")"
+  if [[ -n "${NOTIFY_COOLDOWN_SEC_OVERRIDE:-}" ]]; then
+    cooldown="${NOTIFY_COOLDOWN_SEC_OVERRIDE}"
+  elif [[ "${NOTIFY_COOLDOWN_SEC:-300}" == "0" ]]; then
+    cooldown=0
+  fi
 
   notify_enabled || return 0
   notify_send_lock_acquire || return 0
@@ -486,15 +506,15 @@ notify_monitoring_stack_warn() {
   body="$(notify_html_alert \
     "$details" \
     "• DNS etkilenmez; izleme/Grafana metrikleri eksik olabilir.
-• Pi: <code>docker logs prometheus --tail 30</code>
-• Otomatik onarım: <code>repair-prometheus-tsdb.sh</code>")"
+• Pi: <code>docker logs victoriametrics --tail 30</code>
+• Yeniden başlatma: <code>restart-monitoring-stack.sh</code>")"
   notify_send_with_transition "monitoring-stack" "fail" "⚠️ İzleme Yığını Sorunu" "$body" "HTML"
 }
 
 notify_monitoring_stack_ok() {
   notify_send_with_transition \
     "monitoring-stack" "ok" "✅ İzleme Yığını Normale Döndü" \
-    "Prometheus, Grafana ve node-exporter yeniden çalışıyor." "HTML"
+    "VictoriaMetrics, Grafana ve node-exporter yeniden çalışıyor." "HTML"
 }
 
 notify_container_restart_warn() {
@@ -502,16 +522,17 @@ notify_container_restart_warn() {
   local recent="$2"
   local status="$3"
   local lifetime="${4:-}"
-  local hints window_min
+  local hints window_min esc_name
+  esc_name="$(notify_escape_html "$name")"
   window_min="${CONTAINER_RESTART_WINDOW_SEC:-900}"
   window_min=$((window_min / 60))
   case "$name" in
-    prometheus)
-      hints="• Pi: <code>docker logs prometheus --tail 40</code>
-• TSDB: <code>repair-prometheus-tsdb.sh</code> (checksum/WAL hatasında otomatik)"
+    victoriametrics)
+      hints="• Pi: <code>docker logs victoriametrics --tail 40</code>
+• İzleme: <code>restart-monitoring-stack.sh</code>"
       ;;
     adguard|unbound)
-      hints="• Pi: <code>docker logs ${name} --tail 40</code>
+      hints="• Pi: <code>docker logs ${esc_name} --tail 40</code>
 • DNS: <code>health-check.sh</code>"
       ;;
     crowdsec)
@@ -519,15 +540,15 @@ notify_container_restart_warn() {
 • Bozuk hub index: <code>REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/setup-crowdsec.sh --reset</code>"
       ;;
     *)
-      hints="• Pi: <code>docker logs ${name} --tail 40</code>"
+      hints="• Pi: <code>docker logs ${esc_name} --tail 40</code>"
       ;;
   esac
   local body
   body="$(notify_html_alert \
-    "Konteyner: $(notify_escape_html "$name")
+    "Konteyner: ${name}
 Son ${window_min} dk restart: ${recent}
 Toplam Docker restart: ${lifetime:-bilinmiyor}
-}Durum: $(notify_escape_html "$status")" \
+Durum: ${status}" \
     "$hints")"
   notify_send_with_transition "container-restart-${name}" "fail" "⚠️ Konteyner Restart Döngüsü" "$body" "HTML"
 }
@@ -536,38 +557,27 @@ notify_container_restart_ok() {
   local name="$1"
   notify_send_with_transition \
     "container-restart-${name}" "ok" "✅ Konteyner Normale Döndü" \
-    "$(notify_html_alert "$(notify_escape_html "$name") yeniden stabil çalışıyor.")" "HTML"
-}
-
-notify_prometheus_repair() {
-  local mode="$1"
-  local detail="${2:-}"
-  local human
-  case "$mode" in
-    wal) human="WAL + chunks_head temizlendi; metrik toplama yeniden başladı." ;;
-    blocks) human="Bozuk TSDB blokları yedeklendi ve sıfırlandı; geçmiş grafikler gitti." ;;
-    *) human="Prometheus TSDB onarımı tamamlandı." ;;
-  esac
-  local body
-  body="$(notify_html_alert "$human" "${detail:+• $(notify_escape_html "$detail")}")"
-  notify_send_with_transition "prometheus-repair" "ok" "🔧 Prometheus Onarıldı" "$body" "HTML"
+    "$(notify_html_alert "${name} yeniden stabil çalışıyor.")" "HTML"
 }
 
 notify_crowdsec_diary() {
   local body="$1"
-  notify_telegram "🛡️ Gece Saldırı Defteri" "$body" "crowdsec-diary"
+  notify_telegram "🛡️ Gece Saldırı Defteri" "$(notify_escape_html "$body")" "crowdsec-diary" "HTML"
 }
 
 notify_backup_ok() {
   local stamp="$1"
   local body
-  body="$(notify_html_alert "Son başarılı yedek zaman damgası: $(notify_escape_html "$stamp").")"
-  notify_transition_commit "restic-fail" "ok" 2>/dev/null || true
+  body="$(notify_html_alert "Son başarılı yedek zaman damgası: ${stamp}.")"
+  notify_state_clear "restic-fail" 2>/dev/null || true
   notify_telegram "✅ Yedekleme Tamamlandı" "$body" "restic-ok" "HTML"
 }
 
 notify_backup_fail() {
-  local details="$1"
+  local details="${1:-}"
+  if [[ -n "${2:-}" ]]; then
+    details="${1} — ${2}"
+  fi
   local body
   body="$(notify_html_alert \
     "$details" \
@@ -575,6 +585,23 @@ notify_backup_fail() {
 • <code>ENABLE_RESTIC=true</code> ayarı açık mı?
 • Pi: <code>journalctl -u pi-gateway-backup -n 30</code>")"
   notify_send_with_transition "restic-fail" "fail" "⚠️ Yedekleme Başarısız" "$body" "HTML"
+}
+
+notify_adguard_filter_fail() {
+  local host="$1"
+  local details="${2:-AdGuard filtre güncellemesi başarısız.}"
+  local body
+  body="$(notify_html_alert \
+    "$details" \
+    "• Mevcut filtre kuralları korunuyor; internet ve DNS etkilenmez.
+• Pi: <code>journalctl -u pi-gateway-adguard-filters.service -n 30</code>")"
+  notify_send_with_transition "adguard-filters" "fail" "📋 DNS Filtre Güncelleme Uyarısı" "$body" "HTML"
+}
+
+notify_adguard_filter_ok() {
+  notify_send_with_transition \
+    "adguard-filters" "ok" "✅ DNS Filtreleri Güncellendi" \
+    "Önceki filtre güncelleme uyarısı giderildi." "HTML"
 }
 
 notify_health_systemd_fail() {
@@ -602,9 +629,15 @@ notify_health_systemd_fail() {
 • Durmuş kaplar: <code>docker ps --filter status=exited</code>"
   body="$(notify_html_alert "$human" "$action")"
   # DNS cekirdegi ayri anahtar: health-systemd zaten "fail" (kucuk sorun) iken
-  # adguard/unbound cokmesi 6 saat susturulmasin (2026-09-13: 4 saat sessiz kesinti).
-  notify_details_dns_core_fail "$details" && notify_dns_fail "$host" "$human"
-  notify_send_with_transition "health-systemd" "fail" "⚠️ Sistem Sağlık Uyarısı" "$body" "HTML"
+  # adguard/unbound cokmesi 6 saat susturulmasin. Sadece DNS arizasi varsa cift mesaj atma.
+  if notify_details_dns_core_fail "$details"; then
+    notify_dns_fail "$host" "$human"
+    if [[ "$details" =~ container\ caddy\ down|gateway-http|docker-unresponsive|stack-recover-failed ]]; then
+      notify_send_with_transition "health-systemd" "fail" "⚠️ Sistem Sağlık Uyarısı" "$body" "HTML"
+    fi
+  else
+    notify_send_with_transition "health-systemd" "fail" "⚠️ Sistem Sağlık Uyarısı" "$body" "HTML"
+  fi
 }
 
 notify_details_dns_core_fail() {
@@ -666,8 +699,46 @@ notify_disk_warn() {
   local body
   body="$(notify_html_alert \
     "${subject}: ${detail}" \
-    "• Pi: <code>df -hP ${mount}</code> · <code>free -m</code>")"
+    "• Pi: <code>df -hP ${mount}</code>")"
   notify_send_with_transition "$key" "fail" "📋 Disk Doluluk Uyarısı" "$body" "HTML"
+}
+
+notify_disk_ok() {
+  local mount="$1"
+  local key="disk-${mount//\//-}"
+  notify_send_with_transition \
+    "$key" "ok" "✅ Disk Kullanımı Normale Döndü" \
+    "$(notify_html_alert "${mount} doluluk ve inode oranı yeniden eşik altında.")" "HTML"
+}
+
+notify_memory_warn() {
+  local detail="$1"
+  local body
+  body="$(notify_html_alert \
+    "Kullanılabilir bellek düşük: ${detail}" \
+    "• Pi: <code>free -h</code> · <code>docker stats --no-stream</code>")"
+  notify_send_with_transition "memory-low" "fail" "⚠️ Bellek Düşük Uyarısı" "$body" "HTML"
+}
+
+notify_memory_ok() {
+  notify_send_with_transition \
+    "memory-low" "ok" "✅ Bellek Normale Döndü" \
+    "Kullanılabilir RAM yeniden güvenli eşik üzerinde." "HTML"
+}
+
+notify_smart_warn() {
+  local detail="$1"
+  local body
+  body="$(notify_html_alert \
+    "SSD SMART kontrolü uyarı verdi: ${detail}" \
+    "• Durum: /ssd · <code>sudo smartctl -a /dev/sda</code>")"
+  notify_send_with_transition "ssd-smart" "fail" "⚠️ SSD SMART Uyarısı" "$body" "HTML"
+}
+
+notify_smart_ok() {
+  notify_send_with_transition \
+    "ssd-smart" "ok" "✅ SSD SMART Normale Döndü" \
+    "SSD SMART sağlık kontrolü yeniden geçti." "HTML"
 }
 
 notify_ssd_usb_flap() {
@@ -719,6 +790,8 @@ notify_ssd_post_recovery() {
     "USB kopması sonrası yazılımsal kurtarma tamamlandı." \
     "• $(notify_escape_html "$detail")
 • /ssd · /backup ile doğrula")"
+  notify_ensure_dir
+  notify_write "${NOTIFY_STATE_DIR}/ssd-post-recovery.state" fail || true
   notify_send_with_transition "ssd-post-recovery" "ok" "✅ SSD Olay Raporu" "$body" "HTML"
 }
 
@@ -789,7 +862,7 @@ notify_ssd_degraded() {
   fi
   local body
   local detail_text="• <b>DNS & İnternet:</b> Kesintisiz aktif (AdGuard ve Unbound SD karta alındı).
-• <b>İkincil Servisler:</b> Veri güvenliği için geçici durduruldu (n8n, paneller).
+• <b>İkincil Servisler:</b> Veri güvenliği için geçici durduruldu (paneller ve izleme).
 • <b>Otomatik Kurtarma:</b> Sistem arka planda USB bağlantısını yeniden kurmayı deniyor."
 
   if [[ -n "$details" && "$details" != *"DNS degraded"* && "$details" != *"Veri diski bağlı değil"* ]]; then
@@ -824,7 +897,7 @@ notify_ssd_restored() {
   gateway="$(panel_url gateway)"
   esc_gw="$(notify_escape_html "$gateway")"
   local detail_text="• <b>Depolama:</b> SSD (/mnt/ssd) mount edildi, veri dizini senkronize.
-• <b>Docker & Servisler:</b> Caddy, n8n, NetAlertX ve izleme panelleri tam kapasite devrede.
+• <b>Docker & Servisler:</b> Caddy, Glance, Gatus, NetAlertX ve izleme panelleri tam kapasite devrede.
 • <b>DNS:</b> Normal çalışma düzenine alındı."
 
   if [[ -n "$details" ]]; then

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Ensure Telegram BotCommand menu prioritizes /menu (Pi Gateway panels skill).
+"""Ensure Telegram BotCommand menu prioritizes Pi Gateway skills (/menu, /dns, /ssd, /backup, /recover).
 
 Hermes caps visible commands (~60); skill commands fill leftover slots and often
 drop. platforms.telegram.extra.command_menu.priority prepends survivors.
@@ -16,7 +16,8 @@ try:
 except ImportError:
     raise SystemExit(1)
 
-WANT = ["menu", "help", "new", "status", "commands"]
+WANT = ["menu", "dns", "ssd", "backup", "recover", "status", "new", "help", "commands"]
+DROP = {"paneller", "pi-gateway-menu"}
 CFG = pathlib.Path.home() / ".hermes" / "config.yaml"
 if not CFG.is_file():
     raise SystemExit(1)
@@ -41,8 +42,8 @@ if not isinstance(menu, dict):
 cur = menu.get("priority")
 if not isinstance(cur, list):
     cur = []
-cur_norm = [str(x).strip() for x in cur if str(x).strip()]
-# Prepend WANT preserving relative order, then keep remaining unique
+cur_norm = [str(x).strip() for x in cur if str(x).strip() and str(x).strip() not in DROP]
+
 merged: list[str] = []
 seen: set[str] = set()
 for name in WANT + cur_norm:
@@ -54,7 +55,7 @@ changed = False
 if menu.get("priority_mode", "prepend") != "prepend":
     menu["priority_mode"] = "prepend"
     changed = True
-if cur_norm[: len(WANT)] != WANT:
+if menu.get("priority") != merged:
     menu["priority"] = merged
     changed = True
 if int(menu.get("max_commands") or 0) < 60:
