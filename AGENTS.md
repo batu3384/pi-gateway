@@ -1,6 +1,6 @@
 # Pi Gateway
 
-Home server (Raspberry Pi 4B): AdGuard DNS, Unbound, Caddy, n8n.
+Home server (Raspberry Pi 4B): AdGuard Home, Unbound (DoT `:853`), Caddy, Glance, Gatus, VictoriaMetrics + Grafana, NetAlertX, CrowdSec, Restic, Hermes Telegram assistant (`n8n` disabled by default).
 
 ## Health Stack
 

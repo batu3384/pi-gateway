@@ -9,14 +9,16 @@ AdGuard + Unbound DNS, Caddy reverse proxy, monitoring — deployed from a Mac w
 | Layer | Component |
 |-------|-----------|
 | DNS filter | AdGuard Home |
-| DNS resolver | Unbound (DoT :853) |
-| Reverse proxy | Caddy (`*.home`) |
-| Dashboard | Homepage |
-| Monitoring | Uptime Kuma + host health timer |
-| Logs | Dozzle |
-| Backup | Restic |
-| Network inventory | NetAlertX |
-| Security | UFW + CrowdSec (SSH) + Tailscale |
+| DNS resolver | Unbound (Cloudflare Security + Quad9 DoT `:853`, DNSSEC) + host DoT fallback |
+| Reverse proxy | Caddy (`*.home` TLS) |
+| Dashboard | Glance (`gateway.home`) |
+| Status & SLO | Gatus (`status.home`) + host health timer |
+| Metrics & charts | VictoriaMetrics + Grafana (`grafana.home`) + `node-exporter` |
+| Logs | Dozzle (`logs.home`, via `docker-socket-proxy`) |
+| Backup | Restic (encrypted on SSD + Mac offsite pull) |
+| Network inventory | NetAlertX (`devices.home`) |
+| Security & remote | UFW + CrowdSec (SSH) + Tailscale + Raspberry Pi Connect |
+| Assistant & alerts | Hermes Telegram gateway + low-noise state-transition `notify.sh` |
 
 ## Requirements
 

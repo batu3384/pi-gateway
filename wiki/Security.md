@@ -25,7 +25,8 @@ Summary of repo [`docs/SECURITY.md`](https://github.com/batu3384/pi-gateway/blob
 |------|------|
 | `.env` | Gitignored — never commit |
 | TLS keys | Gitignored |
-| Rendered AdGuard/Caddy | Gitignored on Pi |
+| Rendered AdGuard/Caddy/Glance/Gatus | Gitignored |
+| `/etc/pi-gateway/modem-inventory.env` | Root `0600` on Pi — never in repo |
 
 `make validate` fails on `CHANGE_ME*` placeholders in public-repo checks.
 

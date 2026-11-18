@@ -10,10 +10,10 @@ Need admin from outside home without opening WAN ports on the router. Owner phon
 
 ## Decision
 
-- **Primary**: Tailscale on host. UFW `tailscale0`: `22/80/443` TCP (Caddy/SSH) and `:53` UDP+TCP (AdGuard). Panels: MagicDNS optional; Telegram uses `http://100.x`.
+- **Primary**: Tailscale on host. UFW `tailscale0`: `22/80/443` TCP (Caddy/SSH) and `:53` UDP+TCP (AdGuard). Panels: `https://<panel>.home` via Global DNS + subnet route, or `http://100.x:PORT/` when `TS_PANEL_DIRECT_PORTS=true`.
 - **DNS (owner devices)**: Tailscale **global nameserver** = Pi Tailscale IPv4, then Override DNS. Split DNS `home` stays. Pi `--accept-dns=false`. Proof `dig @100.x` from a **client**, not from the Pi. No second global NS. Nameserver is not the LAN IP.
 - **Optional**: Cloudflare Tunnel when `CLOUDFLARE_TUNNEL_TOKEN` set — public edge. Must restrict hostnames; prefer HTTPS; treat as increased attack surface.
-- Do not expose n8n / panel ports on WAN.
+- Do not expose admin / panel ports on WAN.
 
 ## Consequences
 

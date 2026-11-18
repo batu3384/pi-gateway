@@ -12,8 +12,8 @@
 |-------|-----------|
 | Network | UFW (LAN-scoped) |
 | Threat | CrowdSec + UFW sync / bouncer (sole SSH ban — fail2ban yok; CrowdSec/timer down ise UFW yine LAN kısıtlar ama auto-ban yok) |
-| Application | Per-service passwords (Dozzle, Kuma GUI) |
-| DNS | AdGuard filters + Unbound |
+| Application | Unified or per-service passwords (Caddy, AdGuard, Dozzle, Grafana, NetAlertX) |
+| DNS | AdGuard filters + Unbound (DoT `:853` + DNSSEC) |
 | Remote | Tailscale (optional) |
 
 ## HTTP risk

@@ -22,11 +22,11 @@ docker info --format '{{.DockerRootDir}}'
 
 ## Degraded modu (otomatik)
 
-SSD kaybında stack **unbound + adguard + homepage + caddy** ile devam eder. App verisi SD'ye yazılmaz.
+SSD kaybında stack **unbound + adguard + glance + caddy** ile devam eder. App verisi SD'ye yazılmaz.
 
 **Yapma:**
 - `docker compose up` full stack (SD clobber riski)
-- SSD takılı değilken n8n başlatma
+- SSD takılı değilken SSD bağımlı ikincil servisleri zorla başlatma
 
 **Yap:**
 1. SSD kablo/güç kontrol
@@ -64,7 +64,7 @@ AdGuard bbolt panic (`sessions.db` / `stats.db`): `repair-adguard-bbolt.sh` (hea
 kopyasını kullanır; deploy sonrası iki path hash’i eşleşmelidir:
 
 ```bash
-sha256sum /home/batu/pi-gateway/scripts/pi/ssd-fsck.sh \
+sha256sum ~/pi-gateway/scripts/pi/ssd-fsck.sh \
   /usr/local/lib/pi-gateway/scripts/pi/ssd-fsck.sh
 ```
 

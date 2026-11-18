@@ -28,7 +28,7 @@ Full walkthrough: repo [`INSTALL.md`](https://github.com/batu3384/pi-gateway/blo
 ## After install
 
 1. **Router DNS1** — Pi static IP (`PI_STATIC_IP`). ZTE DNS2=modem often still in OFFER (ads on LAN `:53`). IP filter FORWARD — dest `.1:53` drop INPUT resolver’ı kesmez. Mac: `make mac-dns` (yalnız ev LAN). Bu ZTE’de `adguard-dhcp`+relay DISCOVER yutuyor — modem DHCP açık kalsın. Repo: `docs/DNS-BLOCKING.md`.
-2. **Panels** — `https://gateway.home`, `https://dns.home`, `https://status.home` (TLS default).
+2. **Panels** — `https://gateway.home` (Glance), `https://dns.home` (AdGuard), `https://status.home` (Gatus), `https://grafana.home` (Grafana), `https://logs.home` (Dozzle), `https://devices.home` (NetAlertX).
 3. **Trust CA on Mac** — `make trust-ca` if browser warns on mkcert.
 4. **Remote** — optional Tailscale: `docs/TAILSCALE.md` in repo.
 
@@ -51,6 +51,6 @@ If SSD drops, stack enters **degraded** (DNS on SD only). See [Troubleshooting](
 | Goal | Doc (repo) |
 |------|----------------|
 | Backup (Restic) | `docs/FAZ2.md` |
-| n8n / CrowdSec | `docs/FAZ3.md` |
+| Security / CrowdSec | `docs/FAZ3.md` |
 | NetAlertX | `docs/FAZ4.md` |
 | Env reference | `docs/ENV.md` |

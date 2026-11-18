@@ -6,16 +6,17 @@ Tek bakışta durum + geçmiş grafikleri.
 
 | Katman | URL / yol | Ne gösterir |
 |--------|-----------|-------------|
-| Homepage widget | https://gateway.home | `state.json`: SSD, yedek, drill |
-| Prometheus | `127.0.0.1:9090` (LAN içi) | Metrik deposu |
-| Grafana | https://grafana.home | CPU, disk, gateway SLO grafikleri |
-| Dozzle | https://logs.home | Canlı container logları (Loki yerine) |
+| Glance widget | https://gateway.home | `state.json`: SSD, DNS gecikmesi, yedek, drill |
+| Gatus | https://status.home | Servis sağlığı ve SLO push kalp atışları |
+| VictoriaMetrics | `127.0.0.1:9090` (loopback) | Hafif PromQL metrik deposu (`128MB` bellek sınırı) |
+| Grafana | https://grafana.home | CPU, disk, DNS gecikmesi, AdGuard ve SLO grafikleri |
+| Dozzle | https://logs.home | Canlı container logları (`docker-socket-proxy` üzerinden) |
 
 ## Açma / kapatma
 
 ```bash
 # .env
-ENABLE_MONITORING=true   # varsayılan: prometheus + grafana + node-exporter
+ENABLE_MONITORING=true   # varsayılan: victoriametrics + grafana + node-exporter
 GRAFANA_ADMIN_PASSWORD=  # bos -> UNIFIED_LOGIN ile AGH_ADMIN_PASSWORD
 make deploy-code   # monitoring ilk kurulum / compose için: make deploy
 ```
@@ -26,7 +27,7 @@ make deploy-code   # monitoring ilk kurulum / compose için: make deploy
 
 - Giriş: `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` (unified login = `AGH_ADMIN_*`)
 - Caddy basic auth da geçerli (çift katman)
-- Hazır dashboard: **Pi Gateway** (SSD, CPU, backup age, AdGuard blocked ratio / top clients / top blocked domains / per-list rules, İBB HKI)
+- Hazır dashboard: **Pi Gateway** (SSD, CPU %, backup age, AdGuard blocked ratio / top clients / top blocked domains / per-list rules, İBB HKI)
 
 ## Metrik kaynakları
 
@@ -34,7 +35,7 @@ make deploy-code   # monitoring ilk kurulum / compose için: make deploy
 |--------|-----|-----|
 | `node-exporter` | `node` | CPU, disk, host |
 | Textfile | `/var/lib/pi-gateway/metrics/*.prom` | `export-gateway-state.sh` + `export-adguard-metrics.sh` + `ibb-air-quality.sh` |
-| `prometheus` | `prometheus` | Self |
+| `victoriametrics` | `victoriametrics` | Self |
 
 ## Canary güncelleme
 

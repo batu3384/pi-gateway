@@ -36,34 +36,20 @@ Tracked work lives here and in [GitHub Issues](https://github.com/batu3384/pi-ga
 | SSD SMART wear visibility | Done | `pi-gateway-ssd-smart.timer` + smartmontools; runbook OPERATIONS.md |
 | Hybrid storage FSM + degraded core-dns | Done | ADR-001, `ssd-hotplug-handler`, Aug 2025–2026 |
 | SSD recovery hardening CA-001..007 | Done | notify split, xhci auto on dropout, ghost block, Aug 2026 |
-| Path B monitoring | Done | Prometheus, Grafana, gateway widget — `docs/VISIBILITY.md` |
+| Path B monitoring & lightweight upgrade | Done | VictoriaMetrics (`128MB` cap), Grafana, Glance, Gatus — `docs/VISIBILITY.md` |
+| DNS & Kernel network tuning | Done | Cloudflare Security ~5ms DoT + Quad9, TCP BBR + `fq`, `eth0`↔`wlan0` failover |
 | CI validate + gitleaks | Done | `fetch-depth: 0` for multi-commit scans |
 | Unified login + TLS default | Done | `UNIFIED_LOGIN`, mkcert pipeline |
 | 3-2-1 backup + restore drill | Done | ADR-004, `make backup-restore-drill` |
-| Telegram edge notify + bot panels | Done | `notify.sh` transitions, `/menu` bot |
+| Low-noise Telegram + Hermes assistant | Done | `notify.sh` state-transition dedup, modern pinned card & `/menu /dns /ssd /backup /recover` |
 
-## Timeline (approximate)
+## Timeline (summary)
 
-```mermaid
-gantt
-    title Pi Gateway milestones
-    dateFormat YYYY-MM
-    axisFormat %Y-%m
-
-    section Storage
-    Hybrid FSM + hotplug           :done, stor1, 2025-06, 2026-08
-    SSD software recovery CA fixes :done, stor2, 2026-08, 2026-08
-    JMicron ops / ASMedia guidance  :active, stor3, 2026-08, 2026-12
-
-    section Ops
-    Monitoring Path B              :done, ops1, 2026-07, 2026-08
-    Backup SLA + offsite           :done, ops2, 2026-06, 2026-08
-    GitHub Wiki (repo source)      :active, ops3, 2026-08, 2026-09
-
-    section Docs
-    ADR set 001-005                :done, doc1, 2025-01, 2026-06
-    Docker SSD doc matrix          :doc3, 2026-09, 2026-10
-```
+| Period | Milestone | Status |
+|--------|-----------|--------|
+| 2025–2026 | ADR set 001–005, Hybrid FSM + hotplug, 3-2-1 Backup SLA | Done |
+| Aug–Nov 2026 | Glance + Gatus + VictoriaMetrics migration, 5ms DoT + TCP BBR, low-noise Telegram/Hermes UX | Done |
+| Ongoing | JMicron enclosure / hardware monitoring (`pi-ssd-health.timer`) | Active |
 
 ## Where to propose changes
 

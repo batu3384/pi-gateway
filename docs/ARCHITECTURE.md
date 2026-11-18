@@ -7,8 +7,9 @@ Production-grade single-node home dev/DNS server for Raspberry Pi 4B.
 - Zero manual config on AdGuard/Unbound after deploy (IaC rendered configs)
 - Automatic network discovery and static IP assignment
 - Self-healing containers (`recover-stack.sh` + healthchecks)
-- Independent DNS health monitoring (systemd timer, not dependent on Uptime Kuma)
-- Hybrid storage: SD boot + root; USB SSD for application data (`/mnt/ssd`)
+- Independent DNS health monitoring (systemd timer, not dependent on Gatus)
+- Hybrid storage: SD boot + root; USB SSD for application data (`/mnt/ssd`) and optional Docker `data-root`
+- Kernel network optimization: TCP BBR + `fq` qdisc, ARP flux protection, and automatic `eth0`↔`wlan0` failover
 - Host firewall (UFW) + SSH brute-force protection (CrowdSec)
 - TLS on by default; offsite backup SLA (`make backup-pull`)
 - Optional AdGuard DHCP — **not on ZTE H3600P** (relay swallows DISCOVER)
@@ -17,9 +18,10 @@ Production-grade single-node home dev/DNS server for Raspberry Pi 4B.
 
 | Tier | Profile / always-on | Role |
 |------|---------------------|------|
-| **dns-core** | `unbound`, `adguard` (always) | LAN DNS — keep up even when SSD degraded |
-| **panels** | `caddy`, homepage, uptime-kuma, `dozzle` | `*.home` UI via Caddy+TLS |
-| **automation** | `netalert`, `crowdsec` | Best-effort apps on SSD data |
+| **dns-core** | `unbound`, `adguard` (always) | LAN DNS — keep up even when SSD degraded (+ host DoT `:53` fallback) |
+| **panels** | `caddy`, `glance`, `gateway-state`, `gatus`, `dozzle` | `*.home` UI via Caddy+TLS (`docker-socket-proxy` isolates Docker API) |
+| **monitoring** | `victoriametrics`, `grafana`, `node-exporter` | Low-RAM metrics store (`128MB` cap) + dashboards |
+| **security & lan** | `netalert`, `crowdsec` | LAN ARP/client inventory + SSH/service ban engine (`n8n` retired/off by default) |
 | **edge** | `cloudflare` (token) | Optional public edge |
 
 Feature flags: `ENABLE_*` in `.env` → compose profiles (`scripts/lib/compose-profiles.sh`).
@@ -32,7 +34,7 @@ See [docs/adr/](adr/README.md). Script map: [docs/SCRIPTS.md](SCRIPTS.md).
 
 ```
 Client (DHCP from modem .1)
-  DNS1 = Pi .112          DNS2 = .1 (ZTE inject, panel yok sayilir)
+  DNS1 = Pi .50           DNS2 = .1 (ZTE inject, panel yok sayilir)
   IPv6 RDNSS = fe80::1    (+ Pi ULA RA, last-RA savasi)
        |                      |
        v                      v
@@ -46,7 +48,7 @@ Client (DHCP from modem .1)
 
 Owner telefon/Mac (Tailscale, Override):
   DNS --> Pi 100.x:53 (UFW tailscale0) --> ayni AdGuard
-  Panel --> Pi 100.x:80/443 (Caddy). MagicDNS sart degil.
+  Panel --> Pi 100.x:80/443 -> Tailscale Serve / DNAT -> 127.0.0.1:8088 (Caddy loopback; LAN :80/:443 Basic Auth)
 ```
 
 Pi **LAN gateway değil.** Aynı L2’de `192.168.1.1:53` Pi’den geçmez. `iptables REDIRECT` / “Pi’yi GW yap” DNS2’yi kesmez (on-link). Yeni kutu veya cihaz DNS yoksa **tavan bu.**
@@ -83,27 +85,28 @@ Tam ev kilidi = başka L2 (OpenWrt) veya cihaz DNS. İkisi de bu hedefte yok. Mi
 | Layer | Component | Role |
 |-------|-----------|------|
 | DNS filter | AdGuard Home | Block ads/trackers, local rewrites |
-| DNS resolver | Unbound (klutchell) | DoT forward (Quad9/CF :853); not recursive. DNSSEC validator (AD + `dnssec-failed.org` SERVFAIL in diagnose) |
-| Proxy | Caddy | gateway.home, dns.home, status.home |
-| Dashboard | Homepage | Service links |
-| Logs | Dozzle | Live Docker container logs |
-| Monitoring | Uptime Kuma + systemd health timer | Uptime + DNS layer checks |
-| Network inventory | NetAlertX | LAN device discovery, new/offline alerts |
+| DNS resolver | Unbound (klutchell) | DoT forward (Cloudflare Security `1.1.1.2`/`1.0.0.2` + Quad9 `:853`); not recursive. DNSSEC validator (AD + `dnssec-failed.org` SERVFAIL in diagnose) |
+| Proxy | Caddy | `gateway.home`, `dns.home`, `status.home`, `grafana.home`, `logs.home`, `devices.home` (Tailscale vhosts bound strictly to `127.0.0.1:8088`) |
+| Dashboard | Glance + `gateway-state` | Lightweight dashboard + public `/var/lib/pi-gateway/public/state.json` widget (`modem-inventory.json` isolated) |
+| Logs | Dozzle | Live Docker container logs (via isolated `socket_proxy` internal network + `docker-socket-proxy`) |
+| Status & Metrics | Gatus + VictoriaMetrics + Grafana + systemd health timer | Uptime, SLO heartbeats, time-series metrics & DNS layer checks |
+| Network inventory | NetAlertX | LAN device discovery (`devices.home`), AdGuard client name import |
+| Assistant | Hermes Telegram Gateway + `notify.sh` | Conversational ops (`/menu`, `/dns`, `/ssd`, `/backup`, `/recover` + `/recover onay` single-message `--stdout`) + state-transition alerts |
 | Recovery | recover-stack.sh | Restart unhealthy / degraded stack |
-| Security | UFW + CrowdSec | LAN-scoped admin ports, SSH protection |
-| Host | journald persistent cap (200M), sysctl tuning, watchdog | SD longevity, UDP performance |
-| Remote | Tailscale (host) | Panels `100.x` + owner DNS to AdGuard `:53` |
-| Storage | `/mnt/ssd/pi-gateway-data` (symlink `~/pi-gateway/data`) | AdGuard, Kuma, backups |
+| Security | UFW + CrowdSec | LAN-scoped admin ports, SSH/DoT `:853` & `:22000` immediate `REJECT` (no Android timeout / kernel log storm), CrowdSec JSON-synced UFW bans |
+| Host | journald persistent cap (`99-pi-gateway-persistent.conf`), sysctl BBR+`fq`, NM failover | SD longevity, TCP/UDP performance, NIC redundancy |
+| Remote | Tailscale + Raspberry Pi Connect | Remote panels, owner DNS to AdGuard `:53`, desktop screen access |
+| Storage | `/mnt/ssd/pi-gateway-data` (symlink `~/pi-gateway/data`) | AdGuard, Gatus, VictoriaMetrics, Grafana, NetAlertX, Restic backups |
 
 ## Phased rollout
 
 | Phase | Status | Items |
 |-------|--------|-------|
 | 0 Foundation | Done | Docker, SSD data disk, UFW, CrowdSec, Tailscale hook |
-| 1 DNS stack | Done | Unbound, AdGuard, Homepage, Uptime Kuma, Caddy, Dozzle |
-| 2 Backup | Done | Restic (timer); Forgejo/Syncthing removed |
-| 3 Advanced | Done | CrowdSec; Cloudflare Tunnel (with token). n8n kapatildi 2026-11 |
-| 4 Network visibility | Done | NetAlertX — `devices.home`, Telegram alerts |
+| 1 DNS & Panels | Done | Unbound, AdGuard, Glance, Gatus, Caddy, Dozzle |
+| 2 Backup | Done | Restic (timer + Mac pull + drill); Forgejo/Syncthing removed |
+| 3 Monitoring & Edge | Done | VictoriaMetrics + Grafana + `node-exporter`; `n8n` retired (`ENABLE_N8N=false`) |
+| 4 Network & Assistant | Done | NetAlertX (`devices.home`), Hermes Telegram Gateway, low-noise `notify.sh` |
 
 ## Network modes
 
@@ -122,7 +125,7 @@ Tam ev kilidi = başka L2 (OpenWrt) veya cihaz DNS. İkisi de bu hedefte yok. Mi
 ```
 Mac: make install
   -> discover-remote.sh (Pi network scan)
-  -> render-config.sh (AdGuard yaml, Caddy, dhcpcd, homepage)
+  -> render-config.sh (AdGuard yaml, Caddy, dhcpcd, Glance, Gatus)
   -> validate.sh (compose + config checks)
   -> deploy.sh (rsync + bootstrap + docker compose + smoke test)
 ```
@@ -131,12 +134,14 @@ Mac: make install
 
 ```
 SD (mmcblk):  /           OS root
-              /var/lib/docker (default; ENABLE_DOCKER_SSD=false)
+              /var/lib/containerd (containerd snapshotter)
 USB SSD:      /mnt/ssd/
                 docker/            <- ENABLE_DOCKER_SSD=true (opt-in)
                 pi-gateway-data/   <- ~/pi-gateway/data symlink
                   adguard/work/
-                  uptime-kuma/
+                  gatus/
+                  victoriametrics/
+                  grafana/
                   netalertx/
                   backups/restic/
 ```

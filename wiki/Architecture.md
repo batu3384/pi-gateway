@@ -14,10 +14,10 @@ Single-node home DNS + dev server on Raspberry Pi 4B. Infrastructure-as-code: re
 
 ```
 Client DHCP (modem)
-  DNS1=Pi .112 | DNS2=.1 (ZTE inject) | IPv6 RDNSS fe80::1
-       │                │
-       ▼                ▼
- AdGuard :53      Modem INPUT :53 (aynı L2 — Pi gormez)
+  DNS1=Pi .50 | DNS2=.1 (ZTE inject) | IPv6 RDNSS fe80::1
+       │               │
+       ▼               ▼
+ AdGuard :53     Modem INPUT :53 (aynı L2 — Pi gormez)
        │
  Unbound :5335 DoT :853  (WAN dest:53 drop)
 ```
@@ -30,10 +30,10 @@ HTTP(S) panels: **Caddy** terminates TLS for `*.home` → Docker services.
 
 | Tier | Services | Role |
 |------|----------|------|
-| **dns-core** | unbound, adguard | Always up — even SSD degraded |
-| **panels** | caddy, homepage, uptime-kuma, dozzle | `*.home` UI |
-| **automation** | n8n, netalertx, crowdsec | SSD data (best-effort) |
-| **monitoring** | prometheus, grafana, node-exporter | Profile `monitoring` |
+| **dns-core** | unbound, adguard | Always up — even SSD degraded (+ host DoT fallback) |
+| **panels** | caddy, glance, gateway-state, gatus, dozzle | `*.home` UI (`docker-socket-proxy` isolates Docker API) |
+| **security & lan** | netalertx, crowdsec | SSD data (n8n optional/disabled by default) |
+| **monitoring** | victoriametrics, grafana, node-exporter | Profile `monitoring` (`128MB` VM cap) |
 | **edge** | cloudflare tunnel | Opt-in |
 
 Profiles: `ENABLE_*` in `.env` → `scripts/lib/compose-profiles.sh`.

@@ -15,13 +15,13 @@
 |----------|---------|
 | `ADGUARD_BOOT_WAIT_SEC` | 180 |
 | `ADGUARD_MIN_FILTER_RULES` | 100000 |
-| `ADGUARD_MIN_REWRITES` | 8 |
+| `ADGUARD_MIN_REWRITES` | 7 (`ENABLE_N8N=true` ise 8) |
 | `ADGUARD_UPSTREAM_TIMEOUT` | `2`; ölü isim 5s bekletmesin (Unbound DoT) |
 | `ADGUARD_RATELIMIT_SUBNET_IPV4` / `IPV6` | `32` / `128`; AGH default /24 ve /56 tüm evi tek kova yapar |
-| `ADGUARD_CACHE_SIZE` | `67108864` (64MiB cevap cache; kural motorundan ayrı) |
+| `ADGUARD_CACHE_SIZE` | `16777216` (16MiB cevap cache; Unbound `16m/32m` ile dengeli) |
 | `ADGUARD_CACHE_TTL_MIN` | `60`. `300` yanlış IP’yi 5 dk kilitler; `0` YouTube `rr---sn-*` soğuk DoT |
 | `ADGUARD_AAAA_DISABLED` | `true`. AGH API `disable_ipv6` (YAML `aaaa_disabled`). Yavaş WAN Happy Eyeballs. IPv6-only host: `false` |
-| `DNS_HOST_FALLBACK` | `true`; AGH/docker düşünce host `:53` DoT (AdGuard DNS + Quad9). USB overlay ölümü |
+| `DNS_HOST_FALLBACK` | `true`; AGH/docker düşünce host `:53` DoT (Cloudflare Security + Quad9 + AdGuard). USB overlay ölümü |
 | `ADGUARD_AUTO_HEAL` | `false`; filter drift → `apply-adguard-filters` + global `cache_clear` |
 | `ADGUARD_DNS_AUTO_HEAL` | `true`; DNS drift → yalnız `apply-adguard-dns.sh` (TTL/upstream, cache_clear yok) |
 | `ADGUARD_FILTER_PREFLIGHT` / `ADGUARD_FILTER_PREFLIGHT_TIMEOUT_SEC` | `true` / `20`; HTTPS, izinli host, redirect ve filter syntax kontrolü |
@@ -85,14 +85,17 @@ ilk doğrulamadan sonra modem parolasını rotate edin.
 
 | Variable | Description |
 |----------|-------------|
-| `UNIFIED_LOGIN` | `true` (default): `AGH_ADMIN_*` = Caddy + Dozzle/Kuma/NetAlertX/Grafana |
+| `UNIFIED_LOGIN` | `true` (default): `AGH_ADMIN_*` = Caddy + Dozzle/NetAlertX/Grafana |
 | `SYNC_SERVICE_PASSWORDS` | `true` (default with unified): deploy sonrasi GUI sifre esitleme |
-| `ENABLE_MONITORING` | `true`: Prometheus + Grafana + node-exporter (`grafana.home`) |
+| `ENABLE_GATUS` / `GATUS_PORT` | `true` / `3001`: Gatus durum ve SLO sayfası (`status.home`) |
+| `ENABLE_MONITORING` | `true`: VictoriaMetrics + Grafana + node-exporter (`grafana.home`) |
 | `ENABLE_CANARY_COMPOSE_UPDATE` | `true`: deploy DNS-once, wait, then edge + apps. Bu evde kapatma — Unbound recreate + WAN `:53` drop. |
 | `CANARY_DNS_WAIT_SEC` | `10` (`wait_dns_core` sonrası yastık; eski varsayılan 45). `wait-adguard-dns` zaten `MIN_FILTER_RULES` bekler. |
 | `UFW_ADMIN_EXPOSURE` | `full` or `caddy-only` |
 | `TELEGRAM_BOT_TOKEN` | @BotFather token (notify outbox + panel; Hermes also keeps copy in `~/.hermes/.env`) |
 | `TELEGRAM_CHAT_ID` | Notify / panel hedef chat veya numeric user id |
+| `NOTIFY_BACKUP_OK` / `NOTIFY_DNS_WEEKLY_OK` / `NOTIFY_HERMES_UP_ON_RESTART` | `false`: rutin başarı/restart bildirimleri kapalı; yalnız gerçek hata ve kurtarmalar gönderilir |
+| `NETALERTX_TELEGRAM_NEW_DEVICE` | `false`: rastgele MAC (`privacy_mac`) cihaz spam'ini önlemek için yeni cihaz Telegram bildirimi varsayılan kapalı |
 | `HERMES_TELEGRAM_GATEWAY` | `true` = Hermes owns Telegram inbox (`getUpdates`); panel poller off. Allowlist: `TELEGRAM_ALLOWED_USERS` in `~/.hermes/.env` |
 | `HERMES_TELEGRAM_STREAMING` | `false`: Telegram `editMessageText` akıtma kapalı (Bot API flood). GLM API stream = `HERMES_STREAMING` |
 | `HERMES_TELEGRAM_TOOL_PROGRESS` | `off`: “terminale bakıyorum” bubble yok. Patch YAML’e `false` yazar (`off` string restart döngüsü). CLI `display.tool_progress` ayrı |
@@ -169,13 +172,13 @@ SSD restic alone is **not** 3-2-1. Run `make backup-pull` / `make backup-cron` /
 | `WEAK_TLS_OK` | (unset) | Required to set `ENABLE_TLS=false` |
 | `N8N_SECURE_COOKIE` | `true` | Must be true when TLS on |
 
-## n8n
+## n8n (Optional — `ENABLE_N8N=false` by default)
 
 | Variable | Description |
 |----------|-------------|
+| `ENABLE_N8N` | `false` (varsayılan kapalı; açmak için `true` + `make deploy`) |
 | `N8N_ENCRYPTION_KEY` | Credential encryption (≥32 chars; `openssl rand -hex 24`) |
-| `N8N_WEBHOOK_SECRET` | Webhook URL suffix (Kuma) |
-| `N8N_KUMA_WEBHOOK_URL` | Optional; auto-built from secret if empty |
+| `N8N_WEBHOOK_SECRET` | Optional webhook URL suffix |
 
 If `N8N_ENCRYPTION_KEY` is empty on Pi, `ensure-n8n-encryption-key.sh` generates it during post-deploy. **Do not change** — existing n8n credentials become unreadable.
 
@@ -199,6 +202,6 @@ Details: `docs/FAZ4.md`
 | `ADGUARD_METRICS_TOP_N` | `12` (max 25) | Grafana bar: top client / blocked / queried domain |
 | `IBB_AQI_STATION_ID` | empty | İBB istasyon UUID. Boş = `IBB_HOME_*` / `QUAKE_HOME_*` en yakın (Mobil atlanır) |
 | `IBB_HOME_LAT` / `IBB_HOME_LON` | `QUAKE_HOME_*` veya Aksaray civarı | En yakın HKI istasyonu |
-| `IBB_HKI_WARN` | `51` | Telegram eşik (İBB sarı bant). scrape fail = Telegram yok |
+| `IBB_HKI_WARN` | `101` | Telegram eşik (İBB hassas gruplar / turuncu bant). scrape fail = Telegram yok |
 | `NOTIFY_IBB_REPEAT_SEC` | `21600` | Aynı HKI-kötü durumunda tekrar (6 saat) |
 | `IBB_HTTP_TIMEOUT_SEC` | `20` | İBB API timeout |

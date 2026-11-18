@@ -1,6 +1,6 @@
 # Pi Gateway Wiki
 
-Production DNS / home-lab gateway for **Raspberry Pi 4B**: AdGuard + Unbound, Caddy, n8n, monitoring — deployed from a Mac with one pipeline.
+Production DNS / home-lab gateway for **Raspberry Pi 4B**: AdGuard + Unbound, Caddy, Glance, Gatus, VictoriaMetrics + Grafana, Hermes Telegram assistant — deployed from a Mac with one pipeline.
 
 **Repo:** [github.com/batu3384/pi-gateway](https://github.com/batu3384/pi-gateway)
 
@@ -20,10 +20,10 @@ Production DNS / home-lab gateway for **Raspberry Pi 4B**: AdGuard + Unbound, Ca
 | Layer | Component |
 |-------|-----------|
 | DNS filter | AdGuard Home |
-| DNS resolver | Unbound (DoT :853) |
+| DNS resolver | Unbound (Cloudflare Security + Quad9 DoT `:853`) |
 | Reverse proxy | Caddy (`*.home`) |
-| Dashboard | Homepage + gateway widget |
-| Monitoring | Uptime Kuma, Prometheus, Grafana, systemd health timer |
+| Dashboard | Glance + gateway widget |
+| Monitoring | Gatus, VictoriaMetrics, Grafana, systemd health timer |
 | Backup | Restic (3-2-1 SLA) |
 | Security | UFW, CrowdSec / Tailscale |
 

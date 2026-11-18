@@ -34,11 +34,11 @@ make install   # runs doctor → discover → render → validate → deploy
 |------|-----------|
 | Prerequisite checks (`doctor`) | Yes (via `make install`) |
 | Network discovery (gateway, subnet, static IP) | Yes |
-| dhcpcd static IP | Yes |
+| NetworkManager / dhcpcd static IP + `eth0`↔`wlan0` failover + TCP BBR | Yes |
 | SSD data disk at `/mnt/ssd` | Yes (USB SSD must be attached) |
 | Docker + compose stack | Yes |
-| AdGuard + Unbound + Homepage + Uptime Kuma | Yes |
-| Optional profiles (Caddy, n8n, …) | Yes (from `.env` flags) |
+| AdGuard + Unbound + Glance + Gatus + VictoriaMetrics + Grafana | Yes |
+| Optional profiles (Caddy, Dozzle, NetAlertX, CrowdSec; `n8n` off by default) | Yes (from `.env` flags) |
 | Post-deploy service setup + smoke test | Yes |
 
 ## One-time manual steps

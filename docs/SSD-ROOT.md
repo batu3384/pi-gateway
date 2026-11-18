@@ -1,6 +1,7 @@
-# SD Boot + SSD Rootfs (Architecture A)
+# SD Boot + SSD Rootfs (Architecture A — Experimental)
 
-Production target: **SD boot only**, **SSD = rootfs + Docker + data**.
+Optional alternative: **SD boot only**, **SSD = rootfs + Docker + data**.
+> **Note:** Production default is **`STORAGE_TYPE=hybrid`** (OS on SD, data + optional Docker root on `/mnt/ssd` — see [ADR-001](adr/001-storage-hybrid.md)). Use `ssd-root` only when explicitly migrating rootfs onto USB SSD.
 
 ## Architecture
 
@@ -14,7 +15,7 @@ Pi EEPROM → SD bootfs (firmware/kernel/cmdline)
 | SD `bootfs` | firmware, kernel, cmdline, config |
 | SSD root | OS, apt, home, Docker, pi-gateway data |
 
-`STORAGE_TYPE=ssd-root` — hybrid (`/mnt/ssd` data disk) is **not** the production default; treated as experimental due to JMicron USB and EEPROM risk.
+`STORAGE_TYPE=ssd-root` — experimental alternative to the production default `STORAGE_TYPE=hybrid` (`/mnt/ssd` data disk) due to JMicron USB bridge and EEPROM boot risk.
 
 ## Cutover (Mac)
 

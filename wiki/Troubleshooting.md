@@ -2,7 +2,7 @@
 
 ## SSD dropped / degraded
 
-**Symptoms:** n8n down, Telegram “SSD Degraded”, `storage_degraded: 1`.
+**Symptoms:** secondary panels down, Telegram “SSD Korumalı Mod”, `storage_degraded: 1` (DNS stays active on SD).
 
 ```bash
 # On Pi

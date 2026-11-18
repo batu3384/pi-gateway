@@ -51,35 +51,35 @@ Setup: `make pi-access`
 
 ## Panels (`*.home`)
 
-Visibility stack (Path B): `docs/VISIBILITY.md` — Grafana, Prometheus, Homepage widget.
+Visibility stack (Path B): `docs/VISIBILITY.md` — Grafana, VictoriaMetrics, Glance widget, Gatus.
 
 With `ENABLE_TLS=true` (default), all panels use **HTTPS** (`https://*.home`). HTTP only with `WEAK_TLS_OK=yes`.
 
 ### Unified login (`UNIFIED_LOGIN=true`, default)
 
-`AGH_ADMIN_USER` + `AGH_ADMIN_PASSWORD` = **tek sifre** Caddy ve servis GUI'leri icin. Deploy `sync-service-passwords` ile Dozzle, Uptime Kuma, NetAlertX ve Grafana sifrelerini esitler.
+`AGH_ADMIN_USER` + `AGH_ADMIN_PASSWORD` = **tek sifre** Caddy ve servis GUI'leri icin. Deploy `sync-service-passwords` ile Dozzle, NetAlertX ve Grafana sifrelerini esitler.
 
 Caddy basic_auth her yerde `AGH_ADMIN_USER`.
 
 | URL | Service | Caddy | App (unified) |
 |-----|---------|-------|---------------|
-| https://gateway.home | Homepage + gateway widget | `AGH_ADMIN_*` | — |
-| https://panel.home | Homepage (alias) | same | — |
-| https://status.home | Uptime Kuma | same | same |
+| https://gateway.home | Glance + gateway widget | `AGH_ADMIN_*` | — |
+| https://panel.home | Glance (alias) | same | — |
+| https://status.home | Gatus | same | — |
 | https://logs.home | Dozzle | same | same |
 | https://dns.home | AdGuard | same | `AGH_ADMIN_*` |
 | https://grafana.home | Grafana | same | `AGH_ADMIN_*` |
 | https://devices.home | NetAlertX | — (API dongusu) | `AGH_ADMIN_*` |
 
-Homepage **Gateway durumu** widget: `state.json` (SSD, yedek, drill metrikleri).
+Glance **Gateway durumu** widget: `state.json` (SSD, DNS gecikmesi, yedek, drill metrikleri).
 
 `UNIFIED_LOGIN=false` ise eski dual-login: her servis icin ayri `.env` sifresi.
 
-Public status page: `https://status.home/status/pi-gateway` (after Caddy auth).
+Status & SLO page: `https://status.home` (after Caddy auth).
 
 Mac HTTPS cert warning: `make trust-ca`.
 
-Remote access (telefon): Tailscale **Connected** — paneller `http://100.x/p/…` (MagicDNS şart değil). **Filtre ev dışı:** Use Tailscale DNS + admin global NS=`100.x` + Override (`docs/TAILSCALE.md`). Private DNS / iCloud Relay / Chrome Secure DNS kapalı. Pi: `setup-caddy-lan-ip` TS:80→LAN Caddy DNAT.
+Remote access (telefon): Tailscale **Connected** — paneller `http://100.x/p/…` (MagicDNS şart değil). **Filtre ev dışı:** Use Tailscale DNS + admin global NS=`100.x` + Override (`docs/TAILSCALE.md`). Private DNS / iCloud Relay / Chrome Secure DNS kapalı. Pi: `setup-caddy-lan-ip` / Tailscale Serve → `127.0.0.1:8088` (yalnız loopback authless vhost; LAN `:80/:443` Basic Auth korunur).
 
 ## DNS rollout
 
@@ -143,8 +143,8 @@ If deploy fails: run `make verify-data` to check `data/` symlink; `data/` must n
 - **UFW:** `caddy-only` — admin panels only via `*.home` (ports 80/443)
 - **Passwords:** per-service (`.env`, not in git). `.env` mode 600. Restic şifresi `.env` içinde (aynı disk; ciphertext tek başına açılmaz)
 - **SSH:** key-only (`/etc/ssh/sshd_config.d/00-pi-gateway-ssh.conf`, sshd first-wins vs cloud-init). `pi` sudo parola ister; ilk bootstrap/post-deploy SSH PTY ile çalışır.
-- **Prometheus:** Grafana scrape. Uyarı = health-check + Kuma + Telegram — Alertmanager yok
-- **Tailscale:** UFW `tailscale0` `22/80/443` TCP + `:53` UDP+TCP (AdGuard). ACL `group:owners` / `tag:owner-device`. WAN `:53` kapalı.
+- **VictoriaMetrics:** Grafana PromQL uyumlu metrik deposu (`127.0.0.1:9090`). Uyarı = yalnız `health-check` + `notify.sh` (Gatus ve Alertmanager Telegram atmaz — tek kanal).
+- **Tailscale:** UFW `tailscale0` `22/80/443/8088` TCP + `:53` UDP+TCP (AdGuard). ACL `group:owners` / `tag:owner-device`. WAN `:53` kapalı; LAN `:853` (DoT) ve `:22000` (Syncthing) `REJECT` ile 15s istemci beklemesi ve UFW log fırtınası önlenir.
 
 SSH şifre geri (key kaybı): Pi HDMI/konsol veya SD `userconf`; sonra `sudo rm /etc/ssh/sshd_config.d/00-pi-gateway-ssh.conf && sudo systemctl reload ssh`
 
@@ -185,11 +185,12 @@ docker info | grep "Docker Root Dir"
 Health timer writes:
 
 - `/var/lib/pi-gateway/state.json` — human JSON (`make status`)
+- `/var/lib/pi-gateway/public/state.json` — `gateway-state` nginx tarafından yansıtılan salt-okunur özet (`modem-inventory.json` hariç)
 - `/var/lib/pi-gateway/metrics/pi_gateway.prom` — Prometheus textfile
 - `/var/lib/pi-gateway/metrics/pi_gateway_adguard.prom` — AdGuard stats / per-list rules / top clients+blocked
 - `/var/lib/pi-gateway/metrics/pi_gateway_ibb.prom` — İBB HKI (en yakın istasyon, 30 dk)
 
-SLO PUSH heartbeats → Uptime Kuma (`docs/SLO.md`).
+SLO PUSH heartbeats → Gatus external endpoints (`docs/SLO.md`).
 
 ## Backup confidence (3-2-1)
 
@@ -211,12 +212,11 @@ Başarısız restore drill `/var/lib/pi-gateway/last-backup-restore-drill-failur
 
 | Source | What it sends |
 |--------|---------------|
-| `health-check` timer | Çekirdek sağlık hatası (OnFailure), disk/inode 80%+, düşük RAM, SD warnings |
-| `restic-backup` | Backup completed |
-| `health-check` / SSD hotplug | Stack or SSD recovery |
-| n8n ← Uptime Kuma webhook | Service down / back up |
-| `pi-gateway-quake.timer` (60s) | AFAD+Kandilli poll → outbox bot (Hermes yok; EEW değil) |
-| `pi-gateway-ibb.timer` (30 dk) | İBB HKI ≥ `IBB_HKI_WARN` (51) → Telegram; iyileşince bir kez OK. API fail = sessiz |
+| `health-check` timer | Çekirdek sağlık hatası (OnFailure), disk/inode 80%+, düşük RAM, SD/izleme uyarıları (durum-geçişli + debounce) |
+| `restic-backup` | Yalnız hata olursa uyarı (`NOTIFY_BACKUP_OK=false` varsayılan sessiz) |
+| `health-check` / SSD hotplug | Gerçek kesinti sonrası kurtarma bildirimi |
+| `pi-gateway-quake.timer` (60s) | AFAD+Kandilli poll → outbox bot (REVIZE tekilleştirmeli; Hermes yok; EEW değil) |
+| `pi-gateway-ibb.timer` (30 dk) | İBB HKI ≥ `IBB_HKI_WARN` (101) → Telegram; iyileşince bir kez OK. API fail = sessiz |
 | Hermes cron (07:00 / 18:55 / 19:00 / 23:00) | Günaydın / piyasa / akşam / gece bültenleri — ağ/saatlik gözcü kaldırıldı |
 
 **Deprem:** yayın sonrası bildirim. Gecikme ≈ kaynak sayfası + ≤60s poll. İlk koşu bootstrap (tarihî liste spam yok). Eşik/konum: `.env` `QUAKE_*` (bkz. `.env.example`).
@@ -237,7 +237,7 @@ When `HERMES_TELEGRAM_GATEWAY=true` in Pi `.env`:
 - **Inbox:** `hermes-gateway.service` (Nous Hermes) owns `getUpdates` — chat + commands.
 - **Outbox:** `notify.sh` keeps using the same `TELEGRAM_BOT_TOKEN` via `sendMessage`.
 - **Identity:** deploy kopyalar `config/hermes/SOUL.md` → `~/.hermes/SOUL.md` + skill `pi-gateway-ops` (Forgejo/Syncthing yok). Ölü skill’ler (`imessage`, `findmy`, `comfyui`, `vllm`…) `skills.disabled`. Script: `setup-hermes-identity.sh`.
-- **Panel menu:** `telegram-menu.sh` (Mac/outbox) or Hermes `/menu` skill → `hermes-menu.sh`.
+- **Panel menu:** `telegram-menu.sh` (Mac/outbox) or Hermes `/menu` skill → `hermes-menu.sh`. Komut skill’leri (`/dns`, `/ssd`, `/backup`, `/recover`, `/recover onay`) tek-mesaj `telegram-ops.sh --stdout` çıktısı üretir.
 - Secrets: `GLM_API_KEY` + Telegram token live in `~/.hermes/.env` (chmod 600). Coding Plan base URL: `https://api.z.ai/api/coding/paas/v4`. Default model: **`glm-5.3`** (`provider: zai` in `~/.hermes/config.yaml`).
 - Browser (Pi aarch64): system Chromium (`apt install chromium`) + `agent-browser`; set `AGENT_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium` (Chrome-for-Testing ARM64 yok).
 - Allowlist: `TELEGRAM_ALLOWED_USERS` = numeric **user** id (not group chat id). Notify still uses `TELEGRAM_CHAT_ID`.
@@ -248,13 +248,13 @@ When `HERMES_TELEGRAM_GATEWAY=true` in Pi `.env`:
 | `hermes update && REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/patch-hermes-telegram-pi.sh && sudo systemctl restart hermes-gateway` | Update agent + re-apply Pi Telegram patch |
 | `REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/setup-hermes-gateway.sh` | Reinstall unit + patch + drop-in |
 
-**Pi Telegram patch:** `scripts/pi/patch-hermes-telegram-pi.sh` — cold-start `require_progress=False`, stepped `initialize`, `/etc/hosts` IPv4 pin for `api.telegram.org`, systemd drop-in (`HTTP_POOL_SIZE=8`). Needed because upstream `_await_with_thread_deadline` can wedge on long-poll here. Re-run after every `hermes update`.
+**Pi Telegram patch:** `scripts/pi/patch-hermes-telegram-pi.sh` — v0.20 cold-start uyumluluğu (v0.23+ sürümde otomatik atlanır), eski statik `/etc/hosts` pin temizliği ve systemd drop-in (`HTTP_POOL_SIZE=8`, Chromium yolu). Re-run after every `hermes update`.
 
 **Disable Hermes inbox:** set `HERMES_TELEGRAM_GATEWAY=false` (or remove) in Pi `.env` → redeploy/`setup-hermes-gateway.sh` (`hermes-gateway` disabled; **no poller fallback** — inbox dark, outbox/`notify.sh` still works).
 
 **Cutover fail:** if Connected check fails, unit stays **enabled** (`Restart=always`) and Telegram outbox alert fires (`_alert_inbox_down`). Fix: `journalctl -u hermes-gateway` → `setup-hermes-gateway.sh` again.
 
-**Lifecycle Telegram:** Asistan kapanış → “kısa süre kapanıyor / yeniden başlatılıyor”. Asistan geri → “Sohbet asistanı yeniden aktif” (`hermes-inbox-up-notify.sh`). Pi reboot → “Açıldı” (`boot-notify.sh`). Crash-loop: `NOTIFY_HERMES_UP_COOLDOWN_SEC=120`.
+**Lifecycle Telegram:** Rutin `systemctl restart` ve deploy sırasında kapanış/açılış mesajları kapalıdır (`gateway_restart_notification=false`, `NOTIFY_HERMES_UP_ON_RESTART=false`). Yalnız gerçek kesinti sonrası düzelme (`hermes-inbox-up-notify.sh`) ve Pi reboot (`boot-notify.sh`) bildirilir.
 
 **Token rotate:** update both `~/pi-gateway/.env` and `~/.hermes/.env`, then `systemctl restart hermes-gateway`.
 

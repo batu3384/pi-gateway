@@ -4,17 +4,16 @@
 
 ## Services
 
-| # | Service | URL / bind | Notes |
-|---|---------|------------|-------|
-| 5 | CrowdSec | `127.0.0.1:8082` | SSH attack detection (offline API default) |
-| 10 | n8n | https://n8n.home | Automation / webhooks |
-| 2 | Cloudflare Tunnel | — | Active when `CLOUDFLARE_TUNNEL_TOKEN` is set |
+| Service | URL / bind | Notes |
+|---------|------------|-------|
+| CrowdSec | `127.0.0.1:8082` | SSH attack detection (offline API default; CAPI noise excluded from nightly diary) |
+| Cloudflare Tunnel | — | Active when `CLOUDFLARE_TUNNEL_TOKEN` is set |
+| n8n (retired / optional) | https://n8n.home | Disabled by default (`ENABLE_N8N=false`); enable only if needed |
 
-## n8n first-time setup
+## Optional n8n setup (`ENABLE_N8N=true`)
 
-1. https://n8n.home
-2. Create owner account on first launch
-3. `N8N_ENCRYPTION_KEY` in `.env` must stay fixed — do not change it
+1. Set `ENABLE_N8N=true` and `N8N_ENCRYPTION_KEY` in `.env`, then `make deploy`
+2. Open https://n8n.home and create owner account (`executeCommand` + `ssh` nodes are disabled for host isolation)
 
 ## CrowdSec
 

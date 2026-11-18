@@ -48,7 +48,7 @@ Do **not** flip Override first. Same lesson as WAN `:53` drop: listen + ACL + pr
    ```
 
    Manual equivalent:
-   - **Global nameserver** = Pi Tailscale IPv4 (`100.x`). **Not** LAN `.112`
+   - **Global nameserver** = Pi Tailscale IPv4 (`100.x`). **Not** LAN `.50`
    - Keep split DNS `home` → same `100.x`
    - **No second global NS**
    - **Override DNS servers** on
@@ -66,14 +66,14 @@ On phone, `https://gateway.home` does not trust mkcert certs. Instead:
 
 1. Enable Serve in Admin: `/f/serve` link from deploy or ACL
 2. On Pi: `bash scripts/pi/setup-tailscale-serve.sh`
-3. Telegram menu prefers **`http://100.x.x.x/p/...`** (works without MagicDNS). Serve HTTPS is optional backup when MagicDNS + Override DNS are on.
+3. Telegram menu defaults to **`https://<panel>.home`** (works seamlessly on LAN and over Tailscale when Global DNS + subnet route are active), or **`http://100.x.x.x:PORT/`** when `TS_PANEL_DIRECT_PORTS=true`.
 
 ```bash
 make telegram-menu   # or on Pi: scripts/pi/telegram-menu.sh
 REMOTE_DIR=~/pi-gateway bash scripts/pi/diagnose-remote-access.sh
 ```
 
-**Security:** Caddy `100.x:80/443` (path `/p/`) ve isteğe bağlı `TS_PANEL_DIRECT_PORTS=true` ile `100.x:PORT` DNAT. Direct port default **false**. Panel TCP UFW `tailscale0` + ACL `tag:pi-gateway:3001,3030,5678,8080,9999,20211` — yalnız `group:owners`. DNS `:53` AdGuard, admin UI değil. ACL kapısı tek auth (Caddy basic_auth 100.x Caddy bloğunda yok).
+**Security:** Caddy `100.x:80/443` (path `/p/`) ve isteğe bağlı `TS_PANEL_DIRECT_PORTS=true` ile `100.x:PORT` DNAT. Direct port default **false**. Panel TCP UFW `tailscale0` + ACL `tag:pi-gateway:3001,3030,3040,8080,9999,20211` — yalnız `group:owners`. DNS `:53` AdGuard, admin UI değil. ACL kapısı tek auth (Caddy basic_auth 100.x Caddy bloğunda yok).
 
 **Auth tradeoff:** `http://100.x.x.x` Caddy block has **no basic_auth** (Telegram in-app browser cannot do Basic Auth). LAN `192.x` keeps basic_auth. Anyone on your tailnet who can reach the Pi can open panels without a password — **ACL is the only gate**. Direct port/Serve setup, ACL publish kanıtı olmadan varsayılan olarak engellenir. Do not invite untrusted devices.
 

@@ -19,7 +19,7 @@ SSD path: udev `SYSTEMD_WANTS` + `pi-ssd-watch.path` (`PathChanged`) / `ssd-heal
 
 ## ops (enabled features)
 
-Setup helpers: `setup-*.sh` (n8n, netalertx, crowdsec, dozzle, uptime-kuma, tailscale-*, telegram-menu, caddy-lan-ip, hermes-*).
+Setup helpers: `setup-*.sh` (netalertx, crowdsec, dozzle, tailscale-*, telegram-menu, caddy-lan-ip, hermes-*, optional n8n).
 
 DNS: `apply-adguard-*.sh`, `configure-adguard.sh`, `wait-adguard-dns.sh`, `diagnose-dns-bypass.sh`, `audit-dns-coverage.sh`, `remediate-dns-coverage.sh`, `sync-modem-inventory.sh`, `observe-rdnss-ra.sh`, `diagnose-video-path.sh`, `diagnose-remote-access.sh`, `adguard-tune.sh`, `lib/modem_inventory.py`, `lib/unbound-dnssec.sh`.
 

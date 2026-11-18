@@ -1,13 +1,13 @@
 # Service Level Objectives — Pi Gateway
 
-Operational targets for Path A (Güven). Verified by `health-check`, `export-gateway-state`, and Uptime Kuma PUSH monitors.
+Operational targets for Path A (Güven). Verified by `health-check`, `export-gateway-state`, and Gatus external-endpoint PUSH monitors.
 
 ## SLO table
 
 | SLO | Target | Signal | Alert |
 |-----|--------|--------|-------|
-| **DNS availability** | 99.9% / 30d | `stack_dns_core_ok`, dig tests | health-check, Uptime Kuma Unbound |
-| **Storage healthy** | degraded < 0.1% uptime | `storage_degraded` flag, `ssd_mount_healthy` | PUSH `SLO Storage Healthy` |
+| **DNS availability** | 99.9% / 30d | `stack_dns_core_ok`, dig tests | health-check, Gatus DNS/Unbound |
+| **Storage healthy** | degraded < 0.1% uptime | `storage_degraded` flag, `ssd_mount_healthy` | PUSH `slo_storage-healthy` |
 | **Offsite backup** | age ≤ 7 days | `/var/lib/pi-gateway/last-offsite-backup` | Telegram yedek SLA (health exit 0), PUSH offsite |
 | **Local config backup** | age ≤ 26 h | `~/pi-gateway/backups/20*` + `pi-gateway-backup.service` | health `local-backup-*` SLO |
 | **Restore drill** | age ≤ 30 days | `last-backup-restore-drill` | health `backup-restore-drill-*`, PUSH drill |
@@ -35,11 +35,11 @@ cat /var/lib/pi-gateway/metrics/pi_gateway.prom
 systemctl list-timers pi-gateway-ssd-smart.timer
 ```
 
-## Uptime Kuma PUSH monitors
+## Gatus PUSH monitors
 
-Created by `setup-slo-monitors.sh` (post-deploy). Tokens: `data/uptime-kuma/slo-push-tokens.env` (mode 600, not in git).
+Rendered via `config/gatus/config.yaml.template` (`render-config.sh`). Tokens are derived deterministically from `.env` (`chmod 600` on rendered `config/gatus/config.yaml`, gitignored).
 
-Heartbeats: `push-slo-heartbeat.sh` (health timer, every 2 min).
+Heartbeats: `push-slo-heartbeat.sh` (health timer, every 2 min). Gatus does not send duplicate Telegram alerts; `notify.sh` is the sole notification channel.
 
 ## Related
 
