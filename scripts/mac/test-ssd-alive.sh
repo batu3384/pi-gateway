@@ -74,7 +74,16 @@ if [[ "${*:-}" == *"/mnt/ssd"* ]]; then
 fi
 exit 1
 EOF
-chmod +x "$_ghost_tmp/journalctl" "$_ghost_tmp/findmnt"
+cat >"$_ghost_tmp/sudo" <<'EOF'
+#!/usr/bin/env bash
+while [[ "${1:-}" == -* ]]; do shift; done
+exec "$@"
+EOF
+cat >"$_ghost_tmp/tune2fs" <<'EOF'
+#!/usr/bin/env bash
+printf 'Filesystem state:         clean\n'
+EOF
+chmod +x "$_ghost_tmp/journalctl" "$_ghost_tmp/findmnt" "$_ghost_tmp/sudo" "$_ghost_tmp/tune2fs"
 printf '{"last_success_at":%s}\n' "$(date +%s)" >"$_ghost_tmp/state.json"
 if (
   export PATH="$_ghost_tmp:$PATH"
@@ -103,7 +112,7 @@ grep -q 'ssd_usb_port_cycle_allowed' "$SSD_ALIVE" || die "undervolt port guard y
 grep -q 'SSD_USB_XHCI_RESET_STATE_FILE' "$SSD_ALIVE" || die "xhci ayri rate-limit state yok"
 grep -q 'degraded_stop_optional_apps' "$HOTPLUG" || die "hotplug degraded_stop_optional_apps yok"
 grep -q 'degraded_stop_optional_apps' "$STACK_HEALTH" || die "stack-health degraded_stop_optional_apps yok"
-grep -q 'prometheus grafana node-exporter' "$STACK_HEALTH" || die "stack-health monitoring stop listesi yok"
+grep -q 'victoriametrics grafana node-exporter' "$STACK_HEALTH" || die "stack-health monitoring stop listesi yok"
 [[ "${SSD_USB_CYCLE_ON_HANG:-}" == "true" ]] || die "CYCLE_ON_HANG default true olmali"
 [[ "${SSD_USB_PORT_SCAN_MAX:-}" == "8" ]] || die "PORT_SCAN_MAX default 8 olmali"
 grep -q 'ssd_usb_discover_xhci_ports' "$SSD_ALIVE" || die "xhci platform port kesfi yok"
@@ -230,6 +239,9 @@ if grep -q 'ACTION=="add|remove|change", SUBSYSTEM=="block"' \
 fi
 grep -q 'nodiscard' "$PROJECT_DIR/scripts/pi/ensure-ssd-fstab.sh" || die "fstab nodiscard yok"
 grep -q 'pi-ssd-health.timer' "$PROJECT_DIR/scripts/pi/bootstrap.sh" || die "ssd-health timer bootstrap yok"
+grep -q 'UDISKS_IGNORE' "$PROJECT_DIR/host/udev/99-pi-gateway-jmicron.rules" || die "udev UDISKS_IGNORE yok"
+grep -q 'ID_ATA' "$PROJECT_DIR/host/udev/99-pi-gateway-jmicron.rules" || die "udev ID_ATA clear yok"
+grep -q 'max_sectors_kb' "$PROJECT_DIR/host/udev/99-pi-gateway-jmicron.rules" || die "udev max_sectors_kb yok"
 ok "udev jmicron"
 
 grep -q 'ssd-alive.sh' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" || die "priv ssd-alive yok"

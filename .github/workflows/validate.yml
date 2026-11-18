@@ -5,6 +5,9 @@ on:
     branches: [master, main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -17,7 +20,10 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq shellcheck
-          shellcheck -S warning scripts/pi/*.sh scripts/mac/*.sh scripts/lib/*.sh
+          shellcheck -S warning scripts/pi/*.sh scripts/mac/*.sh scripts/lib/*.sh host/NetworkManager/dispatcher.d/90-pi-gateway-wifi-failover
+
+      - name: Python compile check
+        run: python3 -m py_compile scripts/lib/*.py
 
       - name: Gitleaks
         uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2

@@ -74,10 +74,9 @@ grep -q 'bulletin post helper' "$patch" || die "hermes-cron-patch bulletin post 
   || die "v7 jargon/betik adi kalmis"
 ok "cron patch v7"
 
-workflow="$ROOT/config/n8n/uptime-kuma-alert.workflow.json"
-! grep -q 'Pi Gateway · İzleme\|Servis yeniden çalışıyor\|Servis yanıt vermiyor' "$workflow" \
-  || die "Kuma mesaj tekrarı/branding kaldi"
-ok "Kuma mesaj kopyası"
+[[ ! -f "$ROOT/config/n8n/uptime-kuma-alert.workflow.json" ]] \
+  || die "emekli Kuma workflow kalintisi duruyor"
+ok "Kuma workflow temizlendi"
 ! grep -q 'Pi Gateway · Durum\|<b>Pi Gateway</b>' "$status_card" "$panels" \
   || die "durum/panel branding kaldi"
 ok "durum kartı kopyası"
@@ -90,6 +89,7 @@ grep -q 'HERMES_API_CALL_STALE_TIMEOUT=300' "$unit" || die "systemd stale timeou
 ok "gateway stale env"
 
 grep -q 'web.search_backend' "$cfg" || die "search_backend set yok"
+grep -q 'web.extract_backend' "$cfg" || die "extract_backend set yok"
 grep -q 'ddgs>=9.0,<10' "$cfg" || die "ddgs pin yok"
 grep -q 'HERMES_MODEL_TIMEOUT:-300' "$cfg" || die "model.timeout 300 degil"
 grep -q 'HERMES_TELEGRAM_STREAMING:-false' "$cfg" || die "telegram streaming default false degil"
@@ -280,7 +280,38 @@ def _deliver_result(job: dict, content: str) -> None:
 STUBB
 python3 "$patch" "$tmpb" >/dev/null
 grep -q 'bulletin post helper' "$tmpb" || die "bulletin helper yazilmadi"
+grep -q 'bulletin post helper v2' "$tmpb" || die "bulletin helper v2 yazilmadi"
 grep -q '_pi_gw_bulletin_prepare' "$tmpb" || die "bulletin prepare cagri yok"
+tmpv23="$(mktemp)"
+trap 'rm -rf "$tmpd" "$tmp" "$tmp4" "$tmp5" "$tmp6" "$tmpb" "$tmpv23"' EXIT
+cat >"$tmpv23" <<'STUB23'
+def _pi_gw_bulletin_prepare(job, content):
+    # pi-gateway: bulletin post helper
+    return content
+def _deliver_result(
+    job, content
+):
+    if True:
+        delivery_content = content
+    # pi-gateway: bulletin post v23
+    if not for_failure:
+        delivery_content = _pi_gw_bulletin_prepare(job, delivery_content)
+    reached = 1
+    if suppressed_targets == len(targets):
+        pass
+STUB23
+python3 - "$patch" "$tmpv23" <<'PY' || die "v23 v1->v2 upgrade failed"
+import importlib.util, pathlib, sys
+spec = importlib.util.spec_from_file_location("p", sys.argv[1])
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+p = pathlib.Path(sys.argv[2])
+assert mod.patch_v23_scheduler_delivery(p) is True
+txt = p.read_text()
+assert "bulletin post helper v2" in txt
+assert "_pi_gw_bulletin_flush_rest(job)" in txt
+assert mod.patch_v23_scheduler_delivery(p) is False
+PY
 ok "bulletin post patch"
 
 echo "[test-hermes-bulletins] Tum kontroller gecti"

@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../lib/common.sh"
 load_env
 PI_USER="${PI_USER:-pi}"
-PI_HOST="${PI_STATIC_IP:-${PI_HOST:-}}"
+PI_HOST="$(deploy_host)"
 REMOTE_DIR="${REMOTE_DIR:-/home/$PI_USER/pi-gateway}"
 LOCAL_REPO="${MAC_BACKUP_DEST:-$HOME/Backups/pi-gateway}/restic"
 RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510}"
@@ -22,10 +22,10 @@ run_check() {
   [[ -d "$repo_path" ]] || die "$label — repo yok: $repo_path"
   log "check: $label ($repo_path, subset=$CHECK_SUBSET)"
   if command -v restic >/dev/null 2>&1; then
-    timeout "$RESTIC_TIMEOUT_SEC" env RESTIC_PASSWORD="$RESTIC_PASSWORD" \
+    run_with_timeout "$RESTIC_TIMEOUT_SEC" env RESTIC_PASSWORD="$RESTIC_PASSWORD" \
       restic -r "$repo_path" check --no-lock --read-data-subset="$CHECK_SUBSET"
   elif command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-    timeout "$RESTIC_TIMEOUT_SEC" docker run --rm --network none \
+    run_with_timeout "$RESTIC_TIMEOUT_SEC" docker run --rm --network none \
       -e RESTIC_PASSWORD \
       -v "${repo_path}:/repo:ro" \
       "$RESTIC_IMAGE" -r "local:/repo" check --no-lock --read-data-subset="$CHECK_SUBSET"

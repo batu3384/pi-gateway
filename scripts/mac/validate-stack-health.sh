@@ -336,10 +336,6 @@ grep -q 'caddy-.*-auth-deny' "$PROJECT_DIR/scripts/pi/smoke-test.sh" \
   || die "smoke Caddy auth deny testi yok"
 ok "smoke auth iki yonlu"
 
-grep -q 'n8n-kuma-telegram-off' "$PROJECT_DIR/scripts/pi/smoke-test.sh" \
-  || die "smoke n8n kuma telegram-off yok"
-ok "smoke n8n kuma telegram kapali"
-
 grep -qE 'container_name: (forgejo|syncthing)' "$compose" \
   && die "forgejo/syncthing hala compose'da"
 ok "forgejo/syncthing removed"
@@ -375,14 +371,14 @@ grep -q 'docker logs netalertx --since' "$PROJECT_DIR/scripts/pi/health-check.sh
   || die "health-check netalertx malformed eski log"
 grep -q 'optional-netalertx-ignore-plugin' "$PROJECT_DIR/scripts/pi/health-check.sh" \
   || die "health-check ignore_plugin yok"
-grep -q '9090/-/ready' "$PROJECT_DIR/scripts/pi/health-check.sh" \
-  || die "health-check prometheus ready yok"
+grep -q '9090/health' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check victoriametrics health yok"
 grep -q 'Canlı sqlite chown' "$PROJECT_DIR/scripts/pi/ensure-netalert-db-access.sh" \
   || die "ensure-netalert-db live chown skip yok"
-grep -q 'Eski TSDB log' "$PROJECT_DIR/scripts/pi/container-restart-watchdog.sh" \
-  || die "watchdog prometheus eski checksum"
-grep -q 'container_logs_since_start' "$PROJECT_DIR/scripts/pi/container-restart-watchdog.sh" \
-  || die "watchdog logs since start yok"
+grep -q 'victoriametrics' "$PROJECT_DIR/scripts/pi/container-restart-watchdog.sh" \
+  || die "watchdog victoriametrics yok"
+grep -q 'glance gatus' "$PROJECT_DIR/scripts/pi/container-restart-watchdog.sh" \
+  || die "watchdog glance/gatus yok"
 grep -q 'cpus:' "$compose" \
   || die "netalertx cpu limiti yok"
 grep -q 'integrity_check' "$PROJECT_DIR/scripts/pi/ensure-netalert-db-access.sh" \

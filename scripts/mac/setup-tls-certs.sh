@@ -9,13 +9,14 @@ load_env
 
 PI_USER="${PI_USER:-pi}"
 PI_STATIC_IP="${PI_STATIC_IP:-}"
+SSH_HOST="$(deploy_host)"
 REMOTE_DIR="${REMOTE_DIR:-/home/${PI_USER}/pi-gateway}"
 LAN_DOMAIN="${LAN_DOMAIN:-home}"
 CERT_DIR="$PROJECT_DIR/config/caddy/certs"
 CERT_FILE="${CERT_DIR}/${LAN_DOMAIN}.pem"
 KEY_FILE="${CERT_DIR}/${LAN_DOMAIN}-key.pem"
 
-[[ -n "$PI_STATIC_IP" ]] || die "PI_STATIC_IP gerekli (.env)"
+[[ -n "$SSH_HOST" ]] || die "PI_STATIC_IP veya PI_DEPLOY_HOST gerekli (.env)"
 
 log() { echo "[tls-certs] $*"; }
 
@@ -38,10 +39,13 @@ hosts=(
   "panel.${LAN_DOMAIN}"
   "status.${LAN_DOMAIN}"
   "dns.${LAN_DOMAIN}"
-  "n8n.${LAN_DOMAIN}"
+  "grafana.${LAN_DOMAIN}"
   "logs.${LAN_DOMAIN}"
   "devices.${LAN_DOMAIN}"
 )
+if [[ "${ENABLE_N8N:-false}" == "true" ]]; then
+  hosts+=("n8n.${LAN_DOMAIN}")
+fi
 
 log "Sertifika uretiliyor: ${hosts[*]}"
 mkcert -cert-file "$CERT_FILE" -key-file "$KEY_FILE" "${hosts[@]}"
@@ -53,21 +57,26 @@ log "Caddy config render..."
 "$SCRIPT_DIR/render-config.sh"
 
 log "Pi'ye gonderiliyor..."
-ssh "${PI_USER}@${PI_STATIC_IP}" "mkdir -p ${REMOTE_DIR}/config/caddy/certs"
+ssh "${PI_USER}@${SSH_HOST}" "mkdir -p ${REMOTE_DIR}/config/caddy/certs"
 scp "$CERT_FILE" "$KEY_FILE" \
-  "${PI_USER}@${PI_STATIC_IP}:${REMOTE_DIR}/config/caddy/certs/"
+  "${PI_USER}@${SSH_HOST}:${REMOTE_DIR}/config/caddy/certs/"
+if [[ -f "$PROJECT_DIR/config/caddy/Caddyfile" ]]; then
+  scp "$PROJECT_DIR/config/caddy/Caddyfile" \
+    "${PI_USER}@${SSH_HOST}:${REMOTE_DIR}/config/caddy/Caddyfile"
+fi
 scp "$PROJECT_DIR/compose/docker-compose.yml" \
-  "${PI_USER}@${PI_STATIC_IP}:${REMOTE_DIR}/compose/docker-compose.yml"
+  "${PI_USER}@${SSH_HOST}:${REMOTE_DIR}/compose/docker-compose.yml"
 
 log "Caddy yeniden baslatiliyor..."
-ssh "${PI_USER}@${PI_STATIC_IP}" \
-  "cd ${REMOTE_DIR}/compose && docker compose --profile caddy up -d caddy --force-recreate"
+ssh "${PI_USER}@${SSH_HOST}" \
+  "cd ${REMOTE_DIR}/compose && docker compose --env-file ../.env --profile caddy up -d caddy --force-recreate"
 
 sleep 3
 code="$(curl -sk -o /dev/null -w '%{http_code}' "https://gateway.${LAN_DOMAIN}/" || echo 000)"
 log "Test https://gateway.${LAN_DOMAIN} -> HTTP ${code}"
-if ! curl -fsS -o /dev/null "https://gateway.${LAN_DOMAIN}/"; then
-  log "WARN: Mac henuz CA'ya guvenmiyor olabilir."
+verified_code="$(curl -sS -o /dev/null -w '%{http_code}' "https://gateway.${LAN_DOMAIN}/" 2>/dev/null || echo 000)"
+if [[ "$verified_code" != "200" && "$verified_code" != "401" && "$verified_code" != "302" && "$verified_code" != "308" ]]; then
+  log "WARN: Mac henuz CA'ya guvenmiyor olabilir (HTTP ${verified_code})."
   open "$(mkcert -CAROOT)/rootCA.pem"
   log "Anahtar Zinciri: mkcert development CA -> Guven -> SSL: Her Zaman Guven"
 fi

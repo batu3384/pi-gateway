@@ -23,7 +23,6 @@ export ADGUARD_FILTER_PROFILE="${ADGUARD_FILTER_PROFILE:-balanced}"
 export NETALERTX_PORT="${NETALERTX_PORT:-20211}"
 export PI_STATIC_IP LAN_DOMAIN="${LAN_DOMAIN:-home}" PI_INTERFACE="${PI_INTERFACE:-eth0}"
 export PI_IPV6_ULA LAN_PREFIX="${LAN_PREFIX:-24}" LAN_GATEWAY
-export UPTIME_KUMA_STATUS_SLUG="${UPTIME_KUMA_STATUS_SLUG:-pi-gateway}"
 if [[ "${ENABLE_TLS:-true}" == "true" ]]; then
   export PANEL_PROTOCOL=https
 else
@@ -32,7 +31,7 @@ fi
 
 HASH="$(generate_password_hash "$AGH_ADMIN_USER" "$AGH_ADMIN_PASSWORD")"
 
-mkdir -p "$PROJECT_DIR/config/adguard" "$PROJECT_DIR/config/homepage" "$PROJECT_DIR/config/caddy"
+mkdir -p "$PROJECT_DIR/config/adguard" "$PROJECT_DIR/config/caddy" "$PROJECT_DIR/config/glance" "$PROJECT_DIR/config/gatus"
 
 envsubst '${AGH_ADMIN_USER} ${ADGUARD_WEB_PORT} ${PI_STATIC_IP} ${LAN_DOMAIN} ${PI_INTERFACE}' \
   < "$PROJECT_DIR/config/adguard/AdGuardHome.yaml.template" \
@@ -150,26 +149,35 @@ Path(dst).write_text(text)
 PY
 fi
 
-# Glance dashboard (Homepage yerine) — sadece LAN_DOMAIN placeholder
-export LAN_DOMAIN
-envsubst '${LAN_DOMAIN}' \
+# Glance dashboard
+export LAN_DOMAIN ADGUARD_WEB_PORT NETALERTX_PORT PANEL_PROTOCOL
+envsubst '${LAN_DOMAIN} ${ADGUARD_WEB_PORT} ${NETALERTX_PORT} ${PANEL_PROTOCOL}' \
   < "$PROJECT_DIR/config/glance/glance.yml.template" \
   > "$PROJECT_DIR/config/glance/glance.yml"
 
-# Gatus: Kuma'nin declarative kopyasi (ENABLE_GATUS=true) — push tokenlari
-# ilk kurulusta uretilir ve .env'te korunur (Kuma slo-push-tokens.env modeli)
+# Gatus durum ve SLO paneli (ENABLE_GATUS=true) — push tokenlari yoksa uretilir (eval olmadan guvenli parse)
 if [[ "${ENABLE_GATUS:-true}" == "true" ]]; then
   for key in GATUS_PUSH_TOKEN_STORAGE GATUS_PUSH_TOKEN_OFFSITE GATUS_PUSH_TOKEN_DRILL; do
-    if ! grep -q "^${key}=" "$PROJECT_DIR/.env" 2>/dev/null; then
-      printf '\n# Gatus SLO push token (%s)\n%s=%s\n' "$key" "$key" "$(openssl rand -hex 16)" >>"$PROJECT_DIR/.env"
+    val="${!key:-}"
+    if [[ -z "$val" && -f "$PROJECT_DIR/.env" ]]; then
+      val="$(awk -F= -v k="$key" '$1 == k { sub(/^[^=]*=/, ""); print; exit }' "$PROJECT_DIR/.env")"
+      val="${val%\"}"
+      val="${val#\"}"
+      val="${val%\'}"
+      val="${val#\'}"
     fi
+    if [[ -z "$val" ]]; then
+      val="$(openssl rand -hex 16)"
+      if [[ -f "$PROJECT_DIR/.env" && -w "$PROJECT_DIR/.env" && "${CI:-}" != "true" ]]; then
+        printf '\n# Gatus SLO push token (%s)\n%s=%s\n' "$key" "$key" "$val" >>"$PROJECT_DIR/.env"
+      fi
+    fi
+    export "${key}=${val}"
   done
-  for key in GATUS_PUSH_TOKEN_STORAGE GATUS_PUSH_TOKEN_OFFSITE GATUS_PUSH_TOKEN_DRILL TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID; do
-    eval "export $key=\"$(grep "^${key}=" "$PROJECT_DIR/.env" | head -1 | cut -d= -f2-)\""
-  done
-  envsubst '${TELEGRAM_BOT_TOKEN} ${TELEGRAM_CHAT_ID} ${GATUS_PUSH_TOKEN_STORAGE} ${GATUS_PUSH_TOKEN_OFFSITE} ${GATUS_PUSH_TOKEN_DRILL}' \
+  envsubst '${LAN_DOMAIN} ${ADGUARD_WEB_PORT} ${NETALERTX_PORT} ${GATUS_PUSH_TOKEN_STORAGE} ${GATUS_PUSH_TOKEN_OFFSITE} ${GATUS_PUSH_TOKEN_DRILL}' \
     < "$PROJECT_DIR/config/gatus/config.yaml.template" \
     > "$PROJECT_DIR/config/gatus/config.yaml"
+  chmod 600 "$PROJECT_DIR/config/gatus/config.yaml" 2>/dev/null || true
   log "Rendered Gatus config (ENABLE_GATUS=true)"
 fi
 

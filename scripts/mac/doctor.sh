@@ -72,10 +72,9 @@ if [[ -f "$PROJECT_DIR/.env" ]]; then
 
   check_pw "DOZZLE_ADMIN_PASSWORD" "${DOZZLE_ADMIN_PASSWORD:-}" "${ENABLE_DOZZLE:-true}"
   check_pw "RESTIC_PASSWORD" "${RESTIC_PASSWORD:-}" "${ENABLE_RESTIC:-true}"
-  check_pw "UPTIME_KUMA_ADMIN_PASSWORD" "${UPTIME_KUMA_ADMIN_PASSWORD:-}" "true"
   check_pw "GRAFANA_ADMIN_PASSWORD" "${GRAFANA_ADMIN_PASSWORD:-}" "${ENABLE_MONITORING:-true}"
 
-  if [[ "${ENABLE_N8N:-true}" == "true" ]]; then
+  if [[ "${ENABLE_N8N:-false}" == "true" ]]; then
     if [[ -z "${N8N_ENCRYPTION_KEY:-}" ]]; then
       fail "N8N_ENCRYPTION_KEY required when ENABLE_N8N=true (openssl rand -hex 24)"
     elif [[ "${#N8N_ENCRYPTION_KEY}" -lt 32 ]]; then
@@ -142,7 +141,7 @@ if [[ -f "$PROJECT_DIR/.env" ]]; then
     else
       fail "ENABLE_TLS=true but certs missing — run: make tls-certs"
     fi
-    if [[ "${ENABLE_N8N:-true}" == "true" && "${N8N_SECURE_COOKIE:-true}" != "true" ]]; then
+    if [[ "${ENABLE_N8N:-false}" == "true" && "${N8N_SECURE_COOKIE:-true}" != "true" ]]; then
       fail "N8N_SECURE_COOKIE=true required when ENABLE_TLS=true"
     fi
   fi
@@ -171,7 +170,7 @@ if [[ -f "$PROJECT_DIR/.env" ]]; then
   fi
 
   # Deploy needs non-interactive SSH (key auth)
-  ssh_target="${PI_HOST:-${PI_STATIC_IP:-}}"
+  ssh_target="${PI_DEPLOY_HOST:-${PI_HOST:-${PI_STATIC_IP:-}}}"
   ssh_user="${PI_USER:-pi}"
   if [[ -n "$ssh_target" ]]; then
     if ssh -o ConnectTimeout=5 -o BatchMode=yes -o StrictHostKeyChecking=accept-new \

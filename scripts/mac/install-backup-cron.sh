@@ -31,6 +31,13 @@ cat > "$PLIST" <<EOF
     <string>/bin/bash</string>
     <string>${BACKUP_SCRIPT}</string>
   </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key>
+    <string>${HOME}</string>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:${HOME}/.orbstack/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
   <key>StartCalendarInterval</key>
   <dict>
     <key>Weekday</key>

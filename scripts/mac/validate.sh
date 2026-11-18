@@ -21,13 +21,13 @@ if [[ "${ENABLE_TLS:-true}" != "true" ]]; then
   fi
 fi
 
-if [[ "${ENABLE_TLS:-true}" == "true" && "${ENABLE_N8N:-true}" == "true" ]]; then
+if [[ "${ENABLE_TLS:-true}" == "true" && "${ENABLE_N8N:-false}" == "true" ]]; then
   if [[ "${N8N_SECURE_COOKIE:-true}" != "true" ]]; then
     die "N8N_SECURE_COOKIE=true required when ENABLE_TLS=true"
   fi
 fi
 
-if [[ "${ENABLE_N8N:-true}" == "true" ]]; then
+if [[ "${ENABLE_N8N:-false}" == "true" ]]; then
   [[ -n "${N8N_ENCRYPTION_KEY:-}" ]] || die "Set N8N_ENCRYPTION_KEY in .env (openssl rand -hex 24)"
   [[ "${#N8N_ENCRYPTION_KEY}" -ge 32 ]] || die "N8N_ENCRYPTION_KEY must be at least 32 chars"
 fi
@@ -103,10 +103,11 @@ fi
 compose_config() {
   local yml="$PROJECT_DIR/compose/docker-compose.yml"
   local envf="$PROJECT_DIR/.env"
+  local -a prof=(--profile caddy --profile gatus --profile dozzle --profile netalert --profile crowdsec --profile monitoring)
   if docker compose version >/dev/null 2>&1; then
-    docker compose -f "$yml" --env-file "$envf" config -q
+    docker compose -f "$yml" --env-file "$envf" "${prof[@]}" config -q
   elif command -v docker-compose >/dev/null 2>&1; then
-    docker-compose -f "$yml" --env-file "$envf" config -q
+    docker-compose -f "$yml" --env-file "$envf" "${prof[@]}" config -q
   else
     die "docker compose / docker-compose yok"
   fi
@@ -118,6 +119,8 @@ for f in \
   "$PROJECT_DIR/config/adguard/AdGuardHome.yaml" \
   "$PROJECT_DIR/config/adguard/user-rules.txt" \
   "$PROJECT_DIR/config/adguard/filter-lists.json" \
+  "$PROJECT_DIR/config/glance/glance.yml" \
+  "$PROJECT_DIR/config/gatus/config.yaml" \
   "$PROJECT_DIR/config/unbound/unbound.conf"; do
   [[ -f "$f" ]] || die "Missing rendered file: $f"
 done
@@ -129,5 +132,50 @@ grep -q '\-\-fix-light' "$PROJECT_DIR/scripts/pi/ensure-adguard-blocking.sh" \
   || die "ensure-adguard-blocking --fix-light yok"
 grep -q '\-\-fix-light' "$PROJECT_DIR/scripts/pi/health-check.sh" \
   || die "health-check adguard light heal yok"
+
+if grep -Eq '^[[:space:]]+site:' "$PROJECT_DIR/config/glance/glance.yml.template"; then
+  die "Glance template invalid site: key (causes v0.8.8 SIGSEGV)"
+fi
+
+python3 - "$PROJECT_DIR" <<'PY' || die "Privileged script closure eksigi"
+import re
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+priv_text = (root / "scripts/pi/install-privileged-scripts.sh").read_text(encoding="utf-8")
+m = re.search(r"SCRIPTS=\((.*?)\n\)", priv_text, re.S)
+if not m:
+    print("install-privileged-scripts.sh SCRIPTS=() yok", file=sys.stderr)
+    raise SystemExit(1)
+installed = set(re.findall(r"(scripts/(?:pi|lib)/[A-Za-z0-9_.-]+)", m.group(1)))
+
+roots = [
+    "scripts/pi/health-check.sh",
+    "scripts/pi/recover-readonly-root.sh",
+    "scripts/pi/recover-stack.sh",
+    "scripts/pi/recover-compose-up.sh",
+    "scripts/pi/ssd-hotplug-handler.sh",
+    "scripts/pi/sync-modem-inventory.sh",
+]
+ref_re = re.compile(r"\$\{?SCRIPT_DIR\}?/(\.\./lib/)?([A-Za-z0-9_.-]+\.(?:sh|py))")
+missing = []
+for rel in roots:
+    text = (root / rel).read_text(encoding="utf-8")
+    for line in text.splitlines():
+        s = line.lstrip()
+        if s.startswith("#"):
+            continue
+        for lib_prefix, name in ref_re.findall(line):
+            target = f"scripts/lib/{name}" if lib_prefix else f"scripts/pi/{name}"
+            if (root / target).is_file() and target not in installed:
+                missing.append(f"{rel} -> {target}")
+if missing:
+    print("install-privileged-scripts.sh eksik:", *missing, sep="\n  ", file=sys.stderr)
+    raise SystemExit(1)
+PY
+
+python3 "$PROJECT_DIR/scripts/lib/sync-adguard-clients.py" --self-check
+bash "$PROJECT_DIR/scripts/pi/isp-speedtest.sh" --self-check
 
 log "Validation passed"

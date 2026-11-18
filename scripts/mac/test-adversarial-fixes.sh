@@ -134,12 +134,12 @@ ok "C8 restore keeps SSD data symlink"
 grep -q 'scripts/pi/recover-stack.sh' "$install_priv" || die "C9: recover-stack privileged install yok"
 ok "C9 recover-stack privileged install"
 
-# C10: initialized SSD mount failure must fail closed
-grep -A8 'if \[\[ -f "\$MARKER"' "$ssd_setup" | grep -q 'mount_ssd.*|| true' && \
-  die "C10: existing SSD marker mount failure yutuluyor"
-grep -A12 'if \[\[ -f "\$MARKER"' "$ssd_setup" | grep -q 'mountpoint' \
-  || die "C10: marker branch mount verify yok"
-ok "C10 SSD marker mount fail-closed"
+# C10: SSD mount failure must fail closed (no || true swallow)
+grep -A6 '^mount_ssd()' "$ssd_setup" | grep -q 'mount .*|| true' && \
+  die "C10: mount_ssd mount hatasini yutuyor"
+grep -q 'mountpoint -q "\$MOUNT"' "$ssd_setup" \
+  || die "C10: mountpoint dogrulamasi yok"
+ok "C10 SSD mount fail-closed"
 
 # C11: Docker fallback must detect stale/hung SSD
 grep -q 'ssd_mount_healthy' "$docker_fallback" || die "C11: Docker fallback stale mount probe yok"
@@ -153,7 +153,7 @@ if grep -q 'if ! run_restic snapshots' "$restic" && \
   die "C12: corrupt snapshot failure still directly init"
 fi
 ok "C12 Restic corrupt-repo gate"
-grep -q 'blocks.bak' "$restic" || die "C12: prometheus bak yedek disi degil"
+grep -q 'victoriametrics/flock.lock' "$restic" || die "C12: victoriametrics lock yedek disi degil"
 
 # C13: atomic/offsite pull must not combine delete with ignore-errors
 grep -q 'rsync.*--delete.*--ignore-errors' "$pull" && \
@@ -424,7 +424,7 @@ ok "C29 hotplug no redundant docker restart"
 
 # C30: prune-sd skips docker prune when storage degraded
 grep -q 'STORAGE_DEGRADED_FLAG' "$prune_sd_space" || die "C30: prune degraded flag yok"
-grep -A8 'prune_safe' "$prune_sd_space" | grep -q 'degraded' \
+grep -A20 'prune_safe' "$prune_sd_space" | grep -q 'degraded' \
   || die "C30: prune degraded docker guard yok"
 grep -q 'docker image prune -a' "$prune_sd_space" \
   && die "C30: prune -a pinli restic imajini siler"

@@ -103,8 +103,8 @@ grep -q 'adguard-bbolt-repair-failed' "$ROOT/scripts/pi/health-check.sh" \
 if grep -q 'adguard-bbolt-repair-skipped' "$ROOT/scripts/pi/health-check.sh"; then
   die "health bbolt skip hala FAIL"
 fi
-grep -q 'Eski TSDB log' "$ROOT/scripts/pi/container-restart-watchdog.sh" \
-  || die "watchdog prometheus eski checksum"
+grep -q 'victoriametrics' "$ROOT/scripts/pi/container-restart-watchdog.sh" \
+  || die "watchdog victoriametrics yok"
 grep -q 'restart_events' "$ROOT/scripts/pi/container-restart-watchdog.sh" \
   || die "container-watch restart_events yok"
 if grep -q 'window_total > int(entry.get("last_alert_window_total"' \

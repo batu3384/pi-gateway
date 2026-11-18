@@ -7,7 +7,7 @@ source "$SCRIPT_DIR/../lib/common.sh"
 load_env
 
 PI_USER="${PI_USER:-pi}"
-PI_HOST="${PI_STATIC_IP:-${PI_HOST:-}}"
+PI_HOST="$(deploy_host)"
 REMOTE_DIR="${REMOTE_DIR:-/home/$PI_USER/pi-gateway}"
 PROJECT_DIR="${PROJECT_DIR:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
 
@@ -15,41 +15,45 @@ die() { echo "[config-drift] HATA: $*" >&2; exit 1; }
 log() { echo "[config-drift] $*"; }
 ok() { echo "[config-drift] OK: $*"; }
 
-[[ -n "$PI_HOST" ]] || die "PI_STATIC_IP gerekli"
+[[ -n "$PI_HOST" ]] || die "PI_DEPLOY_HOST veya PI_STATIC_IP gerekli"
 
 canonical_hash() {
-  python3 - "$1" <<'PY' | sha256sum | awk '{print $1}'
+  python3 - "$1" <<'PY'
+import hashlib
 import re
 import sys
 
 text = open(sys.argv[1], encoding="utf-8").read()
 text = re.sub(r"\$2[aby]\$\d{2}\$[./A-Za-z0-9]+", "<BCRYPT>", text)
-print(text.rstrip())
+text = re.sub(r"(?s)# BEGIN DIRECT IP PANELS.*?# END DIRECT IP PANELS\s*", "", text)
+text = re.sub(r"(?s)# BEGIN TAILSCALE PANEL .*?# END TAILSCALE PANEL [^\n]*\s*", "", text)
+norm = text.rstrip() + "\n"
+print(hashlib.sha256(norm.encode("utf-8")).hexdigest())
 PY
 }
 
 canonical_hash_remote() {
   local path="$1"
-  local text
-  if ! text="$(ssh -o ConnectTimeout=15 -o BatchMode=yes "$PI_USER@$PI_HOST" \
+  ssh -o ConnectTimeout=15 -o BatchMode=yes "$PI_USER@$PI_HOST" \
     python3 - "$path" <<'PY'
+import hashlib
 import re
 import sys
 
 text = open(sys.argv[1], encoding="utf-8").read()
 text = re.sub(r"\$2[aby]\$\d{2}\$[./A-Za-z0-9]+", "<BCRYPT>", text)
-print(text.rstrip())
+text = re.sub(r"(?s)# BEGIN DIRECT IP PANELS.*?# END DIRECT IP PANELS\s*", "", text)
+text = re.sub(r"(?s)# BEGIN TAILSCALE PANEL .*?# END TAILSCALE PANEL [^\n]*\s*", "", text)
+norm = text.rstrip() + "\n"
+print(hashlib.sha256(norm.encode("utf-8")).hexdigest())
 PY
-  )"; then
-    return 1
-  fi
-  printf '%s\n' "$text" | sha256sum | awk '{print $1}'
 }
 
 PATHS=(
-  "config/adguard/AdGuardHome.yaml"
   "config/unbound/unbound.conf"
   "config/caddy/Caddyfile"
+  "config/glance/glance.yml"
+  "config/gatus/config.yaml"
   "compose/docker-compose.yml"
 )
 

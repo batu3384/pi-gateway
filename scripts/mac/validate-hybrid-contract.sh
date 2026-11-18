@@ -103,7 +103,7 @@ grep -q 'rsync sonrasi lib drift\|REMOTE_DIR once\|remote_dir}/scripts/pi/recove
   || die "stack-health REMOTE_DIR-first recover path yok"
 ok "stack-health runtime + COMPOSE forward + REMOTE_DIR-first"
 
-JOURNAL_CONF="$PROJECT_DIR/host/systemd/journald.conf.d/00-pi-gateway-persistent.conf"
+JOURNAL_CONF="$PROJECT_DIR/host/systemd/journald.conf.d/99-pi-gateway-persistent.conf"
 [[ -f "$JOURNAL_CONF" ]] || die "journald persistent conf yok"
 grep -q 'Storage=persistent' "$JOURNAL_CONF" || die "journald Storage=persistent yok"
 grep -q 'journald.conf.d' "$BOOTSTRAP" || die "bootstrap journald install yok"

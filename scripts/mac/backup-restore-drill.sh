@@ -7,7 +7,7 @@ source "$SCRIPT_DIR/../lib/common.sh"
 load_env
 
 PI_USER="${PI_USER:-pi}"
-PI_HOST="${PI_STATIC_IP:-${PI_HOST:-}}"
+PI_HOST="$(deploy_host)"
 LOCAL_DEST="${MAC_BACKUP_DEST:-$HOME/Backups/pi-gateway}"
 LOCAL_REPO="${LOCAL_DEST}/restic"
 RESTIC_IMAGE="${RESTIC_IMAGE:-restic/restic@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510}"
@@ -24,7 +24,7 @@ record_failure() {
   date -Iseconds >"$DRILL_FAILURE_MARKER_LOCAL" 2>/dev/null || true
   if [[ -n "$PI_HOST" ]]; then
     if ssh -o ConnectTimeout=10 -o BatchMode=yes "$PI_USER@$PI_HOST" \
-      "sudo mkdir -p /var/lib/pi-gateway && date -Iseconds | sudo tee '$DRILL_FAILURE_MARKER_PI' >/dev/null && sudo chmod 644 '$DRILL_FAILURE_MARKER_PI'" \
+      "sudo mkdir -p /var/lib/pi-gateway && sudo chown '$PI_USER:$PI_USER' /var/lib/pi-gateway && date -Iseconds | sudo tee '$DRILL_FAILURE_MARKER_PI' >/dev/null && sudo chmod 644 '$DRILL_FAILURE_MARKER_PI'" \
       >/dev/null 2>&1; then
       log "Pi failure marker: $DRILL_FAILURE_MARKER_PI"
     else
@@ -43,7 +43,7 @@ trap 'rm -rf "$tmpdir"' EXIT
 log "restore $DRILL_SUBSET -> $tmpdir"
 restore_rc=1
 if docker info >/dev/null 2>&1; then
-  if timeout "$DRILL_TIMEOUT_SEC" docker run --rm --network none \
+  if run_with_timeout "$DRILL_TIMEOUT_SEC" docker run --rm --network none \
     -e RESTIC_PASSWORD \
     -v "${LOCAL_REPO}:/repo:ro" \
     -v "${tmpdir}:/restore" \
@@ -55,7 +55,7 @@ if docker info >/dev/null 2>&1; then
   fi
 elif command -v restic >/dev/null 2>&1; then
   log "docker yok — native restic"
-  if RESTIC_PASSWORD="$RESTIC_PASSWORD" timeout "$DRILL_TIMEOUT_SEC" \
+  if run_with_timeout "$DRILL_TIMEOUT_SEC" env RESTIC_PASSWORD="$RESTIC_PASSWORD" \
     restic -r "$LOCAL_REPO" restore "$DRILL_SUBSET" --target "$tmpdir"; then
     restore_rc=0
   else
@@ -70,9 +70,7 @@ fi
 file_count="$(find "$tmpdir/backup/data" -type f 2>/dev/null | wc -l | tr -d ' ')"
 [[ "${file_count:-0}" -gt 0 ]] || die "restore: backup/data bos (restic_rc=$restore_rc)"
 if [[ "$restore_rc" -ne 0 ]]; then
-  log "WARN: restic rc=$restore_rc — config+compose duruyor, bazi data blob atlandi"
-  log "kismi restore — basari damgasi yazilmadi"
-  exit 0
+  die "restic rc=$restore_rc — config+compose duruyor, bazi data blob atlandi; basari damgasi yazilmadi"
 fi
 
 log "OK restore verify: config+compose+data (${file_count} dosya)"
@@ -81,7 +79,7 @@ log "Mac stamp: $DRILL_MARKER_LOCAL"
 
 if [[ -n "$PI_HOST" ]]; then
   if ssh -o ConnectTimeout=15 -o BatchMode=yes "$PI_USER@$PI_HOST" \
-    "sudo mkdir -p /var/lib/pi-gateway && date -Iseconds | sudo tee '$DRILL_MARKER_PI' >/dev/null && sudo chmod 644 '$DRILL_MARKER_PI'" 2>/dev/null; then
+    "sudo mkdir -p /var/lib/pi-gateway && sudo chown '$PI_USER:$PI_USER' /var/lib/pi-gateway && date -Iseconds | sudo tee '$DRILL_MARKER_PI' >/dev/null && sudo chmod 644 '$DRILL_MARKER_PI'" 2>/dev/null; then
     log "Pi stamp: $DRILL_MARKER_PI"
   else
     log "WARN: Pi drill stamp yazilamadi (SSH/sudo)"

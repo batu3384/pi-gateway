@@ -8,7 +8,7 @@ source "$SCRIPT_DIR/../lib/common.sh"
 load_env
 
 PI_USER="${PI_USER:-pi}"
-PI_HOST="${PI_STATIC_IP:-${PI_HOST:-}}"
+PI_HOST="$(deploy_host)"
 REMOTE_DIR="${REMOTE_DIR:-/home/$PI_USER/pi-gateway}"
 LOCAL_DEST="${MAC_BACKUP_DEST:-$HOME/Backups/pi-gateway}"
 RESTIC_REMOTE="${RESTIC_REPOSITORY:-${REMOTE_DIR}/data/backups/restic}"
@@ -29,10 +29,10 @@ count_snapshots() {
   [[ -d "$repo" ]] || { echo 0; return 0; }
   local out
   if command -v restic >/dev/null 2>&1; then
-    out="$(timeout 120 env RESTIC_PASSWORD="$RESTIC_PASSWORD" \
+    out="$(run_with_timeout 120 env RESTIC_PASSWORD="$RESTIC_PASSWORD" \
       restic -r "$repo" snapshots --json 2>/dev/null)" || { echo 0; return 0; }
   elif command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-    out="$(timeout 120 docker run --rm --network none \
+    out="$(run_with_timeout 120 docker run --rm --network none \
       -e RESTIC_PASSWORD \
       -v "${repo}:/repo:ro" \
       "$RESTIC_IMAGE" -r "local:/repo" snapshots --json 2>/dev/null)" || { echo 0; return 0; }
@@ -49,12 +49,12 @@ check_restic_repo() {
   local timeout_sec="${RESTIC_PULL_CHECK_TIMEOUT_SEC:-600}"
   # ponytail: Mac native restic (0.19+) Pi pin (0.17.x) ile farkli check sonucu verebilir
   if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-    timeout "$timeout_sec" docker run --rm --network none \
+    run_with_timeout "$timeout_sec" docker run --rm --network none \
       -e RESTIC_PASSWORD \
       -v "${repo}:/repo:ro" \
       "$RESTIC_IMAGE" -r "local:/repo" check >/dev/null
   elif command -v restic >/dev/null 2>&1; then
-    timeout "$timeout_sec" env RESTIC_PASSWORD="$RESTIC_PASSWORD" \
+    run_with_timeout "$timeout_sec" env RESTIC_PASSWORD="$RESTIC_PASSWORD" \
       restic -r "$repo" check >/dev/null
   else
     return 1
@@ -113,10 +113,12 @@ log "Config snapshot (secrets haric)"
 if ! rsync -avz \
   --exclude '.env' \
   --exclude 'data/**' \
-  --exclude 'homepage/logs/**' \
   --exclude 'crowdsec/bouncer/local_api_credentials.yaml' \
   --exclude 'adguard/AdGuardHome.yaml' \
+  --exclude 'gatus/config.yaml' \
   --exclude 'caddy/certs' \
+  --exclude 'caddy/Caddyfile' \
+  --exclude 'tailscale/acl.hujson' \
   "$PI_USER@$PI_HOST:$REMOTE_DIR/config/" \
   "$stage_config/"; then
   die "config snapshot basarisiz — .last-success yazilmiyor"
@@ -128,11 +130,25 @@ date -Iseconds >"$LOCAL_DEST/.last-success"
 log "Stamp: $LOCAL_DEST/.last-success"
 
 if ssh -o ConnectTimeout=10 -o BatchMode=yes "$PI_USER@$PI_HOST" \
-  "sudo mkdir -p /var/lib/pi-gateway && date -Iseconds | sudo tee /var/lib/pi-gateway/last-offsite-backup >/dev/null && sudo chmod 644 /var/lib/pi-gateway/last-offsite-backup" \
+  "sudo mkdir -p /var/lib/pi-gateway && sudo chown '$PI_USER:$PI_USER' /var/lib/pi-gateway && date -Iseconds | sudo tee /var/lib/pi-gateway/last-offsite-backup >/dev/null && sudo chmod 644 /var/lib/pi-gateway/last-offsite-backup" \
   2>/dev/null; then
   log "Pi marker: /var/lib/pi-gateway/last-offsite-backup"
 else
   log "WARN: Pi offsite marker yazilamadi (SSH/sudo) — Mac stamp yine de gecerli"
+fi
+
+drill_marker="$LOCAL_DEST/.last-restore-drill"
+drill_interval_sec="${RESTIC_AUTO_DRILL_INTERVAL_SEC:-2160000}"
+drill_script="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/backup-restore-drill.sh"
+if [[ "${RESTIC_AUTO_DRILL:-true}" == "true" && -x "$drill_script" ]] && {
+  [[ ! -f "$drill_marker" ]] || python3 -c 'import os,sys,time; sys.exit(0 if time.time()-os.path.getmtime(sys.argv[1]) >= int(sys.argv[2]) else 1)' "$drill_marker" "$drill_interval_sec"
+}; then
+  log "Aylik otomatik restore drill basliyor..."
+  if bash "$drill_script"; then
+    log "Otomatik restore drill tamamlandi"
+  else
+    log "WARN: Otomatik restore drill basarisiz — offsite yedek yine gecerli"
+  fi
 fi
 
 log "Tamamlandi: $LOCAL_DEST"

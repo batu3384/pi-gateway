@@ -48,6 +48,10 @@ if [[ -d "$REPO_HOST_PATH" ]] && find "$REPO_HOST_PATH" -mindepth 1 -print -quit
 fi
 mkdir -p "$REPO_HOST_PATH"
 run_restic() {
+  local -a extra_mounts=()
+  if [[ -d /mnt/ssd/openbot/data ]]; then
+    extra_mounts+=(-v "/mnt/ssd/openbot/data:/backup/openbot:ro")
+  fi
   timeout "$RESTIC_TIMEOUT_SEC" docker run --rm --network none \
     -e RESTIC_PASSWORD \
     -e RESTIC_REPOSITORY=local:/repo \
@@ -55,6 +59,7 @@ run_restic() {
     -v "${REMOTE_DIR}/config:/backup/config:ro" \
     -v "${REMOTE_DIR}/compose:/backup/compose:ro" \
     -v "${DATA_ROOT}:/backup/data:ro" \
+    ${extra_mounts[@]+"${extra_mounts[@]}"} \
     "$RESTIC_IMAGE" "$@"
 }
 export RESTIC_PASSWORD
@@ -73,19 +78,33 @@ RESTIC_BACKUP_HOST="${RESTIC_BACKUP_HOST:-${PI_HOSTNAME:-$(hostname -s)}}"
 STAMP="$(date -Iseconds)"
 log "Yedek basliyor ($STAMP)"
 do_backup() {
+  local extra_excludes=()
+  local extra_paths=()
+  local data_norm="${DATA_ROOT%/}"
+  local repo_norm="${REPO_HOST_PATH%/}"
+  if [[ "$repo_norm" == "${data_norm}/"* ]]; then
+    local rel="${repo_norm#"${data_norm}/"}"
+    extra_excludes+=(--exclude "/backup/data/${rel}")
+  fi
+  if [[ -d /mnt/ssd/openbot/data ]]; then
+    extra_paths+=(/backup/openbot)
+    extra_excludes+=(
+      --exclude '/backup/openbot/.config/OpenBot/Partitions/**'
+      --exclude '/backup/openbot/.cache/**'
+    )
+  fi
   run_restic backup \
     /backup/config \
     /backup/compose \
     /backup/data \
+    ${extra_paths[@]+"${extra_paths[@]}"} \
     --tag "pi-gateway" \
     --host "$RESTIC_BACKUP_HOST" \
     --exclude '/backup/data/backups/restic' \
+    "${extra_excludes[@]}" \
     --exclude '/backup/data/**/work/data' \
-    --exclude '/backup/data/prometheus/blocks.bak.*' \
-    --exclude '/backup/data/prometheus.bak.corrupt.*' \
-    --exclude '/backup/data/uptime-kuma/kuma.db.corrupt-*' \
-    --exclude '/backup/data/uptime-kuma/kuma.db.pre-recover' \
-    --exclude '/backup/data/uptime-kuma/error.log' \
+    --exclude '/backup/data/victoriametrics/flock.lock' \
+    --exclude '/backup/data/victoriametrics/tmp/**' \
     --exclude '*.tmp'
 }
 REINIT_DONE=0
@@ -144,7 +163,12 @@ if [[ "$REINIT_DONE" -eq 1 ]]; then
   log "Tamamlandi (REINIT — notify fail, exit 1)"
   exit 1
 fi
-notify_backup_ok "$STAMP"
+if [[ "${NOTIFY_BACKUP_OK:-false}" == "true" ]]; then
+  notify_backup_ok "$STAMP"
+else
+  # Clear any prior backup failure state silently so recovery is recorded
+  notify_state_clear "restic-fail" 2>/dev/null || true
+fi
 if [[ -x "$SCRIPT_DIR/restic-offsite-copy.sh" ]]; then
   if ! bash "$SCRIPT_DIR/restic-offsite-copy.sh"; then
     log "WARN: offsite copy basarisiz (local backup OK)"

@@ -5,18 +5,19 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../lib/common.sh"
 load_env
 PI_USER="${PI_USER:-pi}"
-PI_HOST="${PI_STATIC_IP:-${PI_HOST:-}}"
+PI_HOST="$(deploy_host)"
 REMOTE_DIR="${REMOTE_DIR:-/home/$PI_USER/pi-gateway}"
-[[ -n "$PI_HOST" ]] || die "PI_STATIC_IP veya PI_HOST gerekli"
+[[ -n "$PI_HOST" ]] || die "PI_DEPLOY_HOST, PI_STATIC_IP veya PI_HOST gerekli"
 echo "=== Pi Gateway Status ($PI_USER@$PI_HOST) ==="
 ssh -o ConnectTimeout=10 "$PI_USER@$PI_HOST" "REMOTE_DIR='$REMOTE_DIR' bash -s" <<'REMOTE'
 set -euo pipefail
 REMOTE_DIR="${REMOTE_DIR:-$HOME/pi-gateway}"
-_PG_ENV_LIB="${SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}/../lib/env-file.sh"
-PG_SCRIPT_NAME="$(basename "$0")"
+_PG_ENV_LIB="${REMOTE_DIR}/scripts/lib/env-file.sh"
+PG_SCRIPT_NAME="status"
 # shellcheck source=../lib/env-file.sh
 source "${_PG_ENV_LIB:?}"
-read_project_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
+read_remote_dotenv || { echo "[${PG_SCRIPT_NAME}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
+STORAGE_TYPE="${STORAGE_TYPE:-hybrid}"
 echo "--- uptime ---"
 uptime
 echo "--- docker ---"

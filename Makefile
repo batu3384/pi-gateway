@@ -9,9 +9,9 @@ ifneq (,$(wildcard .env))
   REMOTE_DIR ?= $(call env_val,REMOTE_DIR)
 endif
 
-PI_USER ?= pi
-REMOTE_DIR ?= /home/$(PI_USER)/pi-gateway
-PI_SSH_HOST ?= $(if $(PI_DEPLOY_HOST),$(PI_DEPLOY_HOST),$(if $(PI_HOST),$(PI_HOST),$(PI_STATIC_IP)))
+override PI_USER := $(or $(strip $(PI_USER)),pi)
+override REMOTE_DIR := $(or $(strip $(REMOTE_DIR)),/home/$(PI_USER)/pi-gateway)
+PI_SSH_HOST ?= $(if $(strip $(PI_DEPLOY_HOST)),$(strip $(PI_DEPLOY_HOST)),$(if $(strip $(PI_HOST)),$(strip $(PI_HOST)),$(strip $(PI_STATIC_IP))))
 
 .PHONY: setup validate test render deploy deploy-code deploy-fast install discover mac-dns mac-dns-clear harden status dns-test test-remote backup-pull backup-cron backup-restore-drill restore-check verify-data config-drift pi-access trust-ca tls-certs telegram-menu firewall sync-configs docker-ssd ssd-fsck ssd-fsck-run check-pi-env doctor diagnose-remote diagnose-dns audit-dns remediate-dns suggest-ad-sniper modem-inventory diagnose-video adguard-tune recover-stack chaos-drill tailscale-acl tailscale-dns
 
@@ -104,7 +104,7 @@ tls-certs:
 	@./scripts/mac/setup-tls-certs.sh
 
 pi-open:
-	@. ./.env 2>/dev/null; proto=$${PANEL_PROTOCOL:-http}; [ "$${ENABLE_TLS:-false}" = "true" ] && proto=https; open "$$proto://gateway.$${LAN_DOMAIN:-home}"
+	@proto='$(or $(strip $(call env_val,PANEL_PROTOCOL)),http)'; [ '$(strip $(call env_val,ENABLE_TLS))' = 'true' ] && proto=https; open "$$proto://gateway.$(or $(strip $(call env_val,LAN_DOMAIN)),home)"
 
 backup-pull:
 	@chmod +x scripts/mac/backup-pull.sh 2>/dev/null || true
@@ -164,12 +164,12 @@ recover-stack: check-pi-env
 	@ssh -tt "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/recover-stack.sh"'
 
 ssd-fsck: check-pi-env
-	@rsync -az scripts/pi/ssd-fsck.sh scripts/pi/repair-adguard-bbolt.sh scripts/lib/ssd-alive.sh "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/scripts/pi/"
+	@rsync -az scripts/pi/ssd-fsck.sh scripts/pi/repair-adguard-bbolt.sh "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/scripts/pi/"
 	@rsync -az scripts/lib/ssd-alive.sh "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/scripts/lib/ssd-alive.sh"
 	@ssh -tt "$(PI_USER)@$(PI_SSH_HOST)" 'chmod +x "$(REMOTE_DIR)/scripts/pi/ssd-fsck.sh" "$(REMOTE_DIR)/scripts/pi/repair-adguard-bbolt.sh" && REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/ssd-fsck.sh" --check || true'
 
 ssd-fsck-run: check-pi-env
-	@rsync -az scripts/pi/ssd-fsck.sh scripts/pi/repair-adguard-bbolt.sh scripts/pi/repair-post-ssd-recovery.sh scripts/pi/ssd-health.sh scripts/pi/health-check.sh scripts/lib/ssd-alive.sh "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/scripts/pi/"
+	@rsync -az scripts/pi/ssd-fsck.sh scripts/pi/repair-adguard-bbolt.sh scripts/pi/repair-post-ssd-recovery.sh scripts/pi/ssd-health.sh scripts/pi/health-check.sh "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/scripts/pi/"
 	@rsync -az scripts/lib/ssd-alive.sh "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/scripts/lib/ssd-alive.sh"
 	@ssh -tt "$(PI_USER)@$(PI_SSH_HOST)" 'chmod +x "$(REMOTE_DIR)/scripts/pi/ssd-fsck.sh" && REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/ssd-fsck.sh" --run --force'
 
@@ -192,7 +192,3 @@ tailscale-dns: check-pi-env
 	@rsync -az scripts/pi/setup-tailscale-dns.sh "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/scripts/pi/"
 	@ssh -tt "$(PI_USER)@$(PI_SSH_HOST)" 'chmod +x "$(REMOTE_DIR)/scripts/pi/setup-tailscale-dns.sh" && REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-tailscale-dns.sh"'
 	@ssh -tt "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-tailscale-acl.sh"'
-
-n8n-workflows: check-pi-env
-	@chmod +x scripts/pi/setup-n8n-workflows.sh 2>/dev/null || true
-	@ssh "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-n8n-workflows.sh"'

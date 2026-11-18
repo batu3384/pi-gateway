@@ -17,10 +17,10 @@ PI_HOST="${PI_HOST:-}"
 REMOTE_DIR="${REMOTE_DIR:-/home/$PI_USER/pi-gateway}"
 STORAGE_TYPE="${STORAGE_TYPE:-hybrid}"
 PI_DEPLOY_HOST="${PI_DEPLOY_HOST:-}"
-SSH_HOST="${PI_DEPLOY_HOST:-${PI_HOST:-${PI_STATIC_IP:-}}}"
+SSH_HOST="${PI_DEPLOY_HOST:-$(deploy_host)}"
 DEPLOY_MODE="${DEPLOY_MODE:-full}"
 export PI_DEPLOY_HOST
-[[ -n "$SSH_HOST" ]] || die "PI_HOST or PI_DEPLOY_HOST required"
+[[ -n "$SSH_HOST" ]] || die "PI_DEPLOY_HOST, PI_STATIC_IP or PI_HOST required"
 case "$DEPLOY_MODE" in
   full|code) ;;
   *) die "DEPLOY_MODE=$DEPLOY_MODE — full|code" ;;
@@ -39,6 +39,8 @@ log "Deploy mode=$DEPLOY_MODE -> $PI_USER@$SSH_HOST:$REMOTE_DIR"
 ssh -o ConnectTimeout=15 "$PI_USER@$SSH_HOST" "mkdir -p '$REMOTE_DIR'"
 rsync -avz --delete \
   --exclude '.git' \
+  --exclude '__pycache__' \
+  --exclude '*.pyc' \
   --exclude '.env' \
   --exclude 'data' \
   --exclude 'data.sd-degraded.bak*' \
@@ -46,25 +48,30 @@ rsync -avz --delete \
   --filter 'protect data/**' \
   --filter 'protect data.sd-degraded.bak*' \
   --filter 'protect data.sd-degraded.bak*/**' \
-  --filter 'protect config/homepage/logs' \
-  --filter 'protect config/homepage/logs/**' \
   --exclude 'config/adguard/AdGuardHome.yaml' \
-  --exclude 'config/homepage/services.yaml' \
   --exclude 'config/caddy/Caddyfile' \
-  --exclude 'config/homepage/logs/**' \
+  --exclude 'config/caddy/.tailscale-serve-block' \
+  --exclude 'config/glance/glance.yml' \
+  --exclude 'config/gatus/config.yaml' \
+  --exclude 'config/tailscale/acl.hujson' \
   --exclude 'backups' \
   --exclude '*.bak' \
   --exclude 'legacy/' \
   "$PROJECT_DIR/" "$PI_USER@$SSH_HOST:$REMOTE_DIR/"
-scp "$PROJECT_DIR/.env" "$PI_USER@$SSH_HOST:/tmp/pi-gateway.env.new"
-ssh "$PI_USER@$SSH_HOST" "REMOTE_DIR='$REMOTE_DIR' bash -s" <<'ENVMERGE'
+DEPLOY_STAGE="${REMOTE_DIR}/.deploy-tmp.$$"
+ssh -o ConnectTimeout=15 "$PI_USER@$SSH_HOST" "install -d -m 700 '$DEPLOY_STAGE'"
+scp "$PROJECT_DIR/.env" "$PI_USER@$SSH_HOST:${DEPLOY_STAGE}/pi-gateway.env.new"
+ssh "$PI_USER@$SSH_HOST" "REMOTE_DIR='$REMOTE_DIR' DEPLOY_STAGE='$DEPLOY_STAGE' bash -s" <<'ENVMERGE'
 set -euo pipefail
 R="${REMOTE_DIR}"
-NEW="/tmp/pi-gateway.env.new"
+STAGE="${DEPLOY_STAGE}"
+trap 'rm -rf "$STAGE"' EXIT
+NEW="${STAGE}/pi-gateway.env.new"
 OLD="${R}/.env"
 OUT="${R}/.env"
 PRESERVE='N8N_ENCRYPTION_KEY CROWDSEC_BOUNCER_KEY CROWDSEC_API_KEY HERMES_TELEGRAM_GATEWAY'
 python3 - "$NEW" "$OLD" "$OUT" $PRESERVE <<'PY'
+import os
 import sys
 from pathlib import Path
 new_path, old_path, out_path = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
@@ -101,22 +108,26 @@ for k in preserve:
     if k in new and k not in seen:
         out_lines.append(f"{k}={new[k]}")
 out_path.write_text("\n".join(out_lines) + "\n")
+os.chmod(out_path, 0o600)
 print(f"[env-merge] preserved={','.join(sorted(preserve & set(old))) or 'none'}")
 PY
-rm -f "$NEW"
+chmod 600 "$OUT"
 ENVMERGE
-"$SCRIPT_DIR/sync-rendered-configs.sh" || log "WARN: rendered config sync atlandi"
+"$SCRIPT_DIR/sync-rendered-configs.sh" || die "Rendered config sync basarisiz"
 
-DEPLOY_HOST="${PI_DEPLOY_HOST:-${PI_STATIC_IP:-$PI_HOST}}"
+DEPLOY_HOST="${PI_DEPLOY_HOST:-$(deploy_host)}"
 
 finish_urls() {
   DOMAIN="${LAN_DOMAIN:-home}"
   log "Deploy complete (mode=$DEPLOY_MODE)"
   log "  Gateway : https://gateway.${DOMAIN}"
   log "  Status  : https://status.${DOMAIN}"
+  log "  Grafana : https://grafana.${DOMAIN}"
   log "  Logs    : https://logs.${DOMAIN}"
   log "  DNS     : https://dns.${DOMAIN}"
-  log "  n8n     : https://n8n.${DOMAIN}"
+  if [[ "${ENABLE_N8N:-false}" == "true" ]]; then
+    log "  n8n     : https://n8n.${DOMAIN}"
+  fi
   log "  UFW     : ${UFW_ADMIN_EXPOSURE:-caddy-only}"
   if [[ "${NETWORK_MODE:-router-dns}" == "router-dns" ]]; then
     log "  ACTION  : Router DNS -> ${PI_STATIC_IP:-$PI_HOST}"
@@ -184,7 +195,7 @@ esac
 if [[ "$COMPOSE_MODE" == "core-dns" ]]; then
   log "SSD yok/degraded — compose core-dns (unbound+adguard; caddy opsiyonel)"
   core_pull=(unbound adguard)
-  [[ "${ENABLE_CADDY:-true}" == "true" ]] && core_pull+=(homepage caddy)
+  [[ "${ENABLE_CADDY:-true}" == "true" ]] && core_pull+=(glance caddy)
   if [[ "${DEPLOY_SKIP_PULL:-false}" != "true" ]]; then
     ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" \
       "cd '$REMOTE_DIR/compose' && docker compose --env-file ../.env --profile caddy pull ${core_pull[*]}" \

@@ -161,7 +161,7 @@ python3 -m json.tool "$PROJECT_DIR/config/adguard/filter-lists.json" >/dev/null 
   || die "filter-lists.json gecersiz JSON"
 grep -q '@latest' "$PROJECT_DIR/config/adguard/filter-lists.json" \
   && die "filter-lists.json @latest pin yok"
-grep -q 'c30a9937e79f18bb31dcf4d45ac4988c3ddc8e7a' "$PROJECT_DIR/config/adguard/filter-lists.json" \
+grep -q 'e681da879e1b4aaed4962170d0e278d6817542df' "$PROJECT_DIR/config/adguard/filter-lists.json" \
   || die "filter-lists.json HaGeZi SHA pin yok"
 grep -q 'ADGUARD_CACHE_TTL_MIN=60' "$PROJECT_DIR/.env.example" \
   || die ".env.example ADGUARD_CACHE_TTL_MIN=60 yok"
@@ -310,8 +310,8 @@ grep -q 'if ratelimit < 0 ' "$PROJECT_DIR/scripts/pi/apply-adguard-dns.sh" \
   || die "apply-adguard-dns ratelimit=0 reddediyor"
 grep -q 'ADGUARD_RATELIMIT_SUBNET_IPV4=32' "$PROJECT_DIR/.env.example" \
   || die ".env.example ratelimit /32 yok"
-grep -q 'ADGUARD_CACHE_SIZE=67108864' "$PROJECT_DIR/.env.example" \
-  || die ".env.example cache 64MiB yok"
+grep -q 'ADGUARD_CACHE_SIZE=16777216' "$PROJECT_DIR/.env.example" \
+  || die ".env.example cache 16MiB yok"
 grep -q 'ratelimit_subnet_len_ipv4' "$PROJECT_DIR/scripts/pi/apply-adguard-dns.sh" \
   || die "apply-adguard-dns per-client subnet yok"
 grep -q 'ratelimit_subnet_len_ipv4: 32' "$PROJECT_DIR/config/adguard/AdGuardHome.yaml.template" \
@@ -333,10 +333,8 @@ grep 'desired\["fallback_dns"\]' "$PROJECT_DIR/scripts/pi/apply-adguard-dns.sh" 
   && die "apply-adguard-dns fallback hâlâ 1.1.1.1"
 grep -q 'docker logs adguard --since' "$PROJECT_DIR/scripts/pi/health-check.sh" \
   || die "health-check adguard logs full dump"
-grep -q 'docker logs prometheus --since' "$PROJECT_DIR/scripts/pi/health-check.sh" \
-  || die "health-check prometheus eski checksum"
-grep -q 'docker logs prometheus --since' "$PROJECT_DIR/scripts/pi/repair-prometheus-tsdb.sh" \
-  || die "repair-prometheus eski checksum"
+grep -q 'optional_victoriametrics_ok' "$PROJECT_DIR/scripts/pi/health-check.sh" \
+  || die "health-check victoriametrics kontrolu yok"
 grep -q 'docker logs adguard --since' "$PROJECT_DIR/scripts/pi/repair-adguard-bbolt.sh" \
   || die "repair-adguard-bbolt eski panic"
 grep -q 'adguard-filtering-off' "$PROJECT_DIR/scripts/pi/health-check.sh" \
@@ -377,16 +375,14 @@ grep -q 'remove_stale_lists' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
   || die "adguard-filters stale remove governance sonrasi yok"
 grep -q 'reconcile oncesi stale kaldirildi' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
   || die "adguard-filters pre-reconcile stale remove yok"
-grep -q 'repair-prometheus-tsdb.sh' "$PROJECT_DIR/scripts/pi/health-check.sh" \
-  || die "health-check prometheus TSDB auto-heal yok"
 grep -q 'pi-gateway-container-watchdog.timer' "$PROJECT_DIR/scripts/pi/setup-home-ops-timers.sh" \
   || die "home-ops container-watchdog timer yok"
 grep -q 'notify_monitoring_stack_warn' "$PROJECT_DIR/scripts/lib/notify.sh" \
   || die "notify monitoring-stack yok"
 grep -q 'notify_monitoring_stack_ok' "$PROJECT_DIR/scripts/lib/notify.sh" \
   || die "notify monitoring-stack recovery yok"
-grep -q 'notify_prometheus_repair' "$PROJECT_DIR/scripts/lib/notify.sh" \
-  || die "notify prometheus-repair yok"
+grep -q 'notify_adguard_filter_fail' "$PROJECT_DIR/scripts/lib/notify.sh" \
+  || die "notify adguard-filter-fail yok"
 grep -q 'check_live_regressions' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
   || die "adguard-filters live regression set_rules sonrasi yok"
 grep -q 'If-Modified-Since' "$PROJECT_DIR/scripts/lib/adguard-filters.py" \
@@ -438,8 +434,8 @@ grep -q 'adguard-block-aaaa' "$PROJECT_DIR/scripts/pi/health-check.sh" \
   || die "health AAAA block yok"
 grep -q 'block-doubleclick-aaaa' "$PROJECT_DIR/scripts/mac/dns-test.sh" \
   || die "dns-test AAAA block yok"
-grep -q '9.9.9.9@853' "$PROJECT_DIR/config/unbound/unbound.conf" \
-  || die "unbound DoT Quad9 853 yok"
+grep -qE '(1\.1\.1\.2|9\.9\.9\.9)@853' "$PROJECT_DIR/config/unbound/unbound.conf" \
+  || die "unbound DoT (Cloudflare Security/Quad9) 853 yok"
 grep -qE '^[[:space:]]*port: 5335' "$PROJECT_DIR/config/unbound/unbound.conf" \
   || die "unbound.conf port 5335 yok (imaj default 53)"
 ! grep -qE '^[[:space:]]*interface:' "$PROJECT_DIR/config/unbound/unbound.conf" \

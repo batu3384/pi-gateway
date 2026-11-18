@@ -92,7 +92,7 @@ apply_sd_usb_storage_quirks() {
   local cmdline="$boot/cmdline.txt"
   # shellcheck source=../lib/usb-quirk.sh
   source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/usb-quirk.sh"
-  apply_jmicron_cmdline_file "$cmdline" "152d:0583:u"
+  apply_jmicron_cmdline_file "$cmdline" "152d:0583:u" "hybrid"
 
   local config="$boot/config.txt"
   for kv in "hdmi_force_hotplug=1" "usb_max_current_enable=1"; do
