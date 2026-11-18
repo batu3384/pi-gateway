@@ -13,6 +13,8 @@ SSD_USB_VID="${SSD_USB_VID:-152d}"
 SSD_USB_PID="${SSD_USB_PID:-0583}"
 SSD_USB_RESET_MAX="${SSD_USB_RESET_MAX:-3}"
 SSD_USB_RESET_WINDOW_SEC="${SSD_USB_RESET_WINDOW_SEC:-900}"
+SSD_USB_DROPOUT_EPOCH_MAX="${SSD_USB_DROPOUT_EPOCH_MAX:-3}"
+SSD_USB_DROPOUT_EPOCH_FILE="${SSD_USB_DROPOUT_EPOCH_FILE:-/var/lib/pi-gateway/ssd-usb-dropout-epoch}"
 SSD_USB_RESET_STATE_FILE="${SSD_USB_RESET_STATE_FILE:-/var/lib/pi-gateway/ssd-usb-reset-state}"
 SSD_USB_XHCI_RESET_STATE_FILE="${SSD_USB_XHCI_RESET_STATE_FILE:-/var/lib/pi-gateway/ssd-usb-xhci-reset-state}"
 SSD_USB_XHCI_RESET_MAX="${SSD_USB_XHCI_RESET_MAX:-2}"
@@ -453,6 +455,39 @@ ssd_usb_reset_clear() {
   SSD_USB_RESET_COUNTED=0
 }
 
+ssd_usb_dropout_epoch_clear() {
+  _ssd_alive_root rm -f "$SSD_USB_DROPOUT_EPOCH_FILE" 2>/dev/null || true
+}
+
+_ssd_dropout_epoch_record_and_check() {
+  local now epoch_ts=0 epoch_cnt=0 max="${SSD_USB_DROPOUT_EPOCH_MAX:-3}"
+  [[ "$max" =~ ^[0-9]+$ ]] || max=3
+  now="$(date +%s)"
+  if [[ -f "$SSD_USB_DROPOUT_EPOCH_FILE" ]]; then
+    read -r epoch_ts epoch_cnt <"$SSD_USB_DROPOUT_EPOCH_FILE" || true
+    [[ "${epoch_ts:-0}" =~ ^[0-9]+$ ]] || epoch_ts=0
+    [[ "${epoch_cnt:-0}" =~ ^[0-9]+$ ]] || epoch_cnt=0
+    if (( now - epoch_ts >= SSD_USB_RESET_WINDOW_SEC )); then
+      epoch_ts="$now"
+      epoch_cnt=0
+    fi
+  else
+    epoch_ts="$now"
+    epoch_cnt=0
+  fi
+  if (( epoch_cnt >= max )); then
+    return 1
+  fi
+  epoch_cnt=$((epoch_cnt + 1))
+  _ssd_alive_root mkdir -p "$(dirname "$SSD_USB_DROPOUT_EPOCH_FILE")" 2>/dev/null || true
+  if [[ "$(id -u)" -eq 0 ]]; then
+    printf '%s %s\n' "$epoch_ts" "$epoch_cnt" >"$SSD_USB_DROPOUT_EPOCH_FILE"
+  else
+    printf '%s %s\n' "$epoch_ts" "$epoch_cnt" | sudo tee "$SSD_USB_DROPOUT_EPOCH_FILE" >/dev/null
+  fi
+  return 0
+}
+
 ssd_usb_bus_dropout() {
   ssd_find_usb_sysfs >/dev/null 2>&1 && return 1
   ssd_block_present && return 1
@@ -471,7 +506,7 @@ ssd_ghost_block_cleanup() {
   disk="$(blkid -L "$SSD_LABEL" 2>/dev/null || true)"
   [[ -n "$disk" && "$disk" == /dev/sd* ]] || return 1
   dev_base="$(echo "$disk" | sed -E 's/p?[0-9]+$//')"
-  del="${dev_base}/device/delete"
+  del="/sys/block/$(basename "$dev_base")/device/delete"
   [[ -f "$del" ]] || return 1
   echo "[ssd-alive] ghost block ${dev_base} — device/delete" >&2
   if mountpoint -q "$SSD_MOUNT" 2>/dev/null; then
@@ -816,8 +851,12 @@ _ssd_usb_soft_reset_body() {
 
   ssd_usb_disable_autosuspend
 
-  # Onceki fail-first kota: bus dropout'ta 15dk susma. Disk yokken sifirla, recovery devam.
+  # Onceki fail-first kota: bus dropout'ta 15dk susma. Epoch tavani asilmadiysa sayaclari sifirla.
   if ssd_usb_bus_dropout && ssd_usb_port_reset_rate_limited; then
+    if ! _ssd_dropout_epoch_record_and_check; then
+      echo "[ssd-alive] bus dropout + port kota dolu — epoch tavani (${SSD_USB_DROPOUT_EPOCH_MAX:-3}/${SSD_USB_RESET_WINDOW_SEC}s), cycle atlandi" >&2
+      return 1
+    fi
     echo "[ssd-alive] bus dropout + port kota dolu — sifirla (yazilim recovery devam)" >&2
     ssd_usb_reset_clear
   fi
@@ -900,55 +939,55 @@ ssd_usb_soft_reset() {
     echo "[ssd-alive] fsck calisiyor — soft-reset atlandi" >&2
     return 1
   fi
-  local lockdir="${SSD_USB_RESET_LOCK_DIR:-/run/pi-gateway/ssd-usb-reset.lock}"
-  local lock_owned=0 rc mtime now parent waited=0
-  local max_wait="${SSD_USB_RESET_LOCK_WAIT_SEC:-45}"
-  local stale="${SSD_USB_RESET_LOCK_STALE_SEC:-400}"
-  parent="$(dirname "$lockdir")"
-  # sudo yok: Mac validate sudo prompt olmasin. Pi health root.
-  if [[ "$(id -u)" -eq 0 ]]; then
-    mkdir -p "$parent" 2>/dev/null || true
-  fi
-  [[ "$max_wait" =~ ^[0-9]+$ ]] || max_wait=45
-  [[ "$stale" =~ ^[0-9]+$ ]] || stale=400
-  ssd_usb_reset_lock_stale_clear
-  trap 'if [[ "${lock_owned:-0}" == "1" ]]; then rmdir "$lockdir" 2>/dev/null || _ssd_alive_root rmdir "$lockdir" 2>/dev/null || true; fi' EXIT
-  if [[ -d "$parent" && -w "$parent" ]]; then
-    while true; do
-      ssd_usb_reset_lock_stale_clear
-      if [[ -d "$lockdir" ]]; then
-        mtime="$(_ssd_path_mtime "$lockdir")"
-        now="$(date +%s)"
-        if [[ "$mtime" =~ ^[0-9]+$ ]] && (( now - mtime > stale )); then
-          echo "[ssd-alive] stale reset lock (${stale}s) — siliniyor" >&2
-          _ssd_alive_root rmdir "$lockdir" 2>/dev/null || true
+  (
+    local lockdir="${SSD_USB_RESET_LOCK_DIR:-/run/pi-gateway/ssd-usb-reset.lock}"
+    local lock_owned=0 rc mtime now parent waited=0
+    local max_wait="${SSD_USB_RESET_LOCK_WAIT_SEC:-45}"
+    local stale="${SSD_USB_RESET_LOCK_STALE_SEC:-400}"
+    parent="$(dirname "$lockdir")"
+    if [[ "$(id -u)" -eq 0 ]]; then
+      mkdir -p "$parent" 2>/dev/null || true
+    fi
+    [[ "$max_wait" =~ ^[0-9]+$ ]] || max_wait=45
+    [[ "$stale" =~ ^[0-9]+$ ]] || stale=400
+    ssd_usb_reset_lock_stale_clear
+    trap 'if [[ "${lock_owned:-0}" == "1" ]]; then rmdir "$lockdir" 2>/dev/null || _ssd_alive_root rmdir "$lockdir" 2>/dev/null || true; fi' EXIT
+    if [[ -d "$parent" && -w "$parent" ]]; then
+      while true; do
+        ssd_usb_reset_lock_stale_clear
+        if [[ -d "$lockdir" ]]; then
+          mtime="$(_ssd_path_mtime "$lockdir")"
+          now="$(date +%s)"
+          if [[ "$mtime" =~ ^[0-9]+$ ]] && (( now - mtime > stale )); then
+            echo "[ssd-alive] stale reset lock (${stale}s) — siliniyor" >&2
+            _ssd_alive_root rmdir "$lockdir" 2>/dev/null || true
+          fi
         fi
-      fi
-      if mkdir "$lockdir" 2>/dev/null; then
-        lock_owned=1
+        if mkdir "$lockdir" 2>/dev/null; then
+          lock_owned=1
+          break
+        fi
+        if [[ -d "$lockdir" ]]; then
+          # Canli kilit zorla silinmez: iki aktor ayni USB'yi resetler (stale=${stale}s yeter)
+          if (( waited >= max_wait )); then
+            echo "[ssd-alive] soft-reset kilit alinamadi (${max_wait}s) — baska reset suruyor" >&2
+            return 1
+          fi
+          sleep 1
+          waited=$((waited + 1))
+          continue
+        fi
         break
-      fi
-      if [[ -d "$lockdir" ]]; then
-        # Canli kilit zorla silinmez: iki aktor ayni USB'yi resetler (stale=${stale}s yeter)
-        if (( waited >= max_wait )); then
-          echo "[ssd-alive] soft-reset kilit alinamadi (${max_wait}s) — baska reset suruyor" >&2
-          trap - EXIT
-          return 1
-        fi
-        sleep 1
-        waited=$((waited + 1))
-        continue
-      fi
-      break
-    done
-  fi
-  _ssd_usb_soft_reset_body
-  rc=$?
-  if [[ "$lock_owned" == "1" ]]; then
-    rmdir "$lockdir" 2>/dev/null || _ssd_alive_root rmdir "$lockdir" 2>/dev/null || true
-  fi
-  trap - EXIT
-  return "$rc"
+      done
+    fi
+    _ssd_usb_soft_reset_body
+    rc=$?
+    if [[ "$lock_owned" == "1" ]]; then
+      rmdir "$lockdir" 2>/dev/null || _ssd_alive_root rmdir "$lockdir" 2>/dev/null || true
+      lock_owned=0
+    fi
+    return "$rc"
+  )
 }
 
 ssd_try_remount() {
@@ -1052,19 +1091,39 @@ ssd_filesystem_needs_fsck() {
   return 1
 }
 
-# Aktif mount saglikli — ghost sd* node (USB letter churn) temizle
+# Aktif mount saglikli — ghost sd* node (USB letter churn) temizle (baska USB diske dokunma)
 ssd_purge_stale_block_devs() {
-  local active base disk del by_label="${SSD_LABEL:-pi-data}" labeled
+  local active base disk del by_label="${SSD_LABEL:-pi-data}" labeled dev_state sys_usb vid pid expect_vid expect_pid
   active="$(ssd_mount_block_dev)"
   [[ -n "$active" && "$active" == /dev/sd* ]] || return 0
   ssd_mount_healthy || return 0
   base="$(echo "$active" | sed -E 's/p?[0-9]+$//')"
   labeled="$(blkid -L "$by_label" 2>/dev/null || true)"
+  expect_vid="$(printf '%s' "$SSD_USB_VID" | tr '[:upper:]' '[:lower:]')"
+  expect_pid="$(printf '%s' "$SSD_USB_PID" | tr '[:upper:]' '[:lower:]')"
   for disk in /dev/sd[a-z]; do
     [[ -b "$disk" ]] || continue
     [[ "$disk" == "$base" ]] && continue
     [[ -n "$labeled" && "$labeled" == "${disk}"* ]] && continue
-    del="${disk}/device/delete"
+    if command -v lsblk >/dev/null 2>&1 && lsblk -nr -o MOUNTPOINT "$disk" 2>/dev/null | grep -q .; then
+      continue
+    fi
+    dev_state="$(tr -d '[:space:]' <"/sys/block/$(basename "$disk")/device/state" 2>/dev/null || true)"
+    if [[ "$dev_state" != "offline" ]]; then
+      sys_usb="$(readlink -f "/sys/block/$(basename "$disk")/device" 2>/dev/null || true)"
+      vid=""
+      pid=""
+      while [[ -n "$sys_usb" && "$sys_usb" != "/" ]]; do
+        if [[ -f "${sys_usb}/idVendor" && -f "${sys_usb}/idProduct" ]]; then
+          vid="$(tr '[:upper:]' '[:lower:]' <"${sys_usb}/idVendor" 2>/dev/null || true)"
+          pid="$(tr '[:upper:]' '[:lower:]' <"${sys_usb}/idProduct" 2>/dev/null || true)"
+          break
+        fi
+        sys_usb="$(dirname "$sys_usb")"
+      done
+      [[ "$vid" == "$expect_vid" && "$pid" == "$expect_pid" ]] || continue
+    fi
+    del="/sys/block/$(basename "$disk")/device/delete"
     [[ -f "$del" ]] || continue
     echo "[ssd-alive] stale block ${disk} — device/delete (active=${base})" >&2
     ssd_sysfs_write "$del" 1 || true

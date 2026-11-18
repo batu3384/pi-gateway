@@ -74,16 +74,25 @@ run_smart() {
   smartctl_bin -A -d "$dtype" "$ssd_dev" 2>/dev/null || true
 }
 
-health_out="$(run_smart auto 2>/dev/null || true)"
-# JMicron USB bridge: -d auto often empty; SAT passthrough
-if ! echo "$health_out" | grep -qiE 'PASSED|OK'; then
+if [[ -n "${SSD_SMART_DEVICE_TYPE:-}" ]]; then
+  health_out="$(run_smart "$SSD_SMART_DEVICE_TYPE" 2>/dev/null || true)"
+elif [[ "$ssd_dev" == /dev/sd* ]]; then
+  # 152d:0583 drivedb'de sntjmicron (NVMe) kayitli; SATA kutuda gecersiz CDB gondermemek icin once sat
   health_out="$(run_smart sat 2>/dev/null || true)"
+  if ! echo "$health_out" | grep -qiE 'PASSED|OK'; then
+    health_out="$(run_smart auto 2>/dev/null || true)"
+  fi
+else
+  health_out="$(run_smart auto 2>/dev/null || true)"
+  if ! echo "$health_out" | grep -qiE 'PASSED|OK'; then
+    health_out="$(run_smart sat 2>/dev/null || true)"
+  fi
 fi
 if ! echo "$health_out" | grep -qiE 'PASSED|OK'; then
   log "WARN: SMART health FAIL veya okunamadi ($ssd_dev)"
   # shellcheck source=../lib/notify.sh
   source "$SCRIPT_DIR/../lib/notify.sh"
-  notify_disk_warn "/mnt/ssd" "SMART health FAIL ($ssd_dev)"
+  notify_smart_warn "SMART health FAIL ($ssd_dev)"
   exit 1
 fi
 
@@ -122,15 +131,22 @@ emit("wear_pct", wear)
 emit("realloc", realloc)
 ')"
 
+smart_warn=0
 if [[ -n "$wear_pct" && "$wear_pct" =~ ^[0-9]+$ ]] && (( wear_pct >= SSD_WEAR_WARN_PCT )); then
   log "WARN: SSD wear ${wear_pct}% >= ${SSD_WEAR_WARN_PCT}%"
   source "$SCRIPT_DIR/../lib/notify.sh"
-  notify_disk_warn "/mnt/ssd" "wear ${wear_pct}%"
+  notify_smart_warn "wear ${wear_pct}% (eşik ${SSD_WEAR_WARN_PCT}%)"
+  smart_warn=1
 fi
 if [[ -n "$realloc" && "$realloc" =~ ^[0-9]+$ ]] && (( realloc >= SSD_REALLOC_WARN )); then
   log "WARN: reallocated sectors ${realloc} >= ${SSD_REALLOC_WARN}"
   source "$SCRIPT_DIR/../lib/notify.sh"
-  notify_disk_warn "/mnt/ssd" "realloc ${realloc}"
+  notify_smart_warn "reallocated sectors ${realloc} (eşik ${SSD_REALLOC_WARN})"
+  smart_warn=1
+fi
+if [[ "$smart_warn" -eq 0 ]]; then
+  source "$SCRIPT_DIR/../lib/notify.sh"
+  notify_smart_ok || true
 fi
 
 log "OK SMART $ssd_dev (wear=${wear_pct:-n/a} realloc=${realloc:-n/a})"

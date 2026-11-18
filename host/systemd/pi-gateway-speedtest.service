@@ -12,8 +12,7 @@ Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
 Environment=HOME=/home/PI_USER
 ExecStart=/home/PI_USER/pi-gateway/scripts/pi/isp-speedtest.sh
 Nice=19
+IOSchedulingClass=idle
+TimeoutStartSec=90
 StandardOutput=journal
 StandardError=journal
-
-[Install]
-WantedBy=multi-user.target

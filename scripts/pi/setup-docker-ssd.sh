@@ -52,7 +52,7 @@ fi
 pre_cleanup() {
   log "On temizlik (SD alan acma)..."
   sudo apt-get clean -qq 2>/dev/null || true
-  docker image rm louislam/uptime-kuma:1 2>/dev/null || true
+  docker image rm prom/prometheus:v2.55.1 louislam/uptime-kuma:1 ghcr.io/gethomepage/homepage:latest 2>/dev/null || true
   docker image prune -f 2>/dev/null || true
 }
 configure_daemon() {

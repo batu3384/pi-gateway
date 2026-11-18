@@ -2,6 +2,7 @@
 # SD boot + USB SSD veri diski — ilk acilista veya elle calistirilir.
 set -euo pipefail
 MARKER="/mnt/ssd/.pi-gateway-initialized"
+HOST_MARKER="/var/lib/pi-gateway/ssd-initialized"
 MOUNT="/mnt/ssd"
 LABEL="pi-data"
 DATA_ROOT="${MOUNT}/pi-gateway-data"
@@ -13,7 +14,18 @@ require_root() {
   [[ "$(id -u)" -eq 0 ]] || die "root gerekli: sudo $0"
 }
 root_disk() {
-  findmnt -n -o SOURCE / | sed -E 's/p?[0-9]+$//; s/[0-9]+$//'
+  local src pk
+  src="$(findmnt -n -o SOURCE / 2>/dev/null || true)"
+  pk="$(lsblk -no PKNAME "$src" 2>/dev/null | head -1 || true)"
+  if [[ -n "$pk" ]]; then
+    echo "/dev/${pk}"
+    return 0
+  fi
+  if [[ "$src" == /dev/mmcblk* || "$src" == /dev/nvme* ]]; then
+    echo "$src" | sed -E 's/p[0-9]+$//'
+  else
+    echo "$src" | sed -E 's/[0-9]+$//'
+  fi
 }
 find_usb_data_disk() {
   local root base dev candidates=()
@@ -78,6 +90,11 @@ ensure_ext4_partition() {
   if findmnt -n "$part" "$disk" 2>/dev/null | grep -q .; then
     die "Disk/partition mount durumda — format iptal: $disk $part"
   fi
+  local existing_fs
+  existing_fs="$(lsblk -no FSTYPE "$disk" 2>/dev/null | awk 'NF{print; exit}' || true)"
+  if [[ -n "$existing_fs" && "${PI_SSD_FORCE_WIPE:-}" != "yes" ]]; then
+    die "Disk uzerinde mevcut dosya sistemi var (${existing_fs}: $disk) — veriyi korumak icin PI_SSD_FORCE_WIPE=yes gerekli"
+  fi
   if [[ "${PI_SSD_CONFIRM_FORMAT:-}" != "yes" ]]; then
     die "Yeni format icin PI_SSD_CONFIRM_FORMAT=yes gerekli (disk: $disk, ~${size_gb}GB)"
   fi
@@ -120,16 +137,24 @@ prepare_data_tree() {
   local remote="${REMOTE_DIR:-/home/${user}/pi-gateway}"
   mkdir -p \
     "${DATA_ROOT}/adguard/work" \
-    "${DATA_ROOT}/uptime-kuma" \
+    "${DATA_ROOT}/gatus" \
+    "${DATA_ROOT}/victoriametrics" \
+    "${DATA_ROOT}/grafana" \
     "${DATA_ROOT}/docker-volumes" \
     "${DATA_ROOT}/logs" \
     "${DATA_ROOT}/netalertx" \
     "${DATA_ROOT}/restic" \
     "${DATA_ROOT}/backups" \
-    "${DATA_ROOT}/n8n" \
     "${DATA_ROOT}/crowdsec" \
     "${MOUNT}/.disk-probe"
-  chown -R "${user}:${user}" "$DATA_ROOT"
+  if [[ "${ENABLE_N8N:-false}" == "true" ]]; then
+    mkdir -p "${DATA_ROOT}/n8n"
+  fi
+  chown "${user}:${user}" "$DATA_ROOT"
+  local _user_dir
+  for _user_dir in backups logs restic docker-volumes; do
+    chown -R "${user}:${user}" "${DATA_ROOT}/${_user_dir}" 2>/dev/null || true
+  done
   if [[ -d "$remote" ]]; then
     mkdir -p "$remote"
     if [[ ! -L "${remote}/data" ]]; then
@@ -155,7 +180,7 @@ write_health_hint() {
     echo "Pi Gateway veri diski"
     echo "Mount: ${MOUNT}"
     echo "Label: ${LABEL}"
-    echo "Kullanim: AdGuard, Uptime Kuma, Docker volume, loglar"
+    echo "Kullanim: AdGuard, Gatus, VictoriaMetrics, Grafana, Docker volume, Restic, loglar"
     echo "OS: SD kart (mmcblk0) uzerinde kalir"
   } > "${MOUNT}/README.txt"
 }
@@ -163,7 +188,14 @@ main() {
   require_root
   REMOTE_DIR="${REMOTE_DIR:-/home/${PI_USER:-pi}/pi-gateway}"
   # shellcheck source=../lib/env-file.sh
-  source "$SCRIPT_DIR/../lib/env-file.sh"
+  if [[ -f "$SCRIPT_DIR/../lib/env-file.sh" ]]; then
+    source "$SCRIPT_DIR/../lib/env-file.sh"
+  elif [[ -f "/usr/local/lib/pi-gateway/scripts/lib/env-file.sh" ]]; then
+    # Installed copy at /usr/local/sbin/pi-setup-ssd-data.sh resolves libs under /usr/local/lib/pi-gateway
+    source "/usr/local/lib/pi-gateway/scripts/lib/env-file.sh"
+  else
+    die "env-file.sh bulunamadi"
+  fi
   read_remote_dotenv || die ".env dotenv parser hatasi"
   _SSD_REMOTE_DIR="$REMOTE_DIR"
   REMOTE_DIR="$_SSD_REMOTE_DIR"
@@ -182,22 +214,15 @@ main() {
       write_health_hint
       [[ -f "$MARKER" ]] || touch "$MARKER"
       chmod 644 "$MARKER"
+      mkdir -p "$(dirname "$HOST_MARKER")"
+      touch "$HOST_MARKER"
+      chmod 644 "$HOST_MARKER"
       log "Tamamlandi (mevcut mount)"
       exit 0
     fi
   fi
   disk="$(find_usb_data_disk)" || die "USB veri diski bulunamadi (SSD takili mi?)"
   part="$(partition_for_disk "$disk")"
-  if [[ -f "$MARKER" ]]; then
-    log "Zaten hazir ($MARKER) — fstab + symlink kontrol"
-    mount_ssd "$part" || die "Hazir SSD mount edilemedi: $part"
-    mountpoint -q "$MOUNT" || die "Hazir SSD mount probe basarisiz: $MOUNT"
-    mounted_part="$(findmnt -n -o SOURCE "$MOUNT" 2>/dev/null || true)"
-    [[ "$mounted_part" == "$part" ]] || die "Yanlis SSD mount: beklenen $part, bulunan ${mounted_part:-yok}"
-    ensure_fstab "$part"
-    prepare_data_tree
-    exit 0
-  fi
   if ! blkid -o value -s TYPE "$part" 2>/dev/null | grep -q ext4; then
     part="$(ensure_ext4_partition "$disk" "$part")"
   fi
@@ -207,6 +232,9 @@ main() {
   write_health_hint
   touch "$MARKER"
   chmod 644 "$MARKER"
+  mkdir -p "$(dirname "$HOST_MARKER")"
+  touch "$HOST_MARKER"
+  chmod 644 "$HOST_MARKER"
   log "Tamamlandi. Veri diski: $MOUNT ($part)"
 }
 main "$@"

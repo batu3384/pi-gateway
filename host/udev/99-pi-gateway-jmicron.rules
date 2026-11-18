@@ -3,10 +3,10 @@ ACTION=="add|change", SUBSYSTEM=="usb", ATTR{idVendor}=="152d", ATTR{idProduct}=
   ATTR{power/control}="on", ATTR{power/autosuspend}="-1"
 
 ACTION=="add|change", SUBSYSTEM=="usb", ATTR{idVendor}=="152d", ATTR{idProduct}=="0583", \
-  ATTR{power/usb3_hardware_lpm_u1}="0"
+  TEST=="power/usb3_hardware_lpm_u1", ATTR{power/usb3_hardware_lpm_u1}="0"
 
 ACTION=="add|change", SUBSYSTEM=="usb", ATTR{idVendor}=="152d", ATTR{idProduct}=="0583", \
-  ATTR{power/usb3_hardware_lpm_u2}="0"
+  TEST=="power/usb3_hardware_lpm_u2", ATTR{power/usb3_hardware_lpm_u2}="0"
 
 # Kopma/takilma SSOT: udev → pi-ssd-watch.service (path unit yalniz PathChanged)
 ACTION=="add|remove", SUBSYSTEM=="usb", ENV{ID_VENDOR_ID}=="152d", ENV{ID_MODEL_ID}=="0583", \
@@ -15,3 +15,11 @@ ACTION=="add|remove", SUBSYSTEM=="usb", ENV{ID_VENDOR_ID}=="152d", ENV{ID_MODEL_
 # change = her I/O uevent — storm. add|remove yeterli; hung I/O = pi-ssd-health.timer
 ACTION=="add|remove", SUBSYSTEM=="block", ENV{ID_FS_LABEL}=="pi-data", \
   TAG+="systemd", ENV{SYSTEMD_WANTS}="pi-ssd-watch.service"
+
+# Desktop udisksd 10dk ATA SMART passthrough (libatasmart) + auto-mount engelle
+ACTION=="add|change", SUBSYSTEM=="block", SUBSYSTEMS=="usb", ATTRS{idVendor}=="152d", ATTRS{idProduct}=="0583", \
+  ENV{UDISKS_IGNORE}="1", ENV{UDISKS_AUTO}="0", ENV{ID_ATA}=""
+
+# BOT kopru FIFO tasmasi onleme (256KB -> 120KB / 240 sektor) + SSD non-rotational
+ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="sd[a-z]", SUBSYSTEMS=="usb", ATTRS{idVendor}=="152d", ATTRS{idProduct}=="0583", \
+  ATTR{queue/max_sectors_kb}="120", ATTR{queue/rotational}="0"

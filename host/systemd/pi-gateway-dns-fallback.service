@@ -13,6 +13,3 @@ Restart=on-failure
 RestartSec=2s
 StandardOutput=journal
 StandardError=journal
-
-[Install]
-WantedBy=multi-user.target

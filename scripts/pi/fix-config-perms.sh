@@ -18,6 +18,11 @@ fix_file() {
 
 fix_file "${REMOTE_DIR}/config/adguard/AdGuardHome.yaml"
 fix_file "${REMOTE_DIR}/config/caddy/Caddyfile"
+fix_file "${REMOTE_DIR}/config/glance/glance.yml"
+fix_file "${REMOTE_DIR}/config/gatus/config.yaml"
+if [[ -f "${REMOTE_DIR}/config/gatus/config.yaml" ]]; then
+  chmod 600 "${REMOTE_DIR}/config/gatus/config.yaml" 2>/dev/null || true
+fi
 
 if [[ -f "${REMOTE_DIR}/.env" ]]; then
   chmod 600 "${REMOTE_DIR}/.env" 2>/dev/null || sudo chmod 600 "${REMOTE_DIR}/.env"

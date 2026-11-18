@@ -17,7 +17,18 @@ run_root() {
   fi
 }
 root_disk() {
-  findmnt -n -o SOURCE / | sed -E 's/p?[0-9]+$//; s/[0-9]+$//'
+  local src pk
+  src="$(findmnt -n -o SOURCE / 2>/dev/null || true)"
+  pk="$(lsblk -no PKNAME "$src" 2>/dev/null | head -1 || true)"
+  if [[ -n "$pk" ]]; then
+    echo "/dev/${pk}"
+    return 0
+  fi
+  if [[ "$src" == /dev/mmcblk* || "$src" == /dev/nvme* ]]; then
+    echo "$src" | sed -E 's/p[0-9]+$//'
+  else
+    echo "$src" | sed -E 's/[0-9]+$//'
+  fi
 }
 partition_id() {
   local part="$1"

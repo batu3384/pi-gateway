@@ -27,11 +27,11 @@ touch_hotplug_run() {
   run_root mkdir -p "$(dirname "$SSD_HOTPLUG_DEBOUNCE_FILE")" 2>/dev/null || true
   date +%s | run_root tee "$SSD_HOTPLUG_DEBOUNCE_FILE" >/dev/null 2>&1 || true
 }
+_HOTPLUG_REMOTE_DIR="${REMOTE_DIR:-}"
 # shellcheck source=../lib/env-file.sh
 source "$SCRIPT_DIR/../lib/env-file.sh"
 read_remote_dotenv || { echo "[ssd-hotplug] HATA: .env dotenv parser hatasi" >&2; exit 1; }
-_HOTPLUG_REMOTE_DIR="$REMOTE_DIR"
-REMOTE_DIR="$_HOTPLUG_REMOTE_DIR"
+[[ -n "$_HOTPLUG_REMOTE_DIR" ]] && REMOTE_DIR="$_HOTPLUG_REMOTE_DIR"
 # shellcheck source=../lib/stack-health.sh
 source "$SCRIPT_DIR/../lib/stack-health.sh"
 # Overlay docker SSD'de: kopma = AGH ölür. Recover :53'ü çalmadan önce tut.
@@ -114,6 +114,11 @@ if ssd_mount_healthy; then
       exit 1
     fi
   fi
+  if [[ -f "$SCRIPT_DIR/repair-docker-network-store.sh" ]] && ! docker_sandbox_ok 2>/dev/null; then
+    log "WARN: docker sandbox bozuk (stale USB mount FD / local-kv.db) — recover oncesi onariliyor"
+    REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/repair-docker-network-store.sh" \
+      || log "WARN: pre-recover docker network repair"
+  fi
   if ! REMOTE_DIR="$REMOTE_DIR" SKIP_RECOVER_LOCK=true bash "$(recover_script_path "$REMOTE_DIR")"; then
     log "HATA: recover basarisiz — degraded flag korunuyor"
     # shellcheck source=../lib/notify.sh
@@ -141,12 +146,13 @@ if ssd_mount_healthy; then
     || log "WARN: post-ssd repair"
   # SSD recovery notification is owned by recover-readonly-root.sh.
   ssd_usb_reset_clear 2>/dev/null || true
+  declare -F ssd_usb_dropout_epoch_clear >/dev/null 2>&1 && ssd_usb_dropout_epoch_clear 2>/dev/null || true
   ssd_ghost_block_cleanup 2>/dev/null || true
   ssd_purge_stale_block_devs 2>/dev/null || true
   if declare -F ssd_filesystem_needs_fsck >/dev/null 2>&1 && ssd_filesystem_needs_fsck; then
     log "WARN: aktif SSD ext4 fsck gerekli — SSD_FSCK_AUTO veya ssd-fsck.sh --run"
     if [[ "${SSD_FSCK_AUTO:-false}" == "true" ]] && [[ -x "$SCRIPT_DIR/ssd-fsck.sh" ]]; then
-      REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/ssd-fsck.sh" --run \
+      SKIP_RECOVER_LOCK=true REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/ssd-fsck.sh" --run \
         || log "WARN: otomatik fsck basarisiz"
     fi
   fi

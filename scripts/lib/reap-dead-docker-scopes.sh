@@ -2,15 +2,20 @@
 # docker inspect fail + daemon down → hiçbir şeye dokunma.
 # shellcheck shell=bash
 reap_dead_docker_scopes() {
-  local scope cid pid alive
-  docker info >/dev/null 2>&1 || return 0
+  local scope cid pid alive docker_bin err
+  docker_bin="/usr/bin/docker"
+  [[ -x "$docker_bin" ]] || docker_bin="$(command -v docker 2>/dev/null || true)"
+  [[ -n "$docker_bin" ]] || return 0
+  "$docker_bin" info >/dev/null 2>&1 || return 0
   [[ -d /sys/fs/cgroup/system.slice ]] || return 0
   shopt -s nullglob
   for scope in /sys/fs/cgroup/system.slice/docker-*.scope; do
     cid="$(basename "$scope")"
     cid="${cid#docker-}"
     cid="${cid%.scope}"
-    docker inspect "$cid" >/dev/null 2>&1 && continue
+    err="$(timeout 15 "$docker_bin" inspect "$cid" 2>&1 >/dev/null)" && continue
+    printf '%s' "$err" | grep -qiE 'no such (object|container)' || continue
+    "$docker_bin" info >/dev/null 2>&1 || { shopt -u nullglob; return 0; }
     [[ -f "$scope/cgroup.procs" ]] || continue
     alive=0
     while read -r pid; do

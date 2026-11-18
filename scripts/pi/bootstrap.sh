@@ -38,7 +38,7 @@ if [[ -f "$REMOTE_DIR/host/dhcpcd/pi-gateway.conf" ]]; then
   grep -q 'pi-gateway.conf' /etc/dhcpcd.conf 2>/dev/null || echo 'include /etc/dhcpcd.conf.d/pi-gateway.conf' | sudo tee -a /etc/dhcpcd.conf >/dev/null
   sudo systemctl restart dhcpcd 2>/dev/null || sudo rc-service dhcpcd restart 2>/dev/null || true
 fi
-if ! command -v log2ram >/dev/null 2>&1; then
+if [[ "${ENABLE_LOG2RAM:-false}" == "true" ]] && ! command -v log2ram >/dev/null 2>&1; then
   timeout 180 bash -c 'curl -fsSL https://github.com/azlux/log2ram/raw/master/install.sh 2>/dev/null | sudo bash' 2>/dev/null || \
     echo "[bootstrap] log2ram install skipped"
 fi
@@ -84,6 +84,7 @@ fi
 if [[ -d "$REMOTE_DIR/host/systemd/journald.conf.d" ]]; then
   echo "[bootstrap] journald persistent..."
   sudo mkdir -p /etc/systemd/journald.conf.d
+  sudo rm -f /etc/systemd/journald.conf.d/00-pi-gateway-persistent.conf
   sudo cp "$REMOTE_DIR/host/systemd/journald.conf.d/"*.conf /etc/systemd/journald.conf.d/ 2>/dev/null || true
   sudo mkdir -p /var/log/journal
   sudo systemctl restart systemd-journald 2>/dev/null || true
@@ -107,9 +108,9 @@ if [[ -f "$REMOTE_DIR/scripts/lib/usb-quirk.sh" ]]; then
   done
   if [[ -n "$cmdline_target" ]]; then
     echo "[bootstrap] JMicron cmdline (UAS off + NO_LPM + autosuspend=-1): $cmdline_target"
-    if [[ "$REMOTE_DIR" =~ ^/[a-zA-Z0-9._/-]+$ && "$REMOTE_DIR" != *..* ]]; then
+    if ( export LC_ALL=C; [[ "$REMOTE_DIR" =~ ^/[-a-zA-Z0-9._/]+$ && "$REMOTE_DIR" != *..* ]] ); then
       sudo env REMOTE_DIR="$REMOTE_DIR" bash -c \
-        "source \"\$REMOTE_DIR/scripts/lib/usb-quirk.sh\"; apply_jmicron_cmdline_file '$cmdline_target' 152d:0583:u" \
+        "source \"\$REMOTE_DIR/scripts/lib/usb-quirk.sh\"; apply_jmicron_cmdline_file '$cmdline_target' 152d:0583:u '${STORAGE_TYPE}'" \
         || echo "[bootstrap] WARN: cmdline quirk patch atlandi"
     else
       echo "[bootstrap] WARN: REMOTE_DIR guvenli degil — cmdline skip"
@@ -118,7 +119,7 @@ if [[ -f "$REMOTE_DIR/scripts/lib/usb-quirk.sh" ]]; then
     echo "[bootstrap] WARN: cmdline.txt bulunamadi (bootfs mount?)"
   fi
 fi
-for unit in pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-crowdsec-ufw.timer pi-gateway-adguard-filters.timer pi-data-symlink.timer pi-ssd-watch.path pi-ssd-health.timer pi-gateway-ssd-smart.timer pi-gateway-kuma-report.timer pi-gateway-speedtest.timer pi-gateway-quake.timer pi-gateway-ibb.timer pi-gateway-modem-inventory.timer pi-gateway-container-watchdog.timer pi-gateway-crowdsec-diary.timer; do
+for unit in pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-crowdsec-ufw.timer pi-gateway-adguard-filters.timer pi-data-symlink.timer pi-ssd-watch.path pi-ssd-health.timer pi-gateway-ssd-smart.timer pi-gateway-speedtest.timer pi-gateway-quake.timer pi-gateway-ibb.timer pi-gateway-dns-coverage.timer pi-gateway-dns-weekly.timer pi-gateway-modem-inventory.timer pi-gateway-container-watchdog.timer pi-gateway-crowdsec-diary.timer; do
   [[ -f "$REMOTE_DIR/host/systemd/$unit" ]] && sudo cp "$REMOTE_DIR/host/systemd/$unit" "/etc/systemd/system/$unit"
 done
 install_systemd_unit() {
@@ -140,19 +141,20 @@ if [[ -x "$REMOTE_DIR/scripts/pi/install-privileged-scripts.sh" ]]; then
   privileged_script="$REMOTE_DIR/scripts/pi/install-privileged-scripts.sh"
   REMOTE_DIR="$REMOTE_DIR" bash "$privileged_script"
 fi
-for svc in pi-gateway-health.service pi-gateway-backup.service pi-gateway-adguard-config.service pi-gateway-adguard-filters.service pi-gateway-adguard-filters-failure.service pi-gateway-health-failure.service pi-gateway-boot-notify.service pi-gateway-crowdsec-ufw.service pi-data-symlink.service pi-data-symlink-repair.service pi-gateway-recover-ro.service pi-gateway-ensure-fstab.service pi-ssd-data.service pi-ssd-watch.service pi-ssd-health.service pi-gateway-ssd-smart.service pi-gateway-kuma-report.service pi-gateway-speedtest.service pi-gateway-quake.service pi-gateway-ibb.service pi-gateway-modem-inventory.service pi-gateway-container-watchdog.service pi-gateway-crowdsec-diary.service pi-gateway-dns-fallback.service; do
+for svc in pi-gateway-health.service pi-gateway-backup.service pi-gateway-adguard-config.service pi-gateway-adguard-filters.service pi-gateway-adguard-filters-failure.service pi-gateway-health-failure.service pi-gateway-boot-notify.service pi-gateway-crowdsec-ufw.service pi-data-symlink.service pi-data-symlink-repair.service pi-gateway-recover-ro.service pi-gateway-ensure-fstab.service pi-ssd-data.service pi-ssd-watch.service pi-ssd-health.service pi-gateway-ssd-smart.service pi-gateway-speedtest.service pi-gateway-quake.service pi-gateway-ibb.service pi-gateway-dns-coverage.service pi-gateway-dns-weekly.service pi-gateway-modem-inventory.service pi-gateway-container-watchdog.service pi-gateway-crowdsec-diary.service pi-gateway-dns-fallback.service pi-gateway-ts-panel-ports.service; do
   install_systemd_unit "$svc"
 done
-# Eski cift-doktor / cift-isim unit'lerini host'tan temizle (health + ADGUARDIMP yeterli)
+# Eski cift-doktor / emekli unit'leri host'tan temizle
 for stale in pi-gateway-stack-watchdog.timer pi-gateway-stack-watchdog.service \
   pi-gateway-netalertx-names.timer pi-gateway-netalertx-names.service \
+  pi-gateway-kuma-report.timer pi-gateway-kuma-report.service \
   pi-gateway-morning.timer pi-gateway-morning.service pi-gateway-telegram-bot.service; do
   sudo systemctl disable --now "$stale" 2>/dev/null || true
   sudo rm -f "/etc/systemd/system/$stale"
 done
 sudo rm -f /usr/local/lib/pi-gateway/scripts/pi/stack-watchdog.sh 2>/dev/null || true
 sudo systemctl daemon-reload
-sudo systemctl enable pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-adguard-config.service pi-gateway-adguard-filters.timer pi-gateway-recover-ro.service pi-gateway-boot-notify.service pi-gateway-kuma-report.timer pi-gateway-speedtest.timer pi-gateway-quake.timer pi-gateway-ibb.timer 2>/dev/null || true
+sudo systemctl enable pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-adguard-config.service pi-gateway-adguard-filters.timer pi-gateway-recover-ro.service pi-gateway-boot-notify.service pi-gateway-speedtest.timer pi-gateway-quake.timer pi-gateway-ibb.timer pi-gateway-dns-coverage.timer pi-gateway-dns-weekly.timer pi-gateway-container-watchdog.timer pi-gateway-crowdsec-diary.timer 2>/dev/null || true
 if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
   sudo systemctl enable pi-data-symlink.service pi-gateway-ensure-fstab.service pi-data-symlink.timer pi-ssd-watch.path pi-ssd-data.service pi-ssd-health.timer pi-gateway-ssd-smart.timer 2>/dev/null || true
 fi
@@ -190,14 +192,13 @@ if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
     if ! sudo env "${ssd_env[@]}" bash "$ssd_script"; then
       if [[ "${DNS_DEGRADED_ON_SSD_LOSS:-true}" == "true" || "${STORAGE_FALLBACK_SD:-false}" == "true" ]]; then
         echo "[bootstrap] WARN: SSD yok/hazirlanamadi — DNS degraded (SD data) ile devam"
-        touch /run/pi-gateway/storage-degraded 2>/dev/null || \
-          sudo mkdir -p /run/pi-gateway && sudo touch /run/pi-gateway/storage-degraded || true
-        if [[ -d "$REMOTE_DIR/compose" ]]; then
-          sudo docker compose -f "$REMOTE_DIR/compose/docker-compose.yml" \
-            --env-file "$REMOTE_DIR/.env" stop \
-            n8n uptime-kuma crowdsec dozzle netalertx \
-            prometheus grafana node-exporter 2>/dev/null || true
+        if ! touch /run/pi-gateway/storage-degraded 2>/dev/null; then
+          sudo mkdir -p /run/pi-gateway
+          sudo touch /run/pi-gateway/storage-degraded || true
         fi
+        for _opt_svc in n8n gatus crowdsec dozzle docker-socket-proxy netalertx victoriametrics grafana node-exporter; do
+          sudo docker stop "$_opt_svc" >/dev/null 2>&1 || true
+        done
         if [[ -f "$REMOTE_DIR/scripts/pi/setup-docker-fallback.sh" ]]; then
           sudo env REMOTE_DIR="$REMOTE_DIR" bash \
             "$REMOTE_DIR/scripts/pi/setup-docker-fallback.sh" || {
@@ -238,9 +239,9 @@ if [[ -f "$REMOTE_DIR/scripts/pi/ensure-data-symlink.sh" ]]; then
       echo "[bootstrap] WARN: data dizin kontrolu atlandi"
   fi
 else
-  mkdir -p "$REMOTE_DIR/data/adguard/work" "$REMOTE_DIR/data/uptime-kuma" \
-    "$REMOTE_DIR/data/n8n" "$REMOTE_DIR/data/crowdsec" \
-    "$REMOTE_DIR/data/prometheus" "$REMOTE_DIR/data/grafana"
+  mkdir -p "$REMOTE_DIR/data/adguard/work" "$REMOTE_DIR/data/gatus" \
+    "$REMOTE_DIR/data/crowdsec" \
+    "$REMOTE_DIR/data/victoriametrics" "$REMOTE_DIR/data/grafana"
 fi
 if [[ "${ENABLE_MONITORING:-true}" == "true" ]] && [[ -x "$REMOTE_DIR/scripts/pi/ensure-monitoring-data.sh" ]]; then
   ensure_mon="$REMOTE_DIR/scripts/pi/ensure-monitoring-data.sh"
@@ -256,8 +257,8 @@ if [[ "$STORAGE_TYPE" == "ssd-root" || "$STORAGE_TYPE" == "ssd" ]]; then
   fi
   echo "[bootstrap] Storage: SSD root OK ($ROOT_SRC)"
 fi
-sudo mkdir -p /run/pi-gateway/notify 2>/dev/null || true
-sudo chown "$USER:$USER" /run/pi-gateway/notify 2>/dev/null || true
-sudo chmod 775 /run/pi-gateway/notify 2>/dev/null || true
+sudo mkdir -p /var/lib/pi-gateway/notify /run/pi-gateway 2>/dev/null || true
+sudo chown -R "$USER:$USER" /var/lib/pi-gateway /run/pi-gateway 2>/dev/null || true
+sudo chmod 775 /var/lib/pi-gateway /var/lib/pi-gateway/notify /run/pi-gateway 2>/dev/null || true
 chmod +x "$REMOTE_DIR"/scripts/pi/*.sh "$REMOTE_DIR"/scripts/lib/*.sh 2>/dev/null || true
 echo "[bootstrap] complete"

@@ -65,8 +65,11 @@ dns_degraded_allowed() {
 
 data_tree_dirs() {
   printf '%s\n' \
-    adguard/work uptime-kuma docker-volumes logs netalertx \
-    restic backups n8n crowdsec/config crowdsec/db dozzle .disk-probe
+    adguard/work gatus victoriametrics grafana docker-volumes logs netalertx \
+    restic backups crowdsec/config crowdsec/db dozzle .disk-probe
+  if [[ "${ENABLE_N8N:-false}" == "true" ]]; then
+    printf '%s\n' n8n
+  fi
 }
 
 verify_symlink() {

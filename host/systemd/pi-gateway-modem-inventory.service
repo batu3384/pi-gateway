@@ -11,11 +11,14 @@ Group=PI_USER
 WorkingDirectory=/home/PI_USER/pi-gateway
 Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
 LoadCredential=modem:/etc/pi-gateway/modem-inventory.env
-ExecStart=/bin/bash /home/PI_USER/pi-gateway/scripts/pi/sync-modem-inventory.sh
+ExecStart=/bin/bash /usr/local/lib/pi-gateway/scripts/pi/sync-modem-inventory.sh
+TimeoutStartSec=45
+Nice=19
+IOSchedulingClass=idle
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/home/PI_USER/pi-gateway/data /mnt/ssd/pi-gateway-data /var/lib/pi-gateway
-RestrictAddressFamilies=AF_INET AF_INET6
+ReadWritePaths=-/home/PI_USER/pi-gateway/data -/mnt/ssd/pi-gateway-data /var/lib/pi-gateway
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 UMask=0027

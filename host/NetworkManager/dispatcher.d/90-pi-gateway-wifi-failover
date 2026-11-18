@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# Pi Gateway NetworkManager dispatcher:
+#   - eth0 up (kablolu Gigabit aktif) -> wlan0 kesilir (modemde cift IP / ARP flux / Wi-Fi gurultusu olmaz)
+#   - eth0 down (kablo cekildi / port koptu) -> wlan0 otomatik baglanir (acil SSH erisimi korunur)
+set -u
+
+IFACE="${1:-}"
+ACTION="${2:-}"
+ETH_IFACE="${PI_INTERFACE:-eth0}"
+WIFI_IFACE="${PI_WIFI_INTERFACE:-wlan0}"
+
+[[ "$ACTION" == "connectivity-change" || "$IFACE" == "$ETH_IFACE" ]] || exit 0
+command -v nmcli >/dev/null 2>&1 || exit 0
+
+case "$ACTION" in
+  up|connectivity-change)
+    if [[ "$(cat "/sys/class/net/${ETH_IFACE}/carrier" 2>/dev/null || echo 0)" == "1" ]]; then
+      ethtool_bin="$(command -v ethtool 2>/dev/null || echo /usr/sbin/ethtool)"
+      if [[ -x "$ethtool_bin" ]]; then
+        "$ethtool_bin" -K "$ETH_IFACE" rx-udp-gro-forwarding on rx-gro-list off >/dev/null 2>&1 || true
+      fi
+      wstate="$(nmcli -t -f DEVICE,STATE dev status 2>/dev/null | awk -F: -v d="$WIFI_IFACE" '$1==d{print $2}')"
+      if [[ "$wstate" == "connected" || "$wstate" == "bağlandı" ]]; then
+        logger -t pi-gateway-net "${ETH_IFACE} aktif — yedek ${WIFI_IFACE} ayriliyor"
+        nmcli dev disconnect "$WIFI_IFACE" >/dev/null 2>&1 || true
+      fi
+      if [[ "$(nmcli radio wifi 2>/dev/null || true)" == "enabled" ]]; then
+        logger -t pi-gateway-net "${ETH_IFACE} aktif — yedek Wi-Fi radyosu kapatiliyor"
+        nmcli radio wifi off >/dev/null 2>&1 || true
+      fi
+    fi
+    ;;
+  down)
+    logger -t pi-gateway-net "${ETH_IFACE} koptu — acil yedek ${WIFI_IFACE} baglaniyor"
+    nmcli radio wifi on >/dev/null 2>&1 || true
+    for _i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+      if [[ "$(cat "/sys/class/net/${ETH_IFACE}/carrier" 2>/dev/null || echo 0)" == "1" ]]; then
+        logger -t pi-gateway-net "${ETH_IFACE} geri geldi — failover iptal, Wi-Fi kapatiliyor"
+        nmcli radio wifi off >/dev/null 2>&1 || true
+        exit 0
+      fi
+      wstate="$(nmcli -t -f DEVICE,STATE dev status 2>/dev/null | awk -F: -v d="$WIFI_IFACE" '$1==d{print $2}')"
+      case "$wstate" in
+        ""|unavailable|unmanaged|kullanılamıyor|yönetilmiyor)
+          sleep 0.5
+          ;;
+        *)
+          break
+          ;;
+      esac
+    done
+    nmcli dev connect "$WIFI_IFACE" >/dev/null 2>&1 || true
+    ;;
+esac
+exit 0

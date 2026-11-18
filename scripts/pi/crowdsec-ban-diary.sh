@@ -17,7 +17,8 @@ log() { echo "[crowdsec-diary] $*"; }
 if [[ "${1:-}" == "--self-check" ]]; then
   [[ -f "$FORMAT_PY" ]] || exit 1
   printf '[{"value":"203.0.113.1","scenario":"test/http-scan"}]' \
-    | python3 "$FORMAT_PY" | grep -q 'Gece Saldırı' || exit 1
+    | python3 "$FORMAT_PY" | grep -q 'Yerel aktif engelleme' || exit 1
+  [[ -z "$(printf '[{"value":"198.51.100.2","origin":"CAPI","scenario":"crowdsecurity/ssh-bf"}]' | python3 "$FORMAT_PY")" ]] || exit 1
   log "self-check OK"
   exit 0
 fi
@@ -32,9 +33,9 @@ if ! raw="$(docker exec crowdsec cscli decisions list -o json 2>"$errf")"; then
 fi
 rm -f "$errf"
 body="$(printf '%s\n' "$raw" | python3 "$FORMAT_PY")" || { log "HATA: diary format"; exit 1; }
-[[ -n "${body// }" ]] || { log "ban yok — atlandi"; exit 0; }
+[[ -n "${body// }" ]] || { log "yerel ban yok — atlandi"; exit 0; }
 
-body | bash "$ARCHIVE" crowdsec-diary >/dev/null
+printf '%s\n' "$body" | bash "$ARCHIVE" crowdsec-diary >/dev/null
 notify_enabled || exit 0
 notify_crowdsec_diary "$body" || true
 log "Tamamlandi (${#body} byte)"

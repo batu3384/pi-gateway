@@ -71,7 +71,7 @@ cooldown_ok() {
 _fsck_release() {
   if [[ "${FSCK_LOCK_HELD:-false}" == "true" ]]; then
     flock -u "$FSCK_LOCK_FD" 2>/dev/null || true
-    run_root rm -f "$LOCK" 2>/dev/null || true
+    FSCK_LOCK_HELD=false
   fi
   recover_lock_release 2>/dev/null || true
 }
@@ -175,6 +175,10 @@ trap '_fsck_release' EXIT
 ensure_runtime_dir
 run_root mkdir -p "$(dirname "$LOCK")"
 run_root touch "$LOCK"
+if [[ "$(id -u)" -ne 0 ]]; then
+  run_root chown "$(id -u):$(id -g)" "$LOCK" 2>/dev/null || true
+fi
+run_root chmod 664 "$LOCK" 2>/dev/null || true
 if ! exec {FSCK_LOCK_FD}>>"$LOCK"; then
   _fsck_abort "fsck lock acilamadi ($LOCK)"
 fi
@@ -202,20 +206,21 @@ sleep 2
 if mountpoint -q "${SSD_MOUNT:-/mnt/ssd}" 2>/dev/null; then
   run_root fuser -km "${SSD_MOUNT:-/mnt/ssd}" 2>/dev/null || true
   sleep 2
-  run_root umount "${SSD_MOUNT:-/mnt/ssd}" 2>/dev/null \
-    || run_root umount -l "${SSD_MOUNT:-/mnt/ssd}" 2>/dev/null \
-    || run_root systemctl stop mnt-ssd.mount 2>/dev/null || true
+  run_root systemctl stop mnt-ssd.mount 2>/dev/null || true
+  run_root umount "${SSD_MOUNT:-/mnt/ssd}" 2>/dev/null || true
   for _ in $(seq 1 30); do
     mountpoint -q "${SSD_MOUNT:-/mnt/ssd}" 2>/dev/null || break
     sleep 1
   done
 fi
-if mountpoint -q "${SSD_MOUNT:-/mnt/ssd}" 2>/dev/null; then
-  _fsck_abort "/mnt/ssd hala mount"
+if mountpoint -q "${SSD_MOUNT:-/mnt/ssd}" 2>/dev/null \
+  || grep -qE "[[:space:]]${SSD_MOUNT:-/mnt/ssd}[[:space:]]" /proc/mounts 2>/dev/null \
+  || grep -qE "^${dev}[[:space:]]" /proc/mounts 2>/dev/null; then
+  _fsck_abort "/mnt/ssd veya $dev hala mount (umount -l olmadan guvenli iptal)"
 fi
 rc=0
 run_root e2fsck -f -y "$dev" || rc=$?
-if [[ "$rc" -gt 1 ]]; then
+if (( (rc & ~3) != 0 )); then
   run_root mount "${SSD_MOUNT:-/mnt/ssd}" 2>/dev/null || run_root systemctl start mnt-ssd.mount 2>/dev/null || true
   _fsck_abort "e2fsck exit $rc"
 fi

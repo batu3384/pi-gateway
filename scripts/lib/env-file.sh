@@ -74,6 +74,15 @@ load_telegram_from_hermes() {
     [[ "$line" == *=* ]] || continue
     k="${line%%=*}"
     v="${line#*=}"
+    v="${v#"${v%%[![:space:]]*}"}"
+    v="${v%"${v##*[![:space:]]}"}"
+    if [[ "$v" == \'*\' && "$v" == *\' ]]; then
+      v="${v:1:${#v}-2}"
+    elif [[ "$v" == \"*\" && "$v" == *\" ]]; then
+      v="${v:1:${#v}-2}"
+      v="${v//\\\"/\"}"
+      v="${v//\\\\/\\}"
+    fi
     case "$k" in
       TELEGRAM_BOT_TOKEN) [[ -z "${TELEGRAM_BOT_TOKEN:-}" ]] && TELEGRAM_BOT_TOKEN="$v" ;;
       TELEGRAM_CHAT_ID) [[ -z "${TELEGRAM_CHAT_ID:-}" ]] && TELEGRAM_CHAT_ID="$v" ;;

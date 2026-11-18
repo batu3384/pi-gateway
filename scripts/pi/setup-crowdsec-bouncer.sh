@@ -46,6 +46,7 @@ deny_log: true
 iptables_chains:
   - INPUT
 EOF
+  sudo chmod 600 /etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml 2>/dev/null || true
   sudo systemctl enable --now crowdsec-firewall-bouncer 2>/dev/null
 }
 sync_ufw_decisions() {
@@ -66,7 +67,7 @@ else
   SVC_SRC="$REMOTE_DIR/host/systemd/pi-gateway-crowdsec-ufw.service"
   if [[ -f "$TIMER_SRC" ]]; then
     sudo cp "$TIMER_SRC" "$SVC_SRC" /etc/systemd/system/
-    sudo sed -i "s|PI_USER|${USER}|g; s|/home/PI_USER/pi-gateway|${REMOTE_DIR}|g" /etc/systemd/system/pi-gateway-crowdsec-ufw.*
+    sudo sed -i "s|/home/PI_USER/pi-gateway|${REMOTE_DIR}|g; s|PI_USER|${PI_USER:-$USER}|g" /etc/systemd/system/pi-gateway-crowdsec-ufw.*
     sudo systemctl daemon-reload
     sudo systemctl enable --now pi-gateway-crowdsec-ufw.timer
   fi

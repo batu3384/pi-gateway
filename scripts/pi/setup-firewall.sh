@@ -74,8 +74,8 @@ delete_lan_admin_port() {
 delete_wide_pi_gateway_docker_rules() {
   # /16 altı ( /8 /12 ) docker kaynaklı admin kuralı. Numara kayınca baştan tara.
   local line cidr prefix num
-  line="$(sudo ufw status numbered 2>/dev/null | grep -F 'pi-gateway docker' | while read -r row; do
-    cidr="$(printf '%s\n' "$row" | grep -oE '[0-9a-fA-F:.]+/[0-9]+' | head -1)"
+  line="$({ sudo ufw status numbered 2>/dev/null | grep -F 'pi-gateway docker' || true; } | while read -r row; do
+    cidr="$(printf '%s\n' "$row" | grep -oE '[0-9a-fA-F:.]+/[0-9]+' | head -1 || true)"
     prefix="${cidr##*/}"
     [[ "$prefix" =~ ^[0-9]+$ ]] || continue
     (( prefix < 16 )) || continue
@@ -114,17 +114,25 @@ setup_ufw() {
   sudo ufw allow from "$LAN_SUBNET" to any port 53 proto udp comment 'pi-gateway dns'
   # IPv6 DNS (ULA + istege bagli GUA LAN prefix)
   delete_ufw_rules_matching 'pi-gateway dns6'
+  delete_ufw_rules_matching 'pi-gateway dot-reject'
+  ula_net=""
+  gua_net=""
   if [[ -n "${PI_IPV6_ULA:-}" ]]; then
     ula_net="$(python3 -c "import ipaddress,sys; a=ipaddress.ip_interface(sys.argv[1] if '/' in sys.argv[1] else sys.argv[1]+'/64'); print(a.network)" "${PI_IPV6_ULA}" 2>/dev/null || true)"
     if [[ -n "$ula_net" ]]; then
       sudo ufw allow from "$ula_net" to any port 53 proto tcp comment 'pi-gateway dns6'
       sudo ufw allow from "$ula_net" to any port 53 proto udp comment 'pi-gateway dns6'
+      sudo ufw reject from "$ula_net" to any port 853 proto tcp comment 'pi-gateway dot-reject'
+      sudo ufw reject from "$ula_net" to any port 853 proto udp comment 'pi-gateway dot-reject'
       log "IPv6 DNS ULA: $ula_net"
     fi
   fi
   if [[ -n "${LAN_IPV6_CIDR:-}" ]]; then
+    gua_net="$LAN_IPV6_CIDR"
     sudo ufw allow from "$LAN_IPV6_CIDR" to any port 53 proto tcp comment 'pi-gateway dns6'
     sudo ufw allow from "$LAN_IPV6_CIDR" to any port 53 proto udp comment 'pi-gateway dns6'
+    sudo ufw reject from "$LAN_IPV6_CIDR" to any port 853 proto tcp comment 'pi-gateway dot-reject'
+    sudo ufw reject from "$LAN_IPV6_CIDR" to any port 853 proto udp comment 'pi-gateway dot-reject'
     log "IPv6 DNS LAN: $LAN_IPV6_CIDR"
   else
     # eth0 global GUA /64 (SLAAC LAN) — otomatik
@@ -135,11 +143,18 @@ setup_ufw() {
     if [[ -n "$gua_net" && "$gua_net" != fe80:* ]]; then
       sudo ufw allow from "$gua_net" to any port 53 proto tcp comment 'pi-gateway dns6'
       sudo ufw allow from "$gua_net" to any port 53 proto udp comment 'pi-gateway dns6'
+      sudo ufw reject from "$gua_net" to any port 853 proto tcp comment 'pi-gateway dot-reject'
+      sudo ufw reject from "$gua_net" to any port 853 proto udp comment 'pi-gateway dot-reject'
       log "IPv6 DNS GUA LAN: $gua_net"
     fi
   fi
   sudo ufw allow from fe80::/10 to any port 53 proto udp comment 'pi-gateway dns6'
   sudo ufw allow from fe80::/10 to any port 53 proto tcp comment 'pi-gateway dns6'
+  sudo ufw reject from fe80::/10 to any port 853 proto tcp comment 'pi-gateway dot-reject'
+  sudo ufw reject from fe80::/10 to any port 853 proto udp comment 'pi-gateway dot-reject'
+  # Android Private/Opportunistic DoT (:853) 15s SYN stall + [UFW BLOCK] log asinmasini aninda RST ile kes
+  sudo ufw reject from "$LAN_SUBNET" to any port 853 proto tcp comment 'pi-gateway dot-reject'
+  sudo ufw reject from "$LAN_SUBNET" to any port 853 proto udp comment 'pi-gateway dot-reject'
   # DHCP DISCOVER 0.0.0.0:68 → :67 broadcast; from LAN_SUBNET eşleşmez
   delete_ufw_rules_matching 'pi-gateway dhcp'
   if [[ "${NETWORK_MODE:-router-dns}" == "adguard-dhcp" ]]; then
@@ -152,6 +167,8 @@ setup_ufw() {
       delete_ufw_rules_matching "pi-gateway $port"
       sudo ufw allow from "$LAN_SUBNET" to any port "$port" proto tcp comment "pi-gateway $port"
     done
+    delete_ufw_rules_matching "pi-gateway 443-udp"
+    sudo ufw allow from "$LAN_SUBNET" to any port 443 proto udp comment "pi-gateway 443-udp"
     for port in 3001 3040 5678 8080 9999; do
       delete_lan_admin_port "$port"
     done
@@ -160,75 +177,67 @@ setup_ufw() {
       delete_ufw_rules_matching "pi-gateway $port"
       sudo ufw allow from "$LAN_SUBNET" to any port "$port" proto tcp comment "pi-gateway $port"
     done
+    delete_ufw_rules_matching "pi-gateway 443-udp"
+    sudo ufw allow from "$LAN_SUBNET" to any port 443 proto udp comment "pi-gateway 443-udp"
   fi
-  # REMOVED: syncthing 22000 / forgejo 3002 — eski kurulumlardan temizle
+  # REMOVED: syncthing 22000 / forgejo 3002 — TCP RST ile eski istemci SYN log spam'ini kes
+  delete_ufw_rules_matching 'pi-gateway syncthing-reject'
   delete_ufw_rules_matching 'pi-gateway syncthing'
+  sudo ufw reject from "$LAN_SUBNET" to any port 22000 proto tcp comment 'pi-gateway syncthing-reject'
   delete_lan_admin_port 3002
   delete_lan_admin_port 8384
   delete_ufw_rules_matching 'pi-gateway docker-adguard'
   delete_ufw_rules_matching 'pi-gateway docker-bridge-adguard'
   delete_ufw_rules_matching 'pi-gateway docker-caddy-adguard'
+  delete_ufw_rules_matching 'pi-gateway docker-netalertx'
+  delete_ufw_rules_matching 'pi-gateway docker-bridge-netalertx'
+  delete_ufw_rules_matching 'pi-gateway docker0-adguard-fallback'
+  delete_ufw_rules_matching 'pi-gateway docker0-netalertx-fallback'
   # GraphQL 20214 Caddy kullanmaz. compose subnet olmasa da eski kurali sil.
   delete_ufw_rules_matching 'pi-gateway docker-netalertx-graphql'
-  # AdGuard host network — compose_default + genis docker bridge (subnet drift)
+  delete_wide_pi_gateway_docker_rules
+  # AdGuard/NetAlertX host portu yalniz compose_default kopru alt agina acilir
+  adguard_port="${ADGUARD_WEB_PORT:-8080}"
   compose_subnet="$(docker network inspect compose_default -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}' 2>/dev/null || true)"
   if [[ -n "$compose_subnet" ]]; then
-    sudo ufw allow from "$compose_subnet" to any port 8080 proto tcp comment 'pi-gateway docker-adguard'
+    sudo ufw allow from "$compose_subnet" to any port "$adguard_port" proto tcp comment 'pi-gateway docker-adguard'
     if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
-      delete_ufw_rules_matching 'pi-gateway docker-netalertx'
       netalert_port="${NETALERTX_PORT:-20211}"
       sudo ufw allow from "$compose_subnet" to any port "$netalert_port" proto tcp comment 'pi-gateway docker-netalertx'
     fi
   else
-    log "WARN: compose_default subnet bulunamadi — docker-adguard UFW kurali atlandi"
-  fi
-  # Ek docker bridge subnet'leri. /16 altı kaynak admin portuna yazılmaz.
-  delete_wide_pi_gateway_docker_rules
-  while IFS= read -r _dock_subnet; do
-    [[ -n "$_dock_subnet" ]] || continue
-    [[ "$_dock_subnet" == "$compose_subnet" ]] && continue
-    _prefix="${_dock_subnet##*/}"
-    if [[ "$_prefix" =~ ^[0-9]+$ ]] && (( _prefix < 16 )); then
-      log "WARN: genis subnet atlandi $_dock_subnet"
-      continue
-    fi
-    sudo ufw allow from "$_dock_subnet" to any port 8080 proto tcp comment 'pi-gateway docker-bridge-adguard'
-    if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
-      sudo ufw allow from "$_dock_subnet" to any port "${NETALERTX_PORT:-20211}" proto tcp comment 'pi-gateway docker-bridge-netalertx'
-    fi
-  done < <(docker network ls -q 2>/dev/null | while read -r _nid; do
-    [[ -n "$_nid" ]] || continue
-    docker network inspect "$_nid" -f '{{range .IPAM.Config}}{{.Subnet}}{{println}}{{end}}' 2>/dev/null
-  done | awk 'NF' | sort -u)
-  if ! docker network ls -q 2>/dev/null | grep -q .; then
-    log "WARN: docker ag yok — docker0 fallback 172.17.0.0/16"
-    sudo ufw allow from 172.17.0.0/16 to any port 8080 proto tcp comment 'pi-gateway docker0-adguard-fallback'
+    log "WARN: compose_default subnet yok — docker0 fallback 172.17.0.0/16"
+    sudo ufw allow from 172.17.0.0/16 to any port "$adguard_port" proto tcp comment 'pi-gateway docker0-adguard-fallback'
     if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
       sudo ufw allow from 172.17.0.0/16 to any port "${NETALERTX_PORT:-20211}" proto tcp comment 'pi-gateway docker0-netalertx-fallback'
     fi
   fi
   delete_ufw_rules_matching 'pi-gateway tailscale'
+  delete_ufw_rules_matching 'pi-gateway ts-panel'
   delete_ufw_rules_matching 'pi-gateway ts-subnet'
-  if tailscale_connected; then
-    for port in 22 80 443; do
+  if tailscale_connected || ip link show tailscale0 >/dev/null 2>&1; then
+    for port in 22 80 443 8088; do
       sudo ufw allow in on tailscale0 to any port "$port" proto tcp comment "pi-gateway tailscale-$port"
     done
+    sudo ufw allow in on tailscale0 to any port 443 proto udp comment "pi-gateway tailscale-443-udp"
     # DNS UDP asil; 53'u TCP dongusune ekleme. Global NS = Pi 100.x (LAN :53 kurali 100.x kaynagi tutmaz).
     sudo ufw allow in on tailscale0 to any port 53 proto udp comment 'pi-gateway tailscale-53'
     sudo ufw allow in on tailscale0 to any port 53 proto tcp comment 'pi-gateway tailscale-53'
-    if [[ "${TS_PANEL_DIRECT_PORTS:-true}" == "true" ]]; then
-      for port in 3001 "${DOZZLE_PORT:-9999}" "${ADGUARD_WEB_PORT:-8080}" "${N8N_PORT:-5678}" "${GRAFANA_PORT:-3030}"; do
+    if [[ "${TS_PANEL_DIRECT_PORTS:-false}" == "true" ]]; then
+      ts_ports=(3040 "${GATUS_PORT:-3001}" "${DOZZLE_PORT:-9999}" "$adguard_port" "${GRAFANA_PORT:-3030}")
+      [[ "${ENABLE_N8N:-false}" == "true" ]] && ts_ports+=("${N8N_PORT:-5678}")
+      for port in "${ts_ports[@]}"; do
         sudo ufw allow in on tailscale0 to any port "$port" proto tcp comment "pi-gateway tailscale-$port"
       done
       if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
         sudo ufw allow in on tailscale0 to any port "${NETALERTX_PORT:-20211}" proto tcp comment 'pi-gateway tailscale-20211'
       fi
-      log "Tailscale bagli — :53 UDP+TCP + :22/80/443 + TS_PANEL TCP"
+      log "Tailscale bagli — :53 UDP+TCP + :22/80/443/8088 + TS_PANEL TCP"
     else
-      log "Tailscale bagli — tailscale0: 22/80/443/53 (TS_PANEL kapali)"
+      log "Tailscale bagli — tailscale0: 22/80/443/8088/53 (TS_PANEL kapali)"
     fi
   else
-    log "Tailscale bagli degil — tailscale0 kurali eklenmedi"
+    log "Tailscale arayuzu yok — tailscale0 kurali eklenmedi"
   fi
   sudo ufw --force enable
   sudo ufw status numbered

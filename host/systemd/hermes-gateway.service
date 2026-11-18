@@ -17,6 +17,7 @@ Environment=HERMES_STREAM_STALE_TIMEOUT=180
 ExecStart=/home/PI_USER/.local/bin/hermes gateway run --replace
 Restart=always
 RestartSec=5
+SuccessExitStatus=0 1 143
 # Pi4: agent + gateway; tune after live RSS
 MemoryMax=768M
 StandardOutput=journal

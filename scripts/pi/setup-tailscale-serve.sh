@@ -13,6 +13,8 @@ PI_IP="${PI_STATIC_IP:-}"
 ADGUARD_WEB_PORT="${ADGUARD_WEB_PORT:-8080}"
 NETALERTX_PORT="${NETALERTX_PORT:-20211}"
 NETALERTX_LISTEN_ADDR="${NETALERTX_LISTEN_ADDR:-172.17.0.1}"
+ENABLE_N8N="${ENABLE_N8N:-false}"
+STATE_OWNER="${PI_USER:-${SUDO_USER:-${USER:-pi}}}"
 CADDYFILE="${REMOTE_DIR}/config/caddy/Caddyfile"
 MARKER="${REMOTE_DIR}/config/caddy/.tailscale-serve-block"
 ACL_APPLIED_MARKER="${TAILSCALE_ACL_APPLIED_MARKER:-/var/lib/pi-gateway/tailscale-acl-applied}"
@@ -37,23 +39,31 @@ print(json.load(sys.stdin).get('Self',{}).get('DNSName','').rstrip('.'))
 log "Tailscale panel: https://${TS_DNS}"
 # Caddy: path tabanli uzaktan erisim blogu
 if [[ -f "$CADDYFILE" ]]; then
-  python3 - "$CADDYFILE" "$MARKER" "$TS_DNS" "$LAN_DOMAIN" "$PI_IP" "$ADGUARD_WEB_PORT" "$NETALERTX_PORT" "$NETALERTX_LISTEN_ADDR" <<'PY'
+  python3 - "$CADDYFILE" "$MARKER" "$TS_DNS" "$LAN_DOMAIN" "$PI_IP" "$ADGUARD_WEB_PORT" "$NETALERTX_PORT" "$NETALERTX_LISTEN_ADDR" "$ENABLE_N8N" <<'PY'
 import sys
 from pathlib import Path
-caddyfile, marker, ts_dns, domain, pi_ip, agh_port, nax_port, nax_host = sys.argv[1:9]
+caddyfile, marker, ts_dns, domain, pi_ip, agh_port, nax_port, nax_host, enable_n8n = sys.argv[1:10]
 path = Path(caddyfile)
 text = path.read_text()
 start = f"# BEGIN TAILSCALE PANEL {ts_dns}"
 end = f"# END TAILSCALE PANEL {ts_dns}"
-# Tailscale Serve terminates TLS on 100.x:443, then HTTP → Caddy LAN :80.
+n8n_block = ""
+if enable_n8n == "true":
+    n8n_block = """\thandle /p/n8n* {
+\t\turi strip_prefix /p/n8n
+\t\treverse_proxy n8n:5678 {
+\t\t\theader_down Location / /p/n8n/
+\t\t}
+\t}
+"""
+# Tailscale Serve terminates TLS on 100.x:443, then HTTP → 127.0.0.1:8088 (loopback-only Caddy).
 # Site MUST be http:// (no tls) — otherwise Caddy 308→https loops through Serve.
-# Caddy compose binds PI_STATIC_IP only (not 127.0.0.1).
 block = f"""{start}
-http://{ts_dns} {{
-\t# no basic_auth — Tailscale ACL; Serve = HTTPS to phone
+http://{ts_dns}:8088 {{
+\t# no basic_auth — Tailscale ACL + loopback isolation; Serve = HTTPS to phone
 \thandle /p/status* {{
 \t\turi strip_prefix /p/status
-\t\treverse_proxy uptime-kuma:3001 {{
+\t\treverse_proxy gatus:8080 {{
 \t\t\theader_down Location / /p/status/
 \t\t}}
 \t}}
@@ -69,13 +79,7 @@ http://{ts_dns} {{
 \t\t\theader_down Location / /p/dns/
 \t\t}}
 \t}}
-\thandle /p/n8n* {{
-\t\turi strip_prefix /p/n8n
-\t\treverse_proxy n8n:5678 {{
-\t\t\theader_down Location / /p/n8n/
-\t\t}}
-\t}}
-\thandle /p/devices* {{
+{n8n_block}\thandle /p/devices* {{
 \t\turi strip_prefix /p/devices
 \t\treverse_proxy {nax_host}:{nax_port} {{
 \t\t\theader_down Location / /p/devices/
@@ -88,7 +92,7 @@ http://{ts_dns} {{
 \t\t}}
 \t}}
 \thandle {{
-\t\treverse_proxy homepage:3000
+\t\treverse_proxy glance:8080
 \t}}
 }}
 {end}
@@ -107,12 +111,12 @@ PY
     || docker restart caddy >/dev/null 2>&1 || true
 fi
 mkdir -p /var/lib/pi-gateway 2>/dev/null || sudo mkdir -p /var/lib/pi-gateway
+sudo chown "${STATE_OWNER}:${STATE_OWNER}" /var/lib/pi-gateway 2>/dev/null || true
 echo "https://${TS_DNS}" | sudo tee /var/lib/pi-gateway/tailscale-panel-url >/dev/null 2>&1 || true
 bash "$(dirname "$0")/setup-caddy-lan-ip.sh" || true
 
-# Caddy compose binds PI_STATIC_IP:80 — Serve terminates TLS, proxies HTTP (no 308 loop)
-[[ -n "$PI_IP" ]] || { log "HATA: PI_STATIC_IP bos — Serve hedefi yok"; exit 1; }
-serve_target="http://${PI_IP}:80"
+# Caddy binds loopback :8088 for Serve — Serve terminates TLS, proxies HTTP locally (LAN cannot spoof)
+serve_target="http://127.0.0.1:8088"
 prev_serve="$(tailscale serve status 2>/dev/null || true)"
 log "tailscale serve -> ${serve_target} (Caddy http://MagicDNS, TLS=Serve)"
 if ! sudo tailscale serve --bg "$serve_target" 2>&1; then

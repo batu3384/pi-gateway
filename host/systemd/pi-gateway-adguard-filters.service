@@ -13,6 +13,3 @@ ExecStartPre=/bin/bash -lc 'for i in $(seq 1 36); do st=$(docker inspect -f "{{i
 ExecStart=/bin/bash -lc '/home/PI_USER/pi-gateway/scripts/pi/apply-adguard-filters.sh'
 TimeoutStartSec=600
 Nice=10
-
-[Install]
-WantedBy=multi-user.target

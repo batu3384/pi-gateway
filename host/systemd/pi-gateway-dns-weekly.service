@@ -9,6 +9,3 @@ ExecStart=/home/PI_USER/pi-gateway/scripts/pi/dns-coverage-weekly.sh
 Nice=10
 StandardOutput=journal
 StandardError=journal
-
-[Install]
-WantedBy=multi-user.target

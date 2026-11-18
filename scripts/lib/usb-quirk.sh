@@ -48,16 +48,17 @@ usbcore_quirk_from_storage() {
 apply_jmicron_cmdline_file() {
   local file="$1"
   local storage_q="${2:-}"
+  local boot_mode="${3:-ssd-root}"
   [[ -f "$file" ]] || return 1
   if [[ -z "$storage_q" ]]; then
     storage_q="$(detect_usb_quirk)"
   fi
   storage_q="$(normalize_storage_quirk "$storage_q")"
-  python3 - "$file" "$storage_q" "$(usbcore_quirk_from_storage "$storage_q")" <<'PY'
+  python3 - "$file" "$storage_q" "$(usbcore_quirk_from_storage "$storage_q")" "$boot_mode" <<'PY'
 import sys
 from pathlib import Path
 path = Path(sys.argv[1])
-storage_q, usbcore_q = sys.argv[2], sys.argv[3]
+storage_q, usbcore_q, boot_mode = sys.argv[2], sys.argv[3], sys.argv[4]
 parts = path.read_text().replace("\n", " ").split()
 drop_pfx = (
     "usb-storage.quirks=",
@@ -82,8 +83,10 @@ out = [
     f"usb-storage.quirks={storage_q}",
     f"usbcore.quirks={usbcore_q}",
     "usbcore.autosuspend=-1",
-    "rootdelay=25",
-] + keep
+]
+if boot_mode != "hybrid":
+    out.append("rootdelay=25")
+out = out + keep
 text = " ".join(out) + "\n"
 tmp = path.with_name(path.name + ".tmp-jmicron")
 try:

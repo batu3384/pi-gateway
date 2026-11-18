@@ -17,11 +17,11 @@ run_root() {
   fi
 }
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_FALLBACK_REMOTE_DIR="${REMOTE_DIR:-}"
 # shellcheck source=../lib/env-file.sh
 source "$SCRIPT_DIR/../lib/env-file.sh"
 read_remote_dotenv || { echo "[docker-fallback] HATA: .env dotenv parser hatasi" >&2; exit 1; }
-_FALLBACK_REMOTE_DIR="$REMOTE_DIR"
-REMOTE_DIR="$_FALLBACK_REMOTE_DIR"
+[[ -n "$_FALLBACK_REMOTE_DIR" ]] && REMOTE_DIR="$_FALLBACK_REMOTE_DIR"
 # shellcheck source=../lib/stack-health.sh
 source "$SCRIPT_DIR/../lib/stack-health.sh"
 # shellcheck source=../lib/containerd-root.sh

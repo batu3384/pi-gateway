@@ -15,11 +15,11 @@ run_root() {
     sudo "$@"
   fi
 }
+_RECOVER_REMOTE_DIR="${REMOTE_DIR:-}"
 # shellcheck source=../lib/env-file.sh
 source "$SCRIPT_DIR/../lib/env-file.sh"
 read_remote_dotenv || { echo "[recover-ro] HATA: .env dotenv parser hatasi" >&2; exit 1; }
-_RECOVER_REMOTE_DIR="$REMOTE_DIR"
-REMOTE_DIR="$_RECOVER_REMOTE_DIR"
+[[ -n "$_RECOVER_REMOTE_DIR" ]] && REMOTE_DIR="$_RECOVER_REMOTE_DIR"
 # shellcheck source=../lib/compose-profiles.sh
 source "$SCRIPT_DIR/../lib/compose-profiles.sh"
 # shellcheck source=../lib/stack-health.sh
@@ -140,6 +140,16 @@ _notify_stack_ok() {
   [[ "${RECOVER_DID_WORK:-0}" -eq 1 ]] || return 0
   # shellcheck source=../lib/notify.sh
   source "$SCRIPT_DIR/../lib/notify.sh"
+  if [[ "${NOTIFY_RECOVER_ALWAYS:-false}" != "true" ]]; then
+    local any_fail=0 k
+    for k in sd-health ssd-degraded health-dns health-systemd; do
+      if [[ "$(cat "${NOTIFY_STATE_DIR:-/var/lib/pi-gateway/notify}/${k}.state" 2>/dev/null || echo ok)" == "fail" ]]; then
+        any_fail=1
+        break
+      fi
+    done
+    [[ "$any_fail" -eq 1 ]] || return 0
+  fi
   notify_stack_recovered "$(hostname -s)" "${1:-Kurtarma tamamlandı.}"
 }
 main() {
@@ -150,7 +160,7 @@ main() {
     log "HATA: kurtarma kilidi alinamadi (timeout)"
     exit 1
   fi
-  if ! storage_restore_pending && stack_fully_healthy && root_rw_ok; then
+  if ! storage_restore_pending && stack_fully_healthy && root_rw_ok && docker_sandbox_ok; then
     log "Stack saglikli ve root rw — kurtarma gerekmedi"
     apply_adguard_rewrites_best_effort "$REMOTE_DIR"
     recover_lock_release
@@ -206,7 +216,24 @@ main() {
     run_root systemctl start docker || log "WARN: docker start basarisiz"
     sleep 3
   fi
+  if [[ -f "$SCRIPT_DIR/repair-docker-network-store.sh" ]] && ! docker_sandbox_ok 2>/dev/null; then
+    log "WARN: docker sandbox bozuk (stale USB mount FD / local-kv.db) — compose oncesi onariliyor"
+    REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/repair-docker-network-store.sh" \
+      || log "WARN: docker network store onarimi basarisiz"
+  fi
+  local need_compose=0
   if ! stack_core_ok; then
+    need_compose=1
+  elif [[ "$recover_mode" == "full" && -d "$REMOTE_DIR/compose" ]]; then
+    local -a _prof=()
+    mapfile -t _prof < <(compose_profiles)
+    local _missing=""
+    _missing="$(cd "$REMOTE_DIR/compose" && comm -23 \
+      <(docker compose --env-file ../.env "${_prof[@]}" config --services 2>/dev/null | sort) \
+      <(docker compose --env-file ../.env "${_prof[@]}" ps --services --status running 2>/dev/null | sort) || true)"
+    [[ -n "$_missing" ]] && need_compose=1
+  fi
+  if [[ "$need_compose" -eq 1 ]]; then
     if [[ -d "$REMOTE_DIR/compose" ]]; then
       log "docker compose up -d (mode=$recover_mode)"
       if run_compose_recover "$recover_mode"; then

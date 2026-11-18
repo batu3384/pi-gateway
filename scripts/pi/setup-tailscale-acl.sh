@@ -36,9 +36,11 @@ fi
 ACL_TEMPLATE="${ACL_TEMPLATE:-${REMOTE_DIR}/config/tailscale/acl.hujson.example}"
 [[ -f "$ACL_TEMPLATE" ]] || { log "ACL sablonu yok: $ACL_TEMPLATE"; exit 1; }
 mkdir -p "$(dirname "$ACL_LOCAL")"
-python3 - "$ACL_TEMPLATE" "$ACL_LOCAL" "$ACL_OWNER" "$ACL_LAN_SUBNET" <<'PY'
-import sys
+TS_PANEL_DIRECT_PORTS="${TS_PANEL_DIRECT_PORTS:-false}" \
+  python3 - "$ACL_TEMPLATE" "$ACL_LOCAL" "$ACL_OWNER" "$ACL_LAN_SUBNET" <<'PY'
 import ipaddress
+import os
+import sys
 from pathlib import Path
 template, out, owner, lan_subnet = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 text = Path(template).read_text(encoding="utf-8")
@@ -50,6 +52,11 @@ try:
 except ValueError as exc:
     sys.exit(f"invalid LAN subnet: {exc}")
 text = text.replace(placeholder, owner).replace("YOUR_TAILSCALE_LAN_SUBNET", lan_subnet)
+if os.environ.get("TS_PANEL_DIRECT_PORTS", "false").lower() != "true":
+    text = text.replace(
+        '"tag:pi-gateway:22", "tag:pi-gateway:80", "tag:pi-gateway:443", "tag:pi-gateway:53", "tag:pi-gateway:3001", "tag:pi-gateway:3030", "tag:pi-gateway:3040", "tag:pi-gateway:8080", "tag:pi-gateway:9999", "tag:pi-gateway:20211"',
+        '"tag:pi-gateway:22", "tag:pi-gateway:80", "tag:pi-gateway:443", "tag:pi-gateway:53"',
+    )
 Path(out).write_text(text, encoding="utf-8")
 PY
 ACL_FILE="$ACL_LOCAL"

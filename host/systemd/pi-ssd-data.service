@@ -3,6 +3,7 @@ Description=Pi Gateway USB SSD data disk setup
 After=local-fs-pre.target
 Before=remote-fs.target
 ConditionPathExists=!/mnt/ssd/.pi-gateway-initialized
+ConditionPathExists=!/var/lib/pi-gateway/ssd-initialized
 DefaultDependencies=no
 
 [Service]

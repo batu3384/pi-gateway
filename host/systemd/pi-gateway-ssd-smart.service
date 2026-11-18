@@ -9,8 +9,6 @@ User=PI_USER
 Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
 ExecStart=/home/PI_USER/pi-gateway/scripts/pi/check-ssd-smart.sh
 Nice=10
+TimeoutStartSec=90
 StandardOutput=journal
 StandardError=journal
-
-[Install]
-WantedBy=multi-user.target

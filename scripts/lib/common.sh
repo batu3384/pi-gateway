@@ -4,6 +4,10 @@ set -euo pipefail
 # Sourced by mac/pi scripts for PROJECT_DIR + helpers
 # shellcheck disable=SC2034
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+for _pg_bin in "/opt/homebrew/bin" "/usr/local/bin" "${HOME:-}/.orbstack/bin"; do
+  [[ -d "$_pg_bin" ]] && [[ ":${PATH}:" != *":${_pg_bin}:"* ]] && export PATH="${_pg_bin}:${PATH}"
+done
+unset _pg_bin
 
 load_env() {
   # shellcheck source=env-file.sh
@@ -23,7 +27,7 @@ default_remote_dir() {
   echo "${REMOTE_DIR:-/home/$(default_pi_user)/pi-gateway}"
 }
 
-deploy_host() { echo "${PI_STATIC_IP:-${PI_HOST:-}}"; }
+deploy_host() { echo "${PI_DEPLOY_HOST:-${PI_STATIC_IP:-${PI_HOST:-}}}"; }
 
 require_deploy_host() {
   local h
@@ -42,6 +46,25 @@ require_cmd() {
   for cmd in "$@"; do
     command -v "$cmd" >/dev/null 2>&1 || die "Missing command: $cmd"
   done
+}
+
+run_with_timeout() {
+  local sec="$1"
+  shift
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$sec" "$@"
+  elif command -v gtimeout >/dev/null 2>&1; then
+    gtimeout "$sec" "$@"
+  else
+    python3 - "$sec" "$@" <<'PY'
+import subprocess, sys
+sec = float(sys.argv[1])
+try:
+    sys.exit(subprocess.run(sys.argv[2:], timeout=sec).returncode)
+except subprocess.TimeoutExpired:
+    sys.exit(124)
+PY
+  fi
 }
 
 cidr_prefix() {
