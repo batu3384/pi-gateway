@@ -20,7 +20,8 @@ Include: affected script/path, reproduction steps, impact.
 | Passwords, tokens, keys | `.env` (gitignored) | Never commit |
 | Tailscale ACL | `config/tailscale/acl.hujson` (generated) | Never commit |
 | TLS keys | `*.pem` / `*.key` | Never commit |
-| Rendered AdGuard/Caddy | `config/adguard/AdGuardHome.yaml`, `config/caddy/Caddyfile` | Gitignored |
+| Modem credentials (Pi host) | `/etc/pi-gateway/modem-inventory.env` (`root:0600`) | Never commit |
+| Rendered configs | `config/adguard/AdGuardHome.yaml`, `config/caddy/Caddyfile`, `config/glance/glance.yml`, `config/gatus/config.yaml` | Gitignored |
 
 Before making the repo public: run `make validate` and rotate any credentials that ever appeared in chat, logs, or old private clones.
 

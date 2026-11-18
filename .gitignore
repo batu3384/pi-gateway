@@ -26,3 +26,4 @@ __pycache__/
 config/gatus/config.yaml
 data/gatus/
 config/glance/glance.yml
+audit/

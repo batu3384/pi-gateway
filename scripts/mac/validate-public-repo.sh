@@ -53,5 +53,44 @@ grep -q 'host/dhcpcd/pi-gateway.conf' .gitignore || die "dhcpcd rendered conf gi
 grep -q '\.env\.\*' .gitignore || die ".env.* gitignore eksik"
 grep -q '\.pem' .gitignore || die "*.pem gitignore eksik"
 
-ok "tracked secret/PII taramasi temiz"
+python3 - <<'PY' || die "Tracked/untracked dosyada PII/secret/gercek MAC/IPv6 tespit edildi"
+import pathlib
+import re
+import subprocess
+
+files = subprocess.check_output(
+    ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
+    text=True,
+).splitlines()
+
+skip = {"docs/ADGUARD-DHCP.md", "scripts/mac/validate-public-repo.sh"}
+doc_v6 = ("2001:db8:", "2001:4860:", "2606:4700:", "2620:fe:", "2a00:1450:")
+checks = [
+    ("lan-ip", re.compile(r"\b192\.168\.1\.1\d{2}\b")),
+    ("pi-oui-mac", re.compile(r"\b(?:d8[:-]3a[:-]dd|dc[:-]a6[:-]32|e4[:-]5f[:-]01|b8[:-]27[:-]eb|28[:-]cd[:-]c1|2c[:-]cf[:-]67)(?:[:-][0-9a-f]{2}){3}\b", re.I)),
+    ("subscriber-ipv6", re.compile(r"\b2[0-9a-f]{3}:[0-9a-f:]{4,}\b", re.I)),
+    ("private-key", re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")),
+    ("bcrypt-hash", re.compile(r"\$2[aby]\$\d{2}\$[./A-Za-z0-9]{50,}")),
+]
+
+hits = []
+for rel in files:
+    if rel in skip:
+        continue
+    p = pathlib.Path(rel)
+    if not p.is_file():
+        continue
+    for lineno, line in enumerate(p.read_text(encoding="utf-8", errors="ignore").splitlines(), 1):
+        for tag, rx in checks:
+            for m in rx.finditer(line):
+                val = m.group(0)
+                if tag == "subscriber-ipv6" and any(val.lower().startswith(pref) for pref in doc_v6):
+                    continue
+                hits.append(f"{rel}:{lineno}: [{tag}] {val}")
+
+if hits:
+    raise SystemExit("\n".join(hits[:10]))
+PY
+
+ok "tracked+untracked secret/PII taramasi temiz"
 echo "[validate-public] Public repo hazirlik kontrolleri gecti"
