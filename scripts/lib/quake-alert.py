@@ -6,6 +6,7 @@ Gecikme ≈ kaynak yayın + poll (varsayılan 10s).
 """
 from __future__ import annotations
 
+import argparse
 import json
 import math
 import os
@@ -13,11 +14,14 @@ import re
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+
+TR_TZ = timezone(timedelta(hours=3))
 
 HOME_LAT = float(os.environ.get("QUAKE_HOME_LAT", "41.0082"))
 HOME_LON = float(os.environ.get("QUAKE_HOME_LON", "28.9784"))
@@ -38,6 +42,7 @@ STATE_PATH = Path(os.environ.get("QUAKE_STATE", "/var/lib/pi-gateway/quake-state
 PARTIAL_WARN_PATH = STATE_PATH.with_name("quake-partial-warn.json")
 PARTIAL_WARN_MIN_SEC = int(os.environ.get("QUAKE_PARTIAL_WARN_MIN_SEC", "900"))
 AFAD = "https://deprem.afad.gov.tr/apiv2/event/filter"
+KANDILLI_HTTPS = "https://www.koeri.boun.edu.tr/scripts/lst0.asp"
 KANDILLI = os.environ.get(
     "QUAKE_KANDILLI_URL",
     "http://www.koeri.boun.edu.tr/scripts/lst0.asp",
@@ -76,10 +81,18 @@ def _latlon(ev: dict[str, Any]) -> tuple[float, float] | None:
         return None
 
 
-def _parse_event_time(raw: str) -> datetime | None:
+def _parse_event_time(raw: str, *, default_tz: timezone = TR_TZ) -> datetime | None:
     raw = raw.strip()
     if not raw:
         return None
+    norm = raw[:-1] + "+00:00" if raw.endswith("Z") else raw
+    for cand in (norm, norm.replace(".", "-")):
+        try:
+            dt = datetime.fromisoformat(cand)
+            if dt.tzinfo is not None:
+                return dt
+        except ValueError:
+            pass
     candidates = [
         raw[:19],
         raw[:19].replace("T", " "),
@@ -88,7 +101,7 @@ def _parse_event_time(raw: str) -> datetime | None:
         for fmt in ("%Y.%m.%d %H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
             try:
                 dt = datetime.strptime(s, fmt)
-                return dt.replace(tzinfo=timezone(timedelta(hours=3)))
+                return dt.replace(tzinfo=default_tz)
             except ValueError:
                 continue
     return None
@@ -187,16 +200,30 @@ def format_msg(ev: dict[str, Any]) -> str:
 def _http_get(url: str, timeout: float | None = None) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": "pi-gateway-quake/2"})
     with urllib.request.urlopen(req, timeout=timeout or HTTP_TIMEOUT_SEC) as resp:  # noqa: S310
-        return resp.read()
+        return resp.read(2_000_000)
+
+
+def _normalise_afad_date(raw: Any) -> str:
+    txt = str(raw or "").strip()
+    if not txt:
+        return ""
+    parsed = _parse_event_time(txt, default_tz=timezone.utc)
+    if parsed is None:
+        return txt
+    return parsed.astimezone(TR_TZ).strftime("%Y.%m.%d %H:%M:%S")
 
 
 def fetch_afad() -> list[dict[str, Any]]:
-    end = datetime.now(timezone.utc)
+    end = datetime.now(timezone.utc) + timedelta(minutes=5)
     start = end - timedelta(hours=6)
-    url = (
-        f"{AFAD}?start={start.strftime('%Y-%m-%d')}&end={end.strftime('%Y-%m-%d')}"
-        f"&minMag={min(LOCAL_MAG, 3.0)}"
+    params = urllib.parse.urlencode(
+        {
+            "start": start.strftime("%Y-%m-%dT%H:%M:%S"),
+            "end": end.strftime("%Y-%m-%dT%H:%M:%S"),
+            "minMag": min(LOCAL_MAG, 3.0),
+        }
     )
+    url = f"{AFAD}?{params}"
     data = json.loads(_http_get(url).decode("utf-8"))
     rows: list[Any]
     if isinstance(data, list):
@@ -216,6 +243,9 @@ def fetch_afad() -> list[dict[str, Any]]:
         item["source"] = "AFAD"
         if not item.get("eventID") and item.get("eventId"):
             item["eventID"] = item["eventId"]
+        raw_date = item.get("date") or item.get("eventDate")
+        if raw_date:
+            item["date"] = _normalise_afad_date(raw_date)
         out.append(item)
     return out
 
@@ -257,7 +287,13 @@ def parse_kandilli_line(line: str) -> dict[str, Any] | None:
 
 
 def fetch_kandilli() -> list[dict[str, Any]]:
-    raw = _http_get(KANDILLI)
+    if os.environ.get("QUAKE_KANDILLI_URL"):
+        raw = _http_get(KANDILLI)
+    else:
+        try:
+            raw = _http_get(KANDILLI_HTTPS)
+        except (OSError, TimeoutError, urllib.error.URLError):
+            raw = _http_get(KANDILLI)
     text = None
     for enc in ("windows-1254", "iso-8859-9", "utf-8", "latin-1"):
         try:
@@ -352,18 +388,47 @@ def fetch_events() -> list[dict[str, Any]]:
     return merge_events(afad, kandilli)
 
 
+def _is_duplicate_revision(
+    ev: dict[str, Any], recent_sent: list[dict[str, Any]], now_ts: float
+) -> bool:
+    """AFAD/Kandilli REVIZE veya kaynaklar arası hafif saat/konum/büyüklük kaymasını tekilleştir."""
+    loc = _latlon(ev)
+    if loc is None:
+        return False
+    mag = _mag(ev)
+    ets = _event_ts(ev) or now_ts
+    for prev in recent_sent:
+        try:
+            plat = float(prev["lat"])
+            plon = float(prev["lon"])
+            pmag = float(prev["mag"])
+            pts = float(prev["ets"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if abs(ets - pts) <= 900 and abs(mag - pmag) <= 0.45:
+            if haversine_km(plat, plon, loc[0], loc[1]) <= 25.0:
+                return True
+    return False
+
+
 def due_events(events: list[dict[str, Any]], state: dict[str, Any], now_ts: float) -> list[dict[str, Any]]:
-    seen = set(state.get("seen") or [])
+    seen_list = list(dict.fromkeys(str(x) for x in (state.get("seen") or []) if x))
+    seen = set(seen_list)
     sent_ts = [float(x) for x in (state.get("sent_ts") or [])]
+    recent_sent = [x for x in (state.get("recent_sent") or []) if isinstance(x, dict)]
     last = state.get("last") if isinstance(state.get("last"), dict) else None
     night = is_night(datetime.fromtimestamp(now_ts).astimezone())
 
     # İlk koşu: mevcut listeyi "görüldü" say — tarihî deprem spam’i yok
     if not state.get("bootstrapped"):
         for ev in events:
-            seen.add(fingerprint(ev))
-        state["seen"] = list(seen)[-800:]
+            eid = fingerprint(ev)
+            if eid and eid not in seen:
+                seen.add(eid)
+                seen_list.append(eid)
+        state["seen"] = seen_list[-800:]
         state["sent_ts"] = sent_ts
+        state["recent_sent"] = recent_sent[-30:]
         state["last"] = last
         state["bootstrapped"] = True
         return []
@@ -375,10 +440,13 @@ def due_events(events: list[dict[str, Any]], state: dict[str, Any], now_ts: floa
             continue
         # Yeni olay işaretle (eşik altı da) — sonra tekrar bakma
         seen.add(eid)
+        seen_list.append(eid)
         ets = _event_ts(ev)
         if ets is not None and now_ts - ets > MAX_EVENT_AGE_SEC:
             continue
         if not qualifies(ev, night=night):
+            continue
+        if _is_duplicate_revision(ev, recent_sent, now_ts):
             continue
         if is_aftershock(ev, last, now_ts):
             continue
@@ -387,9 +455,15 @@ def due_events(events: list[dict[str, Any]], state: dict[str, Any], now_ts: floa
         due.append(ev)
         sent_ts.append(now_ts)
         loc = _latlon(ev) or (0.0, 0.0)
+        recent_sent.append(
+            {"lat": loc[0], "lon": loc[1], "mag": _mag(ev), "ets": ets or now_ts}
+        )
         last = {"mag": _mag(ev), "ts": now_ts, "lat": loc[0], "lon": loc[1]}
-    state["seen"] = list(seen)[-800:]
+    state["seen"] = seen_list[-800:]
     state["sent_ts"] = [t for t in sent_ts if now_ts - t < 86400][-50:]
+    state["recent_sent"] = [
+        r for r in recent_sent if now_ts - float(r.get("ets") or 0) < 7200
+    ][-30:]
     state["last"] = last
     state["bootstrapped"] = True
     return due
@@ -422,10 +496,11 @@ def self_check() -> None:
         "magnitude": 2.7,
         "latitude": 40.80,
         "longitude": 28.06,
-        "date": "2026.08.27 14:16:09",
+        "date": _normalise_afad_date("2026-08-27T11:16:09"),
         "source": "AFAD",
         "eventID": "x",
     }
+    assert a["date"] == "2026.08.27 14:16:09", a["date"]
     merged = merge_events([a], [k])
     assert len(merged) == 1, merged
     assert merged[0]["source"] == "AFAD+Kandilli", merged[0]["source"]
@@ -439,7 +514,7 @@ def self_check() -> None:
         "magnitude": 3.6,
         "latitude": 40.8,
         "longitude": 28.5,
-        "date": datetime.fromtimestamp(now, tz=timezone(timedelta(hours=3))).strftime(
+        "date": datetime.fromtimestamp(now, tz=TR_TZ).strftime(
             "%Y.%m.%d %H:%M:%S"
         ),
         "source": "Kandilli",
@@ -453,11 +528,32 @@ def self_check() -> None:
     fresh2["longitude"] = 28.51
     due2 = due_events([fresh2], st, now)
     assert len(due2) == 1, due2
+    # ucuncu tur: ayni depremin REVIZE kaydi (2 dk sonra +0.2 mag, ~2 km kayma) → susturulmali
+    rev = dict(fresh2)
+    rev["latitude"] = 40.82
+    rev["longitude"] = 28.52
+    rev["magnitude"] = 3.8
+    rev["date"] = datetime.fromtimestamp(now + 240, tz=TR_TZ).strftime(
+        "%Y.%m.%d %H:%M:%S"
+    )
+    assert due_events([rev], st, now + 240) == [], "REVIZE cift bildirim uretmemeli"
+    # MAX_EVENT_AGE_SEC aşan olay filtrelenmeli
+    old = dict(fresh)
+    old["latitude"] = 40.75
+    old["longitude"] = 28.45
+    old["date"] = datetime.fromtimestamp(now - MAX_EVENT_AGE_SEC - 60, tz=TR_TZ).strftime(
+        "%Y.%m.%d %H:%M:%S"
+    )
+    assert due_events([old], st, now) == [], "Eski olay filtrelenmeli"
     print("[quake-alert] self-check OK")
 
 
 def main() -> int:
-    if "--self-check" in sys.argv:
+    ap = argparse.ArgumentParser(description="AFAD + Kandilli quake poll")
+    ap.add_argument("--self-check", action="store_true")
+    ap.add_argument("--stage-state", default="", help="Write state here when due alerts exist")
+    args = ap.parse_args()
+    if args.self_check:
         self_check()
         return 0
     try:
@@ -467,8 +563,9 @@ def main() -> int:
         return 0
     state = load_state(STATE_PATH)
     due = due_events(events, state, time.time())
+    target_state = Path(args.stage_state) if (due and args.stage_state) else STATE_PATH
     try:
-        save_state(STATE_PATH, state)
+        save_state(target_state, state)
     except OSError as exc:
         print(f"[quake] state yazilamadi: {exc}", file=sys.stderr)
     for ev in due:

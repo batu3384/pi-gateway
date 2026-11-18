@@ -33,6 +33,7 @@ crit() {
 
 crit "Privileged scripts" "$SCRIPT_DIR/install-privileged-scripts.sh"
 crit "DNS perf profile" "$SCRIPT_DIR/ensure-dns-perf-profile.sh"
+crit "AdGuard wait" "$SCRIPT_DIR/wait-adguard-dns.sh"
 crit "AdGuard DNS" "$SCRIPT_DIR/apply-adguard-dns.sh"
 crit "AdGuard rewrites" "$SCRIPT_DIR/apply-adguard-rewrites.sh"
 crit "AdGuard filters" "$SCRIPT_DIR/apply-adguard-filters.sh"
@@ -62,6 +63,12 @@ soft "Config izinleri" "$SCRIPT_DIR/fix-config-perms.sh"
 soft "SSD SMART timer" "$SCRIPT_DIR/setup-ssd-smart-timer.sh"
 soft "Restic repair" "$SCRIPT_DIR/restic-repair.sh"
 
+if [[ -n "${PI_STATIC_IP:-}" && -f "${REMOTE_DIR}/config/caddy/Caddyfile" ]]; then
+  soft "LAN IP panel yollari" "$SCRIPT_DIR/setup-caddy-lan-ip.sh"
+fi
+if command -v tailscale >/dev/null 2>&1 && tailscale status >/dev/null 2>&1; then
+  soft "Tailscale panel HTTPS" "$SCRIPT_DIR/setup-tailscale-serve.sh"
+fi
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx caddy; then
   log ">> Caddy reload"
   docker exec caddy caddy reload --config /etc/caddy/Caddyfile \

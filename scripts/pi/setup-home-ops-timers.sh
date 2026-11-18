@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Faz 1 timer: kuma rapor, speedtest, deprem, modem envanteri
+# Home-ops timer kurulumu: speedtest, deprem, ibb, dns-coverage, dns-weekly, container-watchdog, crowdsec-diary, modem-inventory
 set -euo pipefail
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 log() { echo "[home-ops-timers] $*"; }
@@ -22,8 +22,11 @@ install_unit() {
   rm -f "$tmp"
 }
 
+# Emekli kuma-report unit kalintilarini temizle
+sudo systemctl disable --now pi-gateway-kuma-report.timer pi-gateway-kuma-report.service 2>/dev/null || true
+sudo rm -f /etc/systemd/system/pi-gateway-kuma-report.timer /etc/systemd/system/pi-gateway-kuma-report.service
+
 for unit in \
-  pi-gateway-kuma-report.service pi-gateway-kuma-report.timer \
   pi-gateway-speedtest.service pi-gateway-speedtest.timer \
   pi-gateway-quake.service pi-gateway-quake.timer \
   pi-gateway-ibb.service pi-gateway-ibb.timer \
@@ -41,7 +44,6 @@ if [[ "${MODEM_INVENTORY_ENABLED:-false}" == "true" ]] \
 fi
 sudo systemctl daemon-reload
 sudo systemctl enable --now \
-  pi-gateway-kuma-report.timer \
   pi-gateway-speedtest.timer \
   pi-gateway-quake.timer \
   pi-gateway-ibb.timer \
@@ -60,4 +62,4 @@ else
 fi
 # OnBootSec geçmişse timer ilk scrape atlar — bir kez şimdi.
 sudo systemctl start pi-gateway-ibb.service || log "WARN: ibb ilk scrape"
-log "Aktif: kuma-report / speedtest / quake / ibb / dns-coverage / dns-weekly / container-watch / crowdsec-diary / modem-inventory"
+log "Aktif: speedtest / quake / ibb / dns-coverage / dns-weekly / container-watch / crowdsec-diary / modem-inventory"

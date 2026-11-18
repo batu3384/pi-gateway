@@ -1,20 +1,12 @@
-# Pi Gateway Gatus — config-as-code (Kuma'nin declarative kopyasi)
-# Render: render-config.sh — envsubst: TELEGRAM + GATUS_PUSH tokenlari
+# Pi Gateway Gatus — config-as-code durum ve SLO izleme paneli
+# Render: render-config.sh — Telegram alarmlari tek kanaldan (notify.sh) yonetilir (cift bildirim yok)
 # UI: status.home (Caddy basic auth arkasi). Storage: ../data/gatus (sqlite)
 log:
-  level: info
+  level: warn
 
 storage:
   type: sqlite
   path: /data/gatus.db
-
-alerting:
-  telegram:
-    token: "${TELEGRAM_BOT_TOKEN}"
-    default-id: "${TELEGRAM_CHAT_ID}"
-    # Sadece gercek kesintilerde; her check hatasi spam olmasin
-    default-enabled: true
-    failure-threshold: 3
 
 # SLO heartbeat'lar: push-slo-heartbeat.sh (health timer) buraya POST eder
 external-endpoints:
@@ -31,24 +23,24 @@ external-endpoints:
 endpoints:
   - name: AdGuard DNS
     group: dns
-    url: http://172.17.0.1:8080/
+    url: http://host.docker.internal:${ADGUARD_WEB_PORT}/
     interval: 2m
     conditions:
       - "[STATUS] == 200"
 
-  - name: Homepage
+  - name: Glance
     group: panels
-    url: http://homepage:3000/
+    url: http://glance:8080/
     interval: 2m
     conditions:
       - "[STATUS] == 200"
 
   - name: Caddy gateway
     group: panels
-    url: "https://caddy:443/"
+    url: http://caddy:80/
+    headers:
+      Host: gateway.${LAN_DOMAIN}
     interval: 2m
-    client:
-      insecure: true
     conditions:
       - "[STATUS] < 500"
 
@@ -68,7 +60,7 @@ endpoints:
 
   - name: NetAlertX
     group: panels
-    url: http://172.17.0.1:20211/
+    url: http://host.docker.internal:${NETALERTX_PORT}/
     interval: 2m
     conditions:
       - "[STATUS] == 200"
@@ -80,9 +72,9 @@ endpoints:
     conditions:
       - "[STATUS] == 200"
 
-  - name: Prometheus
+  - name: VictoriaMetrics
     group: monitoring
-    url: http://prometheus:9090/-/ready
+    url: http://victoriametrics:8428/health
     interval: 2m
     conditions:
       - "[STATUS] == 200"

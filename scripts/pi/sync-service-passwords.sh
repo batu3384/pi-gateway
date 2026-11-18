@@ -9,6 +9,9 @@ PG_SCRIPT_NAME="$(basename "$0")"
 # shellcheck source=../lib/env-file.sh
 source "${_PG_ENV_LIB:?}"
 read_remote_dotenv || { echo "[${PG_SCRIPT_NAME}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
+# shellcheck source=../lib/unified-login.sh
+source "$SCRIPT_DIR/../lib/unified-login.sh"
+apply_unified_login
 
 log() { echo "[sync-passwords] $*"; }
 
@@ -28,7 +31,7 @@ fi
 # Grafana compose env = AGH; reset live admin if container up
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx grafana; then
   log ">> Grafana admin reset"
-  docker exec grafana grafana cli admin reset-admin-password "${GRAFANA_ADMIN_PASSWORD}" \
+  docker exec grafana grafana cli admin reset-admin-password "${GRAFANA_ADMIN_PASSWORD:-$AGH_ADMIN_PASSWORD}" \
     >/dev/null 2>&1 || log "WARN: Grafana reset basarisiz (container eski olabilir)"
 fi
 

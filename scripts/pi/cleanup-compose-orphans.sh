@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Compose'dan çıkarılmış servislerin orphan container'larını sil.
+# Compose'dan çıkarılmış servislerin orphan/test container'larını sil.
 set -euo pipefail
 log() { echo "[cleanup-orphans] $*"; }
 
-REMOVED=(forgejo syncthing)
+REMOVED=(forgejo syncthing homepage uptime-kuma prometheus vm-test glance-test)
 for name in "${REMOVED[@]}"; do
   if docker ps -a --format '{{.Names}}' | grep -qx "$name"; then
     docker rm -f "$name" >/dev/null

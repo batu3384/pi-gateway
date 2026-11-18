@@ -107,6 +107,18 @@ def load_cache() -> str | None:
     return None
 
 
+def load_stale_cache(max_age: float = 21600.0) -> str | None:
+    path = cache_path()
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if time.time() - float(data["ts"]) <= max_age:
+            text = data.get("text")
+            return text if isinstance(text, str) and text.strip() else None
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+        return None
+    return None
+
+
 def save_cache(text: str) -> None:
     try:
         path = cache_path()
@@ -195,9 +207,14 @@ if isinstance(gold, dict):
 if ok:
     lines.append("─────────")
     save_close(today, cur, prev_rates if prev_rates else cur)
-
-text = "📊 Piyasa verisi alınamadı — bu tur atlandı." if ok == 0 else "\n".join(lines)
-if ok:
+    text = "\n".join(lines)
     save_cache(text)
-print(text)
+    print(text)
+else:
+    stale = load_stale_cache()
+    if stale:
+        print(f"{stale}\n(Son önbellek verisi)")
+    else:
+        import sys
+        print("[fx-quote] WARN: piyasa verisi alinamadi — bos cikis", file=sys.stderr)
 PY

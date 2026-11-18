@@ -68,7 +68,7 @@ _ensure_netalert_host_gid && _netalert_gid_changed=1 || true
 docker ps -a --format '{{.Names}}' | grep -q '^netalertx$' || { log "HATA: netalertx container yok"; exit 1; }
 case "${N8N_WEBHOOK_SECRET:-}" in
   ""|CHANGE_ME*)
-    [[ "${ENABLE_N8N:-true}" != "true" ]] || { log "HATA: N8N_WEBHOOK_SECRET gerekli"; exit 1; }
+    [[ "${ENABLE_N8N:-false}" != "true" ]] || { log "HATA: N8N_WEBHOOK_SECRET gerekli"; exit 1; }
     ;;
 esac
 scan_subnet() {
@@ -130,6 +130,7 @@ wait_http
 export CONF_FILE SCAN_SUBNET MARKER PANEL_PROTOCOL LAN_DOMAIN NETALERTX_PASSWORD
 export AGH_ADMIN_USER AGH_ADMIN_PASSWORD ADGUARD_WEB_PORT NETALERT_NOTIFY_VIA
 export TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}" TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:-}"
+export NETALERTX_TELEGRAM_NEW_DEVICE="${NETALERTX_TELEGRAM_NEW_DEVICE:-false}"
 SCAN_SUBNET="$(scan_subnet)"
 WEBHOOK_URL="$(webhook_url)"
 export NETALERT_WEBHOOK_RAW="$WEBHOOK_URL"
@@ -179,12 +180,16 @@ dashboard = f"{proto}://devices.{lan}"
 scan_value = f"['{subnet}']"
 tg_token = (os.environ.get("TELEGRAM_BOT_TOKEN") or "").strip()
 tg_chat = (os.environ.get("TELEGRAM_CHAT_ID") or "").strip()
+new_dev_notify = (os.environ.get("NETALERTX_TELEGRAM_NEW_DEVICE") or "false").strip().lower() in ("1", "true", "yes")
 
 def q(val: str) -> str:
     return "'" + val.replace("\\", "\\\\").replace("'", "\\'") + "'"
 
-telegram_run = "'on_notification'" if tg_token and tg_chat else "'disabled'"
-if telegram_run == "'disabled'":
+telegram_run = "'on_notification'" if (tg_token and tg_chat and new_dev_notify) else "'disabled'"
+included_sections = "['new_devices']" if new_dev_notify else "[]"
+if not new_dev_notify:
+    print("[netalertx-setup] Yeni cihaz Telegram bildirimi kapali (privacy MAC spam onleme; acmak icin NETALERTX_TELEGRAM_NEW_DEVICE=true)")
+elif telegram_run == "'disabled'":
     print("[netalertx-setup] WARN: TELEGRAM_BOT_TOKEN/CHAT_ID yok — yeni cihaz bildirimi kapali")
 text = ""
 for _ in range(36):
@@ -225,7 +230,7 @@ updates = {
     "ADGUARDIMP_USER": q(agh_user),
     "ADGUARDIMP_PASS": q(agh_pass),
     "ADGUARDIMP_FAKE_MAC": "False",
-    "NTFPRCS_INCLUDED_SECTIONS": "['new_devices']",
+    "NTFPRCS_INCLUDED_SECTIONS": included_sections,
     "TELEGRAM_RUN": telegram_run,
     "TELEGRAM_HOST": q(tg_chat),
     "TELEGRAM_URL": q(tg_token),

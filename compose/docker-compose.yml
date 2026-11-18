@@ -47,6 +47,8 @@ services:
     logging: *default-logging
     restart: unless-stopped
     profiles: ["dozzle"]
+    networks:
+      - socket_proxy
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
@@ -64,9 +66,11 @@ services:
     restart: unless-stopped
     profiles: ["caddy"]
     ports:
-      # Tailscale Serve 100.x:443 tutabilir — Caddy sadece LAN IP
+      # Tailscale Serve 100.x:443 & tailscale0 DNAT yalniz loopback :8088'e gider (LAN erisemez)
       - "${PI_STATIC_IP:-127.0.0.1}:80:80"
       - "${PI_STATIC_IP:-127.0.0.1}:443:443"
+      - "${PI_STATIC_IP:-127.0.0.1}:443:443/udp"
+      - "127.0.0.1:8088:8088"
     volumes:
       - ../config/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - ../config/caddy/certs:/etc/caddy/certs:ro
@@ -75,7 +79,7 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
-      homepage:
+      glance:
         condition: service_started
 
   gateway-state:
@@ -84,7 +88,7 @@ services:
     logging: *default-logging
     restart: unless-stopped
     volumes:
-      - /var/lib/pi-gateway:/usr/share/nginx/html:ro
+      - /var/lib/pi-gateway/public:/usr/share/nginx/html:ro
     expose:
       - "80"
     healthcheck:
@@ -107,6 +111,12 @@ services:
       - "127.0.0.1:3040:8080"
     volumes:
       - ../config/glance:/app/config:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -125,9 +135,6 @@ services:
       - ../data/gatus:/data
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    environment:
-      GATUS_TELEGRAM_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
-      GATUS_TELEGRAM_CHAT: ${TELEGRAM_CHAT_ID:-}
 
   dozzle:
     image: amir20/dozzle@sha256:244f218c876d6ed766277e71a537f34bfb2c01829e1927737e3673a8327deeb8
@@ -135,6 +142,9 @@ services:
     logging: *default-logging
     restart: unless-stopped
     profiles: ["dozzle"]
+    networks:
+      - default
+      - socket_proxy
     depends_on:
       - docker-socket-proxy
     ports:
@@ -273,6 +283,7 @@ services:
       - -promscrape.config=/etc/victoriametrics/promscrape.yml
       - -storageDataPath=/victoria-metrics-data
       - -retentionPeriod=1
+      - -memory.allowedBytes=128MB
     volumes:
       - ../config/victoriametrics/promscrape.yml:/etc/victoriametrics/promscrape.yml:ro
       - ../data/victoriametrics:/victoria-metrics-data
@@ -303,3 +314,8 @@ services:
 volumes:
   caddy_data:
   caddy_config:
+
+networks:
+  default: {}
+  socket_proxy:
+    internal: true

@@ -3,12 +3,12 @@
 # Gatus v5.4+: POST /api/v1/endpoints/{group}_{name}/push?success=bool
 #              Authorization: Bearer <token>
 set -euo pipefail
-STATE_JSON="${PI_GATEWAY_STATE_JSON:-/var/lib/pi-gateway/state.json}"
-GATUS_URL="${GATUS_URL:-http://127.0.0.1:3001}"
-[[ -f "$STATE_JSON" ]] || exit 0
 # shellcheck source=../lib/env-file.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/env-file.sh"
 read_remote_dotenv || exit 0
+STATE_JSON="${PI_GATEWAY_STATE_JSON:-/var/lib/pi-gateway/state.json}"
+[[ -f "$STATE_JSON" ]] || exit 0
+GATUS_URL="${GATUS_URL:-http://127.0.0.1:${GATUS_PORT:-3001}}"
 
 export STATE_JSON
 export OFFSITE_BACKUP_MAX_AGE_DAYS="${OFFSITE_BACKUP_MAX_AGE_DAYS:-7}"
@@ -37,7 +37,10 @@ def push(env_key: str, ok: bool, msg: str) -> None:
     if not token or not key:
         return
     url = f"{base}/api/v1/endpoints/{key}/external"
-    url += "?" + urllib.parse.urlencode({"success": "true" if ok else "false", "message": msg})
+    params = {"success": "true" if ok else "false"}
+    if not ok and msg:
+        params["error"] = msg
+    url += "?" + urllib.parse.urlencode(params)
     req = urllib.request.Request(url, method="POST", headers={"Authorization": f"Bearer {token}"})
     try:
         urllib.request.urlopen(req, timeout=10).read()
@@ -57,8 +60,9 @@ else:
     push("GATUS_PUSH_TOKEN_OFFSITE", True, f"offsite age {age}d")
 
 dage = int(state.get("backup_restore_drill_age_days", -1))
-if drill_max > 0 and (dage < 0 or dage > drill_max):
-    push("GATUS_PUSH_TOKEN_DRILL", False, f"drill age {dage}d")
+drill_failed = int(state.get("backup_restore_drill_failed", 0) or 0)
+if drill_failed == 1 or (drill_max > 0 and (dage < 0 or dage > drill_max)):
+    push("GATUS_PUSH_TOKEN_DRILL", False, f"drill failed={drill_failed} age={dage}d")
 else:
     push("GATUS_PUSH_TOKEN_DRILL", True, f"drill age {dage}d")
 

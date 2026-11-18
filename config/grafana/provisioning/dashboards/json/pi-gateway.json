@@ -76,7 +76,7 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": { "unit": "percentunit" }, "overrides": [] },
+      "fieldConfig": { "defaults": { "max": 100, "min": 0, "unit": "percent" }, "overrides": [] },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
       "id": 5,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
@@ -86,14 +86,22 @@
     },
     {
       "datasource": { "type": "prometheus", "uid": "prometheus" },
-      "fieldConfig": { "defaults": { "unit": "d" }, "overrides": [] },
+      "fieldConfig": {
+        "defaults": { "unit": "d" },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "restore drill failed (1/0)" },
+            "properties": [{ "id": "unit", "value": "short" }]
+          }
+        ]
+      },
       "gridPos": { "h": 6, "w": 24, "x": 0, "y": 12 },
       "id": 6,
       "options": { "legend": { "displayMode": "table", "placement": "right" }, "tooltip": { "mode": "multi" } },
       "targets": [
         { "expr": "pi_gateway_offsite_backup_age_days", "legendFormat": "offsite backup age", "refId": "A" },
         { "expr": "pi_gateway_backup_restore_drill_age_days", "legendFormat": "restore drill age", "refId": "B" },
-        { "expr": "pi_gateway_restic_offsite_copy_age_days", "legendFormat": "cloud copy age", "refId": "C" },
+        { "expr": "pi_gateway_restic_offsite_copy_age_days >= 0", "legendFormat": "cloud copy age", "refId": "C" },
         { "expr": "pi_gateway_backup_restore_drill_failed", "legendFormat": "restore drill failed (1/0)", "refId": "D" }
       ],
       "title": "Backup / drill age and failure evidence",
@@ -294,7 +302,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "fieldConfig": { "defaults": { "decimals": 0 }, "overrides": [] },
       "gridPos": { "h": 6, "w": 24, "x": 0, "y": 56 },
-      "id": 21,
+      "id": 24,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
       "targets": [
         { "expr": "pi_gateway_ibb_hki", "legendFormat": "HKI {{station}}", "refId": "A" }
@@ -329,6 +337,44 @@
         { "expr": "pi_gateway_dns_coverage_state_age_seconds", "legendFormat": "coverage evidence age (s)", "refId": "D" }
       ],
       "title": "DNS enforcement evidence",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "max": 100, "min": 0, "unit": "percent" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 70 },
+      "id": 25,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
+      "targets": [
+        { "expr": "100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)", "legendFormat": "RAM used %", "refId": "A" }
+      ],
+      "title": "RAM Usage (%)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "celsius" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 70 },
+      "id": 26,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
+      "targets": [
+        { "expr": "node_thermal_zone_temp", "legendFormat": "{{type}}", "refId": "A" }
+      ],
+      "title": "CPU / SoC Temperature (°C)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "decimals": 0 }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 70 },
+      "id": 27,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "expr": "pi_gateway_ssd_usb_reset_events_24h", "legendFormat": "USB resets (24h)", "refId": "A" },
+        { "expr": "pi_gateway_ssd_usb_io_errors_24h", "legendFormat": "I/O errors (24h)", "refId": "B" },
+        { "expr": "pi_gateway_ssd_usb_crc_delta", "legendFormat": "CRC delta", "refId": "C" }
+      ],
+      "title": "USB SSD Link Health (24h Resets / I/O / CRC Δ)",
       "type": "timeseries"
     }
   ],

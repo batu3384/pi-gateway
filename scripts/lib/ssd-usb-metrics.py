@@ -70,21 +70,34 @@ def _parse_journal_ts(line: str) -> float | None:
 
 
 def count_kernel_usb_events(window_sec: int) -> tuple[int, int]:
-    """journalctl -k — locale-safe (dmesg -T TR ay adlari parse etmez)."""
+    """journalctl -k — locale-safe, C-level grep to skip firewall/noise floods."""
     hours = max(1, (window_sec + 3599) // 3600)
-    out = _run(
-        [
-            "journalctl",
-            "-k",
-            "--since",
-            f"{hours} hours ago",
-            "-o",
-            "short-iso",
-            "--no-pager",
-            "-q",
-        ],
-        timeout=20.0,
-    )
+    base_cmd = [
+        "journalctl",
+        "-k",
+        "--since",
+        f"{hours} hours ago",
+        "-o",
+        "short-iso",
+        "--no-pager",
+        "-q",
+    ]
+    out = ""
+    try:
+        proc = subprocess.run(
+            [*base_cmd, "-g", "usb|sd[a-z]|i/o error|offline error"],
+            text=True,
+            capture_output=True,
+            timeout=20.0,
+        )
+        if proc.returncode == 1 and not proc.stderr.strip():
+            return 0, 0
+        if proc.returncode == 0:
+            out = proc.stdout
+        else:
+            out = _run(base_cmd, timeout=20.0)
+    except (subprocess.SubprocessError, OSError):
+        out = _run(base_cmd, timeout=20.0)
     if not out:
         return 0, 0
     cutoff = time.time() - window_sec
@@ -122,12 +135,28 @@ def load_state() -> dict[str, Any]:
 
 
 def _atomic_install(path: Path, text: str, mode: str = "644") -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp_path = tempfile.mkstemp(
+            prefix=".pi-gw-", suffix=".tmp", dir=str(path.parent), text=True
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(text)
+            os.chmod(tmp_path, int(mode, 8))
+            Path(tmp_path).replace(path)
+            return
+        finally:
+            Path(tmp_path).unlink(missing_ok=True)
+    except OSError:
+        pass
+
     fd, tmp_path = tempfile.mkstemp(prefix="pi-gw-", suffix=".tmp", dir="/tmp", text=True)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write(text)
         try:
+            os.chmod(tmp_path, int(mode, 8))
             Path(tmp_path).replace(path)
             return
         except OSError:

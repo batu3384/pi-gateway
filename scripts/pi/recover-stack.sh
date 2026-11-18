@@ -4,11 +4,11 @@
 set -euo pipefail
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER:-pi}/pi-gateway}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_ORCH_REMOTE_DIR="${REMOTE_DIR:-}"
 # shellcheck source=../lib/env-file.sh
 source "$SCRIPT_DIR/../lib/env-file.sh"
 read_remote_dotenv || { echo "[recover-stack] HATA: .env dotenv parser hatasi" >&2; exit 1; }
-_ORCH_REMOTE_DIR="$REMOTE_DIR"
-REMOTE_DIR="$_ORCH_REMOTE_DIR"
+[[ -n "$_ORCH_REMOTE_DIR" ]] && REMOTE_DIR="$_ORCH_REMOTE_DIR"
 # shellcheck source=../lib/stack-health.sh
 source "$SCRIPT_DIR/../lib/stack-health.sh"
 LOG_TAG="pi-gateway-recover-orch"

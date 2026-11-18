@@ -110,19 +110,20 @@ def _num(v: Any) -> float:
 
 
 def render_prom(up: int, station: dict[str, Any], sample: dict[str, Any] | None) -> str:
-    name = esc(str(station.get("Name") or "unknown"))
-    sid = esc(str(station.get("Id") or ""))
-    aqi: dict[str, Any] = {}
-    conc: dict[str, Any] = {}
-    if sample:
-        aqi = sample.get("AQI") if isinstance(sample.get("AQI"), dict) else {}
-        conc = sample.get("Concentration") if isinstance(sample.get("Concentration"), dict) else {}
-    hki = _num(aqi.get("AQIIndex"))
-    labels = f'station="{name}",id="{sid}"'
     lines = [
         "# HELP pi_gateway_ibb_up 1 when İBB AQI scrape succeeded",
         "# TYPE pi_gateway_ibb_up gauge",
         f"pi_gateway_ibb_up {int(up)}",
+    ]
+    if int(up) == 0 or sample is None:
+        return "\n".join(lines) + "\n"
+    name = esc(str(station.get("Name") or "unknown"))
+    sid = esc(str(station.get("Id") or ""))
+    aqi = sample.get("AQI") if isinstance(sample.get("AQI"), dict) else {}
+    conc = sample.get("Concentration") if isinstance(sample.get("Concentration"), dict) else {}
+    hki = _num(aqi.get("AQIIndex"))
+    labels = f'station="{name}",id="{sid}"'
+    lines.extend([
         "# HELP pi_gateway_ibb_hki Hourly air quality index (HKI / AQIIndex)",
         "# TYPE pi_gateway_ibb_hki gauge",
         f"pi_gateway_ibb_hki{{{labels}}} {hki:.1f}",
@@ -138,7 +139,7 @@ def render_prom(up: int, station: dict[str, Any], sample: dict[str, Any] | None)
         "# HELP pi_gateway_ibb_o3 O3 concentration ug/m3 (-1 missing)",
         "# TYPE pi_gateway_ibb_o3 gauge",
         f"pi_gateway_ibb_o3{{{labels}}} {_num(conc.get('O3')):.1f}",
-    ]
+    ])
     return "\n".join(lines) + "\n"
 
 
@@ -194,7 +195,9 @@ def self_check() -> None:
     text = render_prom(1, picked, sample)
     assert 'pi_gateway_ibb_hki{station="Aksaray"' in text
     assert "53.0" in text
-    assert "pi_gateway_ibb_up 0" in render_prom(0, {"Name": "x", "Id": "y"}, None)
+    fail_txt = render_prom(0, {"Name": "x", "Id": "y"}, None)
+    assert "pi_gateway_ibb_up 0" in fail_txt
+    assert "pi_gateway_ibb_hki" not in fail_txt
     d = haversine_km(41.0, 29.0, 41.0, 29.0)
     assert d < 0.01
     s, e = query_window(datetime(2026, 8, 27, 17, 29, 43, tzinfo=IST))
@@ -210,7 +213,7 @@ def main() -> int:
     out = os.environ.get("PI_GATEWAY_METRICS_DIR", "/var/lib/pi-gateway/metrics")
     dest = os.environ.get("PI_GATEWAY_IBB_PROM") or os.path.join(out, "pi_gateway_ibb.prom")
     timeout = int(os.environ.get("IBB_HTTP_TIMEOUT_SEC", "20"))
-    warn = float(os.environ.get("IBB_HKI_WARN", "51"))
+    warn = float(os.environ.get("IBB_HKI_WARN", "101"))
     station_id = (os.environ.get("IBB_AQI_STATION_ID") or "").strip()
     try:
         lat = float(os.environ.get("IBB_HOME_LAT") or os.environ.get("QUAKE_HOME_LAT") or "41.0082")

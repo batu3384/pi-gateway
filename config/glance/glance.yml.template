@@ -1,6 +1,5 @@
-# Pi Gateway Glance — dashboard (Homepage yerine, 38k stars)
-# Render: render-config.sh — envsubst: LAN_DOMAIN
-# Dokuman: https://github.com/glanceapp/glance/blob/main/docs/configuration.md
+# Pi Gateway Glance — hafif ana gösterge paneli (~6 MiB RSS)
+# Render: render-config.sh
 pages:
   - name: Pi Gateway
     columns:
@@ -8,22 +7,30 @@ pages:
         widgets:
           - type: monitor
             cache: 1m
-            title: Paneller
+            title: Paneller & Servisler
             sites:
-              - title: Gatus (status)
-                site: http://gatus:8080/
-              - title: Gateway-state
-                site: http://gateway-state/state.json
-              - title: Dozzle (logs)
-                site: http://dozzle:8080/
+              - title: Gatus (Durum & SLO)
+                url: ${PANEL_PROTOCOL}://status.${LAN_DOMAIN}
+                check-url: http://gatus:8080/
+              - title: Gateway Durumu (JSON)
+                url: ${PANEL_PROTOCOL}://gateway.${LAN_DOMAIN}
+                check-url: http://gateway-state/state.json
+              - title: Dozzle (Konteyner Logları)
+                url: ${PANEL_PROTOCOL}://logs.${LAN_DOMAIN}
+                check-url: http://dozzle:8080/
+              - title: Grafana (Metrikler)
+                url: ${PANEL_PROTOCOL}://grafana.${LAN_DOMAIN}
+                check-url: http://grafana:3000/api/health
           - type: monitor
             cache: 1m
-            title: Coredns
+            title: Çekirdek Ağ & Güvenlik
             sites:
-              - title: AdGuard
-                site: http://172.17.0.1:8080/
-              - title: NetAlertX
-                site: http://172.17.0.1:20211/
+              - title: AdGuard Home (DNS)
+                url: ${PANEL_PROTOCOL}://dns.${LAN_DOMAIN}
+                check-url: http://host.docker.internal:${ADGUARD_WEB_PORT}/
+              - title: NetAlertX (Ağ Cihazları)
+                url: ${PANEL_PROTOCOL}://devices.${LAN_DOMAIN}
+                check-url: http://host.docker.internal:${NETALERTX_PORT}/
 
       - size: full
         widgets:
@@ -31,24 +38,42 @@ pages:
             title: Gateway durumu
             url: http://gateway-state/state.json
             template: |
-              SSD sağlıklı: {{ .JSON.Int "ssd_mount_healthy" }} ·
-              DNS kapsamı: {{ .JSON.String "dns_coverage_status" }} ·
-              Offsite yedek yaşı: {{ .JSON.Int "offsite_backup_age_days" }} gün ·
-              Drill yaşı: {{ .JSON.Int "backup_restore_drill_age_days" }} gün ·
-              Drill fail: {{ .JSON.Int "backup_restore_drill_failed" }} ·
-              Root: {{ .JSON.Int "root_usage_pct" }}% · SSD: {{ .JSON.Int "ssd_usage_pct" }}%
+              {{- $ssd := .JSON.Int "ssd_mount_healthy" -}}
+              {{- $deg := .JSON.Int "storage_degraded" -}}
+              {{- $off := .JSON.Int "offsite_backup_age_days" -}}
+              {{- $drl := .JSON.Int "backup_restore_drill_age_days" -}}
+              {{- $who := .JSON.String "who_home" -}}
+              {{- $spd := .JSON.Float "isp_download_mbps" -}}
+              {{- $ping := .JSON.Int "isp_ping_ms" -}}
+              {{- $hki := .JSON.Int "ibb_hki" -}}
+              {{- $temp := .JSON.Float "cpu_temp_c" -}}
+              {{- $ram := .JSON.Int "ram_used_pct" -}}
+              {{- $ramFree := .JSON.Int "ram_avail_mib" -}}
+              {{- $aghPct := .JSON.Float "adguard_blocked_pct" -}}
+              SSD: {{ if and (eq $ssd 1) (eq $deg 0) }}Sağlıklı{{ else }}Kısıtlı{{ end }} ·
+              DNS: {{ .JSON.Int "dns_latency_ms" }} ms ({{ .JSON.String "dns_coverage_status" }} · {{ printf "%.1f" $aghPct }}% engel) ·
+              Hız: {{ if gt $spd 0.0 }}{{ printf "%.0f" $spd }} Mbps ({{ $ping }} ms){{ else }}—{{ end }} ·
+              Donanım: {{ if gt $temp 0.0 }}{{ printf "%.1f" $temp }}°C · {{ end }}RAM %{{ $ram }} ({{ $ramFree }} MiB boş) ·
+              Disk: SD {{ .JSON.Int "root_usage_pct" }}% / SSD {{ .JSON.Int "ssd_usage_pct" }}% ·
+              Hava: {{ if ge $hki 0 }}HKI {{ $hki }} ({{ .JSON.String "ibb_station" }}){{ else }}—{{ end }} ·
+              Offsite: {{ if lt $off 0 }}—{{ else }}{{ $off }}g{{ end }} ·
+              Drill: {{ if lt $drl 0 }}—{{ else }}{{ $drl }}g{{ end }} ·
+              Çevrimiçi: {{ .JSON.Int "hosts_online" }} cihaz
+              {{- if ne $who "" }}
+              Evdekiler: {{ $who }}
+              {{- end }}
 
           - type: bookmarks
             groups:
-              - title: Paneller
+              - title: Hızlı Erişim Panelleri
                 links:
-                  - title: Gatus (status) — izleme ve SLO
-                    url: https://status.${LAN_DOMAIN}
-                  - title: AdGuard (dns) — DNS filtre yönetimi
-                    url: https://dns.${LAN_DOMAIN}
-                  - title: Grafana — metrik grafikleri
-                    url: https://grafana.${LAN_DOMAIN}
-                  - title: Dozzle (logs) — konteyner logları
-                    url: https://logs.${LAN_DOMAIN}
-                  - title: NetAlertX (devices) — ağ envanteri
-                    url: https://devices.${LAN_DOMAIN}
+                  - title: Gatus (status) — Servis ve SLO İzleme
+                    url: ${PANEL_PROTOCOL}://status.${LAN_DOMAIN}
+                  - title: AdGuard Home (dns) — DNS & Reklam Engelleme
+                    url: ${PANEL_PROTOCOL}://dns.${LAN_DOMAIN}
+                  - title: Grafana — Sistem & DNS Grafikleri
+                    url: ${PANEL_PROTOCOL}://grafana.${LAN_DOMAIN}
+                  - title: Dozzle (logs) — Canlı Konteyner Logları
+                    url: ${PANEL_PROTOCOL}://logs.${LAN_DOMAIN}
+                  - title: NetAlertX (devices) — LAN Cihaz Envanteri
+                    url: ${PANEL_PROTOCOL}://devices.${LAN_DOMAIN}

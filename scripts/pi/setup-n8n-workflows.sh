@@ -17,7 +17,11 @@ PG_SCRIPT_NAME="$(basename "$0")"
 # shellcheck source=../lib/env-file.sh
 source "${_PG_ENV_LIB:?}"
 read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
-[[ "${ENABLE_N8N:-true}" == "true" ]] || { log "n8n kapali"; exit 0; }
+[[ "${ENABLE_N8N:-false}" == "true" ]] || { log "n8n kapali"; exit 0; }
+if ! compgen -G "${N8N_DIR}/*.workflow.json" >/dev/null 2>&1; then
+  log "config/n8n altinda workflow sablonu yok — atlandi"
+  exit 0
+fi
 [[ -n "${TELEGRAM_BOT_TOKEN:-}" && -n "${TELEGRAM_CHAT_ID:-}" ]] || {
   log "HATA: TELEGRAM_BOT_TOKEN ve TELEGRAM_CHAT_ID gerekli"
   exit 1
@@ -149,7 +153,12 @@ fi
 fail=0
 needs_restart=false
 if [[ "$needs_import" == "true" ]]; then
-  import_workflow "Pi Gateway — Uptime Kuma Alert" "${N8N_DIR}/uptime-kuma-alert.workflow.json" || fail=1
+  for wf in "${N8N_DIR}"/*.workflow.json; do
+    [[ -f "$wf" ]] || continue
+    wf_name="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("name",""))' "$wf" 2>/dev/null || true)"
+    [[ -n "$wf_name" ]] || continue
+    import_workflow "$wf_name" "$wf" || fail=1
+  done
   deactivate_workflow "Pi Gateway — Uptime Kuma Alert" || true
   deactivate_workflow "Pi Gateway — NetAlertX Alert" || true
   if [[ "$fail" -eq 0 ]]; then

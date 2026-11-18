@@ -131,7 +131,10 @@ if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
       run_caddy_auth_checks "status"
       run_caddy_auth_checks "logs"
       run_caddy_auth_checks "dns"
-      if [[ "${ENABLE_N8N:-true}" == "true" ]]; then
+      if [[ "${ENABLE_MONITORING:-true}" == "true" ]]; then
+        run_caddy_auth_checks "grafana"
+      fi
+      if [[ "${ENABLE_N8N:-false}" == "true" ]]; then
         run_caddy_auth_checks "n8n"
       fi
       if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
@@ -145,7 +148,9 @@ if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
   esac
 fi
 run_check "glance" curl -fsS "http://127.0.0.1:3040"
-run_check "gatus" curl -fsS "http://127.0.0.1:3001"
+if [[ "${ENABLE_GATUS:-true}" == "true" ]]; then
+  run_check "gatus" curl -fsS "http://127.0.0.1:${GATUS_PORT:-3001}/health"
+fi
 run_check "adguard-ui" curl -fsS "http://127.0.0.1:${ADGUARD_WEB_PORT}/"
 run_check "adguard-no-popup-stack" agh_no_popup_stack
 if [[ "${ENABLE_CADDY:-true}" == "true" ]] && [[ -z "${CADDY_AUTH_PASSWORD:-}" ]]; then
@@ -155,20 +160,9 @@ fi
 if [[ "${ENABLE_DOZZLE:-true}" == "true" ]]; then
   run_check "dozzle" curl -fsS -u "${DOZZLE_ADMIN_USER:-admin}:${DOZZLE_ADMIN_PASSWORD}" "http://127.0.0.1:${DOZZLE_PORT}/"
 fi
-if [[ "${ENABLE_N8N:-true}" == "true" ]]; then
+if [[ "${ENABLE_N8N:-false}" == "true" ]]; then
   run_check "n8n" bash -c \
     "for _ in 1 2 3 4 5; do curl -fsS \"http://127.0.0.1:${N8N_PORT}/\" >/dev/null && exit 0; sleep 4; done; exit 1"
-  case "${N8N_WEBHOOK_SECRET:-}" in
-    ""|CHANGE_ME*) ;;
-    *)
-      run_check "n8n-kuma-telegram-off" bash -c \
-        'code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 -X POST \
-          "http://127.0.0.1:'"${N8N_PORT}"'/webhook/uptime-kuma-alert-'"${N8N_WEBHOOK_SECRET}"'" \
-          -H "Content-Type: application/json" \
-          -d "{\"heartbeat\":{\"status\":1,\"msg\":\"smoke\"},\"monitor\":{\"name\":\"Smoke Test\"}}"); \
-          [[ "$code" != "200" ]]'
-      ;;
-  esac
 fi
 if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
   run_check "netalertx" bash -c \
@@ -227,7 +221,7 @@ if [[ "${ENABLE_UFW:-true}" == "true" ]] && [[ -x /usr/sbin/ufw ]]; then
       "! sudo -n /usr/sbin/ufw status numbered | grep -E '8080/tcp' | grep -q '${LAN_SUBNET_CIDR:-192.168.1.0/24}'"
     # Docker UFW'yi bypass eder — bind gercekten localhost olmali (AdGuard host:0.0.0.0 kasıtlı — UFW blok)
     run_check "admin-ports-localhost" bash -c \
-      '! ss -lnt | grep -E ":(3040|3001|5678|9999)\\b" | grep -vE "127\\.0\\.0\\.1|\\[::1\\]" | grep -q .'
+      '! ss -lnt | grep -E ":(3040|3001|3030|5678|8082|9090|9999)\\b" | grep -vE "127\\.0\\.0\\.1|\\[::1\\]" | grep -q .'
     if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
       run_check "netalertx-ufw-caddy-only" bash -c \
         '! sudo -n /usr/sbin/ufw status | grep -E ":'"${NETALERTX_PORT:-20211}"'\\b" | grep -q "${LAN_SUBNET_CIDR:-192.168.1.0/24}"'

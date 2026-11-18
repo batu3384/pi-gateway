@@ -26,11 +26,18 @@ mkdir -p "$(dirname "$LOCK")" "$(dirname "$QUAKE_STATE")"
 # Önceki poll bitmeden yenisi → çift Telegram / state yarışı yok
 exec 9>"$LOCK"
 flock -n 9 || exit 0
+STAGE_TMP="$(mktemp "${QUAKE_STATE}.stage.XXXXXX")"
+trap 'rm -f "$STAGE_TMP"' EXIT
 # stderr journal'a kalsın (AFAD 500 vb.); stdout yalnız mesaj blokları
-out="$(python3 "$PY" 2> >(logger -t pi-gateway-quake -p user.warning) || true)"
+out="$(python3 "$PY" --stage-state "$STAGE_TMP" 2> >(logger -t pi-gateway-quake -p user.warning) || true)"
 [[ -n "${out// }" ]] || exit 0
+send_ok=1
 while IFS= read -r block; do
   [[ -n "${block// }" ]] || continue
-  notify_send_message "$(printf '⚠️ Deprem Uyarısı\n\n%s' "$block")" || true
+  notify_send_message "$(printf '<b>🌍 Deprem Bildirimi</b>\n\n%s' "$(notify_escape_html "$block")")" "HTML" \
+    || send_ok=0
 done < <(printf '%s\n' "$out" | awk 'BEGIN{RS="---\n"} {gsub(/^[ \t\n]+|[ \t\n]+$/,""); if(length($0)) print}')
+if [[ "$send_ok" -eq 1 && -s "$STAGE_TMP" ]]; then
+  mv -f "$STAGE_TMP" "$QUAKE_STATE"
+fi
 exit 0

@@ -17,19 +17,55 @@ from modem_inventory import load_modem_inventory, modem_device, modem_name
 STATE_VERSION = 3
 SKIP_MACS = frozenset({"internet"})
 NOISE_MAC_PREFIXES = ("01:", "33:", "ff:")
-BAD_NAMES = frozenset({"", "?", "(name not found)"})
+BAD_NAMES = frozenset({
+    "",
+    "?",
+    "(name not found)",
+    "(unknown)",
+    "unknown",
+    "unknown device",
+    "localhost",
+    "n/a",
+    "-",
+})
 STREAMS = {
     "new_device": "New Device",
     "offline": "Disconnected",
 }
 
 
-def _ts_local(ts: int | float | str | None) -> str:
+def _parse_ts(ts: int | float | str | None) -> float | None:
     if ts is None:
-        return "?"
+        return None
+    if isinstance(ts, (int, float)):
+        return float(ts)
+    raw = str(ts).strip()
+    if not raw:
+        return None
     try:
-        t = float(ts)
-    except (TypeError, ValueError):
+        return float(raw)
+    except ValueError:
+        pass
+    norm = raw[:-1] + "+00:00" if raw.endswith("Z") else raw
+    for cand in (norm, norm.replace(" ", "T", 1)):
+        try:
+            dt = datetime.fromisoformat(cand)
+            if dt.tzinfo is None:
+                dt = dt.astimezone()
+            return dt.timestamp()
+        except ValueError:
+            continue
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y.%m.%d %H:%M:%S"):
+        try:
+            return datetime.strptime(raw[:19], fmt).astimezone().timestamp()
+        except ValueError:
+            continue
+    return None
+
+
+def _ts_local(ts: int | float | str | None) -> str:
+    t = _parse_ts(ts)
+    if t is None:
         return "?"
     return datetime.fromtimestamp(t).strftime("%d.%m.%Y %H:%M")
 
@@ -59,7 +95,7 @@ def suggest_display_name(
 
     if ip == "192.168.1.1":
         return "Router (ZTE)"
-    if name and name not in BAD_NAMES and not name.startswith("192.168."):
+    if name and name.lower() not in BAD_NAMES and not name.startswith("192.168."):
         return name
     if mac in SKIP_MACS:
         return mac
@@ -98,7 +134,7 @@ def _is_noise_mac(mac: str, *, new_device: bool = False) -> bool:
 
 def _open_db(path: str) -> sqlite3.Connection:
     try:
-        return sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        return sqlite3.connect(f"file:{path}?mode=ro", timeout=1.5, uri=True)
     except sqlite3.OperationalError as exc:
         msg = str(exc).lower()
         if "unable to open database" in msg:
@@ -215,43 +251,76 @@ def online_devices(db_path: str, *, recency_sec: int = 900) -> list[dict[str, An
     """Homepage/Grafana kim-evde — Telegram yok."""
     con = _open_db(db_path)
     modem_inventory = load_modem_inventory()
+    modem_by_mac = modem_inventory.get("devices_by_mac") or {}
     try:
         cols = {row[1] for row in con.execute("PRAGMA table_info(Devices)")}
         where = "COALESCE(devIsArchived, 0)=0"
-        args: list[Any] = []
-        if "devPresent" in cols:
+        has_presence_col = False
+        if "devPresentLastScan" in cols:
+            where += " AND COALESCE(devPresentLastScan, 0)=1"
+            has_presence_col = True
+        elif "devPresent" in cols:
             where += " AND COALESCE(devPresent, 0)=1"
-        elif "devLastConnection" in cols:
-            where += " AND COALESCE(devLastConnection, 0) >= ?"
-            args.append(time.time() - recency_sec)
+            has_presence_col = True
+        last_col = "devLastConnection" if "devLastConnection" in cols else "NULL"
         sql = f"""
-            SELECT devMac, devName, devVendor, devType, devLastIP
+            SELECT devMac, devName, devVendor, devType, devLastIP, {last_col}
             FROM Devices
             WHERE {where}
             ORDER BY devName COLLATE NOCASE
         """
-        rows = con.execute(sql, args).fetchall()
-        out: list[dict[str, str]] = []
-        for mac, name, vendor, dtype, ip in rows:
+        rows = con.execute(sql).fetchall()
+        cutoff = time.time() - recency_sec
+        candidates: list[tuple[tuple[int, int, int, float], dict[str, Any]]] = []
+        for mac, name, vendor, dtype, ip, last_conn in rows:
             mac_s = (mac or "").strip().lower()
             if _is_noise_mac(mac_s):
                 continue
-            modem_record = modem_device(modem_inventory, mac_s, ip)
-            modem_label = modem_name(modem_inventory, mac_s, ip)
-            display = suggest_display_name(modem_label or name, vendor, dtype, ip, mac_s)
-            out.append(
-                {
-                    "mac": mac_s,
-                    "name": display,
-                    "ip": (ip or "").strip(),
-                    "vendor": (vendor or "").strip() or "?",
-                    "name_source": "zte-h3600p" if modem_label else "netalertx",
-                    "inventory_source": modem_record.get("source", ""),
-                    "inventory_confidence": modem_record.get("confidence", ""),
-                    "privacy_mac": bool(modem_record.get("privacy_mac", _is_privacy_mac(mac_s))),
-                    "inventory_last_seen": modem_record.get("last_seen", ""),
-                }
+            parsed_ts = _parse_ts(last_conn)
+            if not has_presence_col and "devLastConnection" in cols:
+                if parsed_ts is None or parsed_ts < cutoff:
+                    continue
+            ip_s = (ip or "").strip()
+            modem_record = modem_device(modem_inventory, mac_s, ip_s)
+            modem_label = modem_name(modem_inventory, mac_s, ip_s)
+            name_source = "zte-h3600p" if modem_label else "netalertx"
+            privacy = bool(modem_record.get("privacy_mac", _is_privacy_mac(mac_s)))
+            if privacy and name_source != "zte-h3600p" and not has_presence_col:
+                continue
+            display = suggest_display_name(modem_label or name, vendor, dtype, ip_s, mac_s)
+            mac_in_modem = 1 if (mac_s and mac_s in modem_by_mac) else 0
+            score = (
+                mac_in_modem,
+                0 if privacy else 1,
+                1 if name_source == "zte-h3600p" else 0,
+                float(parsed_ts or 0.0),
             )
+            item = {
+                "mac": mac_s,
+                "name": display,
+                "ip": ip_s,
+                "vendor": (vendor or "").strip() or "?",
+                "name_source": name_source,
+                "inventory_source": modem_record.get("source", ""),
+                "inventory_confidence": modem_record.get("confidence", ""),
+                "privacy_mac": privacy,
+                "inventory_last_seen": modem_record.get("last_seen", ""),
+            }
+            candidates.append((score, item))
+
+        by_ip: dict[str, tuple[tuple[int, int, int, float], dict[str, Any]]] = {}
+        no_ip: list[dict[str, Any]] = []
+        for score, item in candidates:
+            ip_s = item["ip"]
+            if not ip_s:
+                no_ip.append(item)
+                continue
+            cur = by_ip.get(ip_s)
+            if cur is None or score > cur[0]:
+                by_ip[ip_s] = (score, item)
+
+        out = [pair[1] for pair in by_ip.values()] + no_ip
+        out.sort(key=lambda d: d["name"].lower())
         return out
     finally:
         con.close()
@@ -713,6 +782,38 @@ def _self_check() -> None:
             and d["inventory_last_seen"]
             for d in home
         ), home
+
+        # NetAlertX v25 schema: devPresentLastScan + TEXT devLastConnection + duplicate IP dedup
+        assert suggest_display_name("(unknown)", "Samsung Electronics", "Phone", "192.0.2.77", "10:11:12:13:14:15") == "Samsung akıllı cihaz"
+        assert _ts_local("2026-11-18 09:45:00") == "18.11.2026 09:45"
+        db25 = os.path.join(td, "app25.db")
+        con25 = sqlite3.connect(db25)
+        con25.executescript(
+            """
+            CREATE TABLE Devices (
+              devMac TEXT PRIMARY KEY, devName TEXT, devVendor TEXT, devType TEXT,
+              devLastIP TEXT, devLastConnection TEXT, devPresentLastScan INTEGER,
+              devIsArchived INTEGER
+            );
+            """
+        )
+        con25.execute(
+            "INSERT INTO Devices VALUES (?,?,?,?,?,?,?,0)",
+            ("02:aa:bb:cc:dd:01", "(unknown)", "Local", "Phone", "192.0.2.50", "2026-11-18 09:45:00", 1),
+        )
+        con25.execute(
+            "INSERT INTO Devices VALUES (?,?,?,?,?,?,?,0)",
+            ("aa:bb:cc:dd:ee:01", "(unknown)", "Xiaomi", "Phone", "192.0.2.50", "2026-11-18 09:40:00", 1),
+        )
+        con25.execute(
+            "INSERT INTO Devices VALUES (?,?,?,?,?,?,?,0)",
+            ("cc:dd:ee:ff:00:11", "OfflineTV", "LG", "TV", "192.0.2.99", "2026-11-18 09:44:00", 0),
+        )
+        con25.commit()
+        con25.close()
+        home25 = online_devices(db25)
+        assert len(home25) == 1, home25
+        assert home25[0]["mac"] == "aa:bb:cc:dd:ee:01" and home25[0]["name"] == "M2003J15SC", home25
 
     print("[netalert-devices] self-check OK")
 

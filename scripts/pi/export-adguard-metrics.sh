@@ -42,6 +42,8 @@ write_prom() {
     mkdir -p "$METRICS_DIR"
     install -m 644 "$PROM_TMP" "$OUT"
     chown "${USER}:${USER}" "$OUT" 2>/dev/null || true
+  elif [[ -d "$METRICS_DIR" && -w "$METRICS_DIR" && ( ! -e "$OUT" || -w "$OUT" ) ]]; then
+    install -m 644 "$PROM_TMP" "$OUT"
   else
     sudo mkdir -p "$METRICS_DIR"
     sudo install -m 644 "$PROM_TMP" "$OUT"

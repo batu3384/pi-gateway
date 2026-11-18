@@ -175,16 +175,14 @@ clear_storage_degraded() {
   echo "[stack-health] HATA: degraded flag silinemedi: $STORAGE_DEGRADED_FLAG" >&2
   return 1
 }
-# SSD kopunca optional app + monitoring durdur (hotplug/recover-ro tek kaynak)
+# SSD kopunca optional app + monitoring durdur (hotplug/recover-ro tek kaynak; docker stop profil bagimsiz)
 degraded_stop_optional_apps() {
   local remote_dir="${1:-${REMOTE_DIR:-}}"
-  [[ -n "$remote_dir" && -d "${remote_dir}/compose" ]] || return 0
-  (
-    cd "${remote_dir}/compose"
-    docker compose --env-file "${remote_dir}/.env" stop \
-      n8n uptime-kuma crowdsec dozzle docker-socket-proxy netalertx \
-      prometheus grafana node-exporter 2>/dev/null || true
-  )
+  local svc
+  for svc in n8n gatus crowdsec dozzle docker-socket-proxy netalertx victoriametrics grafana node-exporter openbot; do
+    docker stop "$svc" >/dev/null 2>&1 || true
+  done
+  [[ -n "$remote_dir" ]] || true
 }
 mark_stack_recover_cooldown() {
   ensure_runtime_dir
@@ -310,13 +308,40 @@ release_recover_lock() {
   [[ -n "${STACK_LOCK_FD:-}" ]] || return 0
   flock -u "$STACK_LOCK_FD" 2>/dev/null || true
 }
+ensure_public_state_dir() {
+  local owner pub_dir pub_file tmp
+  owner="$(pi_user_from_remote_dir "${REMOTE_DIR:-/home/${PI_USER:-pi}/pi-gateway}")"
+  pub_dir="${PI_GATEWAY_PUBLIC_DIR:-/var/lib/pi-gateway/public}"
+  pub_file="${pub_dir}/state.json"
+  mkdir -p "$pub_dir" 2>/dev/null || sudo mkdir -p "$pub_dir" 2>/dev/null || return 1
+  if [[ "$(id -u)" -eq 0 ]]; then
+    chown "${owner}:${owner}" "$pub_dir" 2>/dev/null || true
+    chmod 755 "$pub_dir" 2>/dev/null || true
+  fi
+  if [[ ! -f "$pub_file" ]]; then
+    tmp="$(mktemp)"
+    if [[ -f /var/lib/pi-gateway/state.json ]]; then
+      cp /var/lib/pi-gateway/state.json "$tmp"
+    else
+      printf '{"ts":"","ssd_mount_healthy":1}\n' >"$tmp"
+    fi
+    if [[ "$(id -u)" -eq 0 ]]; then
+      install -o "$owner" -g "$owner" -m 644 "$tmp" "$pub_file" 2>/dev/null || cp "$tmp" "$pub_file"
+    else
+      install -m 644 "$tmp" "$pub_file" 2>/dev/null || sudo install -o "$owner" -g "$owner" -m 644 "$tmp" "$pub_file" 2>/dev/null || true
+    fi
+    rm -f "$tmp"
+  fi
+}
 run_compose_up() {
   local remote_dir="$1"
   local pi_user="$2"
   local lib="${PI_GATEWAY_LIB_DIR:-/usr/local/lib/pi-gateway}"
   local script
-  # REMOTE_DIR once — rsync sonrasi lib drift olmasin
-  if [[ -f "${remote_dir}/scripts/pi/recover-compose-up.sh" ]]; then
+  # Root systemd birimlerinde root-owned lib once; non-root/dev ortamlarda REMOTE_DIR once
+  if [[ "$(id -u)" -eq 0 && -x "${lib}/scripts/pi/recover-compose-up.sh" ]]; then
+    script="${lib}/scripts/pi/recover-compose-up.sh"
+  elif [[ -f "${remote_dir}/scripts/pi/recover-compose-up.sh" ]]; then
     script="${remote_dir}/scripts/pi/recover-compose-up.sh"
   elif [[ -x "${lib}/scripts/pi/recover-compose-up.sh" ]]; then
     script="${lib}/scripts/pi/recover-compose-up.sh"
@@ -335,8 +360,10 @@ run_compose_up() {
 recover_script_path() {
   local remote_dir="$1"
   local lib="${PI_GATEWAY_LIB_DIR:-/usr/local/lib/pi-gateway}"
-  # Deploy rsync ~/pi-gateway gunceller; systemd lib eski kalabilir — REMOTE once
-  if [[ -f "${remote_dir}/scripts/pi/recover-readonly-root.sh" ]]; then
+  # Root iken /usr/local/lib once; non-root/Mac testlerinde REMOTE_DIR once
+  if [[ "$(id -u)" -eq 0 && -x "${lib}/scripts/pi/recover-readonly-root.sh" ]]; then
+    echo "${lib}/scripts/pi/recover-readonly-root.sh"
+  elif [[ -f "${remote_dir}/scripts/pi/recover-readonly-root.sh" ]]; then
     echo "${remote_dir}/scripts/pi/recover-readonly-root.sh"
   elif [[ -x "${lib}/scripts/pi/recover-readonly-root.sh" ]]; then
     echo "${lib}/scripts/pi/recover-readonly-root.sh"
@@ -350,7 +377,9 @@ apply_adguard_rewrites_best_effort() {
   local script
   local pi_user
   local rc=0
-  if [[ -f "${remote_dir}/scripts/pi/apply-adguard-rewrites.sh" ]]; then
+  if [[ "$(id -u)" -eq 0 && -x "${lib}/scripts/pi/apply-adguard-rewrites.sh" ]]; then
+    script="${lib}/scripts/pi/apply-adguard-rewrites.sh"
+  elif [[ -f "${remote_dir}/scripts/pi/apply-adguard-rewrites.sh" ]]; then
     script="${remote_dir}/scripts/pi/apply-adguard-rewrites.sh"
   elif [[ -x "${lib}/scripts/pi/apply-adguard-rewrites.sh" ]]; then
     script="${lib}/scripts/pi/apply-adguard-rewrites.sh"

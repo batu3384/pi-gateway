@@ -15,7 +15,7 @@ REPEAT_SEC="${CONTAINER_RESTART_REPEAT_SEC:-21600}"
 WINDOW_SEC="${CONTAINER_RESTART_WINDOW_SEC:-900}"
 STABLE_SEC="${CONTAINER_RESTART_STABLE_SEC:-600}"
 STATE="${CONTAINER_WATCH_STATE_PATH:-/var/lib/pi-gateway/container-watch-state.json}"
-WATCH="${CONTAINER_WATCH_LIST:-docker-socket-proxy victoriametrics grafana adguard unbound caddy crowdsec netalertx node-exporter}"
+WATCH="${CONTAINER_WATCH_LIST:-docker-socket-proxy victoriametrics grafana adguard unbound caddy glance gatus dozzle crowdsec netalertx node-exporter}"
 
 log() { echo "[container-watch] $*"; }
 
@@ -118,54 +118,6 @@ def inspect(name: str) -> tuple[int, str, bool]:
         restarts = -1
     return restarts, parts[1], parts[2] == "true"
 
-def prometheus_ready() -> bool:
-    try:
-        if subprocess.run(
-            ["curl", "-fsS", "--max-time", "3", "http://127.0.0.1:9090/-/ready"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        ).returncode != 0:
-            return False
-        out = subprocess.check_output(
-            ["docker", "ps", "--format", "{{.Names}}"],
-            text=True,
-            stderr=subprocess.DEVNULL,
-        )
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return False
-    return any(line.strip() == "prometheus" for line in out.splitlines())
-
-
-def container_logs_since_start(name: str) -> str:
-    started = ""
-    try:
-        started = subprocess.check_output(
-            ["docker", "inspect", "-f", "{{.State.StartedAt}}", name],
-            text=True,
-            stderr=subprocess.DEVNULL,
-        ).strip()
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        started = ""
-    cmd = ["docker", "logs", name]
-    if started:
-        cmd.extend(["--since", started])
-    else:
-        cmd.extend(["--since", "5m"])
-    try:
-        return subprocess.check_output(cmd, text=True, stderr=subprocess.STDOUT)
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return ""
-
-
-def prometheus_needs_repair() -> bool:
-    # Eski TSDB log (ayni container ID) her tick WAL silmesin
-    if prometheus_ready():
-        return False
-    logs = container_logs_since_start("prometheus")
-    if "invalid checksum" in logs or "opening storage failed" in logs:
-        return True
-    return "WAL truncation" in logs and "compaction failed" in logs
-
 
 def prune_events(events: list, cutoff: float) -> list[dict]:
     kept: list[dict] = []
@@ -239,7 +191,8 @@ try:
             if name == "adguard":
                 dns_fallback("start")
             continue
-        if (not running) and status in ("exited", "created", "dead") and not degraded:
+        allow_when_degraded = name in ("adguard", "unbound")
+        if (not running) and status in ("exited", "created", "dead") and (not degraded or allow_when_degraded):
             if name == "adguard":
                 if not docker_cli_ok():
                     dns_fallback("start")
@@ -336,9 +289,6 @@ for name, window_total, status, lifetime in alerts:
 
 for name in recovered:
     print(f"OK\t{name}")
-
-if prometheus_needs_repair():
-    print("REPAIR\tprometheus")
 PY
 )
 
@@ -355,14 +305,6 @@ for line in "${_lines[@]:-}"; do
     OK)
       log "normale dondu: ${arg1}"
       notify_container_restart_ok "$arg1" || true
-      ;;
-    REPAIR)
-      log "prometheus TSDB auto-repair"
-      if REMOTE_DIR="$REMOTE_DIR" NOTIFY_REPAIR=1 bash "$SCRIPT_DIR/repair-prometheus-tsdb.sh"; then
-        log "prometheus repair OK"
-      else
-        log "WARN prometheus repair basarisiz"
-      fi
       ;;
     WARN)
       log "WARN: ${arg1} ${arg2:-} ${arg3:-}"

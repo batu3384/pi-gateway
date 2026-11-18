@@ -53,7 +53,7 @@ fi
 if [[ "$DEPLOY_DEGRADED" -eq 1 ]]; then
   log "WARN: storage degraded — yalnizca DNS/firewall post-deploy (app setup atlanir)"
 fi
-for key in AGH_ADMIN_PASSWORD DOZZLE_ADMIN_PASSWORD RESTIC_PASSWORD N8N_WEBHOOK_SECRET UPTIME_KUMA_ADMIN_PASSWORD; do
+for key in AGH_ADMIN_PASSWORD DOZZLE_ADMIN_PASSWORD RESTIC_PASSWORD N8N_WEBHOOK_SECRET; do
   val="${!key:-}"
   case "$val" in
     ""|CHANGE_ME*|Degistir*)
@@ -63,10 +63,9 @@ for key in AGH_ADMIN_PASSWORD DOZZLE_ADMIN_PASSWORD RESTIC_PASSWORD N8N_WEBHOOK_
       if [[ "$key" == "RESTIC_PASSWORD" && "${ENABLE_RESTIC:-true}" != "true" ]]; then
         continue
       fi
-      if [[ "$key" == "N8N_WEBHOOK_SECRET" && "${ENABLE_N8N:-true}" != "true" ]]; then
+      if [[ "$key" == "N8N_WEBHOOK_SECRET" && "${ENABLE_N8N:-false}" != "true" ]]; then
         continue
       fi
-      # Uptime Kuma is always deployed (no compose profile) — never skip on ENABLE_N8N
       log "HATA: $key bos veya placeholder — .env duzelt"
       exit 1
       ;;
@@ -168,7 +167,7 @@ fi
 if [[ "${ENABLE_DOZZLE:-true}" == "true" ]]; then
   run_step_critical "Dozzle auth" "$SCRIPT_DIR/setup-dozzle.sh"
 fi
-if [[ "${ENABLE_N8N:-true}" == "true" ]]; then
+if [[ "${ENABLE_N8N:-false}" == "true" ]]; then
   run_step_critical "n8n encryption key" "$SCRIPT_DIR/ensure-n8n-encryption-key.sh"
   run_step_critical "n8n otomasyonlar" "$SCRIPT_DIR/setup-n8n-workflows.sh"
 fi

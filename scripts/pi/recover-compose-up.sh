@@ -73,8 +73,9 @@ compose_up() {
   local -a core_svc=(unbound adguard)
   local -a pre
   local s
+  ensure_public_state_dir || true
   if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
-    core_svc+=(homepage caddy)
+    core_svc+=(glance caddy)
   fi
   if [[ "${COMPOSE_RECOVER_MODE:-}" == "core-dns" ]]; then
     echo "[recover-compose] mode=core-dns (${core_svc[*]})" >&2
@@ -134,6 +135,16 @@ finish_ok() {
   source "$SCRIPT_DIR/../lib/reap-dead-docker-scopes.sh"
   reap_dead_docker_scopes || true
   if [[ "${COMPOSE_RECOVER_MODE:-}" != "core-dns" ]] \
+    && [[ "${ENABLE_UFW:-true}" == "true" ]] \
+    && [[ -f "$SCRIPT_DIR/setup-firewall.sh" ]]; then
+    local _cs
+    _cs="$(docker network inspect compose_default -f '{{range .IPAM.Config}}{{.Subnet}}{{end}}' 2>/dev/null || true)"
+    if [[ -n "$_cs" ]] && ! sudo -n ufw status 2>/dev/null | grep -Fq "$_cs"; then
+      echo "[recover-compose] compose_default subnet degisti ($_cs) — UFW guncelleniyor" >&2
+      REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/setup-firewall.sh" >/dev/null 2>&1 || true
+    fi
+  fi
+  if [[ "${COMPOSE_RECOVER_MODE:-}" != "core-dns" ]] \
     && [[ "${ENABLE_DOZZLE:-true}" == "true" ]] \
     && [[ ! -f "${REMOTE_DIR}/data/dozzle/users.yml" ]]; then
     echo "[recover-compose] dozzle users.yml eksik — setup-dozzle" >&2
@@ -168,7 +179,7 @@ mapfile -t down_svc < <(comm -23 \
 up_profiles=("${profiles[@]}")
 if [[ "${COMPOSE_RECOVER_MODE:-}" == "core-dns" ]]; then
   core_recreate=(unbound adguard)
-  [[ "${ENABLE_CADDY:-true}" == "true" ]] && core_recreate+=(homepage caddy)
+  [[ "${ENABLE_CADDY:-true}" == "true" ]] && core_recreate+=(glance caddy)
   mapfile -t down_svc < <(printf '%s\n' "${down_svc[@]}" \
     | grep -xF -f <(printf '%s\n' "${core_recreate[@]}") || true)
   up_profiles=(--profile caddy)
@@ -178,6 +189,10 @@ if (( ${#down_svc[@]} == 0 )); then
   finish_ok
 fi
 echo "[recover-compose] son care force-recreate: ${down_svc[*]}" >&2
+if printf '%s\n' "${down_svc[@]}" | grep -qx adguard; then
+  dns_fallback stop --force
+  _dns_force_stopped=1
+fi
 if timeout "${COMPOSE_UP_TIMEOUT:-90}" docker compose --env-file ../.env "${up_profiles[@]}" \
   up -d --force-recreate --no-deps "${down_svc[@]}"; then
   finish_ok

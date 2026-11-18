@@ -42,9 +42,14 @@ def _dns_query_ms(server: str = "127.0.0.1", name: str = "example.com", timeout:
 
 def _http_ms(url: str, timeout: float = 3.0) -> int:
     t0 = time.perf_counter()
-    req = urllib.request.Request(url, method="GET", headers={"User-Agent": "pi-gateway-probe"})
+    req = urllib.request.Request(
+        url,
+        method="GET",
+        headers={"User-Agent": "pi-gateway-probe", "Connection": "close"},
+    )
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
+        with opener.open(req, timeout=timeout) as resp:  # noqa: S310
             resp.read(64)
         return max(int((time.perf_counter() - t0) * 1000), 0)
     except urllib.error.HTTPError as exc:

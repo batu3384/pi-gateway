@@ -3,19 +3,20 @@
 set -euo pipefail
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/env-file.sh
+source "$SCRIPT_DIR/../lib/env-file.sh"
+read_remote_dotenv || { echo "[export-state] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 METRICS_DIR="${PI_GATEWAY_METRICS_DIR:-/var/lib/pi-gateway/metrics}"
 METRICS_FILE="${METRICS_DIR}/pi_gateway.prom"
 STATE_JSON="${PI_GATEWAY_STATE_JSON:-/var/lib/pi-gateway/state.json}"
+PUBLIC_STATE_JSON="${PI_GATEWAY_PUBLIC_STATE_JSON:-$(dirname "$STATE_JSON")/public/state.json}"
 OFFSITE_MARKER="${OFFSITE_MARKER:-/var/lib/pi-gateway/last-offsite-backup}"
 DRILL_MARKER="${DRILL_MARKER:-/var/lib/pi-gateway/last-backup-restore-drill}"
 DRILL_FAILURE_MARKER="${DRILL_FAILURE_MARKER:-/var/lib/pi-gateway/last-backup-restore-drill-failure}"
 OFFSITE_COPY_MARKER="${OFFSITE_COPY_MARKER:-/var/lib/pi-gateway/last-restic-offsite-copy}"
 COVERAGE_STATE_PATH="${ADGUARD_DNS_COVERAGE_STATE_PATH:-/var/lib/pi-gateway/dns-coverage-state.json}"
-COVERAGE_MAX_AGE_SEC="${ADGUARD_DNS_COVERAGE_STATE_MAX_AGE_SEC:-600}"
-[[ "$COVERAGE_MAX_AGE_SEC" =~ ^[0-9]+$ ]] || COVERAGE_MAX_AGE_SEC=600
-# shellcheck source=../lib/env-file.sh
-source "$SCRIPT_DIR/../lib/env-file.sh"
-read_remote_dotenv || { echo "[export-state] HATA: .env dotenv parser hatasi" >&2; exit 1; }
+COVERAGE_MAX_AGE_SEC="${ADGUARD_DNS_COVERAGE_STATE_MAX_AGE_SEC:-1200}"
+[[ "$COVERAGE_MAX_AGE_SEC" =~ ^[0-9]+$ ]] || COVERAGE_MAX_AGE_SEC=1200
 STATE_OWNER="${PI_USER:-${SUDO_USER:-${USER:-pi}}}"
 # shellcheck source=../lib/stack-health.sh
 source "$SCRIPT_DIR/../lib/stack-health.sh"
@@ -30,13 +31,13 @@ run_as_needed() {
 
 usage_pct() {
   local mount="$1"
-  df "$mount" 2>/dev/null | awk 'NR==2 {gsub(/%/,""); print $5}' || echo ""
+  df -P "$mount" 2>/dev/null | awk 'NR==2 {gsub(/%/,""); print $5}' || echo ""
 }
 
 file_age_days() {
   local path="$1"
   [[ -f "$path" ]] || { echo -1; return 0; }
-  python3 -c "import os,time; print(int((time.time()-os.path.getmtime('$path'))//86400))"
+  python3 -c 'import os,sys,time; print(int((time.time()-os.path.getmtime(sys.argv[1]))//86400))' "$path"
 }
 
 degraded=0
@@ -183,22 +184,55 @@ cat >>"$tmp" <<EOF
 pi_gateway_ipv6_rdnss_configured ${rdnss_configured}
 EOF
 
-run_as_needed mkdir -p "$METRICS_DIR" "$(dirname "$STATE_JSON")" 2>/dev/null || true
-if [[ "$(id -u)" -eq 0 ]]; then
-  install -m 644 "$tmp" "$METRICS_FILE"
-else
-  run_as_needed install -m 644 "$tmp" "$METRICS_FILE"
-fi
+_owner_of() {
+  stat -c '%U' "$1" 2>/dev/null || stat -f '%Su' "$1" 2>/dev/null || true
+}
+
+_ensure_state_dir() {
+  local dir="$1" mode="$2"
+  [[ -d "$dir" ]] || run_as_needed mkdir -p "$dir" 2>/dev/null || true
+  if [[ -d "$dir" ]] && { [[ "$(_owner_of "$dir")" != "$STATE_OWNER" ]] || [[ ! -w "$dir" ]]; }; then
+    run_as_needed chown "${STATE_OWNER}:${STATE_OWNER}" "$dir" 2>/dev/null || true
+    [[ -n "$mode" ]] && run_as_needed chmod "$mode" "$dir" 2>/dev/null || true
+  fi
+}
+
+_install_state_file() {
+  local src="$1" dst="$2" dir
+  dir="$(dirname "$dst")"
+  if [[ "$(id -u)" -eq 0 ]] || { [[ -d "$dir" && -w "$dir" ]] && [[ ! -e "$dst" || -w "$dst" ]]; }; then
+    install -m 644 "$src" "$dst"
+  else
+    run_as_needed install -m 644 "$src" "$dst"
+  fi
+  if [[ -e "$dst" && "$(_owner_of "$dst")" != "$STATE_OWNER" ]]; then
+    run_as_needed chown "${STATE_OWNER}:${STATE_OWNER}" "$dst" 2>/dev/null || true
+  fi
+}
+
+PUBLIC_DIR="$(dirname "$PUBLIC_STATE_JSON")"
+_ensure_state_dir "$METRICS_DIR" 775
+_ensure_state_dir "$(dirname "$STATE_JSON")" ""
+_ensure_state_dir "$PUBLIC_DIR" 755
+_install_state_file "$tmp" "$METRICS_FILE"
 rm -f "$tmp"
 
 json_tmp="$(mktemp)"
 python3 - "$json_tmp" "$STATE_JSON" "$ts" "$degraded" "$ssd_ok" "$docker_ssd" "${root_pct:-}" "${ssd_pct:-}" \
   "$offsite_age" "$drill_age" "$offsite_copy_age" "$probe_json" "$COVERAGE_STATE_PATH" "$COVERAGE_MAX_AGE_SEC" \
-  "$rdnss_configured" "$drill_failed" "$containerd_ssd" <<'PY'
+  "$rdnss_configured" "$drill_failed" "$containerd_ssd" "$METRICS_DIR" <<'PY'
 import json, sys
 import time
 from datetime import datetime
 tmp, path = sys.argv[1], sys.argv[2]
+prior = {}
+try:
+    with open(path, encoding="utf-8") as fh:
+        loaded = json.load(fh)
+        if isinstance(loaded, dict):
+            prior = loaded
+except (OSError, TypeError, ValueError, json.JSONDecodeError):
+    prior = {}
 extra = {}
 raw = sys.argv[12] if len(sys.argv) > 12 else "{}"
 try:
@@ -239,6 +273,8 @@ data = {
     "ipv6_rdnss_configured": int(sys.argv[15]),
     "backup_restore_drill_failed": int(sys.argv[16]),
 }
+if "last_ssd_incident" in prior and prior["last_ssd_incident"] is not None:
+    data["last_ssd_incident"] = prior["last_ssd_incident"]
 if coverage_status != "unknown":
     data["dns_coverage_percent"] = int(coverage.get("coverage_percent", -1))
     data["dns_coverage_active_devices"] = int(coverage.get("active_devices", -1))
@@ -248,21 +284,79 @@ if isinstance(extra, dict):
     for k in ("dns_latency_ms", "panel_latency_ms", "hosts_online", "who_home"):
         if k in extra:
             data[k] = extra[k]
+
+def _prom_val(path, metric_prefix):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            for raw in fh:
+                line = raw.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if line.startswith(metric_prefix):
+                    return line.split()[-1], line
+    except OSError:
+        pass
+    return None, ""
+
+metrics_dir = sys.argv[18] if len(sys.argv) > 18 else ""
+if metrics_dir:
+    import os, re
+    v, _ = _prom_val(os.path.join(metrics_dir, "pi_gateway_speedtest.prom"), "pi_gateway_isp_download_mbps ")
+    if v is not None:
+        try:
+            data["isp_download_mbps"] = round(float(v), 1)
+        except ValueError:
+            pass
+    v, _ = _prom_val(os.path.join(metrics_dir, "pi_gateway_speedtest.prom"), "pi_gateway_isp_ping_ms ")
+    if v is not None:
+        try:
+            data["isp_ping_ms"] = int(round(float(v)))
+        except ValueError:
+            pass
+    v, full = _prom_val(os.path.join(metrics_dir, "pi_gateway_ibb.prom"), "pi_gateway_ibb_hki{")
+    if v is not None:
+        try:
+            data["ibb_hki"] = int(round(float(v)))
+        except ValueError:
+            pass
+        m = re.search(r'station="([^"]*)"', full)
+        if m:
+            data["ibb_station"] = m.group(1)
+    v, _ = _prom_val(os.path.join(metrics_dir, "pi_gateway_adguard.prom"), "pi_gateway_adguard_blocked_ratio ")
+    if v is not None:
+        try:
+            data["adguard_blocked_pct"] = round(float(v) * 100.0, 1)
+        except ValueError:
+            pass
+
+try:
+    with open("/sys/class/thermal/thermal_zone0/temp", encoding="utf-8") as fh:
+        data["cpu_temp_c"] = round(int(fh.read().strip()) / 1000.0, 1)
+except (OSError, ValueError):
+    pass
+
+try:
+    mem = {}
+    with open("/proc/meminfo", encoding="utf-8") as fh:
+        for line in fh:
+            parts = line.split()
+            if len(parts) >= 2 and parts[0].rstrip(":") in ("MemTotal", "MemAvailable"):
+                mem[parts[0].rstrip(":")] = int(parts[1])
+    if mem.get("MemTotal", 0) > 0 and "MemAvailable" in mem:
+        avail = mem["MemAvailable"]
+        total = mem["MemTotal"]
+        data["ram_avail_mib"] = avail // 1024
+        data["ram_used_pct"] = int(round((total - avail) * 100.0 / total))
+except (OSError, ValueError):
+    pass
+
 with open(tmp, "w", encoding="utf-8") as f:
     json.dump(data, f, indent=2)
     f.write("\n")
 PY
-if [[ "$(id -u)" -eq 0 ]]; then
-  install -m 644 "$json_tmp" "$STATE_JSON"
-else
-  run_as_needed install -m 644 "$json_tmp" "$STATE_JSON"
-fi
+_install_state_file "$json_tmp" "$STATE_JSON"
+_install_state_file "$json_tmp" "$PUBLIC_STATE_JSON"
 rm -f "$json_tmp"
-if [[ "$(id -u)" -eq 0 ]]; then
-  chown "${STATE_OWNER}:${STATE_OWNER}" "$STATE_JSON" "$METRICS_FILE" 2>/dev/null || true
-else
-  run_as_needed chown "${STATE_OWNER}:${STATE_OWNER}" "$STATE_JSON" "$METRICS_FILE" 2>/dev/null || true
-fi
 _agh_export="${SCRIPT_DIR}/export-adguard-metrics.sh"
 [[ -x "$_agh_export" ]] || _agh_export="${REMOTE_DIR}/scripts/pi/export-adguard-metrics.sh"
 if [[ -x "$_agh_export" ]]; then

@@ -90,10 +90,11 @@ if [[ "${DOCKER_OK}" == "1" ]] && [[ "$STACK_AUTO_RECOVER" == "true" ]] && {
   fi
 fi
 if [[ "${DOCKER_INVENTORY}" == "1" ]]; then
-if ! docker ps --format '{{.Names}}' | grep -q '^unbound$'; then
+_DOCKER_PS="$(docker ps --format '{{.Names}} {{.Status}}' 2>/dev/null || true)"
+if ! grep -qE '^unbound ' <<<"$_DOCKER_PS"; then
   note_fail "container unbound down"
 fi
-if ! docker ps --format '{{.Names}}' | grep -q '^adguard$'; then
+if ! grep -qE '^adguard ' <<<"$_DOCKER_PS"; then
   note_fail "container adguard down"
 fi
 if storage_degraded; then
@@ -101,7 +102,7 @@ if storage_degraded; then
   [[ -d "${REMOTE_DIR}/data" && ! -L "${REMOTE_DIR}/data" ]] || note_fail "storage-degraded-data-missing"
 else
   if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
-    if ! docker ps --format '{{.Names}}' | grep -q '^caddy$'; then
+    if ! grep -qE '^caddy ' <<<"$_DOCKER_PS"; then
       note_fail "container caddy down"
     fi
     if ! stack_gateway_ok; then
@@ -128,37 +129,19 @@ else
   optional_down() {
     local name="$1"
     # "Restarting" docker ps'te görünür — crash-loop (dozzle+proxy) false-green olmasin
-    docker ps --format '{{.Names}} {{.Status}}' | grep -qE "^${name} Up" \
+    grep -qE "^${name} Up" <<<"$_DOCKER_PS" \
       || note_fail "optional-${name}-down"
   }
-  optional_prometheus_ok() {
-    if docker ps --format '{{.Names}}' | grep -q '^prometheus$' \
-      && curl -fsS --max-time 3 http://127.0.0.1:9090/-/ready >/dev/null 2>&1; then
+  optional_victoriametrics_ok() {
+    if grep -qE '^victoriametrics Up' <<<"$_DOCKER_PS" \
+      && curl -fsS --max-time 3 http://127.0.0.1:9090/health >/dev/null 2>&1; then
       return 0
     fi
-    if [[ "${PROMETHEUS_AUTO_HEAL:-true}" == "true" ]]; then
-      local repair="${SCRIPT_DIR}/repair-prometheus-tsdb.sh"
-      local plogs pstarted
-      if [[ -x "$repair" ]]; then
-        pstarted="$(docker inspect -f '{{.State.StartedAt}}' prometheus 2>/dev/null || true)"
-        if [[ -n "$pstarted" ]]; then
-          plogs="$(docker logs prometheus --since "$pstarted" 2>&1 || true)"
-        else
-          plogs="$(docker logs prometheus --since 5m 2>&1 || true)"
-        fi
-        if echo "$plogs" | grep -qE 'invalid checksum|opening storage failed' \
-          || { echo "$plogs" | grep -q 'WAL truncation' \
-            && echo "$plogs" | grep -q 'compaction failed'; }; then
-          logger -t "$LOG_TAG" "prometheus TSDB — auto-heal"
-          if REMOTE_DIR="$REMOTE_DIR" NOTIFY_REPAIR=1 bash "$repair"; then
-            curl -fsS --max-time 3 http://127.0.0.1:9090/-/ready >/dev/null 2>&1 && return 0
-          fi
-        fi
-      fi
-    fi
-    note_fail "optional-prometheus-down"
+    note_fail "optional-victoriametrics-down"
   }
-  [[ "${ENABLE_N8N:-true}" == "true" ]] && optional_down n8n
+  [[ "${ENABLE_CADDY:-true}" == "true" ]] && optional_down glance
+  [[ "${ENABLE_GATUS:-true}" == "true" ]] && optional_down gatus
+  [[ "${ENABLE_N8N:-false}" == "true" ]] && optional_down n8n
   optional_netalertx_ok() {
     local heal="${REMOTE_DIR}/scripts/pi/ensure-netalert-db-access.sh"
     local ignore="${REMOTE_DIR}/config/netalertx/ignore_plugin"
@@ -167,7 +150,7 @@ else
       logger -t "$LOG_TAG" "netalertx ignore_plugin yok — compose dizin bind eder"
       note_fail "optional-netalertx-ignore-plugin"
     fi
-    if docker ps --format '{{.Names}}' | grep -q '^netalertx$'; then
+    if grep -qE '^netalertx ' <<<"$_DOCKER_PS"; then
       _na_started="$(docker inspect -f '{{.State.StartedAt}}' netalertx 2>/dev/null || true)"
       # Eski log (ayni container ID) her tick stop+start yapmasin
       if [[ -n "$_na_started" ]] \
@@ -191,13 +174,21 @@ else
   }
   [[ "${ENABLE_NETALERTX:-true}" == "true" ]] && optional_netalertx_ok
   [[ "${ENABLE_DOZZLE:-true}" == "true" ]] && optional_down dozzle
-  [[ "${ENABLE_MONITORING:-true}" == "true" ]] && optional_prometheus_ok
+  [[ "${ENABLE_CROWDSEC:-true}" == "true" ]] && optional_down crowdsec
+  [[ "${ENABLE_MONITORING:-true}" == "true" ]] && optional_victoriametrics_ok
   [[ "${ENABLE_MONITORING:-true}" == "true" ]] && optional_down grafana
   [[ "${ENABLE_MONITORING:-true}" == "true" ]] && optional_down node-exporter
+  if [[ "${HERMES_TELEGRAM_GATEWAY:-false}" == "true" ]] \
+    && systemctl list-unit-files hermes-gateway.service 2>/dev/null | grep -q 'hermes-gateway.service'; then
+    systemctl is-active --quiet hermes-gateway 2>/dev/null || note_fail "optional-hermes-gateway-down"
+  fi
 fi
 fi
 if ! dig +time=2 +tries=1 @127.0.0.1 -p "${UNBOUND_PORT}" cloudflare.com A >/dev/null 2>&1; then
-  note_fail "unbound:${UNBOUND_PORT}"
+  sleep 1
+  if ! dig +time=2 +tries=1 @127.0.0.1 -p "${UNBOUND_PORT}" cloudflare.com A >/dev/null 2>&1; then
+    note_fail "unbound:${UNBOUND_PORT}"
+  fi
 elif ! unbound_dnssec_ad_ok "${UNBOUND_PORT}"; then
   note_fail "unbound-dnssec-ad"
 fi
@@ -262,7 +253,8 @@ adguard_dns_ok() {
   fi
 }
 if ! adguard_dns_ok; then
-  if [[ "${ADGUARD_AUTO_HEAL:-false}" == "true" ]]; then
+  sleep 1
+  if ! adguard_dns_ok && [[ "${ADGUARD_AUTO_HEAL:-false}" == "true" ]]; then
     logger -t "$LOG_TAG" "adguard drift — auto-heal (light)"
     if ! REMOTE_DIR="$REMOTE_DIR" bash "$(_pi_home_script ensure-adguard-blocking.sh)" --fix-light; then
       logger -t "$LOG_TAG" "WARN adguard auto-heal (light) basarisiz"
@@ -338,7 +330,7 @@ ttl_min_ok = int(d.get('cache_ttl_min') or 0) == int('${ADGUARD_CACHE_TTL_MIN:-6
 aaaa_want = '${ADGUARD_AAAA_DISABLED:-true}'.lower() in ('true','1','yes')
 aaaa_ok = bool(d.get('disable_ipv6')) is aaaa_want
 fb = [str(u) for u in (d.get('fallback_dns') or [])]
-fb_ok = 'tls://dns.adguard-dns.com' in fb and 'tls://9.9.9.9' in fb
+fb_ok = 'tls://1.1.1.2' in fb and 'tls://9.9.9.9' in fb
 print('1' if udp_ok and tcp_off and ptr_ok and ttl_ok and v4_ok and v6_ok and opt_ok and to_ok and ttl_min_ok and aaaa_ok and fb_ok else '0')
 " 2>/dev/null || echo 0)"
     if [[ -f "$_filter_in_progress" ]]; then
@@ -393,7 +385,7 @@ print(sum((f.get('rules_count') or 0) for f in d.get('filters',[])))
           || note_fail "adguard-filter-rules-low(${rules:-0})"
       fi
     fi
-    [[ "${rewrites:-0}" -ge "${ADGUARD_MIN_REWRITES:-8}" ]] || note_fail "adguard-rewrites-low(${rewrites:-0})"
+    [[ "${rewrites:-0}" -ge "${ADGUARD_MIN_REWRITES:-7}" ]] || note_fail "adguard-rewrites-low(${rewrites:-0})"
     [[ "$dns_ok" == "1" ]] || {
       if [[ "${ADGUARD_DNS_AUTO_HEAL:-true}" == "true" ]]; then
         logger -t "$LOG_TAG" "adguard-dns-config-drift — auto-heal (dns)"
@@ -416,7 +408,7 @@ ttl_min_ok = int(d.get('cache_ttl_min') or 0) == int('${ADGUARD_CACHE_TTL_MIN:-6
 aaaa_want = '${ADGUARD_AAAA_DISABLED:-true}'.lower() in ('true','1','yes')
 aaaa_ok = bool(d.get('disable_ipv6')) is aaaa_want
 fb = [str(u) for u in (d.get('fallback_dns') or [])]
-fb_ok = 'tls://dns.adguard-dns.com' in fb and 'tls://9.9.9.9' in fb
+fb_ok = 'tls://1.1.1.2' in fb and 'tls://9.9.9.9' in fb
 print('1' if udp_ok and tcp_off and ptr_ok and ttl_ok and v4_ok and v6_ok and opt_ok and to_ok and ttl_min_ok and aaaa_ok and fb_ok else '0')
 " 2>/dev/null || echo 0)"
       fi
@@ -427,6 +419,19 @@ print('1' if udp_ok and tcp_off and ptr_ok and ttl_ok and v4_ok and v6_ok and op
   fi
   rm -f "$COOKIE"
 fi
+_mtime_sec() {
+  stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0
+}
+_age_units() {
+  local path="$1" unit="$2" now mt diff
+  now="$(date +%s)"
+  mt="$(_mtime_sec "$path")"
+  [[ "$mt" =~ ^[0-9]+$ ]] || mt=0
+  diff=$(( now - mt ))
+  (( diff < 0 )) && diff=0
+  echo $(( diff / unit ))
+}
+
 # Offsite backup SLA (SSD restic alone ≠ 3-2-1). Marker: make backup-pull
 # Degraded: data disk yok — SLA fail systemd spam olmasin
 if storage_degraded; then
@@ -442,7 +447,7 @@ elif [[ "${ENABLE_RESTIC:-true}" == "true" ]]; then
         slo_note "offsite-backup-missing"
       fi
     else
-      age_days="$(python3 -c "import os,time; print(int((time.time()-os.path.getmtime('$marker'))//86400))")"
+      age_days="$(_age_units "$marker" 86400)"
       if (( age_days > max_age )); then
         if [[ "${WEAK_BACKUP_OK:-}" == "yes" ]]; then
           logger -t "$LOG_TAG" "WARN offsite-backup-stale(${age_days}d) WEAK_BACKUP_OK=yes"
@@ -464,7 +469,7 @@ if [[ "${ENABLE_RESTIC:-true}" == "true" ]] && ! storage_degraded; then
     if [[ -z "$latest_local" ]]; then
       slo_note "local-backup-missing"
     else
-      local_age_h="$(python3 -c "import os,time; print(int((time.time()-os.path.getmtime('$latest_local'))//3600))")"
+      local_age_h="$(_age_units "$latest_local" 3600)"
       if (( local_age_h > local_max_h )); then
         slo_note "local-backup-stale(${local_age_h}h)"
       fi
@@ -480,7 +485,7 @@ if [[ "${RESTIC_OFFSITE_ENABLED:-false}" == "true" ]] && [[ "${ENABLE_RESTIC:-tr
     if [[ ! -f "$cloud_marker" ]]; then
       slo_note "restic-offsite-missing"
     else
-      cloud_age="$(python3 -c "import os,time; print(int((time.time()-os.path.getmtime('$cloud_marker'))//86400))")"
+      cloud_age="$(_age_units "$cloud_marker" 86400)"
       if (( cloud_age > cloud_max )); then
         slo_note "restic-offsite-stale(${cloud_age}d)"
       fi
@@ -503,7 +508,7 @@ if [[ "$drill_max" != "0" ]] && [[ "${ENABLE_RESTIC:-true}" == "true" ]] && ! st
       slo_note "backup-restore-drill-missing"
     fi
   else
-    drill_age="$(python3 -c "import os,time; print(int((time.time()-os.path.getmtime('$drill_marker'))//86400))")"
+    drill_age="$(_age_units "$drill_marker" 86400)"
     if (( drill_age > drill_max )); then
       if [[ "${WEAK_BACKUP_OK:-}" == "yes" ]]; then
         logger -t "$LOG_TAG" "WARN backup-restore-drill-stale(${drill_age}d) WEAK_BACKUP_OK=yes"
@@ -572,7 +577,7 @@ health_is_dns_only_fail() {
 health_is_slo_fail() {
   local f="$1"
   case "$f" in
-    offsite-*|restic-offsite-*|backup-restore-drill*)
+    offsite-*|local-backup-*|restic-offsite-*|backup-restore-drill*)
       return 0
       ;;
     *)
@@ -589,7 +594,7 @@ elif [[ ${#FAILURES[@]} -gt 0 ]]; then
   exit_code=0
   for f in "${FAILURES[@]}"; do
     case "$f" in
-      optional-*|offsite-*|restic-offsite-*|backup-restore-drill*|bulletin-*|hermes-session-*|hermes-token-*) ;;
+      optional-*|offsite-*|local-backup-*|restic-offsite-*|backup-restore-drill*|bulletin-*|hermes-session-*|hermes-token-*) ;;
       *) exit_code=1; break ;;
     esac
   done
@@ -617,15 +622,20 @@ else
   has_slo=0
   has_ops_slo=0
   _monitoring_details=()
+  _optional_details=()
   for f in "${FAILURES[@]}"; do
     case "$f" in
       ssd-unmounted|ssd-unhealthy|storage-degraded*|data-ssd-symlink*|data-native-missing)
         has_ssd=1
         ;;
+      optional-victoriametrics-down|optional-grafana-down|optional-node-exporter-down)
+        _monitoring_details+=("$f")
+        ;;
       optional-*)
         has_optional=1
+        _optional_details+=("$f")
         ;;
-      offsite-*|restic-offsite-*|backup-restore-drill*)
+      offsite-*|local-backup-*|restic-offsite-*|backup-restore-drill*)
         has_slo=1
         ;;
       bulletin-*|hermes-session-*|hermes-token-*)
@@ -633,11 +643,6 @@ else
         ;;
       *)
         has_core=1
-        ;;
-    esac
-    case "$f" in
-      optional-prometheus-down|optional-grafana-down|optional-node-exporter-down)
-        _monitoring_details+=("$f")
         ;;
     esac
   done
@@ -651,7 +656,7 @@ else
   elif [[ "$has_core" -eq 1 ]]; then
     logger -t "$LOG_TAG" "core fail — Telegram OnFailure (health-dns yok)"
   elif [[ "$has_optional" -eq 1 ]]; then
-    notify_optional_warn "$host" "$details"
+    notify_optional_warn "$host" "${_optional_details[*]}"
   else
     logger -t "$LOG_TAG" "OK dns stack healthy"
     notify_optional_recovered || true
@@ -716,15 +721,21 @@ INODE_WARN_PCT="${INODE_WARN_PCT:-80}"
 MEM_WARN_MB="${MEM_WARN_MB:-128}"
 for mount in / /mnt/ssd; do
   if [[ -d "$mount" ]]; then
+    _mount_bad=0
     usage="$(df -P "$mount" 2>/dev/null | awk 'NR==2 {gsub(/%/,""); print $5}')"
     if [[ -n "${usage:-}" && "$usage" =~ ^[0-9]+$ ]] && (( 10#$usage >= DISK_WARN_PCT )); then
       notify_disk_warn "$mount" "${usage}%"
       logger -t "$LOG_TAG" "WARN disk ${mount} at ${usage}%"
+      _mount_bad=1
     fi
     iusage="$(df -iP "$mount" 2>/dev/null | awk 'NR==2 {gsub(/%/,""); print $5}')"
     if [[ -n "${iusage:-}" && "$iusage" =~ ^[0-9]+$ ]] && (( 10#$iusage >= INODE_WARN_PCT )); then
       notify_disk_warn "$mount" "inode ${iusage}%" "Inode doluluk: ${mount}"
       logger -t "$LOG_TAG" "WARN inode ${mount} at ${iusage}%"
+      _mount_bad=1
+    fi
+    if [[ "$_mount_bad" -eq 0 ]] && [[ -n "${usage:-}" && "$usage" =~ ^[0-9]+$ ]]; then
+      notify_disk_ok "$mount" || true
     fi
     if [[ "$mount" == "/" ]] && [[ -n "${usage:-}" && "$usage" =~ ^[0-9]+$ ]] && (( 10#$usage >= DISK_PRUNE_PCT )); then
       REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/prune-sd-space.sh" || \
@@ -733,9 +744,13 @@ for mount in / /mnt/ssd; do
   fi
 done
 mem_avail_mb="$(awk '/^MemAvailable:/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || true)"
-if [[ -n "${mem_avail_mb:-}" && "$mem_avail_mb" =~ ^[0-9]+$ ]] && (( 10#$mem_avail_mb < MEM_WARN_MB )); then
-  notify_disk_warn "memory" "MemAvailable ${mem_avail_mb}MiB (esik ${MEM_WARN_MB})" "Bellek düşük"
-  logger -t "$LOG_TAG" "WARN mem available ${mem_avail_mb}MiB"
+if [[ -n "${mem_avail_mb:-}" && "$mem_avail_mb" =~ ^[0-9]+$ ]]; then
+  if (( 10#$mem_avail_mb < MEM_WARN_MB )); then
+    notify_memory_warn "MemAvailable ${mem_avail_mb} MiB (eşik ${MEM_WARN_MB} MiB)"
+    logger -t "$LOG_TAG" "WARN mem available ${mem_avail_mb}MiB"
+  else
+    notify_memory_ok || true
+  fi
 fi
 # Coverage is evidence, not core DNS health; warn mode keeps expected ZTE DNS2 degraded state visible.
 _coverage_audit="${REMOTE_DIR}/scripts/pi/audit-dns-coverage.sh"
@@ -766,8 +781,10 @@ if [[ -x "$_card" ]]; then
     REMOTE_DIR="$REMOTE_DIR" bash "$_card" >/dev/null 2>&1 \
     || logger -t "$LOG_TAG" "WARN telegram-status-card failed"
 fi
-if [[ -x "$SCRIPT_DIR/push-slo-heartbeat.sh" ]]; then
-  REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/push-slo-heartbeat.sh" >/dev/null 2>&1 \
+_slo="${SCRIPT_DIR}/push-slo-heartbeat.sh"
+[[ -x "$_slo" ]] || _slo="${REMOTE_DIR}/scripts/pi/push-slo-heartbeat.sh"
+if [[ -x "$_slo" ]]; then
+  REMOTE_DIR="$REMOTE_DIR" bash "$_slo" >/dev/null 2>&1 \
     || logger -t "$LOG_TAG" "WARN SLO heartbeat push failed"
 fi
 # Boot downtime hesabı — her tick (fail olsa da canlılık)

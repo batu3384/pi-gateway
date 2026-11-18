@@ -5,8 +5,9 @@ set -euo pipefail
 compose_profiles() {
   local -a profiles=()
   [[ "${ENABLE_CADDY:-true}" == "true" ]] && profiles+=(--profile caddy)
+  [[ "${ENABLE_GATUS:-true}" == "true" ]] && profiles+=(--profile gatus)
   [[ "${ENABLE_DOZZLE:-true}" == "true" ]] && profiles+=(--profile dozzle)
-  [[ "${ENABLE_N8N:-true}" == "true" ]] && profiles+=(--profile n8n)
+  [[ "${ENABLE_N8N:-false}" == "true" ]] && profiles+=(--profile n8n)
   [[ "${ENABLE_NETALERTX:-true}" == "true" ]] && profiles+=(--profile netalert)
   [[ "${ENABLE_CROWDSEC:-true}" == "true" ]] && profiles+=(--profile crowdsec)
   [[ -n "${CLOUDFLARE_TUNNEL_TOKEN:-}" ]] && profiles+=(--profile cloudflare)

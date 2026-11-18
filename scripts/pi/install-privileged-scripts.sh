@@ -25,12 +25,26 @@ SCRIPTS=(
   scripts/pi/setup-ssd-data.sh
   scripts/lib/stack-health.sh
   scripts/lib/env-file.sh
+  scripts/lib/unified-login.sh
   scripts/lib/modem_inventory.py
   scripts/lib/ssd-alive.sh
+  scripts/lib/ssd-usb-metrics.py
+  scripts/lib/zte-h3600p.py
   scripts/lib/compose-profiles.sh
   scripts/pi/export-gateway-state.sh
   scripts/pi/export-adguard-metrics.sh
+  scripts/pi/push-slo-heartbeat.sh
+  scripts/pi/repair-docker-network-store.sh
+  scripts/pi/repair-post-ssd-recovery.sh
+  scripts/pi/repair-adguard-bbolt.sh
+  scripts/pi/setup-firewall.sh
+  scripts/pi/setup-dozzle.sh
+  scripts/pi/fix-config-perms.sh
+  scripts/pi/ensure-netalert-db-access.sh
+  scripts/pi/wait-adguard-dns.sh
+  scripts/pi/sync-modem-inventory.sh
   scripts/lib/adguard-metrics.py
+  scripts/lib/sync-adguard-clients.py
   scripts/lib/adguard-filters.py
   scripts/lib/unbound-dnssec.sh
   scripts/lib/gateway-probes.py
@@ -50,6 +64,8 @@ SCRIPTS=(
   scripts/pi/ssd-fsck.sh
   scripts/pi/ssd-health.sh
   scripts/pi/prune-sd-space.sh
+  scripts/pi/setup-tailscale-panel-ports.sh
+  scripts/pi/sync-crowdsec-ufw.sh
 )
 
 run_root() {
@@ -62,9 +78,25 @@ run_root() {
 
 run_root mkdir -p "$LIB_DIR/scripts/pi" "$LIB_DIR/scripts/lib" /run/pi-gateway /usr/local/sbin
 _pi_state_user="${SUDO_USER:-${USER:-pi}}"
-run_root mkdir -p /var/lib/pi-gateway
-run_root chown "${_pi_state_user}:${_pi_state_user}" /var/lib/pi-gateway
-run_root chmod 775 /var/lib/pi-gateway
+if [[ "$_pi_state_user" == "root" && "$REMOTE_DIR" =~ /home/([^/]+)/ ]]; then
+  _pi_state_user="${BASH_REMATCH[1]}"
+fi
+run_root mkdir -p /var/lib/pi-gateway /var/lib/pi-gateway/metrics /var/lib/pi-gateway/public
+run_root chown "${_pi_state_user}:${_pi_state_user}" \
+  /var/lib/pi-gateway /var/lib/pi-gateway/metrics /var/lib/pi-gateway/public
+run_root chmod 775 /var/lib/pi-gateway /var/lib/pi-gateway/metrics
+run_root chmod 755 /var/lib/pi-gateway/public
+if [[ ! -f /var/lib/pi-gateway/public/state.json ]]; then
+  _pub_tmp="$(mktemp)"
+  if [[ -f /var/lib/pi-gateway/state.json ]]; then
+    cp /var/lib/pi-gateway/state.json "$_pub_tmp"
+  else
+    printf '{"ts":"","ssd_mount_healthy":1}\n' >"$_pub_tmp"
+  fi
+  run_root install -o "$_pi_state_user" -g "$_pi_state_user" -m 644 \
+    "$_pub_tmp" /var/lib/pi-gateway/public/state.json
+  rm -f "$_pub_tmp"
+fi
 
 install_verified() {
   local src="$1" dst="$2" before after
@@ -149,14 +181,26 @@ install_unit() {
 
 for unit in \
   pi-gateway-health.service pi-gateway-health.timer \
+  pi-gateway-health-failure.service \
   pi-gateway-container-watchdog.service pi-gateway-container-watchdog.timer \
-  pi-data-symlink.timer \
-  pi-gateway-dns-fallback.service
+  pi-data-symlink.timer pi-data-symlink-repair.service \
+  pi-gateway-dns-fallback.service \
+  pi-gateway-ts-panel-ports.service \
+  pi-ssd-data.service
 do
   install_unit "$unit"
 done
+run_root systemctl disable pi-gateway-dns-fallback.service 2>/dev/null || true
 run_root systemctl daemon-reload
 run_root systemctl reset-failed pi-gateway-dns-fallback.service 2>/dev/null || true
 run_root systemctl restart pi-gateway-health.timer \
   pi-gateway-container-watchdog.timer pi-data-symlink.timer 2>/dev/null || true
 log "OK systemd health/watchdog/fallback units"
+
+if [[ -f "${REMOTE_DIR}/host/udev/99-pi-gateway-jmicron.rules" ]]; then
+  run_root install -o root -g root -m 644 \
+    "${REMOTE_DIR}/host/udev/99-pi-gateway-jmicron.rules" \
+    /etc/udev/rules.d/99-pi-gateway-jmicron.rules
+  run_root udevadm control --reload-rules 2>/dev/null || true
+  log "OK udev 99-pi-gateway-jmicron.rules"
+fi
