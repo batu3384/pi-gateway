@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# AdGuard DNS kritik yol: bekle -> upstream/PTR -> filtreler (+ rewrite)
+# AdGuard DNS kritik yol: bekle -> upstream/PTR -> filtreler (sonunda rewrite senkronu dahildir)
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -9,4 +9,3 @@ export REMOTE_DIR
 bash "$SCRIPT_DIR/wait-adguard-dns.sh"
 bash "$SCRIPT_DIR/apply-adguard-dns.sh"
 bash "$SCRIPT_DIR/apply-adguard-filters.sh"
-bash "$SCRIPT_DIR/apply-adguard-rewrites.sh"

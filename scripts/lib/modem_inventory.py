@@ -171,7 +171,11 @@ def modem_device(
     by_ip = inventory.get("devices_by_ip") or {}
     device = by_mac.get(mac_key) if mac_key else None
     if device is None and inventory.get("fresh") and ip_key:
-        device = by_ip.get(ip_key)
+        candidate = by_ip.get(ip_key)
+        if isinstance(candidate, dict):
+            cand_mac = _normalise_mac(candidate.get("mac"))
+            if not mac_key or not cand_mac or cand_mac == mac_key:
+                device = candidate
     return device if isinstance(device, dict) else {}
 
 
@@ -209,6 +213,8 @@ def self_check() -> None:
         assert inventory["fresh"] and device["mac"] == "aa:bb:cc:dd:ee:01"
         assert device["privacy_mac"] is False
         assert modem_name(inventory, ip="192.168.1.50") == "Telefon"
+        # Stale MAC on reused DHCP IP must NOT inherit current IP holder's identity
+        assert not modem_device(inventory, mac="11:22:33:44:55:66", ip="192.168.1.50")
         assert inventory.get("lan_dhcp") == {}
         stale = load_modem_inventory(path, stale_sec=0)
         assert not stale["fresh"] and not modem_device(stale, ip="192.168.1.50")

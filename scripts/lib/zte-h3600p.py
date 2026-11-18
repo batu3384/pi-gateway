@@ -88,11 +88,19 @@ def _page_session_token(html: str) -> str:
     return match.group(1) if match else ""
 
 
-def _para_rows(payload: str) -> list[dict[str, str]]:
+def _safe_xml_fromstring(payload: str) -> ET.Element:
+    """Reject DTD/ENTITY declarations before parsing router XML."""
+    low = payload.lower()
+    if "<!doctype" in low or "<!entity" in low:
+        raise AdapterError("XML DTD/entity forbidden")
     try:
-        root = ET.fromstring(payload)
+        return ET.fromstring(payload)
     except ET.ParseError as exc:
         raise AdapterError(f"XML parse failed: {exc}") from exc
+
+
+def _para_rows(payload: str) -> list[dict[str, str]]:
+    root = _safe_xml_fromstring(payload)
     error = _text(root.findtext(".//IF_ERRORSTR"))
     if error and error.upper() not in SUCCESS_MARKERS:
         raise AdapterError(f"router response error: {error}")
@@ -111,7 +119,12 @@ def _para_rows(payload: str) -> list[dict[str, str]]:
     return rows
 
 
-def parse_lan_dhcp(group_xml: str, relay_xml: str, gateway_ip: str) -> dict[str, Any]:
+def parse_lan_dhcp(
+    group_xml: str,
+    relay_xml: str,
+    gateway_ip: str,
+    static_xml: str = "",
+) -> dict[str, Any]:
     groups = _para_rows(group_xml)
     lan: dict[str, str] = {}
     for row in groups:
@@ -127,6 +140,21 @@ def parse_lan_dhcp(group_xml: str, relay_xml: str, gateway_ip: str) -> dict[str,
         lan = groups[0]
     relays = _para_rows(relay_xml)
     relay = relays[0] if relays else {}
+    static_leases: list[dict[str, str]] = []
+    if static_xml and static_xml.strip():
+        for row in _para_rows(static_xml):
+            mac = normalize_mac(
+                row.get("macaddr") or row.get("mac") or row.get("macaddress", "")
+            )
+            ip = normalize_ip(
+                row.get("ipaddr") or row.get("ip") or row.get("ipaddress", "")
+            )
+            name = clean_device_name(row.get("name") or row.get("hostname", ""))
+            if mac and ip:
+                entry: dict[str, str] = {"mac": mac, "ip": ip}
+                if name:
+                    entry["name"] = name
+                static_leases.append(entry)
     try:
         lease_sec = int(lan.get("leasetime") or 0)
     except ValueError:
@@ -140,6 +168,7 @@ def parse_lan_dhcp(group_xml: str, relay_xml: str, gateway_ip: str) -> dict[str,
         "server_enable": lan.get("enable") in {"1", "true", "yes"},
         "relay_enable": relay.get("dhcprelayenable") in {"1", "true", "yes"},
         "relay_ip": normalize_ip(relay.get("relayip", "")),
+        "static_leases": static_leases,
     }
 
 
@@ -232,10 +261,7 @@ def _normalize_fields(fields: dict[str, Any], source: str) -> dict[str, Any]:
 
 
 def _parse_xml_instances(payload: str, source: str) -> list[dict[str, Any]]:
-    try:
-        root = ET.fromstring(payload)
-    except ET.ParseError as exc:
-        raise AdapterError(f"XML parse failed: {exc}") from exc
+    root = _safe_xml_fromstring(payload)
 
     error = _text(root.findtext(".//IF_ERRORSTR"))
     if error and error.upper() not in SUCCESS_MARKERS:
@@ -326,6 +352,7 @@ class ZteH3600P:
         self.password = password
         self.timeout = timeout
         self.session_token = ""
+        self.logged_in = False
         self.guid = int(time.time() * 1000)
         handlers: list[Any] = [urllib.request.HTTPCookieProcessor(CookieJar())]
         if self.base_url.lower().startswith("https://"):
@@ -402,8 +429,8 @@ class ZteH3600P:
             params={"_type": "loginData", "_tag": "login_token"},
         )
         try:
-            token_root = ET.fromstring(token_payload)
-        except ET.ParseError as exc:
+            token_root = _safe_xml_fromstring(token_payload)
+        except AdapterError as exc:
             raise AdapterError(f"login token XML invalid: {exc}") from exc
         login_token = _text(token_root.text)
         if _local_name(token_root.tag) != "ajax_response_xml_root" or not login_token:
@@ -430,6 +457,7 @@ class ZteH3600P:
         # ZTE panel JS: login_need_refresh=true → reload (success); false → DisplayLoginErrorTip.
         if result.get("login_need_refresh") in (True, 1, "1"):
             self.session_token = _text(result.get("sess_token")) or session_token
+            self.logged_in = True
             try:
                 self.request("/")
             except AdapterError:
@@ -441,6 +469,9 @@ class ZteH3600P:
         raise AdapterError(message)
 
     def logout(self) -> None:
+        if not self.logged_in:
+            return
+        self.logged_in = False
         try:
             self.request(
                 "/",
@@ -496,8 +527,20 @@ class ZteH3600P:
                 "_sessionTOKEN": token,
             },
         )
+        static_xml = ""
+        try:
+            static_xml = self.request(
+                "/",
+                params={
+                    "_type": "menuData",
+                    "_tag": "Localnet_LanMgrIpv4_DHCPStaticRule_lua.lua",
+                    "_sessionTOKEN": token,
+                },
+            )
+        except AdapterError:
+            static_xml = ""
         gateway_ip = os.environ.get("LAN_GATEWAY") or os.environ.get("MODEM_GATEWAY") or "192.168.1.1"
-        return parse_lan_dhcp(group_xml, relay_xml, gateway_ip)
+        return parse_lan_dhcp(group_xml, relay_xml, gateway_ip, static_xml=static_xml)
 
 
 def write_snapshot(
@@ -525,6 +568,9 @@ def write_snapshot(
             json.dump(snapshot, handle, ensure_ascii=False, indent=2)
             handle.write("\n")
         os.chmod(temp_path, 0o640)
+        if os.geteuid() == 0:
+            pstat = destination.parent.stat()
+            os.chown(temp_path, pstat.st_uid, pstat.st_gid)
         os.replace(temp_path, destination)
     finally:
         try:
@@ -600,7 +646,28 @@ def self_check() -> None:
     assert lan["dns2"] == "0.0.0.0"
     assert lan["relay_enable"] is False
     assert lan["lease_sec"] == 3600
+    assert lan["static_leases"] == []
+    static_xml = """
+    <ajax_response_xml_root><IF_ERRORSTR>SUCC</IF_ERRORSTR>
+      <OBJ_DHCPBIND_ID><Instance>
+        <ParaName>Name</ParaName><ParaValue>pi</ParaValue>
+        <ParaName>MACAddr</ParaName><ParaValue>AA-BB-CC-DD-EE-50</ParaValue>
+        <ParaName>IPAddr</ParaName><ParaValue>192.0.2.50</ParaValue>
+      </Instance></OBJ_DHCPBIND_ID>
+    </ajax_response_xml_root>
+    """
+    lan_static = parse_lan_dhcp(group_xml, relay_xml, "192.0.2.1", static_xml=static_xml)
+    assert len(lan_static["static_leases"]) == 1
+    assert lan_static["static_leases"][0]["mac"] == "aa:bb:cc:dd:ee:50"
+    assert lan_static["static_leases"][0]["ip"] == "192.0.2.50"
     assert _page_session_token(r'_sessionTmpToken = "\x31\x32";') == "12"
+    try:
+        _para_rows("<!DOCTYPE foo [<!ENTITY xxe '1'>]><r/>")
+    except AdapterError:
+        pass
+    else:
+        raise AssertionError("DOCTYPE/ENTITY payload must fail")
+    ZteH3600P("http://192.0.2.1", "u", "p").logout()
     print("[zte-h3600p] self-check OK")
 
 

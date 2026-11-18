@@ -16,8 +16,18 @@ dns:
   port: 53
   upstream_dns:
     - udp://127.0.0.1:5335
+  # Modem WAN :53 drop oldugu icin Unbound duserse DoT (:853) bootstrap kullanilir.
   bootstrap_dns:
     - 127.0.0.1:5335
+    - 1.1.1.2
+    - 1.0.0.2
+    - 9.9.9.9
+  fallback_dns:
+    - tls://1.1.1.2
+    - tls://1.0.0.2
+    - h3://security.cloudflare-dns.com/dns-query
+    - tls://9.9.9.9
+    - tls://dns.adguard-dns.com
   protection_enabled: true
   filtering_enabled: true
   # 0 = kapali (UFW :53 LAN/Tailscale sinirli). apply-adguard-dns ADGUARD_RATELIMIT ile override.
@@ -26,9 +36,11 @@ dns:
   ratelimit_subnet_len_ipv6: 128
   refuse_any: true
   upstream_mode: load_balance
+  use_http3_upstreams: true
   upstream_timeout: 2s
+  blocking_mode: default
   blocked_response_ttl: 300
-  cache_size: 67108864
+  cache_size: 33554432
   cache_ttl_min: 60
   cache_ttl_max: 86400
   cache_optimistic: true
@@ -47,8 +59,6 @@ dns:
       answer: ${PI_STATIC_IP}
     - domain: panel.${LAN_DOMAIN}
       answer: ${PI_STATIC_IP}
-    - domain: n8n.${LAN_DOMAIN}
-      answer: ${PI_STATIC_IP}
     - domain: logs.${LAN_DOMAIN}
       answer: ${PI_STATIC_IP}
     - domain: devices.${LAN_DOMAIN}
@@ -66,7 +76,7 @@ __USER_RULES_YAML__
 querylog:
   enabled: true
   interval: 168h
-  size_memory: 5000
+  size_memory: 2000
 
 statistics:
   enabled: true

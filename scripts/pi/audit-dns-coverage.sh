@@ -74,7 +74,7 @@ trap 'rm -f "$COOKIE"' EXIT
 agh_login "http://127.0.0.1:${ADGUARD_WEB_PORT}" "$COOKIE" "$AGH_ADMIN_USER" "$AGH_ADMIN_PASSWORD" \
   || { note_fail "AdGuard API login"; exit 1; }
 
-export COOKIE PI_IP GATEWAY_IP LAN_NET_PREFIX QUERY_LIMIT MIN_QUERIES MIN_COVERAGE BYPASS_CHECK ADGUARD_WEB_PORT REMOTE_DIR MODEM_INVENTORY_PATH MODEM_INVENTORY_STALE_SEC MODEM_INVENTORY_REQUIRED MODEM_INVENTORY_ENABLED NETALERTX_RECENCY_SEC QUERY_RECENCY_SEC
+export COOKIE PI_IP GATEWAY_IP LAN_NET_PREFIX LAN_SUBNET_CIDR QUERY_LIMIT MIN_QUERIES MIN_COVERAGE BYPASS_CHECK ADGUARD_WEB_PORT REMOTE_DIR MODEM_INVENTORY_PATH MODEM_INVENTORY_STALE_SEC MODEM_INVENTORY_REQUIRED MODEM_INVENTORY_ENABLED NETALERTX_RECENCY_SEC QUERY_RECENCY_SEC
 set +e
 python3 - <<'PY'
 import ipaddress
@@ -88,6 +88,21 @@ from modem_inventory import load_modem_inventory, modem_device
 pi_ip = os.environ["PI_IP"]
 gateway = os.environ["GATEWAY_IP"]
 lan_prefix = os.environ["LAN_NET_PREFIX"]
+_cidr_raw = os.environ.get("LAN_SUBNET_CIDR", "").strip()
+try:
+    lan_net = ipaddress.ip_network(_cidr_raw, strict=False) if _cidr_raw else None
+except ValueError:
+    lan_net = None
+
+def in_lan(ip_str):
+    if lan_net is not None and lan_net.version == 4:
+        try:
+            addr = ipaddress.ip_address(ip_str)
+            return addr.version == 4 and addr in lan_net
+        except ValueError:
+            return False
+    return ip_str.startswith(lan_prefix)
+
 query_limit = int(os.environ["QUERY_LIMIT"])
 min_queries = int(os.environ["MIN_QUERIES"])
 min_cov = int(os.environ["MIN_COVERAGE"])
@@ -110,33 +125,48 @@ def curl_api(path):
     )
 
 def parse_neigh():
-    online, idle, macs = set(), set(), {}
+    online, idle, macs, ipv6_macs = set(), set(), {}, {}
     try:
         lines = subprocess.check_output(["ip", "neigh", "show"], text=True).splitlines()
     except (OSError, subprocess.CalledProcessError):
-        return online, idle, macs
+        return online, idle, macs, ipv6_macs
     for line in lines:
         parts = line.split()
         if len(parts) < 2:
             continue
         ip, state = parts[0], parts[-1]
-        if not ip.startswith(lan_prefix) or ip in (pi_ip, gateway):
+        llmac = parts[parts.index("lladdr") + 1].lower() if "lladdr" in parts else ""
+        if ":" in ip and llmac:
+            try:
+                ipv6_macs[str(ipaddress.ip_address(ip))] = llmac
+            except ValueError:
+                pass
             continue
-        if "lladdr" in parts:
-            macs[ip] = parts[parts.index("lladdr") + 1].lower()
+        if not in_lan(ip) or ip in (pi_ip, gateway):
+            continue
+        if llmac:
+            macs[ip] = llmac
         if state in ("REACHABLE", "DELAY"):
             online.add(ip)
         elif state in ("STALE", "PROBE"):
             idle.add(ip)
-    return online, idle, macs
+    return online, idle, macs, ipv6_macs
 
-online_ips, idle_ips, neigh_macs = parse_neigh()
+online_ips, idle_ips, neigh_macs, ipv6_neigh_macs = parse_neigh()
 
 modem = load_modem_inventory(modem_path, modem_stale_sec)
 modem["ips"] = {
     ip for ip in modem.get("ips", set())
-    if ip.startswith(lan_prefix) and ip not in (pi_ip, gateway)
+    if in_lan(ip) and ip not in (pi_ip, gateway)
 }
+ipv4_by_mac = {
+    mac.lower(): ipv4
+    for ipv4, mac in modem.get("mac_by_ip", {}).items()
+    if ipv4 in modem["ips"] and mac
+}
+for _v4, _mac in neigh_macs.items():
+    if _mac:
+        ipv4_by_mac[_mac.lower()] = _v4
 
 def mac_for(ip):
     return neigh_macs.get(ip) or modem["mac_by_ip"].get(ip, "?")
@@ -179,11 +209,25 @@ def load_names():
                 if mac and name:
                     db_mac[mac.lower()] = name
                 if ip and last_seen:
+                    ts = None
                     try:
                         seen_value = float(last_seen)
-                        netalert_seen[ip] = seen_value / 1000 if seen_value > 100000000000 else seen_value
+                        ts = seen_value / 1000 if seen_value > 100000000000 else seen_value
                     except (TypeError, ValueError):
-                        pass
+                        txt = str(last_seen).strip()
+                        if txt:
+                            from datetime import datetime
+                            try:
+                                ts = datetime.fromisoformat(txt.replace("Z", "+00:00")).timestamp()
+                            except ValueError:
+                                for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
+                                    try:
+                                        ts = datetime.strptime(txt, fmt).timestamp()
+                                        break
+                                    except ValueError:
+                                        pass
+                    if ts is not None:
+                        netalert_seen[ip] = ts
             con.close()
             db_readable = True
         except Exception:
@@ -249,9 +293,13 @@ for row in ql.get("data", []):
     except ValueError:
         parsed_ip = None
     if parsed_ip is not None and parsed_ip.version == 6:
-        ipv6_query_clients[ip] += 1
-        continue
-    if not ip.startswith(lan_prefix) or ip in (pi_ip, gateway):
+        canon6 = str(parsed_ip)
+        ipv6_query_clients[canon6] += 1
+        mapped_v4 = ipv4_by_mac.get(ipv6_neigh_macs.get(canon6, ""))
+        if not mapped_v4:
+            continue
+        ip = mapped_v4
+    if not in_lan(ip) or ip in (pi_ip, gateway):
         continue
     clients[ip] += 1
     proto = str(
@@ -399,6 +447,7 @@ def write_state(status, exit_code):
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             json.dump(payload, fh, ensure_ascii=False)
             fh.write("\n")
+        os.chmod(tmp_path, 0o644)
         os.replace(tmp_path, path)
     except OSError as exc:
         if tmp_path:

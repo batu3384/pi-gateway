@@ -100,5 +100,12 @@ if [[ "$rc" -eq 0 && -x "$SCRIPT_DIR/apply-adguard-rewrites.sh" ]]; then
 elif [[ "$rc" -ne 0 ]]; then
   log "WARN filter apply basarisiz — rewrites atlandi"
 fi
-[[ "$rc" -eq 0 ]] && log "Tamamlandi"
+if [[ "$rc" -eq 0 ]]; then
+  if [[ -f "$SCRIPT_DIR/../lib/notify.sh" ]]; then
+    # shellcheck source=../lib/notify.sh
+    source "$SCRIPT_DIR/../lib/notify.sh"
+    notify_adguard_filter_ok || true
+  fi
+  log "Tamamlandi"
+fi
 exit "$rc"

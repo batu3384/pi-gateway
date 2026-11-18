@@ -64,10 +64,14 @@ for line in bypass[:12]:
 PY
 )
 
-status="${_rem[0]#status=}"
-pct="${_rem[1]#pct=}"
-bypass_count="${_rem[2]#bypass_count=}"
-mapfile -t bypass_lines < <(printf '%s\n' "${_rem[@]:3}" | sed -n 's/^bypass://p')
+status="${_rem[0]:-status=unknown}"; status="${status#status=}"
+pct="${_rem[1]:-pct=-1}"; pct="${pct#pct=}"
+bypass_count="${_rem[2]:-bypass_count=0}"; bypass_count="${bypass_count#bypass_count=}"
+if ((${#_rem[@]} > 3)); then
+  mapfile -t bypass_lines < <(printf '%s\n' "${_rem[@]:3}" | sed -n 's/^bypass://p')
+else
+  bypass_lines=()
+fi
 
 echo ""
 echo "=== Ozet ==="

@@ -32,7 +32,7 @@ RATELIMIT="${ADGUARD_RATELIMIT:-0}"
 # AGH default subnet /24 = tum LAN tek kova (donma). /32 = cihaz basi.
 RATE_V4="${ADGUARD_RATELIMIT_SUBNET_IPV4:-32}"
 RATE_V6="${ADGUARD_RATELIMIT_SUBNET_IPV6:-128}"
-CACHE_SIZE="${ADGUARD_CACHE_SIZE:-67108864}"
+CACHE_SIZE="${ADGUARD_CACHE_SIZE:-33554432}"
 # 0 = upstream TTL (Unbound zaten cache). 300 eski "min 5dk" yanlis IP'yi kilitler.
 CACHE_TTL_MIN="${ADGUARD_CACHE_TTL_MIN:-60}"
 # IPv6 Happy Eyeballs: yavaş AAAA (WAN) video açılışını bekletir. true = yalnız A.
@@ -78,11 +78,20 @@ desired = dict(current)
 desired["upstream_dns"] = [
     f"udp://127.0.0.1:{unbound_port}",
 ]
-desired["bootstrap_dns"] = [f"127.0.0.1:{unbound_port}", "9.9.9.9"]
+# Bootstrap: AdGuard upstream hostnamelerini cozmek icin duz IP resolver ister (DoT URL gereksiz).
+desired["bootstrap_dns"] = [f"127.0.0.1:{unbound_port}", "1.1.1.2", "1.0.0.2", "9.9.9.9"]
 # Unbound olurse AGH SERVFAIL → cihazlar modem DNS2 (.1, filtresiz) → reklam.
-# DoT :853 (WAN dest:53 drop). Quad9 malware; AdGuard DNS reklam. Cloudflare fallback yok.
-# bootstrap 9.9.9.9: Unbound dusukken hostname fallback cozulsun.
-desired["fallback_dns"] = ["tls://dns.adguard-dns.com", "tls://9.9.9.9"]
+# DoT :853 / DoH3 :443 (WAN dest:53 drop). Cloudflare Security (Istanbul ~5ms, malware) + Quad9 + AdGuard DNS.
+desired["fallback_dns"] = [
+    "tls://1.1.1.2",
+    "tls://1.0.0.2",
+    "h3://security.cloudflare-dns.com/dns-query",
+    "tls://9.9.9.9",
+    "tls://dns.adguard-dns.com",
+]
+if "use_http3_upstreams" in desired:
+    desired["use_http3_upstreams"] = True
+desired["blocking_mode"] = "default"
 desired["blocked_response_ttl"] = blocked_ttl
 desired["upstream_timeout"] = upstream_timeout
 desired["use_private_ptr_resolvers"] = False

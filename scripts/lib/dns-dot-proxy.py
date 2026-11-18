@@ -14,9 +14,12 @@ import threading
 import time
 
 UPSTREAMS = (
+    ("1.1.1.2", 853, "security.cloudflare-dns.com"),
+    ("1.0.0.2", 853, "security.cloudflare-dns.com"),
     ("9.9.9.9", 853, "dns.quad9.net"),
     ("94.140.14.14", 853, "dns.adguard-dns.com"),
 )
+_SSL_CTX = ssl.create_default_context()
 DOT_TIMEOUT = 3.0
 LISTEN_PORT = int(os.environ.get("DNS_FALLBACK_PORT", "53"))
 # ponytail: EADDRINUSE retry. Tavan sonsuz bekleme; unit stop = AGH geri.
@@ -77,20 +80,26 @@ def servfail(q: bytes) -> bytes:
     """RCODE=2. Kuyruk doluysa sessiz drop yerine istemci tekrar denesin."""
     if len(q) < 12:
         return b""
+    qdcount = int.from_bytes(q[4:6], "big")
+    if qdcount < 1:
+        return q[:2] + b"\x81\x82\x00\x00\x00\x00\x00\x00\x00\x00"
     end = _skip_qname(q, 12) + 4
     if end > len(q) or end < 12:
         return b""
-    return q[:2] + b"\x81\x82" + q[4:6] + b"\x00\x00\x00\x00\x00\x00" + q[12:end]
+    return q[:2] + b"\x81\x82\x00\x01\x00\x00\x00\x00\x00\x00" + q[12:end]
 
 
 def nodata(q: bytes) -> bytes:
     """NOERROR + empty answer (NODATA). Happy Eyeballs AAAA bekletmesin."""
     if len(q) < 16:
         return b""
+    qdcount = int.from_bytes(q[4:6], "big")
+    if qdcount < 1:
+        return b""
     end = _skip_qname(q, 12) + 4
     if end > len(q) or end < 16:
         return b""
-    return q[:2] + b"\x81\x80" + q[4:6] + b"\x00\x00\x00\x00\x00\x00" + q[12:end]
+    return q[:2] + b"\x81\x80\x00\x01\x00\x00\x00\x00\x00\x00" + q[12:end]
 
 
 def _answer(q: bytes) -> bytes:
@@ -102,13 +111,12 @@ def _answer(q: bytes) -> bytes:
 def query_dot(q: bytes) -> bytes:
     if not q or len(q) > MAX_DNS:
         return b""
-    ctx = ssl.create_default_context()
     payload = struct.pack("!H", len(q)) + q
     last_err: OSError | None = None
     for host, port, sni in UPSTREAMS:
         try:
             raw = socket.create_connection((host, port), timeout=DOT_TIMEOUT)
-            tls = ctx.wrap_socket(raw, server_hostname=sni)
+            tls = _SSL_CTX.wrap_socket(raw, server_hostname=sni)
             with tls:
                 tls.settimeout(DOT_TIMEOUT)
                 tls.sendall(payload)
@@ -150,57 +158,45 @@ def _handle_udp(sock: socket.socket, data: bytes, src: tuple) -> None:
 
 
 def _tcp_busy(conn: socket.socket) -> None:
-    """Kuyruk dolu: sorguyu oku, TCP SERVFAIL yaz, kapat."""
+    """Kuyruk dolu: main select loop'u bloklamadan baglantiyi hemen kapat."""
     try:
-        conn.settimeout(DOT_TIMEOUT)
-        hdr = b""
-        while len(hdr) < 2:
-            chunk = conn.recv(2 - len(hdr))
-            if not chunk:
-                return
-            hdr += chunk
-        (n,) = struct.unpack("!H", hdr)
-        if n == 0 or n > MAX_DNS:
-            return
-        q = b""
-        while len(q) < n:
-            chunk = conn.recv(n - len(q))
-            if not chunk:
-                return
-            q += chunk
-        fail = servfail(q)
-        if fail:
-            conn.sendall(struct.pack("!H", len(fail)) + fail)
-    except OSError:
-        return
-    finally:
         conn.close()
+    except OSError:
+        pass
+
+
+def _recv_exact_deadline(conn: socket.socket, size: int, deadline: float) -> bytes:
+    buf = b""
+    while len(buf) < size:
+        rem = deadline - time.monotonic()
+        if rem <= 0:
+            raise TimeoutError("tcp deadline")
+        conn.settimeout(min(DOT_TIMEOUT, rem))
+        chunk = conn.recv(size - len(buf))
+        if not chunk:
+            raise OSError("tcp eof")
+        buf += chunk
+    return buf
+
+
+def _handle_tcp(conn: socket.socket, addr: tuple) -> None:
     host = addr[0]
     if host.startswith("::ffff:"):
         host = host[7:]
     try:
         if not allowed(host):
             return
-        conn.settimeout(DOT_TIMEOUT)
-        hdr = b""
-        while len(hdr) < 2:
-            chunk = conn.recv(2 - len(hdr))
-            if not chunk:
-                return
-            hdr += chunk
+        deadline = time.monotonic() + 4.0
+        hdr = _recv_exact_deadline(conn, 2, deadline)
         (n,) = struct.unpack("!H", hdr)
         if n == 0 or n > MAX_DNS:
             return
-        q = b""
-        while len(q) < n:
-            chunk = conn.recv(n - len(q))
-            if not chunk:
-                return
-            q += chunk
+        q = _recv_exact_deadline(conn, n, deadline)
         ans = _answer(q)
-        if ans:
+        if ans and time.monotonic() < deadline:
+            conn.settimeout(max(0.2, deadline - time.monotonic()))
             conn.sendall(struct.pack("!H", len(ans)) + ans)
-    except OSError:
+    except (OSError, TimeoutError):
         return
     finally:
         conn.close()
@@ -379,6 +375,8 @@ def self_check() -> None:
     )
     assert _INFLIGHT.acquire(blocking=False)
     _INFLIGHT.release()
+    assert callable(_handle_tcp)
+    assert callable(_tcp_busy)
     print("[dns-dot-proxy] self-check OK")
 
 

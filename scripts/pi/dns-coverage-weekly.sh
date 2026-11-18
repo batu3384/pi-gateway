@@ -38,12 +38,19 @@ else:
 if st.get("protocol_unknown"):
     detail += " — protokol API bilinmiyor"
 action = "Bypass: /dns veya make audit-dns · TV/IoT: elle Pi DNS · Modem DNS2=.1 tavanı"
+print(status)
 print(detail)
 print(action)
 PY
 )
-detail="${_dns_weekly[0]:-Kanıt yok}"
-action="${_dns_weekly[1]:-}"
+status="${_dns_weekly[0]:-unknown}"
+detail="${_dns_weekly[1]:-Kanıt yok}"
+action="${_dns_weekly[2]:-}"
+
+if [[ "$status" == "ok" && "${NOTIFY_DNS_WEEKLY_OK:-false}" != "true" ]]; then
+  log "OK (kapsam tam — sessiz)"
+  exit 0
+fi
 
 body="$(notify_html_alert "$detail" "$action")"
 notify_telegram "📋 Haftalık DNS Kapsam" "$body" "dns-weekly-report" "HTML"

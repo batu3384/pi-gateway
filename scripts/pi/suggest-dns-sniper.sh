@@ -73,9 +73,15 @@ counts: Counter[str] = Counter()
 clients: dict[str, set[str]] = {}
 
 for row in rows:
-  ts = row.get("time") or row.get("T") or 0
-  if isinstance(ts, str):
-      continue
+  raw_ts = row.get("time") or row.get("T") or 0
+  if isinstance(raw_ts, str):
+      try:
+          from datetime import datetime
+          ts = datetime.fromisoformat(raw_ts.replace("Z", "+00:00")).timestamp()
+      except ValueError:
+          ts = 0
+  else:
+      ts = float(raw_ts)
   if ts > 1_000_000_000_000:
       ts /= 1000
   if ts and ts < cutoff:

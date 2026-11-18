@@ -41,6 +41,18 @@ export MODEM_URL MODEM_INVENTORY_PATH MODEM_USERNAME MODEM_PASSWORD
 export MODEM_ALLOW_HTTP MODEM_TLS_CA_FILE MODEM_TLS_INSECURE
 export MODEM_HTTP_TIMEOUT_SEC="${MODEM_HTTP_TIMEOUT_SEC:-8}"
 
-exec python3 "${SCRIPT_DIR}/../lib/zte-h3600p.py" \
+python3 "${SCRIPT_DIR}/../lib/zte-h3600p.py" \
   --url "$MODEM_URL" \
   --output "$MODEM_INVENTORY_PATH"
+
+if [[ -f "${SCRIPT_DIR}/../lib/sync-adguard-clients.py" ]]; then
+  AGH_ADMIN_USER="${AGH_ADMIN_USER:-admin}" \
+    AGH_ADMIN_PASSWORD="${AGH_ADMIN_PASSWORD:-}" \
+    ADGUARD_WEB_PORT="${ADGUARD_WEB_PORT:-8080}" \
+    PI_STATIC_IP="${PI_STATIC_IP:-}" \
+    PI_IPV6_ULA="${PI_IPV6_ULA:-}" \
+    PI_INTERFACE="${PI_INTERFACE:-eth0}" \
+    ADGUARD_CLIENT_ALIASES_PATH="${ADGUARD_CLIENT_ALIASES_PATH:-/var/lib/pi-gateway/client-aliases.json}" \
+    MODEM_INVENTORY_PATH="$MODEM_INVENTORY_PATH" \
+    python3 "${SCRIPT_DIR}/../lib/sync-adguard-clients.py" || true
+fi
