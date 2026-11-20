@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Bildirim yardımcıları (Telegram). health-check, backup, systemd tarafından kullanılır.
+# Bildirim yardımcıları. NOTIFY_BACKEND=openbot → openbot-notify.sh → jarvis-send.sh
 set -euo pipefail
 
 # Kalıcı — /run reboot'ta silinir, recover bildirimi kaybolurdu.
@@ -18,12 +18,34 @@ NOTIFY_BOOT_MIN_DOWN_SEC="${NOTIFY_BOOT_MIN_DOWN_SEC:-90}"
 
 LAN_DOMAIN="${LAN_DOMAIN:-home}"
 
+_openbot_notify_lib() {
+  local lib
+  lib="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/openbot-notify.sh"
+  [[ -r "$lib" ]] || return 1
+  # shellcheck source=openbot-notify.sh
+  source "$lib"
+}
+
+notify_backend() {
+  printf '%s' "${NOTIFY_BACKEND:-openbot}"
+}
+
+notify_openbot_wanted() {
+  case "$(notify_backend)" in
+    openbot|both) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+notify_telegram_wanted() {
+  case "$(notify_backend)" in
+    telegram|both) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 notify_enabled() {
-  if [[ -z "${TELEGRAM_BOT_TOKEN:-}" || -z "${TELEGRAM_CHAT_ID:-}" ]] \
-    && declare -F load_telegram_from_hermes >/dev/null 2>&1; then
-    load_telegram_from_hermes 2>/dev/null || true
-  fi
-  [[ -n "${TELEGRAM_BOT_TOKEN:-}" && -n "${TELEGRAM_CHAT_ID:-}" ]]
+  notify_openbot_wanted && _openbot_notify_lib && openbot_notify_enabled
 }
 
 panel_url() {
@@ -137,17 +159,6 @@ notify_boot_up() {
   # Her boot ayrı olay: önceki state fail gibi (ok→ok susturulmasın).
   notify_write "${NOTIFY_STATE_DIR}/boot-lifecycle.state" fail || true
   notify_send_with_transition "boot-lifecycle" "ok" "✅ Sistem Başlatıldı" "$body" "HTML"
-}
-
-# Asistan sohbeti yeniden aktif — kapanış mesajının çifti
-notify_hermes_inbox_up() {
-  local host="${1:-$(hostname -s)}"
-  local body gateway
-  gateway="$(panel_url gateway)"
-  body="$(notify_html_alert "Yeni mesajları gönderebilirsiniz." "" "Durum: $(notify_escape_html "$gateway")")"
-  notify_ensure_dir
-  notify_write "${NOTIFY_STATE_DIR}/hermes-inbox.state" fail || true
-  notify_send_with_transition "hermes-inbox" "ok" "✅ Asistan Sohbeti Aktif" "$body" "HTML"
 }
 
 notify_repeat_sec_for() {
@@ -334,12 +345,16 @@ notify_send_with_transition() {
   else
     text="$(printf '<b>%s</b>' "$title_fmt")"
   fi
+  local rc=0
   if notify_send_message "$text" "$parse_mode"; then
     notify_transition_commit "$key" "$new_state"
     rm -f "${NOTIFY_STATE_DIR}/${key}.pending"
     notify_global_commit
+  else
+    rc=1
   fi
   notify_send_lock_release
+  return "$rc"
 }
 
 notify_escape_html() {
@@ -354,33 +369,10 @@ notify_escape_html() {
 notify_send_message() {
   local text="$1"
   local parse_mode="${2:-}"
-  local response="" safe_resp="" url_cfg=""
-  url_cfg="$(printf 'url = "https://api.telegram.org/bot%s/sendMessage"\n' "${TELEGRAM_BOT_TOKEN:-}")"
-
-  if [[ -n "$parse_mode" ]]; then
-    response="$(curl -fsS --connect-timeout 5 --max-time 15 -K - -X POST \
-      -d "chat_id=${TELEGRAM_CHAT_ID}" \
-      -d "parse_mode=${parse_mode}" \
-      --data-urlencode "text=${text}" \
-      -d "disable_web_page_preview=true" <<<"$url_cfg" 2>&1)" || true
-  else
-    response="$(curl -fsS --connect-timeout 5 --max-time 15 -K - -X POST \
-      -d "chat_id=${TELEGRAM_CHAT_ID}" \
-      --data-urlencode "text=${text}" \
-      -d "disable_web_page_preview=true" <<<"$url_cfg" 2>&1)" || true
-  fi
-
-  if [[ -n "$response" ]] && python3 -c \
-    'import json,sys; d=json.load(sys.stdin); raise SystemExit(0 if d.get("ok") is True else 1)' \
-    <<<"$response" 2>/dev/null; then
-    return 0
-  fi
-  safe_resp="${response:-bilinmeyen hata}"
-  if [[ -n "${TELEGRAM_BOT_TOKEN:-}" ]]; then
-    safe_resp="${safe_resp//"${TELEGRAM_BOT_TOKEN}"/[REDACTED]}"
-  fi
-  echo "[notify] Telegram gonderilemedi: ${safe_resp}" >&2
-  return 1
+  notify_openbot_wanted || return 1
+  _openbot_notify_lib || return 1
+  openbot_notify_enabled || return 1
+  openbot_notify_send "$text" "$parse_mode"
 }
 
 notify_telegram() {
@@ -417,11 +409,15 @@ notify_telegram() {
   else
     text="$(printf '<b>%s</b>' "$title_fmt")"
   fi
+  local rc=0
   if notify_send_message "$text" "$parse_mode"; then
     notify_rate_commit "$key"
     notify_global_commit
+  else
+    rc=1
   fi
   notify_send_lock_release
+  return "$rc"
 }
 
 # HTML: güvenilir raw fragment → (aksiyon) → (dipnot)

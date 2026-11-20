@@ -2,7 +2,14 @@
 # Root systemd unit'lerinin calistiracagi scriptleri root-owned lib'e kopyalar.
 set -euo pipefail
 
-REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
+if [[ -z "${REMOTE_DIR:-}" ]]; then
+  _priv_user="${SUDO_USER:-${USER:-}}"
+  if [[ -z "$_priv_user" || "$_priv_user" == "root" ]]; then
+    echo "[install-priv] HATA: REMOTE_DIR yok (sudo ortamı root'a düştü)" >&2
+    exit 1
+  fi
+  REMOTE_DIR="/home/${_priv_user}/pi-gateway"
+fi
 LIB_DIR="${PI_GATEWAY_LIB_DIR:-/usr/local/lib/pi-gateway}"
 
 log() { echo "[install-priv] $*"; }
@@ -50,12 +57,15 @@ SCRIPTS=(
   scripts/lib/gateway-probes.py
   scripts/lib/netalert-devices.py
   scripts/lib/notify.sh
+  scripts/lib/openbot-notify.sh
+  scripts/lib/openbot-paths.sh
   scripts/lib/reset-gateway-units.sh
   scripts/pi/boot-notify.sh
-  scripts/pi/hermes-inbox-up-notify.sh
+  scripts/pi/jarvis-send.sh
+  scripts/pi/verify-openbot-fleet.sh
+  scripts/pi/heal-openbot-fleet.sh
+  scripts/pi/repair-openbot-provider-runtimes.sh
   scripts/lib/bulletin-slo.py
-  scripts/lib/hermes-token-slo.py
-  scripts/lib/hermes-session-hygiene.py
   scripts/lib/reap-dead-docker-scopes.sh
   scripts/lib/adguard-api.sh
   scripts/lib/dns-dot-proxy.py
@@ -204,3 +214,4 @@ if [[ -f "${REMOTE_DIR}/host/udev/99-pi-gateway-jmicron.rules" ]]; then
   run_root udevadm control --reload-rules 2>/dev/null || true
   log "OK udev 99-pi-gateway-jmicron.rules"
 fi
+run_root systemctl disable --now smartmontools.service smartd.service 2>/dev/null || true

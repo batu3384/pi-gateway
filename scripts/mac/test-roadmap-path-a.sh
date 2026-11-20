@@ -28,6 +28,7 @@ grep -q '/usr/sbin/smartctl' "$ROOT/scripts/pi/check-ssd-smart.sh" || die "check
 grep -q 'Percentage Used' "$ROOT/scripts/pi/check-ssd-smart.sh" || die "check-ssd-smart wear kolon parse yok"
 grep -q 'Unbound DoT' "$ROOT/wiki/Security.md" || die "wiki Security Unbound recursion yalan"
 grep -q 'pi-gateway-ssd-smart.timer' "$ROOT/docs/OPERATIONS.md" || die "OPERATIONS SMART runbook yok"
+grep -q 'disable --now smartmontools.service' "$ROOT/scripts/pi/setup-ssd-smart-timer.sh" || die "smartd disable yok"
 ok "SMART timer"
 
 [[ -f "$ROOT/scripts/pi/restic-offsite-copy.sh" ]] || die "restic-offsite-copy yok"

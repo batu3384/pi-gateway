@@ -17,7 +17,6 @@ RECOVER_CONFIRM_SEC="${TELEGRAM_RECOVER_CONFIRM_SEC:-60}"
 # shellcheck source=../lib/env-file.sh
 source "$SCRIPT_DIR/../lib/env-file.sh"
 read_remote_dotenv || { echo "[telegram-ops] HATA: .env" >&2; exit 1; }
-load_telegram_from_hermes || true
 # shellcheck source=../lib/notify.sh
 source "$SCRIPT_DIR/../lib/notify.sh"
 log() { echo "[telegram-ops] $*"; }

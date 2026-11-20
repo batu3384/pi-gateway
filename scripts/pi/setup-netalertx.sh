@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# NetAlertX: ARP envanter, AdGuard isim, yeni cihaz Telegram (sendMessage)
+# NetAlertX: ARP envanter, AdGuard isim, yeni cihaz → pi-gateway-netalert-new-device → Jarvis
 set -euo pipefail
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -11,12 +11,15 @@ read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv pars
 log() { echo "[netalertx-setup] $*"; }
 # shellcheck source=../lib/reap-dead-docker-scopes.sh
 source "${SCRIPT_DIR}/../lib/reap-dead-docker-scopes.sh"
-NETALERT_NOTIFY_VIA="${NETALERT_NOTIFY_VIA:-telegram}"
-[[ "${NETALERT_NOTIFY_VIA}" == "hermes" ]] && NETALERT_NOTIFY_VIA=telegram
-if [[ "${NETALERT_NOTIFY_VIA}" != "telegram" ]]; then
-  log "HATA: NETALERT_NOTIFY_VIA=telegram gerekli (n8n yolu yok)"
-  exit 1
-fi
+NETALERT_NOTIFY_VIA="${NETALERT_NOTIFY_VIA:-openbot}"
+case "${NETALERT_NOTIFY_VIA}" in
+  hermes|telegram) NETALERT_NOTIFY_VIA=openbot ;;
+  openbot) ;;
+  *)
+    log "HATA: NETALERT_NOTIFY_VIA yalnız openbot (Jarvis timer)"
+    exit 1
+    ;;
+esac
 NETALERTX_PORT="${NETALERTX_PORT:-20211}"
 NETALERTX_LISTEN_ADDR="${NETALERTX_LISTEN_ADDR:-172.17.0.1}"
 NETALERTX_PASSWORD="${NETALERTX_PASSWORD:-${AGH_ADMIN_PASSWORD:-}}"
@@ -134,9 +137,9 @@ export NETALERTX_TELEGRAM_NEW_DEVICE="${NETALERTX_TELEGRAM_NEW_DEVICE:-false}"
 SCAN_SUBNET="$(scan_subnet)"
 WEBHOOK_URL="$(webhook_url)"
 export NETALERT_WEBHOOK_RAW="$WEBHOOK_URL"
-log "NetAlertX webhook kapali — Telegram plugin sendMessage"
+log "NetAlertX TELEGRAM_RUN kapalı — yeni cihaz Jarvis timer"
 # ARP + AdGuard isim + zorunlu iskelet + TELEGRAM. ICMP/DIG/vendor/webhook yok.
-export NETALERTX_PLUGINS='["ARPSCAN","ADGUARDIMP","NEWDEV","NTFPRCS","DBCLNP","CUSTPROP","SETPWD","SYNC","UI","MAINT","TELEGRAM"]'
+export NETALERTX_PLUGINS='["ARPSCAN","ADGUARDIMP","NEWDEV","NTFPRCS","DBCLNP","CUSTPROP","SETPWD","SYNC","UI","MAINT"]'
 export SCAN_SUBNET
 python3 <<'PY'
 import json
@@ -148,11 +151,9 @@ from pathlib import Path
 conf = Path(os.environ["CONF_FILE"])
 marker = Path(os.environ["MARKER"])
 subnet = os.environ["SCAN_SUBNET"]
-notify_via = os.environ.get("NETALERT_NOTIFY_VIA", "telegram")
-if notify_via == "hermes":
-    notify_via = "telegram"
-if notify_via != "telegram":
-    raise SystemExit("[netalertx-setup] HATA: NETALERT_NOTIFY_VIA=telegram gerekli")
+notify_via = os.environ.get("NETALERT_NOTIFY_VIA", "openbot")
+if notify_via in ("hermes", "telegram"):
+    notify_via = "openbot"
 webhook = "''"
 webhook_run = "'off'"
 password = os.environ["NETALERTX_PASSWORD"]
@@ -169,7 +170,7 @@ except json.JSONDecodeError:
 if not isinstance(plugin_names, list) or not plugin_names:
     plugin_names = [
         "ARPSCAN", "ADGUARDIMP", "NEWDEV", "NTFPRCS", "DBCLNP",
-        "CUSTPROP", "SETPWD", "SYNC", "UI", "MAINT", "TELEGRAM",
+        "CUSTPROP", "SETPWD", "SYNC", "UI", "MAINT",
     ]
 # app.conf Python literal — JSON cift tirnak parse edilmez (#1023).
 # INTRNT/VNDRPDT/WORKFLOWS necessary_plugins; compose ignore_plugin ile unload.
@@ -185,12 +186,9 @@ new_dev_notify = (os.environ.get("NETALERTX_TELEGRAM_NEW_DEVICE") or "false").st
 def q(val: str) -> str:
     return "'" + val.replace("\\", "\\\\").replace("'", "\\'") + "'"
 
-telegram_run = "'on_notification'" if (tg_token and tg_chat and new_dev_notify) else "'disabled'"
-included_sections = "['new_devices']" if new_dev_notify else "[]"
-if not new_dev_notify:
-    print("[netalertx-setup] Yeni cihaz Telegram bildirimi kapali (privacy MAC spam onleme; acmak icin NETALERTX_TELEGRAM_NEW_DEVICE=true)")
-elif telegram_run == "'disabled'":
-    print("[netalertx-setup] WARN: TELEGRAM_BOT_TOKEN/CHAT_ID yok — yeni cihaz bildirimi kapali")
+telegram_run = "'disabled'"
+included_sections = "[]"
+print("[netalertx-setup] TELEGRAM_RUN kapalı. Yeni cihaz: pi-gateway-netalert-new-device.timer → Jarvis")
 text = ""
 for _ in range(36):
     try:

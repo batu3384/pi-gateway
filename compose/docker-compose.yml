@@ -177,8 +177,6 @@ services:
       N8N_PERSONALIZATION_ENABLED: "false"
       # executeCommand = host komut yuzeyi; disk/morning host scriptlerinde
       NODES_EXCLUDE: '["n8n-nodes-base.executeCommand","n8n-nodes-base.ssh"]'
-      PI_TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
-      PI_TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
     volumes:
       - ../data/n8n:/home/node/.n8n
       - ../data/.disk-probe:/host-ssd:ro
@@ -200,9 +198,9 @@ services:
       LISTEN_ADDR: ${NETALERTX_LISTEN_ADDR:-172.17.0.1}
       PUID: ${NETALERTX_UID:-20211}
       PGID: ${NETALERTX_GID:-1000}
-      # Sade: ARP + AdGuard isim + Telegram sendMessage (getUpdates yok)
+      # Sade: ARP + AdGuard isim. Yeni cihaz: host timer → Jarvis (TELEGRAM yok)
       # Python list; JSON '["x"]' string parse edilince allowlist kırılır (NetAlertX #1023)
-      LOADED_PLUGINS: "['ARPSCAN','ADGUARDIMP','NEWDEV','NTFPRCS','DBCLNP','CUSTPROP','SETPWD','SYNC','UI','MAINT','TELEGRAM']"
+      LOADED_PLUGINS: "['ARPSCAN','ADGUARDIMP','NEWDEV','NTFPRCS','DBCLNP','CUSTPROP','SETPWD','SYNC','UI','MAINT']"
       APP_CONF_OVERRIDE: '{"GRAPHQL_PORT":"20214"}'
     volumes:
       - ../data/netalertx:/data

@@ -57,7 +57,7 @@ def active_panels() -> list[tuple[str, str, str, str, int]]:
 
 
 def hermes_owns_inbox() -> bool:
-    return env_bool("HERMES_TELEGRAM_GATEWAY", False)
+    return False
 
 
 def _run(cmd: list[str]) -> str:

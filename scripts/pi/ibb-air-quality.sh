@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# İBB HKI scrape → Prometheus textfile + Telegram (eşik geçişi)
+# İBB HKI scrape → Prometheus textfile + Jarvis (eşik geçişi)
 set -euo pipefail
 _PI_STATE_USER="${PI_USER:-${SUDO_USER:-${USER:-pi}}}"
 REMOTE_DIR="${REMOTE_DIR:-/home/${_PI_STATE_USER}/pi-gateway}"
@@ -17,7 +17,6 @@ PG_SCRIPT_NAME="$(basename "$0")"
 # shellcheck source=../lib/env-file.sh
 source "${_PG_ENV_LIB:?}"
 read_remote_dotenv || { echo "[${PG_SCRIPT_NAME}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
-load_telegram_from_hermes || true
 # shellcheck source=../lib/notify.sh
 source "$SCRIPT_DIR/../lib/notify.sh"
 
@@ -80,7 +79,7 @@ case "$line" in
   *) status=fail ;;
 esac
 case "$status" in
-  warn) notify_ibb_hki_warn "$(ibb_human_detail "$line")" ;;
-  ok) notify_ibb_hki_ok ;;
+  warn) notify_ibb_hki_warn "$(ibb_human_detail "$line")" || true ;;
+  ok) notify_ibb_hki_ok || true ;;
   *) logger -t pi-gateway-ibb "WARN scrape: $line" || true ;;
 esac

@@ -26,6 +26,13 @@ WINDOW_SEC = int(os.environ.get("SSD_USB_DMESG_WINDOW_SEC", "86400") or "86400")
 CRC_WARN_DELTA = int(os.environ.get("SSD_USB_CRC_WARN_DELTA", "5") or "5")
 RESET_WARN_COUNT = int(os.environ.get("SSD_USB_RESET_WARN_COUNT", "3") or "3")
 IO_WARN_COUNT = int(os.environ.get("SSD_USB_IO_WARN_COUNT", "5") or "5")
+FSCK_STATE_PATH = os.environ.get(
+    "SSD_FSCK_STATE_PATH",
+    "/var/lib/pi-gateway/ssd-fsck-state.json",
+)
+FLAP_QUIET_CLEAR_SEC = int(
+    os.environ.get("SSD_USB_FLAP_QUIET_CLEAR_SEC", "7200") or "7200"
+)
 
 
 def _run(cmd: list[str], timeout: float = 8.0) -> str:
@@ -69,7 +76,59 @@ def _parse_journal_ts(line: str) -> float | None:
         return None
 
 
-def count_kernel_usb_events(window_sec: int) -> tuple[int, int]:
+def _fsck_baseline_ts() -> float:
+    try:
+        data = json.loads(Path(FSCK_STATE_PATH).read_text(encoding="utf-8"))
+        val = float(data.get("last_success_at") or 0)
+        if 0 < val <= time.time():
+            return val
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        pass
+    return 0.0
+
+
+def _active_ssd_usb_bus_prefix() -> str | None:
+    src = _run(["findmnt", "-n", "-o", "SOURCE", "/mnt/ssd"], timeout=3.0).strip()
+    m_dev = re.match(r"^/dev/(sd[a-z]+)\d*$", src)
+    if not m_dev:
+        return None
+    try:
+        resolved = str(Path(f"/sys/block/{m_dev.group(1)}/device").resolve())
+    except OSError:
+        return None
+    m_bus = re.search(r"/usb\d+/(\d+)-\d+", resolved)
+    return f"{m_bus.group(1)}-" if m_bus else None
+
+
+def _classify_kernel_line(
+    line: str, usb_bus_prefix: str | None = None
+) -> tuple[bool, bool]:
+    low = line.lower()
+    m_bus = re.search(r"\busb\s*(\d+)-|\busb(\d+)-port", low)
+    if m_bus:
+        bus_num = m_bus.group(1) or m_bus.group(2)
+        expected_bus = usb_bus_prefix.rstrip("-") if usb_bus_prefix else "2"
+        if bus_num != expected_bus:
+            return False, False
+    has_sd = bool(re.search(r"\bsd[a-z]+\d*\b", low))
+    if "usb" not in low and not has_sd:
+        return False, False
+    is_reset = ("usb" in low) and any(
+        x in low
+        for x in (
+            "usb disconnect",
+            "cannot enable",
+            "device not accepting address",
+            "reset high-speed",
+            "reset super speed",
+            "reset superspeed",
+        )
+    )
+    is_io = has_sd and ("i/o error" in low or "device offline error" in low)
+    return is_reset, is_io
+
+
+def count_kernel_usb_events(window_sec: int) -> tuple[int, int, float]:
     """journalctl -k — locale-safe, C-level grep to skip firewall/noise floods."""
     hours = max(1, (window_sec + 3599) // 3600)
     base_cmd = [
@@ -91,7 +150,7 @@ def count_kernel_usb_events(window_sec: int) -> tuple[int, int]:
             timeout=20.0,
         )
         if proc.returncode == 1 and not proc.stderr.strip():
-            return 0, 0
+            return 0, 0, 0.0
         if proc.returncode == 0:
             out = proc.stdout
         else:
@@ -99,30 +158,23 @@ def count_kernel_usb_events(window_sec: int) -> tuple[int, int]:
     except (subprocess.SubprocessError, OSError):
         out = _run(base_cmd, timeout=20.0)
     if not out:
-        return 0, 0
-    cutoff = time.time() - window_sec
+        return 0, 0, 0.0
+    cutoff = max(time.time() - window_sec, _fsck_baseline_ts())
+    usb_prefix = _active_ssd_usb_bus_prefix()
     resets = io_err = 0
+    last_event_ts = 0.0
     for line in out.splitlines():
         ts = _parse_journal_ts(line)
-        if ts is None or ts < cutoff:
+        if ts is None or ts <= cutoff:
             continue
-        low = line.lower()
-        if "usb" not in low and "sda" not in low and "sdb" not in low:
-            continue
-        if any(
-            x in low
-            for x in (
-                "usb disconnect",
-                "cannot enable",
-                "device not accepting address",
-                "reset high-speed",
-                "reset super speed",
-            )
-        ):
+        is_r, is_io = _classify_kernel_line(line, usb_prefix)
+        if is_r:
             resets += 1
-        if "i/o error" in low or "device offline error" in low:
+        if is_io:
             io_err += 1
-    return resets, io_err
+        if is_r or is_io:
+            last_event_ts = max(last_event_ts, ts)
+    return resets, io_err, last_event_ts
 
 
 def load_state() -> dict[str, Any]:
@@ -200,12 +252,26 @@ def _threshold_met(delta: int, resets: int, io_err: int) -> bool:
     return delta >= CRC_WARN_DELTA or resets >= RESET_WARN_COUNT or io_err >= IO_WARN_COUNT
 
 
+def _should_alert_flap(
+    delta: int, resets: int, io_err: int, last_event_ts: float, now_ts: float
+) -> bool:
+    if not _threshold_met(delta, resets, io_err):
+        return False
+    if delta >= CRC_WARN_DELTA:
+        return True
+    if last_event_ts <= 0:
+        return False
+    if FLAP_QUIET_CLEAR_SEC > 0 and (now_ts - last_event_ts) >= FLAP_QUIET_CLEAR_SEC:
+        return False
+    return True
+
+
 def update(smart_text: str = "") -> dict[str, Any]:
     prev = load_state()
     crc = parse_crc(smart_text) if smart_text else prev.get("crc")
     if crc is None and not smart_text:
         crc = prev.get("crc")
-    resets, io_err = count_kernel_usb_events(WINDOW_SEC)
+    resets, io_err, last_event_ts = count_kernel_usb_events(WINDOW_SEC)
     prev_crc = prev.get("crc")
     delta = 0
     if crc is not None and prev_crc is not None:
@@ -217,6 +283,7 @@ def update(smart_text: str = "") -> dict[str, Any]:
         "crc_delta": delta,
         "usb_resets_24h": resets,
         "io_errors_24h": io_err,
+        "last_event_ts": int(last_event_ts) if last_event_ts > 0 else 0,
         "window_sec": WINDOW_SEC,
         "last_alert_sig": prev.get("last_alert_sig"),
     }
@@ -229,6 +296,7 @@ def notify_if_needed(state: dict[str, Any]) -> int:
     delta = int(state.get("crc_delta") or 0)
     resets = int(state.get("usb_resets_24h") or 0)
     io_err = int(state.get("io_errors_24h") or 0)
+    last_event_ts = float(state.get("last_event_ts") or 0.0)
     remote = os.environ.get("REMOTE_DIR", os.path.expanduser("~/pi-gateway"))
     notify_sh = os.path.join(remote, "scripts/lib/notify.sh")
     if not os.path.isfile(notify_sh):
@@ -249,7 +317,7 @@ def notify_if_needed(state: dict[str, Any]) -> int:
         except (subprocess.SubprocessError, OSError):
             return False
 
-    if not _threshold_met(delta, resets, io_err):
+    if not _should_alert_flap(delta, resets, io_err, last_event_ts, time.time()):
         # last_alert_sig yokken de asili fail state temizlensin
         if not _notify("notify_ssd_usb_flap_ok"):
             return 1
@@ -304,6 +372,12 @@ def _self_check() -> None:
     assert "pi_gateway_ssd_usb_crc_errors 38" in prom
     assert _threshold_met(0, 3, 0)
     assert not _threshold_met(0, 2, 4)
+    assert _classify_kernel_line("2026-11-18T12:58:31+0300 batu kernel: usb 1-1.1: USB disconnect, device number 5") == (False, False)
+    assert _classify_kernel_line("2026-11-18T01:00:23+0300 batu kernel: usb usb2-port2: Cannot enable. Maybe the USB cable is bad?") == (True, False)
+    assert _classify_kernel_line("2026-11-18T01:00:23+0300 batu kernel: usb 2-2: reset SuperSpeed USB device number 7") == (True, False)
+    assert _classify_kernel_line("2026-11-18T01:00:37+0300 batu kernel: I/O error, dev sdc, sector 123") == (False, True)
+    assert _should_alert_flap(0, 19, 45, 1000.0, 1300.0)
+    assert not _should_alert_flap(0, 19, 45, 1000.0, 1000.0 + FLAP_QUIET_CLEAR_SEC + 1)
     print("[ssd-usb-metrics] self-check OK")
 
 

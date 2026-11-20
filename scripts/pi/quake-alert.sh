@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Deprem Telegram — AFAD+Kandilli HTTP poll → notify.sh (Bot API outbox).
-# Hermes/ajan YOK. EEW/saniye YOK. Gecikme ≈ yayın + poll (10s).
+# Deprem — AFAD+Kandilli HTTP poll → notify.sh → Jarvis. EEW değil.
 set -euo pipefail
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -10,7 +9,6 @@ PG_SCRIPT_NAME="$(basename "$0")"
 # shellcheck source=../lib/env-file.sh
 source "${_PG_ENV_LIB:?}"
 read_remote_dotenv || { echo "[${PG_SCRIPT_NAME}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
-load_telegram_from_hermes || true
 # shellcheck source=../lib/notify.sh
 source "$SCRIPT_DIR/../lib/notify.sh"
 
@@ -19,7 +17,6 @@ if [[ "${1:-}" == "--self-check" ]]; then
   exit 0
 fi
 
-notify_enabled || exit 0
 export QUAKE_STATE="${QUAKE_STATE:-/var/lib/pi-gateway/quake-state.json}"
 LOCK="${QUAKE_LOCK:-/var/lib/pi-gateway/quake.lock}"
 mkdir -p "$(dirname "$LOCK")" "$(dirname "$QUAKE_STATE")"
@@ -31,6 +28,7 @@ trap 'rm -f "$STAGE_TMP"' EXIT
 # stderr journal'a kalsın (AFAD 500 vb.); stdout yalnız mesaj blokları
 out="$(python3 "$PY" --stage-state "$STAGE_TMP" 2> >(logger -t pi-gateway-quake -p user.warning) || true)"
 [[ -n "${out// }" ]] || exit 0
+notify_enabled || exit 0
 send_ok=1
 while IFS= read -r block; do
   [[ -n "${block// }" ]] || continue

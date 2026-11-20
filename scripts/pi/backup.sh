@@ -51,7 +51,7 @@ read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv pars
 restic_failed=0
 if [[ "${ENABLE_RESTIC:-true}" == "true" ]] && [[ ! -x "$REMOTE_DIR/scripts/pi/restic-backup.sh" ]]; then
   echo "[backup] HATA: restic-backup.sh yok veya executable degil" >&2
-  notify_backup_fail "restic-backup.sh missing"
+  notify_backup_fail "restic-backup.sh missing" || true
   exit 1
 fi
 if [[ -x "$REMOTE_DIR/scripts/pi/restic-backup.sh" ]]; then

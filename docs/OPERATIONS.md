@@ -208,7 +208,7 @@ Başarısız restore drill `/var/lib/pi-gateway/last-backup-restore-drill-failur
 
 ## Notifications
 
-`.env`: `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`
+`.env`: `NOTIFY_BACKEND=openbot` (Jarvis automation). `OPENBOT_JARVIS_WAIT_DELIVERY=true` → `jarvis-send --wait` (tur bitince iOS/Android push). Telegram yalnız `NOTIFY_BACKEND=telegram|both` iken.
 
 | Source | What it sends |
 |--------|---------------|
@@ -217,7 +217,7 @@ Başarısız restore drill `/var/lib/pi-gateway/last-backup-restore-drill-failur
 | `health-check` / SSD hotplug | Gerçek kesinti sonrası kurtarma bildirimi |
 | `pi-gateway-quake.timer` (60s) | AFAD+Kandilli poll → outbox bot (REVIZE tekilleştirmeli; Hermes yok; EEW değil) |
 | `pi-gateway-ibb.timer` (30 dk) | İBB HKI ≥ `IBB_HKI_WARN` (101) → Telegram; iyileşince bir kez OK. API fail = sessiz |
-| Hermes cron (07:00 / 18:55 / 19:00 / 23:00) | Günaydın / piyasa / akşam / gece bültenleri — ağ/saatlik gözcü kaldırıldı |
+| Jarvis rutinleri (07:00 / 18:55 / 19:00 / 23:00) | Günaydın / piyasa / akşam / gece. Piyasa dosyası 18:54 `jarvis-fx-prepare.timer`. |
 
 **Deprem:** yayın sonrası bildirim. Gecikme ≈ kaynak sayfası + ≤60s poll. İlk koşu bootstrap (tarihî liste spam yok). Eşik/konum: `.env` `QUAKE_*` (bkz. `.env.example`).
 

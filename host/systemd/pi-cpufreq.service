@@ -1,0 +1,11 @@
+[Unit]
+Description=Pi 4 CPU schedutil
+After=multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh -c 'for g in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do echo schedutil > "$$g"; done'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -9,10 +9,11 @@ PG_SCRIPT_NAME="$(basename "$0")"
 # shellcheck source=../lib/env-file.sh
 source "${_PG_ENV_LIB:?}"
 read_remote_dotenv || { echo "[${PG_SCRIPT_NAME}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
-load_telegram_from_hermes || true
 # shellcheck source=../lib/notify.sh
 source "$SCRIPT_DIR/../lib/notify.sh"
 log() { echo "[status-card] $*"; }
+log "Telegram kartı kalktı."
+exit 0
 notify_enabled || { log "TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID eksik"; exit 1; }
 [[ -f "$CARD_PY" ]] || { log "HATA: telegram-status-card.py yok"; exit 1; }
 

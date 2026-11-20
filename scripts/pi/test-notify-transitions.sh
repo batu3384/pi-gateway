@@ -8,7 +8,8 @@ source "$SCRIPT_DIR/../lib/env-file.sh"
 # shellcheck source=../lib/notify.sh
 source "$SCRIPT_DIR/../lib/notify.sh"
 
-export NOTIFY_STATE_DIR
+export NOTIFY_STATE_DIR NOTIFY_BACKEND=openbot OPENBOT_JARVIS_AUTOMATION=true
+export OPENBOT_ALERT_WEBHOOK_URL=http://127.0.0.1:9/unused
 NOTIFY_STATE_DIR="$(mktemp -d)"
 export TELEGRAM_BOT_TOKEN='' TELEGRAM_CHAT_ID=''
 export NOTIFY_REPEAT_SEC=3600
@@ -18,16 +19,10 @@ export NOTIFY_GLOBAL_MAX_HOUR=0
 fail() { echo "[test-notify] FAIL: $*"; exit 1; }
 ok() { echo "[test-notify] OK: $*"; }
 
-hermes_home="$(mktemp -d)"
-printf 'TELEGRAM_BOT_TOKEN=hermes-token\nTELEGRAM_CHAT_ID=hermes-chat\n' > "$hermes_home/.env"
-export HERMES_HOME="$hermes_home"
 if ! notify_enabled; then
-  fail "Hermes Telegram credential fallback yok"
+  fail "OpenBot notify kapalı"
 fi
-[[ "$TELEGRAM_BOT_TOKEN" == "hermes-token" && "$TELEGRAM_CHAT_ID" == "hermes-chat" ]] \
-  || fail "Hermes Telegram credential fallback hatali"
-rm -rf "$hermes_home"
-ok "Hermes credential fallback"
+ok "OpenBot notify açık"
 
 notify_transition_peek "t" "fail" || fail "ilk fail peek"
 notify_transition_commit "t" "fail"
@@ -49,7 +44,7 @@ ok "recover"
 NOTIFY_REPEAT_SEC=3600
 export TELEGRAM_BOT_TOKEN=test-token TELEGRAM_CHAT_ID=test-chat
 notify_send_message() { return 1; }
-notify_telegram "Başarısız gönderim" "" "send-fail"
+notify_telegram "Başarısız gönderim" "" "send-fail" || true
 [[ ! -f "${NOTIFY_STATE_DIR}/send-fail" ]] || fail "başarısız gönderim cooldown tüketti"
 notify_send_message() { return 0; }
 notify_telegram "Başarılı gönderim" "" "send-fail"
@@ -63,17 +58,17 @@ escaped="$(notify_html_alert 'a < b & c')"
   || fail "HTML raw fragment bozuldu"
 captured=""
 notify_send_message() { captured="$1"; return 0; }
-notify_send_with_transition "title-escape" "fail" "A & B" "" "HTML"
+notify_send_with_transition "title-escape" "fail" "A & B" "" "HTML" \
+  || fail "başarılı gönderim 0 dönmedi"
 [[ "$captured" == '<b>A &amp; B</b>' ]] || fail "HTML title escape yok"
+notify_send_message() { return 1; }
+if notify_send_with_transition "send-rc" "fail" "x" "" "HTML"; then
+  fail "başarısız gönderim 0 döndü"
+fi
 unset -f notify_send_message
 source "$SCRIPT_DIR/../lib/notify.sh"
-curl() { printf '{"ok":false,"description":"test"}'; }
-if notify_send_message "HTTP 200 false"; then
-  fail "Telegram ok=false basarili sayildi"
-fi
-curl() { printf '{"ok":true,"result":{"message_id":1}}'; }
-notify_send_message "HTTP 200 true" || fail "Telegram ok=true basarisiz sayildi"
-unset -f curl
+OPENBOT_JARVIS_AUTOMATION=false OPENBOT_ALERT_WEBHOOK_URL= \
+  notify_send_message "kapalı" && fail "kapalı kanal başarılı sayıldı"
 ok "HTML detail contract"
 
 NOTIFY_REPEAT_SEC=0
@@ -132,14 +127,12 @@ grep -q '/var/lib/pi-gateway/notify' "$SCRIPT_DIR/../lib/notify.sh" \
 grep -q 'notify_touch_alive' "$SCRIPT_DIR/../lib/notify.sh" || fail "notify_touch_alive yok"
 grep -q 'notify_boot_up' "$SCRIPT_DIR/../lib/notify.sh" || fail "notify_boot_up yok"
 [[ -f "$SCRIPT_DIR/boot-notify.sh" ]] || fail "boot-notify.sh yok"
-grep -q 'notify_hermes_inbox_up' "$SCRIPT_DIR/../lib/notify.sh" || fail "notify_hermes_inbox_up yok"
-[[ -f "$SCRIPT_DIR/hermes-inbox-up-notify.sh" ]] || fail "hermes-inbox-up-notify.sh yok"
-grep -q 'hermes-inbox-up-notify' "$SCRIPT_DIR/patch-hermes-telegram-pi.sh" \
-  || fail "patch ExecStartPost hermes-up yok"
+[[ ! -f "$SCRIPT_DIR/hermes-inbox-up-notify.sh" ]] || fail "hermes-inbox script duruyor"
+[[ ! -f "$SCRIPT_DIR/patch-hermes-telegram-pi.sh" ]] || fail "hermes telegram patch duruyor"
 grep -q '_notify_stack_ok\|notify_stack_recovered' "$SCRIPT_DIR/recover-readonly-root.sh" \
   || fail "recover-readonly stack notify yok"
-grep -q 'Asistan Sohbeti Aktif' "$SCRIPT_DIR/../lib/notify.sh" \
-  || fail "asistan basligi yok"
+grep -q 'Sistem Başlatıldı' "$SCRIPT_DIR/../lib/notify.sh" \
+  || fail "boot basligi yok"
 ! grep -qiE 'Inbox geri|Telegram inbox|getUpdates|stack ayağa|degraded mod|P2 —|saatte en fazla|Yedek SLA|· Yavaş|· Opsiyonel|· Stack' \
   "$SCRIPT_DIR/../lib/notify.sh" \
   || fail "kullaniciya jargon kalmis"

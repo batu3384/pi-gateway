@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Boot lifecycle: Pi açıldı + kapalı süre (Telegram outbox). getUpdates yok.
+# Boot lifecycle: Pi açıldı + kapalı süre → notify.sh → jarvis-send (OpenBot push).
 set -euo pipefail
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,7 +13,7 @@ source "${SCRIPT_DIR}/../lib/notify.sh"
 
 log() { echo "[boot-notify] $*"; logger -t pi-gateway-boot-notify "$*" 2>/dev/null || true; }
 
-notify_enabled || { log "Telegram yok — atlandi"; exit 0; }
+notify_enabled || { log "notify kapalı (OpenBot automation yok) — atlandı"; exit 0; }
 
 notify_ensure_dir
 now="$(date +%s)"
@@ -36,8 +36,8 @@ fi
 host="$(hostname -s)"
 if notify_boot_up "$host" "$down"; then
   log "OK downtime=${down}s"
-else
-  log "WARN: telegram gonderilemedi"
+  notify_touch_alive
+  exit 0
 fi
-notify_touch_alive
-exit 0
+log "WARN: jarvis-send / notify gönderilemedi"
+exit 1

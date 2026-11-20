@@ -85,24 +85,7 @@ if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx n8n; then
   fi
 fi
 
-# Hermes / Telegram outbox hot path (sohbet + alarm metinleri)
-if [[ "${HERMES_TELEGRAM_GATEWAY:-}" == "true" ]]; then
-  soft "Hermes telegram patch" "$SCRIPT_DIR/patch-hermes-telegram-pi.sh"
-  soft "Hermes cron patch" "$SCRIPT_DIR/patch-hermes-cron-pi.sh"
-  soft "Hermes config" "$SCRIPT_DIR/patch-hermes-config-pi.sh"
-  soft "Hermes cron jobs" "$SCRIPT_DIR/setup-hermes-cron.sh"
-  # SOUL + ops skill + ölü skill disable (her code deploy)
-  soft "Hermes identity" "$SCRIPT_DIR/setup-hermes-identity.sh"
-  # Menu skill + durum kartı: full deploy / DEPLOY_CODE_MENU=true
-  if [[ "${DEPLOY_CODE_MENU:-false}" == "true" ]]; then
-    soft "Hermes menu skill" "$SCRIPT_DIR/setup-hermes-menu-skill.sh"
-  fi
-  if systemctl is-active --quiet hermes-gateway 2>/dev/null; then
-    sudo systemctl restart hermes-gateway 2>/dev/null \
-      && log "hermes-gateway restart (SOUL/ops)" \
-      || log "WARN: hermes-gateway restart"
-  fi
-fi
+OPENBOT_HEAL_QUICK=true soft "OpenBot heal" "$SCRIPT_DIR/heal-openbot-fleet.sh"
 
 soft "Home ops timers" "$SCRIPT_DIR/setup-home-ops-timers.sh"
 soft "Notify transition self-check" "$SCRIPT_DIR/test-notify-transitions.sh"

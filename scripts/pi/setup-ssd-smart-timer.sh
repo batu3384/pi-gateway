@@ -15,6 +15,8 @@ if ! smartctl_ok; then
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq smartmontools
 fi
 smartctl_ok || { log "HATA: smartctl yok"; exit 1; }
+# smartd daemon sabit /dev/sda 30dk SAT sorgusu atar (JMicron kopru cakismasi); yalniz haftalik timer kullanilir
+sudo systemctl disable --now smartmontools.service smartd.service 2>/dev/null || true
 for unit in pi-gateway-ssd-smart.service pi-gateway-ssd-smart.timer; do
   [[ -f "$REMOTE_DIR/host/systemd/$unit" ]] || { log "HATA: $unit yok"; exit 1; }
   sudo cp "$REMOTE_DIR/host/systemd/$unit" "/etc/systemd/system/$unit"

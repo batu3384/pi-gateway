@@ -135,50 +135,10 @@ def archive(text: str, slug: str) -> Path | None:
         return None
 
 
-def _hermes_telegram_creds() -> tuple[str, str]:
-    token = os.environ.get("TELEGRAM_BOT_TOKEN") or ""
-    chat = os.environ.get("TELEGRAM_CHAT_ID") or ""
-    if token and chat:
-        return token, chat
-    env_path = Path(os.environ.get("HERMES_HOME") or (Path.home() / ".hermes")) / ".env"
-    if env_path.is_file():
-        try:
-            for line in env_path.read_text(encoding="utf-8").splitlines():
-                s = line.strip()
-                if not s or s.startswith("#") or "=" not in s:
-                    continue
-                k, _, v = s.partition("=")
-                k, v = k.strip(), v.strip().strip("'\"")
-                if k == "TELEGRAM_BOT_TOKEN" and not token:
-                    token = v
-                elif k == "TELEGRAM_CHAT_ID" and not chat:
-                    chat = v
-                elif k == "TELEGRAM_ALLOWED_USERS" and not chat and v:
-                    chat = v.split(",", 1)[0].strip()
-        except OSError:
-            pass
-    return token, chat
-
-
 def _send_telegram(text: str) -> bool:
-    token, chat = _hermes_telegram_creds()
-    if not token or not chat:
-        return False
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    payload = urllib.parse.urlencode(
-        {
-            "chat_id": chat,
-            "text": text,
-            "disable_web_page_preview": "true",
-        }
-    ).encode()
-    req = urllib.request.Request(url, data=payload, method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            data = json.load(resp)
-        return bool(data.get("ok"))
-    except (OSError, TimeoutError, json.JSONDecodeError, urllib.error.URLError):
-        return False
+    # Bültenler OpenBot filo rutinlerinde. Bu fonksiyon artık dışarı göndermez.
+    del text
+    return False
 
 
 def slug_for_job(name: str) -> str:

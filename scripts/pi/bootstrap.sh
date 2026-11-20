@@ -148,7 +148,8 @@ done
 for stale in pi-gateway-stack-watchdog.timer pi-gateway-stack-watchdog.service \
   pi-gateway-netalertx-names.timer pi-gateway-netalertx-names.service \
   pi-gateway-kuma-report.timer pi-gateway-kuma-report.service \
-  pi-gateway-morning.timer pi-gateway-morning.service pi-gateway-telegram-bot.service; do
+  pi-gateway-morning.timer pi-gateway-morning.service pi-gateway-telegram-bot.service \
+  hermes-gateway.service; do
   sudo systemctl disable --now "$stale" 2>/dev/null || true
   sudo rm -f "/etc/systemd/system/$stale"
 done

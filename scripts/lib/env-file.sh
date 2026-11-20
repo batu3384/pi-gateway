@@ -61,39 +61,3 @@ read_project_or_example_dotenv() {
     read_dotenv_strict "$project/.env.example"
   fi
 }
-
-# Hermes cutover: panel poller token may live only in ~/.hermes/.env
-load_telegram_from_hermes() {
-  local hermes_env="${HERMES_HOME:-$HOME/.hermes}/.env"
-  local line k v
-  [[ -f "$hermes_env" ]] || return 1
-  [[ -n "${TELEGRAM_BOT_TOKEN:-}" && -n "${TELEGRAM_CHAT_ID:-}" ]] && return 0
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    line="${line%$'\r'}"
-    [[ -z "${line//[[:space:]]/}" || "$line" =~ ^[[:space:]]*# ]] && continue
-    [[ "$line" == *=* ]] || continue
-    k="${line%%=*}"
-    v="${line#*=}"
-    v="${v#"${v%%[![:space:]]*}"}"
-    v="${v%"${v##*[![:space:]]}"}"
-    if [[ "$v" == \'*\' && "$v" == *\' ]]; then
-      v="${v:1:${#v}-2}"
-    elif [[ "$v" == \"*\" && "$v" == *\" ]]; then
-      v="${v:1:${#v}-2}"
-      v="${v//\\\"/\"}"
-      v="${v//\\\\/\\}"
-    fi
-    case "$k" in
-      TELEGRAM_BOT_TOKEN) [[ -z "${TELEGRAM_BOT_TOKEN:-}" ]] && TELEGRAM_BOT_TOKEN="$v" ;;
-      TELEGRAM_CHAT_ID) [[ -z "${TELEGRAM_CHAT_ID:-}" ]] && TELEGRAM_CHAT_ID="$v" ;;
-      TELEGRAM_ALLOWED_USERS)
-        if [[ -z "${TELEGRAM_CHAT_ID:-}" && -n "$v" ]]; then
-          TELEGRAM_CHAT_ID="${v%%,*}"
-          TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID// /}"
-        fi
-        ;;
-    esac
-  done <"$hermes_env"
-  export TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID
-  [[ -n "${TELEGRAM_BOT_TOKEN:-}" && -n "${TELEGRAM_CHAT_ID:-}" ]]
-}

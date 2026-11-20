@@ -375,7 +375,6 @@ echo "[export-state] OK ${METRICS_FILE}"
 # P2 yavaşlama — kartta ms; eşikte alarm
 # shellcheck source=../lib/notify.sh
 source "$SCRIPT_DIR/../lib/notify.sh"
-load_telegram_from_hermes 2>/dev/null || true
 DNS_LATENCY_WARN_MS="${DNS_LATENCY_WARN_MS:-150}"
 PANEL_LATENCY_WARN_MS="${PANEL_LATENCY_WARN_MS:-800}"
 dns_ms="$(python3 -c 'import json,sys

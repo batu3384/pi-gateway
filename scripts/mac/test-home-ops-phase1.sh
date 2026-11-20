@@ -8,8 +8,9 @@ ok() { echo "[test-home-ops] OK: $*"; }
 health="$ROOT/scripts/pi/health-check.sh"
 ! grep -q 'notify_dns_fail' "$health" || die "health-check hâlâ notify_dns_fail"
 ! grep -q 'notify_dns_recovered' "$health" || die "health-check hâlâ notify_dns_recovered"
-grep -q 'telegram-status-card.sh' "$health" || die "health-check durum kartı yok"
-ok "health-dns çift kesildi + kart"
+! grep -q 'telegram-status-card.sh' "$health" || die "health-check hâlâ Telegram kartı"
+grep -q 'notify.sh' "$health" || die "health-check notify yok"
+ok "health-dns çift kesildi + Jarvis notify"
 
 n8n="$ROOT/scripts/pi/setup-n8n-workflows.sh"
 grep -q 'deactivate_workflow "Pi Gateway — Uptime Kuma Alert"' "$n8n" \
@@ -22,8 +23,8 @@ python3 "$card" self-check || die "status-card self-check"
 grep -q 'editMessageText' "$card" || die "editMessageText yok"
 grep -q 'disable_notification' "$card" || die "kart sessiz send yok"
 ! grep -q '_clock' "$card" || die "kart saati hash kiriyor"
-grep -q 'telegram-status-card.sh' "$ROOT/scripts/pi/telegram-menu.sh" \
-  || die "telegram-menu kart kullanmiyor"
+! grep -q 'api.telegram.org' "$ROOT/scripts/pi/telegram-menu.sh" \
+  || die "telegram-menu hâlâ Telegram API"
 grep -q 'Ana' "$ROOT/scripts/lib/telegram-panels.py" || die "TR Ana etiket yok"
 grep -q 'Grafikler' "$ROOT/scripts/lib/telegram-panels.py" || die "TR Grafikler yok"
 ok "durum karti + TR menu"

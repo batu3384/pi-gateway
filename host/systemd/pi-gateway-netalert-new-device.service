@@ -1,0 +1,11 @@
+[Unit]
+Description=NetAlertX new device alert to OpenBot Jarvis
+After=docker.service network-online.target
+
+[Service]
+Type=oneshot
+User=PI_USER
+Group=PI_USER
+Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
+ExecStart=/home/PI_USER/pi-gateway/scripts/pi/netalert-new-device-notify.sh
+Nice=15

@@ -178,10 +178,6 @@ else
   [[ "${ENABLE_MONITORING:-true}" == "true" ]] && optional_victoriametrics_ok
   [[ "${ENABLE_MONITORING:-true}" == "true" ]] && optional_down grafana
   [[ "${ENABLE_MONITORING:-true}" == "true" ]] && optional_down node-exporter
-  if [[ "${HERMES_TELEGRAM_GATEWAY:-false}" == "true" ]] \
-    && systemctl list-unit-files hermes-gateway.service 2>/dev/null | grep -q 'hermes-gateway.service'; then
-    systemctl is-active --quiet hermes-gateway 2>/dev/null || note_fail "optional-hermes-gateway-down"
-  fi
 fi
 fi
 if ! dig +time=2 +tries=1 @127.0.0.1 -p "${UNBOUND_PORT}" cloudflare.com A >/dev/null 2>&1; then
@@ -518,43 +514,6 @@ if [[ "$drill_max" != "0" ]] && [[ "${ENABLE_RESTIC:-true}" == "true" ]] && ! st
     fi
   fi
 fi
-# Hermes bülten SLO (07/19/23 last_run > 26h) — journal SLO, systemd FAIL değil
-_run_hermes_py() {
-  local kind="$1" out ec=0
-  shift
-  out="$("$@" 2>&1)" || ec=$?
-  if (( ec != 0 )); then
-    logger -t "$LOG_TAG" "WARN ${kind} fail(${ec}): ${out:-exit}"
-    case "$kind" in
-      bulletin-slo|hermes-token-slo|hermes-session-hygiene)
-        slo_note "${kind}-failed"
-        ;;
-    esac
-    return 0
-  fi
-  while IFS= read -r line || [[ -n "${line:-}" ]]; do
-    [[ -n "$line" ]] || continue
-    if [[ "$kind" == *slo ]]; then
-      slo_note "$line"
-    else
-      logger -t "$LOG_TAG" "$line"
-    fi
-  done <<< "$out"
-}
-_jobs_json="${HERMES_HOME:-$HOME/.hermes}/cron/jobs.json"
-if [[ -f "$_jobs_json" ]]; then
-  _run_hermes_py bulletin-slo python3 "$SCRIPT_DIR/../lib/bulletin-slo.py" "$_jobs_json"
-fi
-_hermes_db="${HERMES_HOME:-$HOME/.hermes}/state.db"
-_hygiene_py="$SCRIPT_DIR/../lib/hermes-session-hygiene.py"
-# 2 dk timer: şişman/idle Telegram oturumunu DB'de kapat (gateway restart yok, #54878)
-if [[ -f "$_hermes_db" && -f "$_hygiene_py" ]]; then
-  _idle_sec=$(( ${HERMES_SESSION_IDLE_MIN:-720} * 60 ))
-  _run_hermes_py hermes-session-hygiene python3 "$_hygiene_py" --db "$_hermes_db" --idle-seconds "$_idle_sec"
-fi
-if [[ -f "$_hermes_db" ]]; then
-  _run_hermes_py hermes-token-slo python3 "$SCRIPT_DIR/../lib/hermes-token-slo.py" "$_hermes_db"
-fi
 _reap_sh="$SCRIPT_DIR/../lib/reap-dead-docker-scopes.sh"
 if [[ -f "$_reap_sh" ]]; then
   # shellcheck source=../lib/reap-dead-docker-scopes.sh
@@ -652,11 +611,11 @@ else
     notify_monitoring_stack_ok || true
   fi
   if [[ "$has_ssd" -eq 1 ]]; then
-    notify_ssd_degraded "$host" "$details"
+    notify_ssd_degraded "$host" "$details" || true
   elif [[ "$has_core" -eq 1 ]]; then
-    logger -t "$LOG_TAG" "core fail — Telegram OnFailure (health-dns yok)"
+    logger -t "$LOG_TAG" "core fail — Jarvis OnFailure (health-dns yok)"
   elif [[ "$has_optional" -eq 1 ]]; then
-    notify_optional_warn "$host" "${_optional_details[*]}"
+    notify_optional_warn "$host" "${_optional_details[*]}" || true
   else
     logger -t "$LOG_TAG" "OK dns stack healthy"
     notify_optional_recovered || true
@@ -686,7 +645,7 @@ else
     else
       notify_restic_offsite_ok || true
     fi
-    notify_slo_backup "$host" "${slo_details[*]}"
+    notify_slo_backup "$host" "${slo_details[*]}" || true
   else
     notify_slo_backup_ok || true
     notify_restic_offsite_ok || true
@@ -698,7 +657,7 @@ else
         bulletin-*|hermes-session-*|hermes-token-*) ops_slo_details+=("$f") ;;
       esac
     done
-    notify_slo_ops "$host" "${ops_slo_details[*]}"
+    notify_slo_ops "$host" "${ops_slo_details[*]}" || true
   else
     notify_slo_ops_ok || true
   fi
@@ -708,7 +667,7 @@ if [[ "$exit_code" -eq 0 ]]; then
   if ! storage_degraded && declare -F ssd_mount_healthy >/dev/null 2>&1 && ssd_mount_healthy; then
     if [[ "$(cat "${NOTIFY_STATE_DIR:-/var/lib/pi-gateway/notify}/ssd-degraded.state" 2>/dev/null)" == "fail" ]]; then
       notify_ssd_restored "$(hostname -s 2>/dev/null || echo pi-gateway)" \
-        "Periyodik sağlık kontrolü SSD'yi doğruladı."
+        "Periyodik sağlık kontrolü SSD'yi doğruladı." || true
     fi
   fi
   # shellcheck source=../lib/reset-gateway-units.sh
@@ -724,13 +683,13 @@ for mount in / /mnt/ssd; do
     _mount_bad=0
     usage="$(df -P "$mount" 2>/dev/null | awk 'NR==2 {gsub(/%/,""); print $5}')"
     if [[ -n "${usage:-}" && "$usage" =~ ^[0-9]+$ ]] && (( 10#$usage >= DISK_WARN_PCT )); then
-      notify_disk_warn "$mount" "${usage}%"
+      notify_disk_warn "$mount" "${usage}%" || true
       logger -t "$LOG_TAG" "WARN disk ${mount} at ${usage}%"
       _mount_bad=1
     fi
     iusage="$(df -iP "$mount" 2>/dev/null | awk 'NR==2 {gsub(/%/,""); print $5}')"
     if [[ -n "${iusage:-}" && "$iusage" =~ ^[0-9]+$ ]] && (( 10#$iusage >= INODE_WARN_PCT )); then
-      notify_disk_warn "$mount" "inode ${iusage}%" "Inode doluluk: ${mount}"
+      notify_disk_warn "$mount" "inode ${iusage}%" "Inode doluluk: ${mount}" || true
       logger -t "$LOG_TAG" "WARN inode ${mount} at ${iusage}%"
       _mount_bad=1
     fi
@@ -746,7 +705,7 @@ done
 mem_avail_mb="$(awk '/^MemAvailable:/ {print int($2/1024)}' /proc/meminfo 2>/dev/null || true)"
 if [[ -n "${mem_avail_mb:-}" && "$mem_avail_mb" =~ ^[0-9]+$ ]]; then
   if (( 10#$mem_avail_mb < MEM_WARN_MB )); then
-    notify_memory_warn "MemAvailable ${mem_avail_mb} MiB (eşik ${MEM_WARN_MB} MiB)"
+    notify_memory_warn "MemAvailable ${mem_avail_mb} MiB (eşik ${MEM_WARN_MB} MiB)" || true
     logger -t "$LOG_TAG" "WARN mem available ${mem_avail_mb}MiB"
   else
     notify_memory_ok || true
@@ -775,20 +734,19 @@ if [[ -x "$_export" ]]; then
   REMOTE_DIR="$REMOTE_DIR" bash "$_export" >/dev/null 2>&1 \
     || logger -t "$LOG_TAG" "WARN export-gateway-state failed"
 fi
-_card="${REMOTE_DIR}/scripts/pi/telegram-status-card.sh"
-if [[ -x "$_card" ]]; then
-  PI_GATEWAY_HEALTH_OK="$([[ "$exit_code" -eq 0 ]] && echo 1 || echo 0)" \
-    REMOTE_DIR="$REMOTE_DIR" bash "$_card" >/dev/null 2>&1 \
-    || logger -t "$LOG_TAG" "WARN telegram-status-card failed"
-fi
 _slo="${SCRIPT_DIR}/push-slo-heartbeat.sh"
 [[ -x "$_slo" ]] || _slo="${REMOTE_DIR}/scripts/pi/push-slo-heartbeat.sh"
 if [[ -x "$_slo" ]]; then
   REMOTE_DIR="$REMOTE_DIR" bash "$_slo" >/dev/null 2>&1 \
     || logger -t "$LOG_TAG" "WARN SLO heartbeat push failed"
 fi
-# Boot downtime hesabı — her tick (fail olsa da canlılık)
-notify_touch_alive || true
+# Boot downtime hesabı. boot-notify hâlâ çalışıyorsa last-alive'a dokunma.
+_boot_unit="$(systemctl is-active pi-gateway-boot-notify.service 2>/dev/null || true)"
+if [[ "$_boot_unit" == "activating" ]]; then
+  logger -t "$LOG_TAG" "skip last-alive (boot-notify activating)"
+else
+  notify_touch_alive || true
+fi
 if (( exit_code != 0 )); then
   mkdir -p /run/pi-gateway 2>/dev/null || true
   {

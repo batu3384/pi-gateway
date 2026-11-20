@@ -92,7 +92,7 @@ if ! echo "$health_out" | grep -qiE 'PASSED|OK'; then
   log "WARN: SMART health FAIL veya okunamadi ($ssd_dev)"
   # shellcheck source=../lib/notify.sh
   source "$SCRIPT_DIR/../lib/notify.sh"
-  notify_smart_warn "SMART health FAIL ($ssd_dev)"
+  notify_smart_warn "SMART health FAIL ($ssd_dev)" || true
   exit 1
 fi
 
@@ -135,13 +135,13 @@ smart_warn=0
 if [[ -n "$wear_pct" && "$wear_pct" =~ ^[0-9]+$ ]] && (( wear_pct >= SSD_WEAR_WARN_PCT )); then
   log "WARN: SSD wear ${wear_pct}% >= ${SSD_WEAR_WARN_PCT}%"
   source "$SCRIPT_DIR/../lib/notify.sh"
-  notify_smart_warn "wear ${wear_pct}% (eşik ${SSD_WEAR_WARN_PCT}%)"
+  notify_smart_warn "wear ${wear_pct}% (eşik ${SSD_WEAR_WARN_PCT}%)" || true
   smart_warn=1
 fi
 if [[ -n "$realloc" && "$realloc" =~ ^[0-9]+$ ]] && (( realloc >= SSD_REALLOC_WARN )); then
   log "WARN: reallocated sectors ${realloc} >= ${SSD_REALLOC_WARN}"
   source "$SCRIPT_DIR/../lib/notify.sh"
-  notify_smart_warn "reallocated sectors ${realloc} (eşik ${SSD_REALLOC_WARN})"
+  notify_smart_warn "reallocated sectors ${realloc} (eşik ${SSD_REALLOC_WARN})" || true
   smart_warn=1
 fi
 if [[ "$smart_warn" -eq 0 ]]; then

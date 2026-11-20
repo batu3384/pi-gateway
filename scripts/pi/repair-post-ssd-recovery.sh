@@ -34,9 +34,9 @@ if [[ -d "$REMOTE_DIR/compose" && "${ENABLE_CROWDSEC:-true}" == "true" ]]; then
   (cd "$REMOTE_DIR/compose" && docker compose --env-file ../.env --profile crowdsec up -d crowdsec) 2>/dev/null \
     || log "WARN: crowdsec up"
 fi
-if [[ -f /mnt/ssd/openbot/compose.yaml ]]; then
-  (cd /mnt/ssd/openbot && docker compose up -d) 2>/dev/null \
-    || log "WARN: openbot up"
+if systemctl is-enabled openbot.service >/dev/null 2>&1; then
+  sudo systemctl restart openbot.service 2>/dev/null \
+    || log "WARN: openbot restart"
 fi
 # shellcheck source=../lib/reset-gateway-units.sh
 source "$SCRIPT_DIR/../lib/reset-gateway-units.sh"

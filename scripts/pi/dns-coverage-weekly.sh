@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
-# Haftalik DNS kapsam ozeti — Telegram
+# Haftalik DNS kapsam ozeti — Jarvis
 set -euo pipefail
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../lib/env-file.sh
 source "$SCRIPT_DIR/../lib/env-file.sh"
 read_remote_dotenv || { echo "[dns-weekly] HATA: .env" >&2; exit 1; }
-load_telegram_from_hermes || true
 # shellcheck source=../lib/notify.sh
 source "$SCRIPT_DIR/../lib/notify.sh"
 log() { echo "[dns-weekly] $*"; }
 
-notify_enabled || { log "TELEGRAM eksik — atlandi"; exit 0; }
+notify_enabled || { log "Jarvis notify kapalı — atlandı"; exit 0; }
 
 state="${ADGUARD_DNS_COVERAGE_STATE_PATH:-/var/lib/pi-gateway/dns-coverage-state.json}"
 audit="${REMOTE_DIR}/scripts/pi/audit-dns-coverage.sh"
@@ -53,5 +52,5 @@ if [[ "$status" == "ok" && "${NOTIFY_DNS_WEEKLY_OK:-false}" != "true" ]]; then
 fi
 
 body="$(notify_html_alert "$detail" "$action")"
-notify_telegram "📋 Haftalık DNS Kapsam" "$body" "dns-weekly-report" "HTML"
+notify_telegram "📋 Haftalık DNS Kapsam" "$body" "dns-weekly-report" "HTML" || true
 log "OK"

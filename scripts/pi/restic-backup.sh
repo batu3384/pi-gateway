@@ -49,8 +49,10 @@ fi
 mkdir -p "$REPO_HOST_PATH"
 run_restic() {
   local -a extra_mounts=()
-  if [[ -d /mnt/ssd/openbot/data ]]; then
-    extra_mounts+=(-v "/mnt/ssd/openbot/data:/backup/openbot:ro")
+  if [[ -d /mnt/ssd/openbot-native/config/OpenBot ]]; then
+    extra_mounts+=(-v "/mnt/ssd/openbot-native/config/OpenBot:/backup/openbot:ro")
+  elif [[ -d /mnt/ssd/openbot/data/.config/OpenBot ]]; then
+    extra_mounts+=(-v "/mnt/ssd/openbot/data/.config/OpenBot:/backup/openbot:ro")
   fi
   timeout "$RESTIC_TIMEOUT_SEC" docker run --rm --network none \
     -e RESTIC_PASSWORD \
@@ -68,7 +70,7 @@ if ! run_restic snapshots >/dev/null 2>&1; then
     log "HATA: mevcut Restic repo okunamiyor — init reddedildi; repair/recovery gerekli"
     # shellcheck source=../lib/notify.sh
     source "$SCRIPT_DIR/../lib/notify.sh"
-    notify_backup_fail "$(date -Iseconds)" "existing Restic repo unavailable; init refused"
+    notify_backup_fail "$(date -Iseconds)" "existing Restic repo unavailable; init refused" || true
     exit 1
   fi
   log "Repo olusturuluyor: $REPO_HOST_PATH"
@@ -86,11 +88,12 @@ do_backup() {
     local rel="${repo_norm#"${data_norm}/"}"
     extra_excludes+=(--exclude "/backup/data/${rel}")
   fi
-  if [[ -d /mnt/ssd/openbot/data ]]; then
+  if [[ -d /mnt/ssd/openbot-native/config/OpenBot || -d /mnt/ssd/openbot/data/.config/OpenBot ]]; then
     extra_paths+=(/backup/openbot)
     extra_excludes+=(
-      --exclude '/backup/openbot/.config/OpenBot/Partitions/**'
-      --exclude '/backup/openbot/.cache/**'
+      --exclude '/backup/openbot/Partitions/**'
+      --exclude '/backup/openbot/Cache/**'
+      --exclude '/backup/openbot/Code Cache/**'
     )
   fi
   run_restic backup \
@@ -121,7 +124,7 @@ if ! do_backup; then
       log "HATA: Restic repo kurtarilamadi — otomatik reinit kapali (RESTIC_ALLOW_REINIT=true ile bilincli kurtarma)"
       # shellcheck source=../lib/notify.sh
       source "$SCRIPT_DIR/../lib/notify.sh"
-      notify_backup_fail "$STAMP" "Restic repair failed; automatic reinit disabled"
+      notify_backup_fail "$STAMP" "Restic repair failed; automatic reinit disabled" || true
       exit 1
     fi
     log "WARN: repo kurtarilamadi — yedek klasoru yeniden init (GECMIS KORUNUR: .corrupt.*)"
@@ -141,7 +144,7 @@ if ! do_backup; then
       log "HATA: fresh init sonrasi backup basarisiz"
       # shellcheck source=../lib/notify.sh
       source "$SCRIPT_DIR/../lib/notify.sh"
-      notify_backup_fail "$STAMP" "fresh init sonrasi backup basarisiz"
+      notify_backup_fail "$STAMP" "fresh init sonrasi backup basarisiz" || true
       exit 1
     }
   fi
@@ -159,12 +162,12 @@ timeout "$RESTIC_CHOWN_TIMEOUT_SEC" sudo chown -R "${USER}:${USER}" "$REPO_HOST_
 # shellcheck source=../lib/notify.sh
 source "$SCRIPT_DIR/../lib/notify.sh"
 if [[ "$REINIT_DONE" -eq 1 ]]; then
-  notify_backup_fail "$STAMP" "restic repo reinit — eski snapshot'lar ${bak:-.corrupt.*}; Mac backup-pull --delete REDDEDILIR (marker)"
+  notify_backup_fail "$STAMP" "restic repo reinit — eski snapshot'lar ${bak:-.corrupt.*}; Mac backup-pull --delete REDDEDILIR (marker)" || true
   log "Tamamlandi (REINIT — notify fail, exit 1)"
   exit 1
 fi
 if [[ "${NOTIFY_BACKUP_OK:-false}" == "true" ]]; then
-  notify_backup_ok "$STAMP"
+  notify_backup_ok "$STAMP" || true
 else
   # Clear any prior backup failure state silently so recovery is recorded
   notify_state_clear "restic-fail" 2>/dev/null || true

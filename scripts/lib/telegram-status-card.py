@@ -160,20 +160,8 @@ def card_hash(text: str, markup: str) -> str:
 
 
 def _api(method: str, payload: dict[str, Any]) -> dict[str, Any]:
-    token = os.environ.get("TELEGRAM_BOT_TOKEN") or ""
-    url = f"https://api.telegram.org/bot{token}/{method}"
-    data = urllib.parse.urlencode(payload).encode()
-    req = urllib.request.Request(url, data=data, method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            return json.load(resp)
-    except urllib.error.HTTPError as exc:
-        try:
-            return json.loads(exc.read().decode("utf-8", errors="replace"))
-        except Exception:
-            return {"ok": False, "description": str(exc)}
-    except (OSError, json.JSONDecodeError, TimeoutError) as exc:
-        return {"ok": False, "description": str(exc)}
+    del method, payload
+    return {"ok": False, "description": "telegram kalkti"}
 
 
 def _save_state(path: str, state: dict[str, Any]) -> None:

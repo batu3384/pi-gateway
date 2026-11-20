@@ -81,8 +81,8 @@ grep -q 'ENABLE_TLS' "$PROJECT_DIR/scripts/mac/render-config.sh" \
 ok "ENABLE_TLS render'a bagli"
 
 grep -q 'PI_TELEGRAM_BOT_TOKEN' "$compose" \
-  || die "n8n PI_TELEGRAM env yok"
-ok "n8n telegram env compose'da"
+  && die "n8n PI_TELEGRAM env duruyor"
+ok "n8n telegram env yok"
 
 grep -q '/data/.disk-probe:/host-ssd:ro' "$compose" \
   || die "n8n hala genis /mnt/ssd mount kullaniyor"
@@ -353,8 +353,8 @@ grep -q 'reap-dead-docker-scopes.sh' "$PROJECT_DIR/scripts/pi/install-privileged
   || die "privileged docker-scope reap yok"
 [[ ! -f "$PROJECT_DIR/config/n8n/netalert-device-alert.workflow.json" ]] \
   || die "netalert-device-alert.workflow.json silinmeli"
-grep -q 'NETALERT_NOTIFY_VIA=telegram gerekli' "$PROJECT_DIR/scripts/pi/setup-netalertx.sh" \
-  || die "setup-netalertx telegram-only degil"
+grep -q 'TELEGRAM_RUN kapalı' "$PROJECT_DIR/scripts/pi/setup-netalertx.sh" \
+  || die "setup-netalertx telegram plugin kapali degil"
 grep -qE 'VNDRPDT|DIGSCAN|ICMP' "$compose" \
   && die "netalertx compose hala agir plugin"
 grep -q "LOADED_PLUGINS: \"\\['ARPSCAN'" "$compose" \
@@ -405,28 +405,25 @@ grep -q "NTFPRCS_INCLUDED_SECTIONS" "$PROJECT_DIR/scripts/pi/setup-netalertx.sh"
   || die "netalert-offline.sh silinmeli"
 [[ ! -f "$PROJECT_DIR/scripts/pi/watchdog.sh" ]] \
   || die "watchdog.sh silinmeli"
-grep -qE 'pi-netalert-newdev|pi-watchdog|Sistem Gözcüsü|Ağ Gözcüsü' \
-  "$PROJECT_DIR/config/hermes/cron-jobs.template.json" \
-  && die "hermes cron template hala ag/saatlik gozcu"
+[[ ! -f "$PROJECT_DIR/config/hermes/cron-jobs.template.json" ]] \
+  || die "config/hermes/cron-jobs.template.json silinmeli"
+[[ -f "$PROJECT_DIR/scripts/pi/netalert-new-device-notify.sh" ]] \
+  || die "netalert-new-device-notify.sh yok"
 grep -q 'panel_url' "$PROJECT_DIR/scripts/lib/telegram-panels.py" \
   || die "telegram-panels panel_url yok"
 python3 "$PROJECT_DIR/scripts/lib/netalert-devices.py" --self-check \
   || die "netalert-devices self-check fail"
 grep -q 'setup-hermes-cron.sh' "$PROJECT_DIR/scripts/pi/post-deploy.sh" \
-  || die "post-deploy hermes cron yok"
-[[ -f "$PROJECT_DIR/scripts/pi/setup-hermes-cron-scripts.sh" ]] \
-  || die "setup-hermes-cron-scripts yok"
-grep -q 'pi-fx-quote.sh' "$PROJECT_DIR/config/hermes/cron-jobs.template.json" \
-  || die "piyasa pi-fx-quote yok"
-grep -q 'HERMES_API_CALL_STALE_TIMEOUT' "$PROJECT_DIR/host/systemd/hermes-gateway.service" \
-  || die "hermes-gateway stale timeout yok"
-grep -q 'HERMES_COMPRESS_TOKEN_CAP:-96000' "$PROJECT_DIR/scripts/pi/patch-hermes-config-pi.sh" \
-  || die "hermes compress token cap 96000 degil"
-grep -q 'hermes-token-slo.py' "$PROJECT_DIR/scripts/pi/health-check.sh" \
-  || die "health-check token SLO yok"
+  && die "post-deploy hermes cron duruyor"
+[[ ! -f "$PROJECT_DIR/host/systemd/hermes-gateway.service" ]] \
+  || die "hermes-gateway unit duruyor"
+grep 'LOADED_PLUGINS' "$compose" | grep -q 'TELEGRAM' \
+  && die "netalertx compose TELEGRAM plugin duruyor"
+grep -q 'jarvis-send' "$PROJECT_DIR/scripts/lib/openbot-notify.sh" \
+  || die "openbot-notify jarvis-send yok"
 grep -q 'NETALERT_NOTIFY_VIA' "$PROJECT_DIR/scripts/pi/setup-netalertx.sh" \
   || die "setup-netalertx NOTIFY_VIA yok"
-ok "netalertx host + telegram new-device (ag cron yok)"
+ok "netalertx host + jarvis new-device (hermes cron yok)"
 
 grep -q 'STORAGE_TYPE=hybrid' "$PROJECT_DIR/.env.example" \
   || die ".env.example hybrid varsayilan degil"

@@ -33,7 +33,8 @@ for unit in \
   pi-gateway-dns-coverage.service pi-gateway-dns-coverage.timer \
   pi-gateway-dns-weekly.service pi-gateway-dns-weekly.timer \
   pi-gateway-container-watchdog.service pi-gateway-container-watchdog.timer \
-  pi-gateway-crowdsec-diary.service pi-gateway-crowdsec-diary.timer
+  pi-gateway-crowdsec-diary.service pi-gateway-crowdsec-diary.timer \
+  pi-gateway-netalert-new-device.service pi-gateway-netalert-new-device.timer
 do
   install_unit "$unit"
 done
@@ -50,7 +51,8 @@ sudo systemctl enable --now \
   pi-gateway-dns-coverage.timer \
   pi-gateway-dns-weekly.timer \
   pi-gateway-container-watchdog.timer \
-  pi-gateway-crowdsec-diary.timer
+  pi-gateway-crowdsec-diary.timer \
+  pi-gateway-netalert-new-device.timer
 if [[ "${MODEM_INVENTORY_ENABLED:-false}" == "true" ]] \
   && [[ -f /etc/pi-gateway/modem-inventory.env ]]; then
   sudo systemctl enable --now pi-gateway-modem-inventory.timer

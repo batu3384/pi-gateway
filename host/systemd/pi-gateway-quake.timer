@@ -1,5 +1,5 @@
 [Unit]
-Description=Pi Gateway earthquake poll every 60s (AFAD+Kandilli; outbox bot, no Hermes)
+Description=Pi Gateway earthquake poll every 60s (AFAD+Kandilli → Jarvis)
 
 [Timer]
 OnBootSec=15s

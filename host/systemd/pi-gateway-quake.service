@@ -1,5 +1,5 @@
 [Unit]
-Description=Pi Gateway earthquake poll (AFAD+Kandilli → Telegram outbox; no Hermes)
+Description=Pi Gateway earthquake poll (AFAD+Kandilli → OpenBot Jarvis)
 After=network-online.target
 Wants=network-online.target
 

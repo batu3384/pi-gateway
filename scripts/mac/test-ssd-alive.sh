@@ -247,34 +247,31 @@ ok "udev jmicron"
 grep -q 'ssd-alive.sh' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" || die "priv ssd-alive yok"
 grep -q 'telegram-menu.sh' "$PROJECT_DIR/scripts/lib/telegram-panels.py" \
   || die "telegram-panels CLI caller dokuman yok"
-grep -q 'hermes-menu' "$PROJECT_DIR/scripts/lib/telegram-panels.py" \
-  || die "telegram-panels hermes-menu caller yok"
 grep -q 'grafana' "$PROJECT_DIR/scripts/lib/telegram-panels.py" \
   || die "telegram-panels grafana yok"
-grep -q 'name: menu' "$PROJECT_DIR/config/hermes/skills/menu/SKILL.md" \
-  || die "hermes menu skill name=menu yok"
-grep -q 'config/hermes/skills/menu' "$PROJECT_DIR/scripts/pi/setup-hermes-menu-skill.sh" \
-  || die "setup-hermes-menu-skill menu path yok"
-grep -q 'Pi Gateway Asistan' "$PROJECT_DIR/config/hermes/SOUL.md" \
-  || die "hermes SOUL.md Pi Gateway kimlik yok"
-grep -q 'Forgejo / Syncthing yok' "$PROJECT_DIR/config/hermes/SOUL.md" \
-  || die "hermes SOUL Forgejo yok notu eksik"
-grep -q 'name: pi-gateway-ops' "$PROJECT_DIR/config/hermes/skills/pi-gateway-ops/SKILL.md" \
+grep -q 'name: menu' "$PROJECT_DIR/config/openbot/fleet/skills/menu/SKILL.md" \
+  || die "menu skill name=menu yok"
+[[ ! -f "$PROJECT_DIR/scripts/pi/setup-hermes-menu-skill.sh" ]] \
+  || die "setup-hermes-menu-skill duruyor"
+grep -q 'Heimdall' "$PROJECT_DIR/config/openbot/fleet/jarvis.md" \
+  || die "jarvis.md Heimdall kimliği yok"
+grep -q 'Forgejo, Syncthing' "$PROJECT_DIR/config/openbot/fleet/jarvis.md" \
+  || die "jarvis.md Forgejo yok notu eksik"
+grep -q 'name: pi-gateway-ops' "$PROJECT_DIR/config/openbot/fleet/skills/pi-gateway-ops/SKILL.md" \
   || die "pi-gateway-ops skill yok"
-grep -q 'Forgejo, Syncthing' "$PROJECT_DIR/config/hermes/skills/pi-gateway-ops/SKILL.md" \
+grep -q 'Forgejo, Syncthing' "$PROJECT_DIR/config/openbot/fleet/skills/pi-gateway-ops/SKILL.md" \
   || die "pi-gateway-ops yok listesi eksik"
-grep -q 'skills.disabled' "$PROJECT_DIR/scripts/pi/setup-hermes-identity.sh" \
-  || die "setup-hermes-identity skills.disabled yok"
+[[ ! -f "$PROJECT_DIR/scripts/pi/setup-hermes-identity.sh" ]] \
+  || die "setup-hermes-identity duruyor"
 grep -q 'setup-hermes-identity.sh' "$PROJECT_DIR/scripts/pi/post-deploy-code.sh" \
-  || die "code deploy hermes identity yok"
+  && die "code deploy hermes identity duruyor"
 grep -q 'setup-hermes-identity.sh' "$PROJECT_DIR/scripts/pi/post-deploy.sh" \
-  || die "full deploy hermes identity yok"
-ok "hermes identity SOUL+ops"
-grep -q 'hermes_owns_inbox' "$PROJECT_DIR/scripts/pi/telegram-menu.sh" \
-  || die "telegram-menu Hermes setMyCommands korumasi yok"
-grep -q 'BotCommandScope\|scope.*chat\|type.: .chat' "$PROJECT_DIR/scripts/pi/telegram-menu.sh" \
-  || grep -q '"type": "chat"' "$PROJECT_DIR/scripts/pi/telegram-menu.sh" \
-  || die "telegram-menu chat-scope /menu yok"
+  && die "full deploy hermes identity duruyor"
+grep -q 'heal-openbot-fleet.sh' "$PROJECT_DIR/scripts/pi/post-deploy-code.sh" \
+  || die "code deploy openbot heal yok"
+ok "deploy hermes identity yok"
+! grep -q 'api.telegram.org' "$PROJECT_DIR/scripts/pi/telegram-menu.sh" \
+  || die "telegram-menu hâlâ Telegram API çağırıyor"
 PANEL_PROTOCOL='' ENABLE_TLS=true LAN_DOMAIN=home PI_STATIC_IP=192.168.1.50 \
   python3 "$PROJECT_DIR/scripts/lib/telegram-panels.py" panels_json \
   | grep -q 'https://gateway.home' \
@@ -294,34 +291,18 @@ grep -q 'p/grafana' "$PROJECT_DIR/scripts/pi/setup-tailscale-serve.sh" \
   || die "telegram-bot.sh silinmeli"
 [[ ! -f "$PROJECT_DIR/scripts/pi/setup-telegram-bot.sh" ]] \
   || die "setup-telegram-bot.sh silinmeli"
-grep -q 'load_telegram_from_hermes' "$PROJECT_DIR/scripts/lib/env-file.sh" \
-  || die "load_telegram_from_hermes yok"
-grep -q 'Connected to Telegram' "$PROJECT_DIR/scripts/pi/setup-hermes-gateway.sh" \
-  || die "hermes setup Connected check yok"
-grep -q '_alert_inbox_down' "$PROJECT_DIR/scripts/pi/setup-hermes-gateway.sh" \
-  || die "hermes setup inbox-down alarm yok"
-grep -q 'enabled birakildi' "$PROJECT_DIR/scripts/pi/setup-hermes-gateway.sh" \
-  || die "hermes fail path unit enabled birakmali (poller yok)"
-grep -q '_remove_leftover_poller' "$PROJECT_DIR/scripts/pi/setup-hermes-gateway.sh" \
-  || die "hermes setup poller cleanup yok"
-grep -q 'systemctl restart' "$PROJECT_DIR/scripts/pi/setup-hermes-gateway.sh" \
-  || die "hermes setup restart yok"
-grep -q 'patch basarisiz' "$PROJECT_DIR/scripts/pi/setup-hermes-gateway.sh" \
-  || die "hermes setup patch fail-closed yok"
-grep -q 'TELEGRAM_ALLOWED_USERS' "$PROJECT_DIR/scripts/pi/setup-hermes-gateway.sh" \
-  || die "hermes setup allowlist preflight yok"
-grep -q 'hermes gateway run' "$PROJECT_DIR/host/systemd/hermes-gateway.service" \
-  || die "hermes-gateway unit yok"
+[[ ! -f "$PROJECT_DIR/scripts/pi/setup-hermes-gateway.sh" ]] \
+  || die "setup-hermes-gateway duruyor"
+[[ ! -f "$PROJECT_DIR/scripts/pi/patch-hermes-telegram-pi.sh" ]] \
+  || die "patch-hermes-telegram duruyor"
+[[ ! -f "$PROJECT_DIR/host/systemd/hermes-gateway.service" ]] \
+  || die "hermes-gateway unit duruyor"
+grep -q 'heal-openbot-fleet.sh' "$PROJECT_DIR/scripts/pi/post-deploy.sh" \
+  || die "post-deploy openbot heal yok"
 grep -q 'setup-hermes-gateway.sh' "$PROJECT_DIR/scripts/pi/post-deploy.sh" \
-  || die "post-deploy hermes setup yok"
-grep -q 'patch-hermes-telegram-pi.sh' "$PROJECT_DIR/scripts/pi/setup-hermes-gateway.sh" \
-  || die "hermes setup Pi telegram patch cagirmiyor"
-grep -q 'require_progress=False' "$PROJECT_DIR/scripts/pi/patch-hermes-telegram-pi.sh" \
-  || die "hermes telegram Pi patch yok"
-grep -q 'VERIFY_FAIL\|verified' "$PROJECT_DIR/scripts/pi/patch-hermes-telegram-pi.sh" \
-  || die "hermes patch verify yok"
-grep -q 'HERMES_TELEGRAM_GATEWAY' "$PROJECT_DIR/.env.example" \
-  || die ".env.example Hermes flag yok"
+  && die "post-deploy hermes setup duruyor"
+grep -q '^HERMES_TELEGRAM_GATEWAY=true' "$PROJECT_DIR/.env.example" \
+  && die ".env.example Hermes açık"
 # ENV.md: single TELEGRAM_CHAT_ID row
 [[ "$(grep -c 'TELEGRAM_CHAT_ID' "$PROJECT_DIR/docs/ENV.md" || true)" -eq 1 ]] \
   || die "ENV.md TELEGRAM_CHAT_ID tek satir olmali"
