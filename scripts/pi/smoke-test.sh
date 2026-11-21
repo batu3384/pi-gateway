@@ -32,10 +32,12 @@ run_check() {
 agh_no_popup_stack() {
   local cookie rc=1
   cookie="$(mktemp)"
-  if curl -fsS -c "$cookie" -X POST "http://127.0.0.1:${ADGUARD_WEB_PORT}/control/login" \
-      -H 'Content-Type: application/json' \
-      -d "{\"name\":\"${AGH_ADMIN_USER:-admin}\",\"password\":\"${AGH_ADMIN_PASSWORD}\"}" >/dev/null \
-    && curl -fsS -b "$cookie" "http://127.0.0.1:${ADGUARD_WEB_PORT}/control/filtering/status" | python3 -c '
+  if AGH_U="${AGH_ADMIN_USER:-admin}" AGH_P="${AGH_ADMIN_PASSWORD:-}" python3 -c '
+import json, os, sys
+print(json.dumps({"name": os.environ["AGH_U"], "password": os.environ["AGH_P"]}))
+' | curl -fsS --max-time 8 -c "$cookie" -X POST "http://127.0.0.1:${ADGUARD_WEB_PORT}/control/login" \
+      -H 'Content-Type: application/json' --data-binary @- >/dev/null \
+    && curl -fsS --max-time 8 -b "$cookie" "http://127.0.0.1:${ADGUARD_WEB_PORT}/control/filtering/status" | python3 -c '
 import json,sys
 d=json.load(sys.stdin)
 urls=[(f.get("url") or "") for f in d.get("filters",[])]
@@ -52,14 +54,45 @@ if not any("graph-fallback.instagram.com" in r for r in rules):
 }
 CADDY_AUTH_USER="${CADDY_AUTH_USER:-${AGH_ADMIN_USER:-admin}}"
 CADDY_AUTH_PASSWORD="${CADDY_AUTH_PASSWORD:-${AGH_ADMIN_PASSWORD:-}}"
+_caddy_probe_deny() {
+  local host="$1" resolve_ip="${PI_STATIC_IP:-127.0.0.1}" code
+  if [[ "${ENABLE_TLS:-true}" == "true" ]]; then
+    code="$(curl -sk -o /dev/null -w '%{http_code}' --max-time 5 \
+      --resolve "${host}.${LAN_DOMAIN}:443:${resolve_ip}" \
+      "https://${host}.${LAN_DOMAIN}/" 2>/dev/null || echo 000)"
+  else
+    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 \
+      -H "Host: ${host}.${LAN_DOMAIN}" "http://${resolve_ip}/" 2>/dev/null || echo 000)"
+  fi
+  [[ "$code" == "401" ]]
+}
+_caddy_probe_ok() {
+  local host="$1" resolve_ip="${PI_STATIC_IP:-127.0.0.1}" code cfg
+  cfg="$(mktemp)"
+  chmod 600 "$cfg"
+  CADDY_U="$CADDY_AUTH_USER" CADDY_P="$CADDY_AUTH_PASSWORD" python3 - "$cfg" <<'PY'
+import json, os, sys
+cred = os.environ["CADDY_U"] + ":" + os.environ["CADDY_P"]
+with open(sys.argv[1], "w", encoding="utf-8") as fh:
+    fh.write("user = " + json.dumps(cred) + "\n")
+PY
+  if [[ "${ENABLE_TLS:-true}" == "true" ]]; then
+    code="$(curl -sk -K "$cfg" -o /dev/null -w '%{http_code}' --max-time 5 \
+      --resolve "${host}.${LAN_DOMAIN}:443:${resolve_ip}" \
+      "https://${host}.${LAN_DOMAIN}/" 2>/dev/null || echo 000)"
+  else
+    code="$(curl -s -K "$cfg" -o /dev/null -w '%{http_code}' --max-time 5 \
+      -H "Host: ${host}.${LAN_DOMAIN}" "http://${resolve_ip}/" 2>/dev/null || echo 000)"
+  fi
+  rm -f "$cfg"
+  [[ "$code" == "200" || "$code" == "302" || "$code" == "307" ]]
+}
 run_caddy_auth_checks() {
   local host="$1"
-  local resolve_ip="${PI_STATIC_IP:-127.0.0.1}"
-  run_check "caddy-${host}-auth-deny" bash -c \
-    'if [[ "${ENABLE_TLS:-false}" == "true" ]]; then code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 --resolve "'"${host}"'.'"${LAN_DOMAIN}"':443:'"${resolve_ip}"'" "https://'"${host}"'.'"${LAN_DOMAIN}"'/"); else code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 -H "Host: '"${host}"'.'"${LAN_DOMAIN}"'" http://127.0.0.1/); fi; [[ "$code" == "401" ]]'
-  run_check "caddy-${host}-auth-ok" bash -c \
-    'if [[ "${ENABLE_TLS:-false}" == "true" ]]; then code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 -u "'"${CADDY_AUTH_USER}"':'"${CADDY_AUTH_PASSWORD}"'" --resolve "'"${host}"'.'"${LAN_DOMAIN}"':443:'"${resolve_ip}"'" "https://'"${host}"'.'"${LAN_DOMAIN}"'/"); else code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 -u "'"${CADDY_AUTH_USER}"':'"${CADDY_AUTH_PASSWORD}"'" -H "Host: '"${host}"'.'"${LAN_DOMAIN}"'" http://127.0.0.1/); fi; [[ "$code" == "200" || "$code" == "302" || "$code" == "307" ]]'
+  run_check "caddy-${host}-auth-deny" _caddy_probe_deny "$host"
+  run_check "caddy-${host}-auth-ok" _caddy_probe_ok "$host"
 }
+STORAGE_TYPE="${STORAGE_TYPE:-hybrid}"
 DEGRADED=0
 if [[ -f /run/pi-gateway/storage-degraded ]]; then
   DEGRADED=1
@@ -96,12 +129,14 @@ elif [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
 fi
 # shellcheck source=../lib/unbound-dnssec.sh
 source "$SCRIPT_DIR/../lib/unbound-dnssec.sh"
-run_check "unbound-5335" dig +time=3 +tries=1 @127.0.0.1 -p 5335 cloudflare.com A
+run_check "unbound-5335" bash -c \
+  'dig +time=3 +tries=1 @127.0.0.1 -p 5335 cloudflare.com A | grep -q "status: NOERROR"'
 run_check "unbound-dnssec-ad" unbound_dnssec_ad_ok 5335
 run_check "unbound-dnssec-sigfail" unbound_dnssec_sigfail_ok 5335
-run_check "adguard-53" dig +time=3 +tries=1 @"$PI_STATIC_IP" cloudflare.com A
+run_check "adguard-53" bash -c \
+  "dig +time=3 +tries=1 @${PI_STATIC_IP} cloudflare.com A | grep -q 'status: NOERROR'"
 run_check "adguard-block" bash -c \
-  "for d in doubleclick.net googletagmanager.com pagead.l.doubleclick.net; do dig +time=3 +tries=1 @${PI_STATIC_IP} \"\$d\" A | grep -Eq '0.0.0.0|127.0.0.0|NXDOMAIN' || exit 1; done"
+  "for d in doubleclick.net googletagmanager.com pagead.l.doubleclick.net; do dig +time=3 +tries=1 @${PI_STATIC_IP} \"\$d\" A | grep -Eq '0\\.0\\.0\\.0|127\\.0\\.0\\.1|NXDOMAIN' || exit 1; done"
 run_check "dns-rewrite" bash -c \
   "dig +time=3 +tries=1 @${PI_STATIC_IP} gateway.${LAN_DOMAIN} A +short | grep -qx '${PI_STATIC_IP}'"
 run_check "dns-rewrite-logs" bash -c \
@@ -157,16 +192,30 @@ if [[ "${ENABLE_CADDY:-true}" == "true" ]] && [[ -z "${CADDY_AUTH_PASSWORD:-}" ]
   run_check "gateway-http" bash -c \
     'if [[ "${ENABLE_TLS:-false}" == "true" ]]; then code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 --resolve "gateway.'"${LAN_DOMAIN}"':443:'"${PI_STATIC_IP}"'" "https://gateway.'"${LAN_DOMAIN}"'/"); else code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 -H "Host: gateway.'"${LAN_DOMAIN}"'" "http://'"${PI_STATIC_IP}"'/"); fi; [[ "$code" == "200" || "$code" == "401" || "$code" == "302" || "$code" == "307" ]]'
 fi
+_dozzle_ok() {
+  local cfg rc=1
+  cfg="$(mktemp)"
+  chmod 600 "$cfg"
+  DOZ_U="${DOZZLE_ADMIN_USER:-admin}" DOZ_P="${DOZZLE_ADMIN_PASSWORD:-${AGH_ADMIN_PASSWORD:-}}" python3 - "$cfg" <<'PY'
+import json, os, sys
+cred = os.environ["DOZ_U"] + ":" + os.environ["DOZ_P"]
+with open(sys.argv[1], "w", encoding="utf-8") as fh:
+    fh.write("user = " + json.dumps(cred) + "\n")
+PY
+  curl -fsS --max-time 5 -K "$cfg" "http://127.0.0.1:${DOZZLE_PORT}/" >/dev/null && rc=0
+  rm -f "$cfg"
+  return "$rc"
+}
 if [[ "${ENABLE_DOZZLE:-true}" == "true" ]]; then
-  run_check "dozzle" curl -fsS -u "${DOZZLE_ADMIN_USER:-admin}:${DOZZLE_ADMIN_PASSWORD}" "http://127.0.0.1:${DOZZLE_PORT}/"
+  run_check "dozzle" _dozzle_ok
 fi
 if [[ "${ENABLE_N8N:-false}" == "true" ]]; then
   run_check "n8n" bash -c \
-    "for _ in 1 2 3 4 5; do curl -fsS \"http://127.0.0.1:${N8N_PORT}/\" >/dev/null && exit 0; sleep 4; done; exit 1"
+    "for _ in 1 2 3 4 5; do curl -fsS --max-time 5 \"http://127.0.0.1:${N8N_PORT}/\" >/dev/null && exit 0; sleep 4; done; exit 1"
 fi
 if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
   run_check "netalertx" bash -c \
-    "for _ in 1 2 3 4 5 6; do curl -fsS -L \"http://${NETALERTX_LISTEN_ADDR:-127.0.0.1}:${NETALERTX_PORT}/\" >/dev/null && exit 0; sleep 5; done; exit 1"
+    "for _ in 1 2 3 4 5 6; do curl -fsS --max-time 5 -L \"http://${NETALERTX_LISTEN_ADDR:-127.0.0.1}:${NETALERTX_PORT}/\" >/dev/null && exit 0; sleep 5; done; exit 1"
 fi
 run_check "privileged-lib-installed" test -x /usr/local/lib/pi-gateway/scripts/pi/recover-readonly-root.sh
 run_check "privileged-lib-sync" diff -q \
@@ -179,7 +228,18 @@ run_check "privileged-adguard-filters-sync" diff -q \
   "${REMOTE_DIR}/scripts/pi/apply-adguard-filters.sh" \
   /usr/local/lib/pi-gateway/scripts/pi/apply-adguard-filters.sh
 run_check "privileged-lib-hash" bash -c \
-  '[[ -f /usr/local/lib/pi-gateway/.installed-sha256 ]] && (cd /usr/local/lib/pi-gateway && sha256sum -c .installed-sha256 >/dev/null)'
+  '[[ -f /usr/local/lib/pi-gateway/.installed-sha256 && -f /usr/local/lib/pi-gateway/.scripts-sha256 ]] \
+    && (cd /usr/local/lib/pi-gateway && sha256sum -c .installed-sha256 >/dev/null) \
+    && (cd "'"${REMOTE_DIR}"'" && sha256sum -c /usr/local/lib/pi-gateway/.scripts-sha256 >/dev/null)'
+run_check "privileged-lib-no-orphans" python3 -c '
+from pathlib import Path
+lib = Path("/usr/local/lib/pi-gateway")
+expected = {ln.split(None, 1)[1].strip() for ln in (lib / ".installed-sha256").read_text().splitlines() if ln.strip()}
+actual = {str(p.relative_to(lib)) for sub in ("scripts/pi", "scripts/lib") for p in (lib / sub).glob("*") if p.is_file()}
+raise SystemExit(0 if actual == expected else 1)
+'
+run_check "systemd-no-failed-gateway-units" bash -c \
+  '! systemctl --failed --no-legend --plain 2>/dev/null | grep -qE "^(pi-gateway-|pi-ssd-|pi-data-|openbot)"'
 if [[ "$DEGRADED" -eq 0 ]]; then
   run_check "gateway-state-json" test -f /var/lib/pi-gateway/state.json
   run_check "gateway-metrics-prom" test -f /var/lib/pi-gateway/metrics/pi_gateway.prom
@@ -224,7 +284,7 @@ if [[ "${ENABLE_UFW:-true}" == "true" ]] && [[ -x /usr/sbin/ufw ]]; then
       '! ss -lnt | grep -E ":(3040|3001|3030|5678|8082|9090|9999)\\b" | grep -vE "127\\.0\\.0\\.1|\\[::1\\]" | grep -q .'
     if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
       run_check "netalertx-ufw-caddy-only" bash -c \
-        '! sudo -n /usr/sbin/ufw status | grep -E ":'"${NETALERTX_PORT:-20211}"'\\b" | grep -q "${LAN_SUBNET_CIDR:-192.168.1.0/24}"'
+        '! sudo -n /usr/sbin/ufw status | grep -E "^'"${NETALERTX_PORT:-20211}"'/tcp\\b" | grep -q "'"${LAN_SUBNET_CIDR:-192.168.1.0/24}"'"'
     fi
   fi
 fi

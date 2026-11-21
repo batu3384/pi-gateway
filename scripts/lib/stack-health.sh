@@ -47,18 +47,18 @@ runtime_rm() {
   fi
 }
 runtime_write() {
-  local path="$1" content="$2"
+  local path="$1" content="$2" owner
   ensure_runtime_dir
-  if printf '%s\n' "$content" >"$path" 2>/dev/null; then
+  if { printf '%s\n' "$content" >"$path"; } 2>/dev/null; then
     return 0
   fi
+  owner="$(pi_user_from_remote_dir "${REMOTE_DIR:-/home/${PI_USER:-pi}/pi-gateway}")"
   if [[ "$(id -u)" -eq 0 ]]; then
     printf '%s\n' "$content" >"$path"
+    [[ -n "$owner" && "$owner" != "root" ]] && chown "${owner}:${owner}" "$path" 2>/dev/null || true
   else
     printf '%s\n' "$content" | sudo tee "$path" >/dev/null
-    local owner
-    owner="$(pi_user_from_remote_dir "${REMOTE_DIR:-/home/${PI_USER:-pi}/pi-gateway}")"
-    sudo chown "${owner}:${owner}" "$path" 2>/dev/null || true
+    [[ -n "$owner" && "$owner" != "root" ]] && sudo chown "${owner}:${owner}" "$path" 2>/dev/null || true
   fi
 }
 needs_ssd_storage() {
@@ -281,8 +281,15 @@ recover_service_running() {
   local state
   state="$(systemctl show -p ActiveState --value pi-gateway-recover-ro.service 2>/dev/null || true)"
   [[ "$state" == "activating" || "$state" == "start" ]] && return 0
-  # Script dogrudan cagrildiginda systemd activating olmayabilir — lock dosyasi
-  [[ -f "$STACK_LOCK_FILE" ]] && fuser -s "$STACK_LOCK_FILE" 2>/dev/null
+  # Script dogrudan cagrildiginda systemd activating olmayabilir — non-blocking flock probe (root kilidini de gorur)
+  if [[ -f "$STACK_LOCK_FILE" ]]; then
+    if command -v flock >/dev/null 2>&1; then
+      ! flock -n "$STACK_LOCK_FILE" true 2>/dev/null && return 0
+    else
+      fuser -s "$STACK_LOCK_FILE" 2>/dev/null && return 0
+    fi
+  fi
+  return 1
 }
 wait_for_recover_service() {
   local waited=0
@@ -296,17 +303,24 @@ acquire_recover_lock_wait() {
   local owner
   owner="$(pi_user_from_remote_dir "${REMOTE_DIR:-/home/${PI_USER:-pi}/pi-gateway}")"
   mkdir -p "$(dirname "$STACK_LOCK_FILE")" 2>/dev/null || return 1
+  [[ ! -L "$STACK_LOCK_FILE" ]] || return 1
   touch "$STACK_LOCK_FILE" 2>/dev/null || return 1
   if [[ "$(id -u)" -eq 0 ]]; then
-    chown "${owner}:${owner}" "$STACK_LOCK_FILE" 2>/dev/null || true
+    chown -h "${owner}:${owner}" "$STACK_LOCK_FILE" 2>/dev/null || true
   fi
   chmod 664 "$STACK_LOCK_FILE" 2>/dev/null || true
   exec {STACK_LOCK_FD}>>"$STACK_LOCK_FILE" || return 1
-  flock -w "${STACK_RECOVER_WAIT_SEC}" "$STACK_LOCK_FD" || return 1
+  flock -w "${STACK_RECOVER_WAIT_SEC}" "$STACK_LOCK_FD" || {
+    exec {STACK_LOCK_FD}>&- 2>/dev/null || true
+    unset STACK_LOCK_FD
+    return 1
+  }
 }
 release_recover_lock() {
   [[ -n "${STACK_LOCK_FD:-}" ]] || return 0
   flock -u "$STACK_LOCK_FD" 2>/dev/null || true
+  exec {STACK_LOCK_FD}>&- 2>/dev/null || true
+  unset STACK_LOCK_FD
 }
 ensure_public_state_dir() {
   local owner pub_dir pub_file tmp
@@ -315,15 +329,15 @@ ensure_public_state_dir() {
   pub_file="${pub_dir}/state.json"
   mkdir -p "$pub_dir" 2>/dev/null || sudo mkdir -p "$pub_dir" 2>/dev/null || return 1
   if [[ "$(id -u)" -eq 0 ]]; then
-    chown "${owner}:${owner}" "$pub_dir" 2>/dev/null || true
+    chown -h "${owner}:${owner}" "$pub_dir" 2>/dev/null || true
     chmod 755 "$pub_dir" 2>/dev/null || true
   fi
   if [[ ! -f "$pub_file" ]]; then
     tmp="$(mktemp)"
-    if [[ -f /var/lib/pi-gateway/state.json ]]; then
+    if [[ -f /var/lib/pi-gateway/state.json && ! -L /var/lib/pi-gateway/state.json ]]; then
       cp /var/lib/pi-gateway/state.json "$tmp"
     else
-      printf '{"ts":"","ssd_mount_healthy":1}\n' >"$tmp"
+      printf '{"ts":"","ssd_mount_healthy":1,"storage_degraded":0}\n' >"$tmp"
     fi
     if [[ "$(id -u)" -eq 0 ]]; then
       install -o "$owner" -g "$owner" -m 644 "$tmp" "$pub_file" 2>/dev/null || cp "$tmp" "$pub_file"
@@ -338,8 +352,9 @@ run_compose_up() {
   local pi_user="$2"
   local lib="${PI_GATEWAY_LIB_DIR:-/usr/local/lib/pi-gateway}"
   local script
-  # Root systemd birimlerinde root-owned lib once; non-root/dev ortamlarda REMOTE_DIR once
-  if [[ "$(id -u)" -eq 0 && -x "${lib}/scripts/pi/recover-compose-up.sh" ]]; then
+  # Root systemd birimlerinde yalnizca root-owned lib (trust boundary); non-root/dev ortamlarda REMOTE_DIR once
+  if [[ "$(id -u)" -eq 0 ]]; then
+    [[ -x "${lib}/scripts/pi/recover-compose-up.sh" ]] || return 1
     script="${lib}/scripts/pi/recover-compose-up.sh"
   elif [[ -f "${remote_dir}/scripts/pi/recover-compose-up.sh" ]]; then
     script="${remote_dir}/scripts/pi/recover-compose-up.sh"
@@ -360,8 +375,9 @@ run_compose_up() {
 recover_script_path() {
   local remote_dir="$1"
   local lib="${PI_GATEWAY_LIB_DIR:-/usr/local/lib/pi-gateway}"
-  # Root iken /usr/local/lib once; non-root/Mac testlerinde REMOTE_DIR once
-  if [[ "$(id -u)" -eq 0 && -x "${lib}/scripts/pi/recover-readonly-root.sh" ]]; then
+  # Root iken yalnizca root-owned /usr/local/lib; non-root/Mac testlerinde REMOTE_DIR once
+  if [[ "$(id -u)" -eq 0 ]]; then
+    [[ -x "${lib}/scripts/pi/recover-readonly-root.sh" ]] || return 1
     echo "${lib}/scripts/pi/recover-readonly-root.sh"
   elif [[ -f "${remote_dir}/scripts/pi/recover-readonly-root.sh" ]]; then
     echo "${remote_dir}/scripts/pi/recover-readonly-root.sh"
@@ -377,7 +393,8 @@ apply_adguard_rewrites_best_effort() {
   local script
   local pi_user
   local rc=0
-  if [[ "$(id -u)" -eq 0 && -x "${lib}/scripts/pi/apply-adguard-rewrites.sh" ]]; then
+  if [[ "$(id -u)" -eq 0 ]]; then
+    [[ -x "${lib}/scripts/pi/apply-adguard-rewrites.sh" ]] || return 0
     script="${lib}/scripts/pi/apply-adguard-rewrites.sh"
   elif [[ -f "${remote_dir}/scripts/pi/apply-adguard-rewrites.sh" ]]; then
     script="${remote_dir}/scripts/pi/apply-adguard-rewrites.sh"

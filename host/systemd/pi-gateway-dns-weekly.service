@@ -6,6 +6,7 @@ Type=oneshot
 User=PI_USER
 Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
 ExecStart=/home/PI_USER/pi-gateway/scripts/pi/dns-coverage-weekly.sh
+TimeoutStartSec=120
 Nice=10
 StandardOutput=journal
 StandardError=journal

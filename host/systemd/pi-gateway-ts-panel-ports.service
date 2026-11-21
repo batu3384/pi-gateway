@@ -6,12 +6,11 @@ Wants=network-online.target tailscaled.service
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-# Boot race: wait for 100.x then fail+retry if still missing
+# Boot race: setup-tailscale-panel-ports.sh waits internally for 100.x
 Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
 Environment=PI_GATEWAY_TS_PANEL_REQUIRE=1
 ExecStart=/usr/local/lib/pi-gateway/scripts/pi/setup-tailscale-panel-ports.sh
-Restart=on-failure
-RestartSec=20
+TimeoutStartSec=90
 
 [Install]
 WantedBy=multi-user.target

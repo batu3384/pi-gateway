@@ -2,7 +2,8 @@
 # AdGuard filtre yenileme timer kurulumu (idempotent)
 set -euo pipefail
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
-USER_NAME="${USER:-pi}"
+USER_NAME="${PI_USER:-${SUDO_USER:-${USER:-pi}}}"
+[[ "$USER_NAME" == "root" && "$REMOTE_DIR" =~ /home/([^/]+)/ ]] && USER_NAME="${BASH_REMATCH[1]}"
 
 install_unit() {
   local unit="$1"

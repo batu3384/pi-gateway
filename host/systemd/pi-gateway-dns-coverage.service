@@ -14,6 +14,3 @@ IOSchedulingClass=idle
 TimeoutStartSec=120
 StandardOutput=journal
 StandardError=journal
-
-[Install]
-WantedBy=multi-user.target

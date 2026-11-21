@@ -71,11 +71,20 @@ SCRIPTS=(
   scripts/lib/dns-dot-proxy.py
   scripts/pi/dns-host-fallback.sh
   scripts/lib/ensure-data-symlink.sh
+  scripts/lib/containerd-root.sh
+  scripts/lib/crowdsec-journal-feed.py
+  scripts/lib/telegram-panels.py
   scripts/pi/ssd-fsck.sh
   scripts/pi/ssd-health.sh
   scripts/pi/prune-sd-space.sh
   scripts/pi/setup-tailscale-panel-ports.sh
   scripts/pi/sync-crowdsec-ufw.sh
+  scripts/pi/backup.sh
+  scripts/pi/restic-backup.sh
+  scripts/pi/restic-repair.sh
+  scripts/pi/restic-offsite-copy.sh
+  scripts/pi/notify-failure.sh
+  scripts/pi/setup-openbot-zai-jarvis.sh
 )
 
 run_root() {
@@ -86,7 +95,8 @@ run_root() {
   fi
 }
 
-run_root mkdir -p "$LIB_DIR/scripts/pi" "$LIB_DIR/scripts/lib" /run/pi-gateway /usr/local/sbin
+run_root mkdir -p "$LIB_DIR/scripts/pi" "$LIB_DIR/scripts/lib" /run/pi-gateway /run/pi-gateway/crowdsec-logs /usr/local/sbin
+run_root chmod 755 /run/pi-gateway/crowdsec-logs
 _pi_state_user="${SUDO_USER:-${USER:-pi}}"
 if [[ "$_pi_state_user" == "root" && "$REMOTE_DIR" =~ /home/([^/]+)/ ]]; then
   _pi_state_user="${BASH_REMATCH[1]}"
@@ -98,10 +108,10 @@ run_root chmod 775 /var/lib/pi-gateway /var/lib/pi-gateway/metrics
 run_root chmod 755 /var/lib/pi-gateway/public
 if [[ ! -f /var/lib/pi-gateway/public/state.json ]]; then
   _pub_tmp="$(mktemp)"
-  if [[ -f /var/lib/pi-gateway/state.json ]]; then
+  if [[ -f /var/lib/pi-gateway/state.json && ! -L /var/lib/pi-gateway/state.json ]]; then
     cp /var/lib/pi-gateway/state.json "$_pub_tmp"
   else
-    printf '{"ts":"","ssd_mount_healthy":1}\n' >"$_pub_tmp"
+    printf '{"ts":"","ssd_mount_healthy":1,"storage_degraded":0}\n' >"$_pub_tmp"
   fi
   run_root install -o "$_pi_state_user" -g "$_pi_state_user" -m 644 \
     "$_pub_tmp" /var/lib/pi-gateway/public/state.json
@@ -140,6 +150,23 @@ for rel in "${SCRIPTS[@]}"; do
   dst="${LIB_DIR}/${rel}"
   install_verified "$src" "$dst"
 done
+
+# Yetim/emekli privileged script'leri temizle (drift & stale root kod kalmasin)
+declare -A _expected_priv=()
+for rel in "${SCRIPTS[@]}"; do
+  _expected_priv["${LIB_DIR}/${rel}"]=1
+done
+for _sub in scripts/pi scripts/lib; do
+  if [[ -d "${LIB_DIR}/${_sub}" ]]; then
+    while IFS= read -r -d '' _f; do
+      if [[ -z "${_expected_priv[$_f]+x}" ]]; then
+        run_root rm -f "$_f"
+        log "Yetim privileged dosya silindi: ${_f#"${LIB_DIR}/"}"
+      fi
+    done < <(find "${LIB_DIR}/${_sub}" -maxdepth 1 -type f -print0 2>/dev/null)
+  fi
+done
+unset _expected_priv _sub _f
 
 ssd_src="${REMOTE_DIR}/scripts/pi/setup-ssd-data.sh"
 if [[ -f "$ssd_src" ]]; then
@@ -184,6 +211,7 @@ install_unit() {
       -e "s|User=PI_USER|User=${owner}|g" \
       -e "s|Group=PI_USER|Group=${owner}|g" \
       -e "s|Environment=PI_USER=PI_USER|Environment=PI_USER=${owner}|g" \
+      -e "s|Environment=NOTIFY_OWNER=PI_USER|Environment=NOTIFY_OWNER=${owner}|g" \
       "$src" >"$tmp"
   run_root install -o root -g root -m 644 "$tmp" "$dst"
   rm -f "$tmp"
@@ -192,8 +220,18 @@ install_unit() {
 for unit in \
   pi-gateway-health.service pi-gateway-health.timer \
   pi-gateway-health-failure.service \
+  pi-gateway-boot-notify.service \
+  pi-gateway-backup.service pi-gateway-backup.timer \
+  pi-gateway-adguard-config.service \
+  pi-gateway-adguard-filters.service pi-gateway-adguard-filters.timer \
+  pi-gateway-adguard-filters-failure.service \
+  pi-gateway-crowdsec-ufw.service pi-gateway-crowdsec-ufw.timer \
+  pi-gateway-crowdsec-journal.service \
   pi-gateway-container-watchdog.service pi-gateway-container-watchdog.timer \
-  pi-data-symlink.timer pi-data-symlink-repair.service \
+  pi-data-symlink.service pi-data-symlink.timer pi-data-symlink-repair.service \
+  pi-gateway-recover-ro.service pi-gateway-ensure-fstab.service \
+  pi-ssd-health.service pi-ssd-health.timer \
+  pi-ssd-watch.service pi-ssd-watch.path \
   pi-gateway-dns-fallback.service \
   pi-gateway-ts-panel-ports.service \
   pi-ssd-data.service
@@ -202,16 +240,21 @@ do
 done
 run_root systemctl disable pi-gateway-dns-fallback.service 2>/dev/null || true
 run_root systemctl daemon-reload
-run_root systemctl reset-failed pi-gateway-dns-fallback.service 2>/dev/null || true
-run_root systemctl restart pi-gateway-health.timer \
-  pi-gateway-container-watchdog.timer pi-data-symlink.timer 2>/dev/null || true
-log "OK systemd health/watchdog/fallback units"
+run_root systemctl reset-failed pi-gateway-dns-fallback.service pi-gateway-boot-notify.service 2>/dev/null || true
+run_root systemctl enable pi-gateway-boot-notify.service 2>/dev/null || true
+run_root systemctl enable --now pi-gateway-health.timer \
+  pi-gateway-container-watchdog.timer pi-data-symlink.timer \
+  pi-gateway-backup.timer pi-gateway-adguard-filters.timer \
+  pi-gateway-crowdsec-journal.service 2>/dev/null || true
+log "OK systemd core/health/watchdog/fallback/boot units"
 
 if [[ -f "${REMOTE_DIR}/host/udev/99-pi-gateway-jmicron.rules" ]]; then
   run_root install -o root -g root -m 644 \
     "${REMOTE_DIR}/host/udev/99-pi-gateway-jmicron.rules" \
     /etc/udev/rules.d/99-pi-gateway-jmicron.rules
   run_root udevadm control --reload-rules 2>/dev/null || true
+  run_root udevadm trigger --action=change --subsystem-match=block --sysname-match='sd[a-z]' 2>/dev/null || true
+  run_root udevadm settle --timeout=5 2>/dev/null || true
   log "OK udev 99-pi-gateway-jmicron.rules"
 fi
 run_root systemctl disable --now smartmontools.service smartd.service 2>/dev/null || true

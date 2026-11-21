@@ -15,6 +15,3 @@ TimeoutStartSec=180
 Nice=10
 StandardOutput=journal
 StandardError=journal
-
-[Install]
-WantedBy=multi-user.target

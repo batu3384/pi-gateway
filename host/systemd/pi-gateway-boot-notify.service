@@ -11,6 +11,7 @@ Group=PI_USER
 Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
 # openbot.service: loopback automation (jarvis-send) boot'ta hazır olmalı.
 ExecStart=/usr/local/lib/pi-gateway/scripts/pi/boot-notify.sh
+TimeoutStartSec=120
 Nice=5
 
 [Install]

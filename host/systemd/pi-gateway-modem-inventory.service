@@ -19,6 +19,6 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=-/home/PI_USER/pi-gateway/data -/mnt/ssd/pi-gateway-data /var/lib/pi-gateway
+ReadWritePaths=-/home/PI_USER/pi-gateway/data -/mnt/ssd/pi-gateway-data -/var/lib/pi-gateway
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 UMask=0027

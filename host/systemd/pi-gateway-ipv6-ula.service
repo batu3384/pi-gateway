@@ -10,6 +10,7 @@ RemainAfterExit=yes
 ExecStart=/sbin/ip -6 addr add __ULA_CIDR__ dev __PI_IFACE__
 # Already-present address is OK
 SuccessExitStatus=0 2
+TimeoutStartSec=30
 
 [Install]
 WantedBy=multi-user.target

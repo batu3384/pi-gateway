@@ -11,8 +11,8 @@ WorkingDirectory=/home/PI_USER/pi-gateway
 Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
 Environment=HOME=/home/PI_USER
 ExecStart=/home/PI_USER/pi-gateway/scripts/pi/quake-alert.sh
-# Poll 10s; HTTP 5s×2 paralel + notify — asılı kalırsa birikmesin
-TimeoutStartSec=25
+# HTTP 5s×2 paralel + Jarvis notify — asılı kalırsa birikmesin ama normal akış kesilmesin
+TimeoutStartSec=45
 Nice=19
 IOSchedulingClass=idle
 StandardOutput=journal

@@ -6,15 +6,17 @@ log() { echo "[ts-panel-ports-unit] $*"; }
 unit=pi-gateway-ts-panel-ports.service
 src="$REMOTE_DIR/host/systemd/$unit"
 [[ -f "$src" ]] || { log "HATA: $src yok"; exit 1; }
-sudo cp "$src" "/etc/systemd/system/$unit"
-sudo sed -i \
-  -e "s|/home/PI_USER/pi-gateway|${REMOTE_DIR}|g" \
-  -e "s|PI_USER|${USER}|g" \
-  "/etc/systemd/system/$unit" 2>/dev/null || \
-  sudo sed -i '' \
-    -e "s|/home/PI_USER/pi-gateway|${REMOTE_DIR}|g" \
-    -e "s|PI_USER|${USER}|g" \
-    "/etc/systemd/system/$unit" 2>/dev/null || true
+_owner="${PI_USER:-${SUDO_USER:-${USER:-pi}}}"
+[[ "$_owner" == "root" && "$REMOTE_DIR" =~ /home/([^/]+)/ ]] && _owner="${BASH_REMATCH[1]}"
+_tmp="$(mktemp)"
+sed -e "s|/home/PI_USER/pi-gateway|${REMOTE_DIR}|g" \
+    -e "s|/home/PI_USER|/home/${_owner}|g" \
+    -e "s|User=PI_USER|User=${_owner}|g" \
+    -e "s|Group=PI_USER|Group=${_owner}|g" \
+    -e "s|Environment=PI_USER=PI_USER|Environment=PI_USER=${_owner}|g" \
+    "$src" >"$_tmp"
+sudo install -o root -g root -m 644 "$_tmp" "/etc/systemd/system/$unit"
+rm -f "$_tmp"
 sudo systemctl daemon-reload
 sudo systemctl enable --now "$unit"
 # Apply immediately (unit RemainAfterExit; also run script for live rules)

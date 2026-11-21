@@ -119,21 +119,24 @@ if [[ -f "$REMOTE_DIR/scripts/lib/usb-quirk.sh" ]]; then
     echo "[bootstrap] WARN: cmdline.txt bulunamadi (bootfs mount?)"
   fi
 fi
-for unit in pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-crowdsec-ufw.timer pi-gateway-adguard-filters.timer pi-data-symlink.timer pi-ssd-watch.path pi-ssd-health.timer pi-gateway-ssd-smart.timer pi-gateway-speedtest.timer pi-gateway-quake.timer pi-gateway-ibb.timer pi-gateway-dns-coverage.timer pi-gateway-dns-weekly.timer pi-gateway-modem-inventory.timer pi-gateway-container-watchdog.timer pi-gateway-crowdsec-diary.timer; do
+for unit in pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-crowdsec-ufw.timer pi-gateway-adguard-filters.timer pi-data-symlink.timer pi-ssd-watch.path pi-ssd-health.timer pi-gateway-ssd-smart.timer pi-gateway-speedtest.timer pi-gateway-quake.timer pi-gateway-ibb.timer pi-gateway-dns-coverage.timer pi-gateway-dns-weekly.timer pi-gateway-modem-inventory.timer pi-gateway-container-watchdog.timer pi-gateway-crowdsec-diary.timer pi-gateway-netalert-new-device.timer; do
   [[ -f "$REMOTE_DIR/host/systemd/$unit" ]] && sudo cp "$REMOTE_DIR/host/systemd/$unit" "/etc/systemd/system/$unit"
 done
 install_systemd_unit() {
   local svc="$1"
   local src="$REMOTE_DIR/host/systemd/$svc"
   local dst="/etc/systemd/system/$svc"
+  local owner
   [[ -f "$src" ]] || return 0
+  owner="${PI_USER:-${SUDO_USER:-${USER:-pi}}}"
+  [[ "$owner" == "root" && "$REMOTE_DIR" =~ /home/([^/]+)/ ]] && owner="${BASH_REMATCH[1]}"
   sed -e "s|/home/PI_USER/pi-gateway|${REMOTE_DIR}|g" \
-      -e "s|/home/PI_USER|/home/${USER}|g" \
+      -e "s|/home/PI_USER|/home/${owner}|g" \
       -e "s|/opt/pi-gateway|${REMOTE_DIR}|g" \
-      -e "s|User=PI_USER|User=${USER}|g" \
-      -e "s|Group=PI_USER|Group=${USER}|g" \
-      -e "s|Environment=PI_USER=PI_USER|Environment=PI_USER=${USER}|g" \
-      -e "s|Environment=NOTIFY_OWNER=PI_USER|Environment=NOTIFY_OWNER=${USER}|g" \
+      -e "s|User=PI_USER|User=${owner}|g" \
+      -e "s|Group=PI_USER|Group=${owner}|g" \
+      -e "s|Environment=PI_USER=PI_USER|Environment=PI_USER=${owner}|g" \
+      -e "s|Environment=NOTIFY_OWNER=PI_USER|Environment=NOTIFY_OWNER=${owner}|g" \
       "$src" | sudo tee "$dst" >/dev/null
 }
 if [[ -x "$REMOTE_DIR/scripts/pi/install-privileged-scripts.sh" ]]; then
@@ -141,7 +144,7 @@ if [[ -x "$REMOTE_DIR/scripts/pi/install-privileged-scripts.sh" ]]; then
   privileged_script="$REMOTE_DIR/scripts/pi/install-privileged-scripts.sh"
   REMOTE_DIR="$REMOTE_DIR" bash "$privileged_script"
 fi
-for svc in pi-gateway-health.service pi-gateway-backup.service pi-gateway-adguard-config.service pi-gateway-adguard-filters.service pi-gateway-adguard-filters-failure.service pi-gateway-health-failure.service pi-gateway-boot-notify.service pi-gateway-crowdsec-ufw.service pi-data-symlink.service pi-data-symlink-repair.service pi-gateway-recover-ro.service pi-gateway-ensure-fstab.service pi-ssd-data.service pi-ssd-watch.service pi-ssd-health.service pi-gateway-ssd-smart.service pi-gateway-speedtest.service pi-gateway-quake.service pi-gateway-ibb.service pi-gateway-dns-coverage.service pi-gateway-dns-weekly.service pi-gateway-modem-inventory.service pi-gateway-container-watchdog.service pi-gateway-crowdsec-diary.service pi-gateway-dns-fallback.service pi-gateway-ts-panel-ports.service; do
+for svc in pi-gateway-health.service pi-gateway-backup.service pi-gateway-adguard-config.service pi-gateway-adguard-filters.service pi-gateway-adguard-filters-failure.service pi-gateway-health-failure.service pi-gateway-boot-notify.service pi-gateway-crowdsec-ufw.service pi-data-symlink.service pi-data-symlink-repair.service pi-gateway-recover-ro.service pi-gateway-ensure-fstab.service pi-ssd-data.service pi-ssd-watch.service pi-ssd-health.service pi-gateway-ssd-smart.service pi-gateway-speedtest.service pi-gateway-quake.service pi-gateway-ibb.service pi-gateway-dns-coverage.service pi-gateway-dns-weekly.service pi-gateway-modem-inventory.service pi-gateway-container-watchdog.service pi-gateway-crowdsec-diary.service pi-gateway-netalert-new-device.service pi-gateway-dns-fallback.service pi-gateway-ts-panel-ports.service; do
   install_systemd_unit "$svc"
 done
 # Eski cift-doktor / emekli unit'leri host'tan temizle
@@ -149,20 +152,26 @@ for stale in pi-gateway-stack-watchdog.timer pi-gateway-stack-watchdog.service \
   pi-gateway-netalertx-names.timer pi-gateway-netalertx-names.service \
   pi-gateway-kuma-report.timer pi-gateway-kuma-report.service \
   pi-gateway-morning.timer pi-gateway-morning.service pi-gateway-telegram-bot.service \
-  hermes-gateway.service; do
+  hermes-gateway.service \
+  jarvis-bulletin-morning.timer jarvis-bulletin-morning.service \
+  jarvis-bulletin-evening.timer jarvis-bulletin-evening.service \
+  jarvis-bulletin-night.timer jarvis-bulletin-night.service \
+  jarvis-bulletin-fx.timer jarvis-bulletin-fx.service \
+  jarvis-fx-prepare.timer jarvis-fx-prepare.service; do
   sudo systemctl disable --now "$stale" 2>/dev/null || true
   sudo rm -f "/etc/systemd/system/$stale"
 done
 sudo rm -f /usr/local/lib/pi-gateway/scripts/pi/stack-watchdog.sh 2>/dev/null || true
 sudo systemctl daemon-reload
-sudo systemctl enable pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-adguard-config.service pi-gateway-adguard-filters.timer pi-gateway-recover-ro.service pi-gateway-boot-notify.service pi-gateway-speedtest.timer pi-gateway-quake.timer pi-gateway-ibb.timer pi-gateway-dns-coverage.timer pi-gateway-dns-weekly.timer pi-gateway-container-watchdog.timer pi-gateway-crowdsec-diary.timer 2>/dev/null || true
+sudo systemctl enable pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-adguard-config.service pi-gateway-adguard-filters.timer pi-gateway-recover-ro.service pi-gateway-boot-notify.service pi-gateway-speedtest.timer pi-gateway-quake.timer pi-gateway-ibb.timer pi-gateway-dns-coverage.timer pi-gateway-dns-weekly.timer pi-gateway-container-watchdog.timer pi-gateway-crowdsec-diary.timer pi-gateway-netalert-new-device.timer 2>/dev/null || true
 if [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
   sudo systemctl enable pi-data-symlink.service pi-gateway-ensure-fstab.service pi-data-symlink.timer pi-ssd-watch.path pi-ssd-data.service pi-ssd-health.timer pi-gateway-ssd-smart.timer 2>/dev/null || true
+  sudo systemctl start pi-data-symlink.timer pi-ssd-watch.path 2>/dev/null || true
 fi
 if [[ "${ENABLE_CROWDSEC:-true}" == "true" ]]; then
   sudo systemctl enable --now pi-gateway-crowdsec-ufw.timer 2>/dev/null || true
 fi
-sudo systemctl start pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-adguard-filters.timer pi-gateway-speedtest.timer pi-gateway-quake.timer pi-gateway-ibb.timer 2>/dev/null || true
+sudo systemctl start pi-gateway-health.timer pi-gateway-backup.timer pi-gateway-adguard-filters.timer pi-gateway-speedtest.timer pi-gateway-quake.timer pi-gateway-ibb.timer pi-gateway-dns-coverage.timer pi-gateway-dns-weekly.timer pi-gateway-container-watchdog.timer pi-gateway-crowdsec-diary.timer pi-gateway-netalert-new-device.timer 2>/dev/null || true
 if [[ "${MODEM_INVENTORY_ENABLED:-false}" == "true" ]] \
   && [[ -f /etc/pi-gateway/modem-inventory.env ]]; then
   sudo systemctl enable --now pi-gateway-modem-inventory.timer 2>/dev/null || true

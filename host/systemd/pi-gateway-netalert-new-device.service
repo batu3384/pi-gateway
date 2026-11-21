@@ -8,4 +8,5 @@ User=PI_USER
 Group=PI_USER
 Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
 ExecStart=/home/PI_USER/pi-gateway/scripts/pi/netalert-new-device-notify.sh
+TimeoutStartSec=60
 Nice=15

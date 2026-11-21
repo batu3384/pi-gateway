@@ -11,6 +11,3 @@ ExecStart=/usr/local/lib/pi-gateway/scripts/pi/health-check.sh
 TimeoutStartSec=180
 Nice=19
 IOSchedulingClass=idle
-
-[Install]
-WantedBy=multi-user.target

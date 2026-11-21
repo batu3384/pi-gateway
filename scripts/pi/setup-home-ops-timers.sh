@@ -11,12 +11,15 @@ read_remote_dotenv || { echo "[home-ops-timers] HATA: .env dotenv parser hatasi"
 install_unit() {
   local unit="$1"
   [[ -f "$REMOTE_DIR/host/systemd/$unit" ]] || { log "HATA: $unit yok"; return 1; }
-  local tmp
+  local tmp owner
+  owner="${PI_USER:-${SUDO_USER:-${USER:-pi}}}"
+  [[ "$owner" == "root" && "$REMOTE_DIR" =~ /home/([^/]+)/ ]] && owner="${BASH_REMATCH[1]}"
   tmp="$(mktemp)"
   sed -e "s|/home/PI_USER/pi-gateway|${REMOTE_DIR}|g" \
-      -e "s|/home/PI_USER|/home/${USER}|g" \
-      -e "s|User=PI_USER|User=${USER}|g" \
-      -e "s|Group=PI_USER|Group=${USER}|g" \
+      -e "s|/home/PI_USER|/home/${owner}|g" \
+      -e "s|User=PI_USER|User=${owner}|g" \
+      -e "s|Group=PI_USER|Group=${owner}|g" \
+      -e "s|Environment=PI_USER=PI_USER|Environment=PI_USER=${owner}|g" \
       "$REMOTE_DIR/host/systemd/$unit" >"$tmp"
   sudo install -o root -g root -m 644 "$tmp" "/etc/systemd/system/$unit"
   rm -f "$tmp"

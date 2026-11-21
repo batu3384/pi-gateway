@@ -21,6 +21,19 @@ load_env_file() {
       value="${value:1:${#value}-2}"
       value="${value//\\\"/\"}"
       value="${value//\\\\/\\}"
+    elif [[ "$value" =~ ^(.*[^[:space:]])[[:space:]]+#.*$ ]]; then
+      value="${BASH_REMATCH[1]}"
+      value="${value%"${value##*[![:space:]]}"}"
+    fi
+    if [[ "$(id -u)" -eq 0 ]]; then
+      case "$key" in
+        PATH|LD_*|BASH_ENV|ENV|PYTHON*|SCRIPT_DIR|PI_GATEWAY_LIB_DIR|IFS|CDPATH|SHELLOPTS|BASHOPTS|HOME|USER)
+          continue
+          ;;
+        REMOTE_DIR)
+          [[ -n "${REMOTE_DIR:-}" ]] && continue
+          ;;
+      esac
     fi
     printf -v "$key" '%s' "$value"
     # shellcheck disable=SC2163 # key is validated as a shell identifier above.

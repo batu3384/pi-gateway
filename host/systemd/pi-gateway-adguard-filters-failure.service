@@ -7,4 +7,5 @@ Type=oneshot
 User=PI_USER
 Environment=REMOTE_DIR=/home/PI_USER/pi-gateway
 Environment=FAILURE_KIND=adguard-filter
-ExecStart=/home/PI_USER/pi-gateway/scripts/pi/notify-failure.sh
+ExecStart=/usr/local/lib/pi-gateway/scripts/pi/notify-failure.sh
+TimeoutStartSec=90

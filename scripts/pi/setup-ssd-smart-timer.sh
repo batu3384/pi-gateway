@@ -17,11 +17,19 @@ fi
 smartctl_ok || { log "HATA: smartctl yok"; exit 1; }
 # smartd daemon sabit /dev/sda 30dk SAT sorgusu atar (JMicron kopru cakismasi); yalniz haftalik timer kullanilir
 sudo systemctl disable --now smartmontools.service smartd.service 2>/dev/null || true
+_owner="${PI_USER:-${SUDO_USER:-${USER:-pi}}}"
+[[ "$_owner" == "root" && "$REMOTE_DIR" =~ /home/([^/]+)/ ]] && _owner="${BASH_REMATCH[1]}"
 for unit in pi-gateway-ssd-smart.service pi-gateway-ssd-smart.timer; do
   [[ -f "$REMOTE_DIR/host/systemd/$unit" ]] || { log "HATA: $unit yok"; exit 1; }
-  sudo cp "$REMOTE_DIR/host/systemd/$unit" "/etc/systemd/system/$unit"
-  sudo sed -i "s|PI_USER|${USER}|g" "/etc/systemd/system/$unit" 2>/dev/null || \
-    sudo sed -i '' "s|PI_USER|${USER}|g" "/etc/systemd/system/$unit" 2>/dev/null || true
+  _tmp="$(mktemp)"
+  sed -e "s|/home/PI_USER/pi-gateway|${REMOTE_DIR}|g" \
+      -e "s|/home/PI_USER|/home/${_owner}|g" \
+      -e "s|User=PI_USER|User=${_owner}|g" \
+      -e "s|Group=PI_USER|Group=${_owner}|g" \
+      -e "s|Environment=PI_USER=PI_USER|Environment=PI_USER=${_owner}|g" \
+      "$REMOTE_DIR/host/systemd/$unit" >"$_tmp"
+  sudo install -o root -g root -m 644 "$_tmp" "/etc/systemd/system/$unit"
+  rm -f "$_tmp"
 done
 sudo systemctl daemon-reload
 sudo systemctl enable --now pi-gateway-ssd-smart.timer
