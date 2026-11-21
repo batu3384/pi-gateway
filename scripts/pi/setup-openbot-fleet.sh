@@ -48,9 +48,13 @@ else
 fi
 
 mkdir -p \
-  "$FLEET/shared" \
-  "$FLEET/jarvis" "$FLEET/falcon" "$FLEET/spider" \
-  "$FLEET/ultron" "$FLEET/cipher" "$FLEET/iron"
+  "$FLEET/shared" "$FLEET/shared/archive" \
+  "$FLEET/jarvis" "$FLEET/falcon" "$FLEET/spider" "$FLEET/spider/reports" \
+  "$FLEET/ultron" "$FLEET/ultron/output" "$FLEET/cipher" "$FLEET/iron"
+
+if [[ ! -f "$FLEET/shared/user_profile.md" && -f "${REMOTE_DIR}/config/openbot/fleet/user-profile.md.template" ]]; then
+  install -m 0644 "${REMOTE_DIR}/config/openbot/fleet/user-profile.md.template" "$FLEET/shared/user_profile.md"
+fi
 
 write_shared() {
   local name="$1" owner="$2" readers="$3"
@@ -112,16 +116,17 @@ if [[ ! -f "$FLEET/spider/profile.md" ]]; then
   install -m 0644 "${REMOTE_DIR}/config/openbot/fleet/spider-profile.md" "$FLEET/spider/profile.md"
 fi
 cat >"$FLEET/shared/READERS.md" <<'EOF'
-# Paylaşılan dosyalar
+# Paylaşılan dosyalar (Filo SSOT & Rolling Şema)
 
-Tek yazıcı. Başkası yalnız okur.
+Tek yazıcı. Başkası yalnız okur. Uzun dosyalar `fleet-shared-rotate.sh` ile günlük `shared/archive/YYYY-MM/` altına taşınır.
 
-- system_health.md — Jarvis
-- tech_radar.md — Falcon
-- career_pipeline.md — Spider
-- culture_library.md — Ultron
-- english_log.md — Cipher
-- weekly_plan.md — Iron
+- `user_profile.md` — Ortak kullanıcı profili (tüm ajanlar salt okunur)
+- `system_health.md` — Yazıcı: Jarvis · Okur: Iron, kullanıcı (tarihli sağlık + 7g trend kartları)
+- `tech_radar.md` — Yazıcı: Falcon · Okur: Spider, Ultron, Iron (tarihli 1–3 madde özet + link)
+- `career_pipeline.md` — Yazıcı: Spider · Okur: Iron, Cipher (`[open|applied|closed]` tablo)
+- `culture_library.md` — Yazıcı: Ultron · Okur: Iron, Cipher (tarih, konu, 2 cümle tez + PDF yolu)
+- `english_log.md` — Yazıcı: Cipher · Okur: Iron (Spaced Repetition tablosu: Tarih, Seviye, Kalıp, Takılınan, Tekrar, Durum)
+- `weekly_plan.md` — Yazıcı: Iron · Okur: Spider, Ultron, Cipher, Jarvis (haftalık sprint + `[ ]/[x]` odak bloğu)
 EOF
 
 # Kullanılmayan eski duplicate watchdog kopyasını temizle (unit repo kopyasını çalıştırır)
@@ -164,9 +169,24 @@ specs = [
      "Kitap ve derin kültür dosyaları.", None),
     ("Cipher", "cipher", "full", False, False, "medium", "#3dbea5", "İngilizce",
      "Akıcılık ve profesyonel iletişim.", None),
-    ("Iron", "iron", "full", False, False, "medium", "#9aa0a6", "Disiplin",
-     "Günlük üç odak ve haftalık plan.", None),
+    ("Iron", "iron", "full", False, False, "medium", "#9aa0a6", "Chief of Staff",
+     "Batuhan'ın filo orkestratörü; stratejik sabah brifingi, akşam debottlenecking analizi ve haftalık sprint yönetimi.", None),
 ]
+
+jarvis_backup_models = {
+    "automatic": True,
+    "order": [
+        {"provider": "opencode", "model": "zai-coding-plan/glm-5-turbo"},
+        {"provider": "antigravity", "model": gemini_model},
+    ],
+}
+gemini_backup_models = {
+    "automatic": True,
+    "order": [
+        {"provider": "opencode", "model": jarvis_model},
+        {"provider": "opencode", "model": "zai-coding-plan/glm-5-turbo"},
+    ],
+}
 
 existing = {}
 for agent_id, blob in db.execute("select agent_id, agent_json from projection_agents"):
@@ -197,6 +217,7 @@ for order, spec in enumerate(specs):
         "chatColor": color,
         "avatarUrl": None,
         "provider": "opencode" if name == "Jarvis" else "antigravity",
+        "backupModels": jarvis_backup_models if name == "Jarvis" else gemini_backup_models,
         "access": access,
         "computerUse": computer,
         "allowAutomation": True,
@@ -247,7 +268,10 @@ fi
 
 sudo systemctl start openbot.service
 
-sudo tee /etc/systemd/system/pi-fleet-watchdog.service >/dev/null <<EOF
+if [[ -x "${REMOTE_DIR}/scripts/pi/install-privileged-scripts.sh" ]]; then
+  sudo REMOTE_DIR="${REMOTE_DIR}" bash "${REMOTE_DIR}/scripts/pi/install-privileged-scripts.sh"
+else
+  sudo tee /etc/systemd/system/pi-fleet-watchdog.service >/dev/null <<EOF
 [Unit]
 Description=Pi fleet watchdog (no LLM unless threshold)
 After=docker.service network-online.target
@@ -259,7 +283,7 @@ Environment=REMOTE_DIR=${REMOTE_DIR}
 Environment=OPENBOT_FLEET_ROOT=${FLEET}
 ExecStart=${SCRIPT_DIR}/pi-fleet-watchdog.sh
 EOF
-sudo tee /etc/systemd/system/pi-fleet-watchdog.timer >/dev/null <<EOF
+  sudo tee /etc/systemd/system/pi-fleet-watchdog.timer >/dev/null <<EOF
 [Unit]
 Description=Run Pi fleet watchdog every 5 minutes
 
@@ -273,6 +297,7 @@ Unit=pi-fleet-watchdog.service
 [Install]
 WantedBy=timers.target
 EOF
+fi
 
 for unit in jarvis-bulletin-morning jarvis-bulletin-fx jarvis-bulletin-evening \
   jarvis-bulletin-night jarvis-fx-prepare; do

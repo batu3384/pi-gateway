@@ -72,13 +72,17 @@ for blob, in con.execute("select agent_json from projection_agents"):
     if a.get("notifications") is False:
         print(f"FAIL {a['name']}: notifications kapalı", file=sys.stderr)
         sys.exit(1)
+    bm = a.get("backupModels")
+    if not isinstance(bm, dict) or bm.get("automatic") is not True or not isinstance(bm.get("order"), list) or len(bm["order"]) < 1:
+        print(f"FAIL {a['name']}: backupModels eksik veya automatic kapalı", file=sys.stderr)
+        sys.exit(1)
 missing = want - set(names)
 if missing:
     print(f"FAIL eksik ajan: {missing}", file=sys.stderr)
     sys.exit(1)
 routines = con.execute("select count(*) from projection_agent_routines where active=1").fetchone()[0]
-if routines < 8:
-    print(f"FAIL aktif rutin {routines} < 8", file=sys.stderr)
+if routines < 10:
+    print(f"FAIL aktif rutin {routines} < 10", file=sys.stderr)
     sys.exit(1)
 jarvis = [json.loads(b) for b, in con.execute("select agent_json from projection_agents") if json.loads(b).get("name")=="Jarvis"][0]
 if jarvis.get("provider") != "opencode":
@@ -100,10 +104,27 @@ FLEET="${OPENBOT_FLEET_ROOT:-$(openbot_data_root)/fleet}"
 for agent in jarvis falcon spider ultron cipher iron; do
   [[ -e "${FLEET}/${agent}" ]] && ok "workspace $agent" || bad "workspace yok: $agent"
 done
-if grep -rn '__REMOTE_DIR__' "${FLEET}/jarvis/.agents/skills" "${FLEET}/jarvis/.claude/skills" >/dev/null 2>&1; then
-  bad "Jarvis becerilerinde işlenmemiş __REMOTE_DIR__ yer tutucusu var (setup-openbot-fleet.sh --files-only)"
+if grep -rn '__REMOTE_DIR__' "${FLEET}/jarvis/.agents/skills" "${FLEET}/jarvis/.claude/skills" "${FLEET}/ultron/.agents/skills" "${FLEET}/ultron/.claude/skills" >/dev/null 2>&1; then
+  bad "Becerilerde işlenmemiş __REMOTE_DIR__ yer tutucusu var (setup-openbot-fleet.sh --files-only)"
 else
-  ok "Jarvis beceri yolları"
+  ok "Filo beceri yolları"
+fi
+
+for helper in jarvis-health-brief.sh render-ultron-pdf.sh fleet-shared-rotate.sh; do
+  if [[ -x "${SCRIPT_DIR}/${helper}" || -x "${REMOTE_DIR}/scripts/pi/${helper}" ]]; then
+    ok "helper ${helper}"
+  else
+    bad "helper eksik/çalıştırılabilir değil: ${helper}"
+  fi
+done
+
+if [[ -f "${SCRIPT_DIR}/sync-fleet-routines.py" ]]; then
+  if OPENBOT_STATE_DIR="$(openbot_state_dir)" OPENBOT_DATA_ROOT="$(openbot_data_root)" \
+    python3 "${SCRIPT_DIR}/sync-fleet-routines.py" --check >/dev/null 2>&1; then
+    ok "routines in sync"
+  else
+    bad "routines drift (sync-fleet-routines.py --check)"
+  fi
 fi
 
 case "${NOTIFY_BACKEND:-openbot}" in

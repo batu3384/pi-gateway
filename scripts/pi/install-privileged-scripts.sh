@@ -63,6 +63,10 @@ SCRIPTS=(
   scripts/pi/boot-notify.sh
   scripts/pi/jarvis-send.sh
   scripts/pi/jarvis-snapshot.sh
+  scripts/pi/jarvis-health-brief.sh
+  scripts/pi/fleet-shared-rotate.sh
+  scripts/pi/render-ultron-pdf.sh
+  scripts/pi/sync-fleet-routines.py
   scripts/pi/pi-fleet-watchdog.sh
   scripts/pi/verify-openbot-fleet.sh
   scripts/pi/heal-openbot-fleet.sh

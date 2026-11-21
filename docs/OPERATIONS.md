@@ -227,8 +227,9 @@ Başarısız restore drill `/var/lib/pi-gateway/last-backup-restore-drill-failur
 
 Sistem sohbeti ve tüm uyarılar native `openbot.service` (`Heimdall`) üzerinden yürür (`HERMES_TELEGRAM_GATEWAY=false`, `NOTIFY_BACKEND=openbot`, `OPENBOT_JARVIS_AUTOMATION=true`).
 
-- **Jarvis (`opencode` / `zai-coding-plan/glm-5.3`):** Host üzerinde tam yetkili tanılama (`jarvis-snapshot.sh`, `health-check.sh`, `/menu`, `/dns`, `/ssd`, `/backup`, `/recover`, `/recover onay`) + tüm host uyarılarının alıcısı (`jarvis-send.sh`).
-- **Gemini filosu (`antigravity` / `gemini-3.8-flash`):** Falcon (gündem), Spider (kariyer), Ultron (kültür), Cipher (İngilizce), Iron (Chief of Staff).
+- **Jarvis (`opencode` / `zai-coding-plan/glm-5.3`):** Host üzerinde tam yetkili tanılama (`jarvis-snapshot.sh`, `jarvis-health-brief.sh`, `health-check.sh`, `/menu`, `/dns`, `/ssd`, `/backup`, `/recover`, `/recover onay`) + tüm host uyarılarının alıcısı (`jarvis-send.sh`). Otomatik yedek modeller: `glm-5-turbo` → `antigravity/gemini-3.8-flash`.
+- **Gemini filosu (`antigravity` / `gemini-3.8-flash`):** Falcon (gündem), Spider (kariyer/eğitim), Ultron (Salı/Cmt editoryal PDF monograf — `render-ultron-pdf.sh`), Cipher (A0→B2 İngilizce + Spaced Repetition), Iron (Chief of Staff). Çapraz otomatik yedek: `opencode/zai-coding-plan/glm-5.3` → `glm-5-turbo`.
+- **Ortak hafıza ve rotasyon:** `fleet/shared/user_profile.md` (yalnızca Pi'de, repoda şablon) + `fleet-shared-rotate.sh` (günlük rolling arşiv).
 - **Bellek ve OOM koruması:** `openbot.service.d/pi-gateway.conf` (`MemoryHigh=1800M`, `MemoryMax=2200M`, `MemorySwapMax=1024M`, `OOMScoreAdjust=300`) — DNS çekirdeği (`OOMScoreAdjust=0`) her zaman korunur.
 - **Sırlar:** z.ai ve Tavily anahtarları `/mnt/ssd/openbot/{zai,tavily}.env` (chmod 600, Restic yedeğine şifreli dahildir, repoya girmez).
 - **Beceri ve prompt senkronu:** `make deploy-code` otomatik olarak `setup-openbot-fleet.sh --files-only` çalıştırır (`__REMOTE_DIR__` ikamesiyle).
@@ -236,9 +237,10 @@ Sistem sohbeti ve tüm uyarılar native `openbot.service` (`Heimdall`) üzerinde
 | Command | Description |
 |---------|-------------|
 | `sudo openbot status` | OpenBot sunucu, bellek ve bağlantı durumu |
-| `REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/verify-openbot-fleet.sh` | 6 ajan, rutinler, provider runtime ve beceri doğrulaması |
+| `REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/verify-openbot-fleet.sh` | 6 ajan, 10 sıralı rutin, `backupModels`, provider runtime ve beceri doğrulaması |
 | `REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/heal-openbot-fleet.sh` | Provider runtime ve filo onarımı (`OPENBOT_HEAL_PROBE_AGENTS=true` ile Falcon smoke) |
-| `REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/jarvis-snapshot.sh` | Tek komut salt-okunur sistem fotoğrafı |
+| `REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/jarvis-snapshot.sh` | Tek komut salt-okunur anlık sistem fotoğrafı |
+| `REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/jarvis-health-brief.sh` | Anlık fotoğraf + VictoriaMetrics 7g trend + OpenBot 24s filo özeti |
 | `make telegram-test` | `notify.sh` → OpenBot Jarvis canlı uyarı testi |
 
 ## Passwords

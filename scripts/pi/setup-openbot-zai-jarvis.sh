@@ -78,6 +78,13 @@ aj["model"] = model
 aj["provider"] = "opencode"
 aj["reasoningEffort"] = effort
 aj["computerUse"] = computer_use
+aj["backupModels"] = {
+    "automatic": True,
+    "order": [
+        {"provider": "opencode", "model": "zai-coding-plan/glm-5-turbo"},
+        {"provider": "antigravity", "model": "gemini-3.8-flash"},
+    ],
+}
 now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 aj["updatedAt"] = now
 blob = json.dumps(aj, ensure_ascii=False, separators=(",", ":"))
