@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# z.ai Coding Plan (opencode) + Jarvis model glm-5.3-flash — native OpenBot.
+# z.ai Coding Plan (opencode) + Jarvis model glm-5.3 — native OpenBot.
 set -euo pipefail
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -12,9 +12,10 @@ read_remote_dotenv || { echo "HATA: .env" >&2; exit 1; }
 STATE_DIR="$(openbot_state_dir)"
 DB="${STATE_DIR}/openbot.db"
 ZAI_ENV="${OPENBOT_ZAI_ENV:-/mnt/ssd/openbot/zai.env}"
-JARVIS_MODEL="${JARVIS_OPENCODE_MODEL:-zai-coding-plan/glm-5.3-flash}"
+JARVIS_MODEL="${JARVIS_OPENCODE_MODEL:-zai-coding-plan/glm-5.3}"
 JARVIS_AGENT_ID="${JARVIS_AGENT_ID:-}"
-JARVIS_EFFORT="${JARVIS_REASONING_EFFORT:-high}"
+JARVIS_EFFORT="${JARVIS_REASONING_EFFORT:-medium}"
+JARVIS_COMPUTER_USE="${JARVIS_COMPUTER_USE:-false}"
 OC_CFG_SRC="${REMOTE_DIR}/config/openbot/opencode.json"
 OC_CFG_DST="${HOME}/.config/opencode/opencode.json"
 SYSTEMD_DROP="/etc/systemd/system/openbot.service.d/zai-env.conf"
@@ -46,7 +47,7 @@ if systemctl is-active --quiet openbot.service 2>/dev/null; then
   sudo systemctl stop openbot.service
 fi
 
-export DB JARVIS_MODEL JARVIS_AGENT_ID JARVIS_EFFORT
+export DB JARVIS_MODEL JARVIS_AGENT_ID JARVIS_EFFORT JARVIS_COMPUTER_USE
 python3 - <<'PY'
 import json, os, sqlite3, sys
 from datetime import datetime, timezone
@@ -54,7 +55,8 @@ from datetime import datetime, timezone
 db = os.environ["DB"]
 model = os.environ["JARVIS_MODEL"]
 aid = os.environ.get("JARVIS_AGENT_ID", "").strip()
-effort = os.environ.get("JARVIS_EFFORT", "high")
+effort = os.environ.get("JARVIS_EFFORT", "medium")
+computer_use = os.environ.get("JARVIS_COMPUTER_USE", "false").strip().lower() == "true"
 
 con = sqlite3.connect(db)
 rows = [(r[0], r[1], json.loads(r[2])) for r in con.execute(
@@ -75,6 +77,7 @@ agent_id, aj = pick
 aj["model"] = model
 aj["provider"] = "opencode"
 aj["reasoningEffort"] = effort
+aj["computerUse"] = computer_use
 now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 aj["updatedAt"] = now
 blob = json.dumps(aj, ensure_ascii=False, separators=(",", ":"))
@@ -83,7 +86,7 @@ con.execute(
     (model, blob, now, agent_id),
 )
 con.commit()
-print(agent_id, model)
+print(agent_id, model, effort, aj["computerUse"])
 PY
 
 if [[ "$was_active" == true ]]; then

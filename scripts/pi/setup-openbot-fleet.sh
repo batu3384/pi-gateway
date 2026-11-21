@@ -138,7 +138,8 @@ log "openbot durduruluyor (compose/AdGuard durmaz)"
 sudo systemctl stop openbot.service
 
 export DB FLEET DATA_ROOT
-export JARVIS_OPENCODE_MODEL="${JARVIS_OPENCODE_MODEL:-zai-coding-plan/glm-5.3-flash}"
+export JARVIS_OPENCODE_MODEL="${JARVIS_OPENCODE_MODEL:-zai-coding-plan/glm-5.3}"
+export JARVIS_REASONING_EFFORT="${JARVIS_REASONING_EFFORT:-medium}"
 python3 - <<'PY'
 import json, os, sqlite3, uuid
 from datetime import datetime, timezone
@@ -147,12 +148,13 @@ db = sqlite3.connect(os.environ["DB"])
 fleet = os.environ["FLEET"]
 now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 ns = uuid.UUID("6d0f3e6e-047a-4ec0-9697-d093cf953716")
-jarvis_model = os.environ.get("JARVIS_OPENCODE_MODEL") or "zai-coding-plan/glm-5.3-flash"
+jarvis_model = os.environ.get("JARVIS_OPENCODE_MODEL") or "zai-coding-plan/glm-5.3"
+jarvis_effort = os.environ.get("JARVIS_REASONING_EFFORT") or "medium"
 gemini_model = "gemini-3.8-flash"
 # OpenCode workspace modu Linux'ta başlamıyor (yalnız macOS). Kabuk yasağı SOUL'da.
 
 specs = [
-    ("Jarvis", "jarvis", "full", True, True, "high", "#8688ff", "Sistem",
+    ("Jarvis", "jarvis", "full", False, True, jarvis_effort, "#8688ff", "Sistem",
      "Pi 4B, pi-gateway ve AdGuard komutanı.", "agent-6d0f3e6e-047a-4ec0-9697-d093cf953716"),
     ("Falcon", "falcon", "full", False, False, "medium", "#e0a040", "Gündem",
      "Günlük haber ve teknoloji radarı.", None),

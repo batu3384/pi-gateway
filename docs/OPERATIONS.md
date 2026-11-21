@@ -227,7 +227,7 @@ Başarısız restore drill `/var/lib/pi-gateway/last-backup-restore-drill-failur
 
 Sistem sohbeti ve tüm uyarılar native `openbot.service` (`Heimdall`) üzerinden yürür (`HERMES_TELEGRAM_GATEWAY=false`, `NOTIFY_BACKEND=openbot`, `OPENBOT_JARVIS_AUTOMATION=true`).
 
-- **Jarvis (`opencode` / `zai-coding-plan/glm-5.3-flash`):** Host üzerinde tam yetkili tanılama (`jarvis-snapshot.sh`, `health-check.sh`, `/menu`, `/dns`, `/ssd`, `/backup`, `/recover`, `/recover onay`) + tüm host uyarılarının alıcısı (`jarvis-send.sh`).
+- **Jarvis (`opencode` / `zai-coding-plan/glm-5.3`):** Host üzerinde tam yetkili tanılama (`jarvis-snapshot.sh`, `health-check.sh`, `/menu`, `/dns`, `/ssd`, `/backup`, `/recover`, `/recover onay`) + tüm host uyarılarının alıcısı (`jarvis-send.sh`).
 - **Gemini filosu (`antigravity` / `gemini-3.8-flash`):** Falcon (gündem), Spider (kariyer), Ultron (kültür), Cipher (İngilizce), Iron (Chief of Staff).
 - **Bellek ve OOM koruması:** `openbot.service.d/pi-gateway.conf` (`MemoryHigh=1800M`, `MemoryMax=2200M`, `MemorySwapMax=1024M`, `OOMScoreAdjust=300`) — DNS çekirdeği (`OOMScoreAdjust=0`) her zaman korunur.
 - **Sırlar:** z.ai ve Tavily anahtarları `/mnt/ssd/openbot/{zai,tavily}.env` (chmod 600, Restic yedeğine şifreli dahildir, repoya girmez).

@@ -8,7 +8,7 @@ bash ~/pi-gateway/scripts/pi/setup-openbot-native-server.sh
 # Gerekirse: sudo openbot login
 ```
 
-Servis: `openbot.service` — sunucu **Heimdall**. Jarvis: `zai-coding-plan/glm-5.3-flash` + Tavily. Diğerleri: `gemini-3.8-flash` (Antigravity).
+Servis: `openbot.service` — sunucu **Heimdall**. Jarvis: `zai-coding-plan/glm-5.3` + Tavily. Diğerleri: `gemini-3.8-flash` (Antigravity).
 
 Filo (`setup-openbot-fleet.sh`, veri `/mnt/ssd/openbot-native/fleet`):
 
