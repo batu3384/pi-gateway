@@ -215,57 +215,31 @@ Başarısız restore drill `/var/lib/pi-gateway/last-backup-restore-drill-failur
 | `health-check` timer | Çekirdek sağlık hatası (OnFailure), disk/inode 80%+, düşük RAM, SD/izleme uyarıları (durum-geçişli + debounce) |
 | `restic-backup` | Yalnız hata olursa uyarı (`NOTIFY_BACKUP_OK=false` varsayılan sessiz) |
 | `health-check` / SSD hotplug | Gerçek kesinti sonrası kurtarma bildirimi |
-| `pi-gateway-quake.timer` (60s) | AFAD+Kandilli poll → outbox bot (REVIZE tekilleştirmeli; Hermes yok; EEW değil) |
-| `pi-gateway-ibb.timer` (30 dk) | İBB HKI ≥ `IBB_HKI_WARN` (101) → Telegram; iyileşince bir kez OK. API fail = sessiz |
-| Jarvis rutinleri (07:00 / 18:55 / 19:00 / 23:00) | Günaydın / piyasa / akşam / gece. Piyasa dosyası 18:54 `jarvis-fx-prepare.timer`. |
+| `pi-gateway-quake.timer` (60s) | AFAD v2 + Kandilli poll → `notify.sh` → OpenBot Jarvis (REVIZE tekilleştirmeli; EEW değil) |
+| `pi-gateway-ibb.timer` (30 dk) | İBB HKI ≥ `IBB_HKI_WARN` (101) → OpenBot Jarvis; iyileşince bir kez OK. API fail = sessiz |
+| OpenBot filo rutinleri (`config/openbot/ROUTINES.md`) | Jarvis (08:00 sistem), Falcon (07:30/19:00 gündem), Iron (08:15/21:45/Pazar plan), Spider (09:30 kariyer), Cipher (13:00 İngilizce) |
 
 **Deprem:** yayın sonrası bildirim. Gecikme ≈ kaynak sayfası + ≤60s poll. İlk koşu bootstrap (tarihî liste spam yok). Eşik/konum: `.env` `QUAKE_*` (bkz. `.env.example`).
 
-**Hava (İBB):** en yakın sabit istasyon (varsayılan Aksaray civarı). HKI sarı bant (51+) geçiş bildirimi; tekrar `NOTIFY_IBB_REPEAT_SEC`. Ev bahçesi ölçümü değil — istasyon açık veri.
+**Hava (İBB):** en yakın sabit istasyon (varsayılan Aksaray civarı). HKI eşik geçiş bildirimi; tekrar `NOTIFY_IBB_REPEAT_SEC`. Ev bahçesi ölçümü değil — istasyon açık veri.
+
+### OpenBot Native Fleet (Jarvis + 5 Gemini Ajanı)
+
+Sistem sohbeti ve tüm uyarılar native `openbot.service` (`Heimdall`) üzerinden yürür (`HERMES_TELEGRAM_GATEWAY=false`, `NOTIFY_BACKEND=openbot`, `OPENBOT_JARVIS_AUTOMATION=true`).
+
+- **Jarvis (`opencode` / `zai-coding-plan/glm-5.3-flash`):** Host üzerinde tam yetkili tanılama (`jarvis-snapshot.sh`, `health-check.sh`, `/menu`, `/dns`, `/ssd`, `/backup`, `/recover`, `/recover onay`) + tüm host uyarılarının alıcısı (`jarvis-send.sh`).
+- **Gemini filosu (`antigravity` / `gemini-3.8-flash`):** Falcon (gündem), Spider (kariyer), Ultron (kültür), Cipher (İngilizce), Iron (Chief of Staff).
+- **Bellek ve OOM koruması:** `openbot.service.d/pi-gateway.conf` (`MemoryHigh=1800M`, `MemoryMax=2200M`, `MemorySwapMax=1024M`, `OOMScoreAdjust=300`) — DNS çekirdeği (`OOMScoreAdjust=0`) her zaman korunur.
+- **Sırlar:** z.ai ve Tavily anahtarları `/mnt/ssd/openbot/{zai,tavily}.env` (chmod 600, Restic yedeğine şifreli dahildir, repoya girmez).
+- **Beceri ve prompt senkronu:** `make deploy-code` otomatik olarak `setup-openbot-fleet.sh --files-only` çalıştırır (`__REMOTE_DIR__` ikamesiyle).
 
 | Command | Description |
 |---------|-------------|
-| `make telegram-test` | Test message |
-| `make telegram-menu` | Panel link buttons |
-
-Outbox yalnız bildirim gönderir. Hermes gateway aktifken inbox gelen mesajları ve komutları yanıtlar.
-
-### Hermes Agent (Telegram inbox)
-
-When `HERMES_TELEGRAM_GATEWAY=true` in Pi `.env`:
-
-- **Inbox:** `hermes-gateway.service` (Nous Hermes) owns `getUpdates` — chat + commands.
-- **Outbox:** `notify.sh` keeps using the same `TELEGRAM_BOT_TOKEN` via `sendMessage`.
-- **Identity:** deploy kopyalar `config/hermes/SOUL.md` → `~/.hermes/SOUL.md` + skill `pi-gateway-ops` (Forgejo/Syncthing yok). Ölü skill’ler (`imessage`, `findmy`, `comfyui`, `vllm`…) `skills.disabled`. Script: `setup-hermes-identity.sh`.
-- **Panel menu:** `telegram-menu.sh` (Mac/outbox) or Hermes `/menu` skill → `hermes-menu.sh`. Komut skill’leri (`/dns`, `/ssd`, `/backup`, `/recover`, `/recover onay`) tek-mesaj `telegram-ops.sh --stdout` çıktısı üretir.
-- Secrets: `GLM_API_KEY` + Telegram token live in `~/.hermes/.env` (chmod 600). Coding Plan base URL: `https://api.z.ai/api/coding/paas/v4`. Default model: **`glm-5.3`** (`provider: zai` in `~/.hermes/config.yaml`).
-- Browser (Pi aarch64): system Chromium (`apt install chromium`) + `agent-browser`; set `AGENT_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium` (Chrome-for-Testing ARM64 yok).
-- Allowlist: `TELEGRAM_ALLOWED_USERS` = numeric **user** id (not group chat id). Notify still uses `TELEGRAM_CHAT_ID`.
-
-| Command | Description |
-|---------|-------------|
-| `sudo systemctl status hermes-gateway` | Gateway health |
-| `hermes update && REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/patch-hermes-telegram-pi.sh && sudo systemctl restart hermes-gateway` | Update agent + re-apply Pi Telegram patch |
-| `REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/setup-hermes-gateway.sh` | Reinstall unit + patch + drop-in |
-
-**Pi Telegram patch:** `scripts/pi/patch-hermes-telegram-pi.sh` — v0.20 cold-start uyumluluğu (v0.23+ sürümde otomatik atlanır), eski statik `/etc/hosts` pin temizliği ve systemd drop-in (`HTTP_POOL_SIZE=8`, Chromium yolu). Re-run after every `hermes update`.
-
-**Disable Hermes inbox:** set `HERMES_TELEGRAM_GATEWAY=false` (or remove) in Pi `.env` → redeploy/`setup-hermes-gateway.sh` (`hermes-gateway` disabled; **no poller fallback** — inbox dark, outbox/`notify.sh` still works).
-
-**Cutover fail:** if Connected check fails, unit stays **enabled** (`Restart=always`) and Telegram outbox alert fires (`_alert_inbox_down`). Fix: `journalctl -u hermes-gateway` → `setup-hermes-gateway.sh` again.
-
-**Lifecycle Telegram:** Rutin `systemctl restart` ve deploy sırasında kapanış/açılış mesajları kapalıdır (`gateway_restart_notification=false`, `NOTIFY_HERMES_UP_ON_RESTART=false`). Yalnız gerçek kesinti sonrası düzelme (`hermes-inbox-up-notify.sh`) ve Pi reboot (`boot-notify.sh`) bildirilir.
-
-**Token rotate:** update both `~/pi-gateway/.env` and `~/.hermes/.env`, then `systemctl restart hermes-gateway`.
-
-**DM test:** Telegram’da `@RaspberryPi3384_bot` → allowlist user id ile mesaj. Outbox: `make telegram-test`.
-
-| Command | Description |
-|---------|-------------|
-| `make telegram-test` | Test message |
-| `make telegram-menu` | Panel link buttons (Mac/outbox; Hermes `/menu` skill on Pi when gateway active) |
-
-Bot outbox: notifications. Hermes inbox: conversational replies when gateway is active.
+| `sudo openbot status` | OpenBot sunucu, bellek ve bağlantı durumu |
+| `REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/verify-openbot-fleet.sh` | 6 ajan, rutinler, provider runtime ve beceri doğrulaması |
+| `REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/heal-openbot-fleet.sh` | Provider runtime ve filo onarımı (`OPENBOT_HEAL_PROBE_AGENTS=true` ile Falcon smoke) |
+| `REMOTE_DIR=~/pi-gateway bash ~/pi-gateway/scripts/pi/jarvis-snapshot.sh` | Tek komut salt-okunur sistem fotoğrafı |
+| `make telegram-test` | `notify.sh` → OpenBot Jarvis canlı uyarı testi |
 
 ## Passwords
 

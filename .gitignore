@@ -7,12 +7,10 @@ data/
 config/adguard/AdGuardHome.yaml
 config/caddy/Caddyfile
 config/caddy/certs/
-config/homepage/services.yaml
 config/crowdsec/bouncer/local_api_credentials.yaml
 config/tailscale/acl.hujson
 host/dhcpcd/pi-gateway.conf
 backups/
-legacy/
 *.log
 *.pem
 *.key

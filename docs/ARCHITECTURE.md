@@ -85,17 +85,17 @@ Tam ev kilidi = başka L2 (OpenWrt) veya cihaz DNS. İkisi de bu hedefte yok. Mi
 | Layer | Component | Role |
 |-------|-----------|------|
 | DNS filter | AdGuard Home | Block ads/trackers, local rewrites |
-| DNS resolver | Unbound (klutchell) | DoT forward (Cloudflare Security `1.1.1.2`/`1.0.0.2` + Quad9 `:853`); not recursive. DNSSEC validator (AD + `dnssec-failed.org` SERVFAIL in diagnose) |
+| DNS resolver | Unbound (klutchell) | DoT forward (Cloudflare Security `1.1.1.2`/`1.0.0.2` + Google `8.8.8.8`/`8.8.4.4` `:853`); not recursive. DNSSEC validator (AD + `dnssec-failed.org` SERVFAIL in diagnose) |
 | Proxy | Caddy | `gateway.home`, `dns.home`, `status.home`, `grafana.home`, `logs.home`, `devices.home` (Tailscale vhosts bound strictly to `127.0.0.1:8088`) |
 | Dashboard | Glance + `gateway-state` | Lightweight dashboard + public `/var/lib/pi-gateway/public/state.json` widget (`modem-inventory.json` isolated) |
 | Logs | Dozzle | Live Docker container logs (via isolated `socket_proxy` internal network + `docker-socket-proxy`) |
 | Status & Metrics | Gatus + VictoriaMetrics + Grafana + systemd health timer | Uptime, SLO heartbeats, time-series metrics & DNS layer checks |
 | Network inventory | NetAlertX | LAN device discovery (`devices.home`), AdGuard client name import |
-| Assistant | Hermes Telegram Gateway + `notify.sh` | Conversational ops (`/menu`, `/dns`, `/ssd`, `/backup`, `/recover` + `/recover onay` single-message `--stdout`) + state-transition alerts |
+| Assistant | OpenBot Native Fleet (Jarvis + 5 Gemini) + `notify.sh` | Conversational ops (`jarvis-snapshot.sh`, `/menu`, `/dns`, `/ssd`, `/backup`, `/recover` + `/recover onay` single-message `--stdout`) + state-transition alerts |
 | Recovery | recover-stack.sh | Restart unhealthy / degraded stack |
-| Security | UFW + CrowdSec | LAN-scoped admin ports, SSH/DoT `:853` & `:22000` immediate `REJECT` (no Android timeout / kernel log storm), CrowdSec JSON-synced UFW bans |
-| Host | journald persistent cap (`99-pi-gateway-persistent.conf`), sysctl BBR+`fq`, NM failover | SD longevity, TCP/UDP performance, NIC redundancy |
-| Remote | Tailscale + Raspberry Pi Connect | Remote panels, owner DNS to AdGuard `:53`, desktop screen access |
+| Security | UFW + CrowdSec | LAN-scoped admin ports, SSH/DoT `:853` & `:22000` immediate `REJECT`, CrowdSec journald acquisition + `DOCKER-USER` + UFW bans |
+| Host | journald persistent cap (`99-pi-gateway-persistent.conf`), unified sysctl BBR+`fq`, JMicron `read_ahead_kb=0`, NM failover | SD longevity, USB SSD integrity, TCP/UDP performance, NIC redundancy |
+| Remote | Tailscale | Remote panels via Tailscale Serve, owner DNS to AdGuard `:53` |
 | Storage | `/mnt/ssd/pi-gateway-data` (symlink `~/pi-gateway/data`) | AdGuard, Gatus, VictoriaMetrics, Grafana, NetAlertX, Restic backups |
 
 ## Phased rollout
@@ -106,7 +106,7 @@ Tam ev kilidi = başka L2 (OpenWrt) veya cihaz DNS. İkisi de bu hedefte yok. Mi
 | 1 DNS & Panels | Done | Unbound, AdGuard, Glance, Gatus, Caddy, Dozzle |
 | 2 Backup | Done | Restic (timer + Mac pull + drill); Forgejo/Syncthing removed |
 | 3 Monitoring & Edge | Done | VictoriaMetrics + Grafana + `node-exporter`; `n8n` retired (`ENABLE_N8N=false`) |
-| 4 Network & Assistant | Done | NetAlertX (`devices.home`), Hermes Telegram Gateway, low-noise `notify.sh` |
+| 4 Network & Assistant | Done | NetAlertX (`devices.home`), OpenBot Native Fleet (Jarvis + 5 Gemini), low-noise `notify.sh` |
 
 ## Network modes
 

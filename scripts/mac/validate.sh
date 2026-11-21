@@ -66,7 +66,7 @@ chmod +x "$SCRIPT_DIR/test-adversarial-fixes.sh" 2>/dev/null || true
 if [[ -f "$SCRIPT_DIR/test-adversarial-fixes.sh" ]]; then
   "$SCRIPT_DIR/test-adversarial-fixes.sh"
 fi
-chmod +x "$SCRIPT_DIR/test-hermes-bulletins.sh" "$PROJECT_DIR/scripts/pi/fx-quote.sh" 2>/dev/null || true
+chmod +x "$SCRIPT_DIR/test-hermes-bulletins.sh" 2>/dev/null || true
 if [[ -f "$SCRIPT_DIR/test-hermes-bulletins.sh" ]]; then
   "$SCRIPT_DIR/test-hermes-bulletins.sh"
 fi

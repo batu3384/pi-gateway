@@ -9,7 +9,7 @@ AdGuard + Unbound DNS, Caddy reverse proxy, monitoring — deployed from a Mac w
 | Layer | Component |
 |-------|-----------|
 | DNS filter | AdGuard Home |
-| DNS resolver | Unbound (Cloudflare Security + Quad9 DoT `:853`, DNSSEC) + host DoT fallback |
+| DNS resolver | Unbound (Cloudflare Security + Google DoT `:853`, DNSSEC) + host DoT fallback |
 | Reverse proxy | Caddy (`*.home` TLS) |
 | Dashboard | Glance (`gateway.home`) |
 | Status & SLO | Gatus (`status.home`) + host health timer |
@@ -17,8 +17,8 @@ AdGuard + Unbound DNS, Caddy reverse proxy, monitoring — deployed from a Mac w
 | Logs | Dozzle (`logs.home`, via `docker-socket-proxy`) |
 | Backup | Restic (encrypted on SSD + Mac offsite pull) |
 | Network inventory | NetAlertX (`devices.home`) |
-| Security & remote | UFW + CrowdSec (SSH) + Tailscale + Raspberry Pi Connect |
-| Assistant & alerts | Hermes Telegram gateway + low-noise state-transition `notify.sh` |
+| Security & remote | UFW + CrowdSec (SSH/kernel journald + `DOCKER-USER`) + Tailscale |
+| Assistant & alerts | OpenBot native 6-agent fleet (Jarvis + 5 Gemini) + low-noise state-transition `notify.sh` |
 
 ## Requirements
 
@@ -69,7 +69,7 @@ make validate    # render + contract tests (Pi can be offline)
 make test        # alias for validate (CI / runtime-check)
 make discover    # network discovery → writes .env
 make deploy      # full stack to Pi (bootstrap+compose+post+smoke)
-make deploy-code # daily: rsync + privileged + Hermes (alias: deploy-fast)
+make deploy-code # daily: rsync + privileged + OpenBot/notify (alias: deploy-fast)
 make dns-test    # DNS checks from Mac
 make backup-pull # offsite restic copy to Mac
 make restore-check # restic check (Pi + Mac offsite)
