@@ -15,7 +15,8 @@ REMOTE_DIR="${REMOTE_DIR:-/home/$PI_USER/pi-gateway}"
 STORAGE_TYPE="${STORAGE_TYPE:-hybrid}"
 PI_DEPLOY_HOST="${PI_DEPLOY_HOST:-}"
 
-[[ -n "${PI_DEPLOY_HOST:-$PI_HOST}" ]] || die "PI_HOST or PI_DEPLOY_HOST required"
+DEPLOY_HOST="${PI_DEPLOY_HOST:-${PI_STATIC_IP:-$PI_HOST}}"
+[[ -n "$DEPLOY_HOST" ]] || die "PI_HOST, PI_STATIC_IP or PI_DEPLOY_HOST required"
 
 if [[ -d "$PROJECT_DIR/data" && ! -L "$PROJECT_DIR/data" ]]; then
   if find "$PROJECT_DIR/data" -type f -print -quit 2>/dev/null | grep -q .; then
@@ -25,7 +26,6 @@ if [[ -d "$PROJECT_DIR/data" && ! -L "$PROJECT_DIR/data" ]]; then
   rm -rf "$PROJECT_DIR/data"
 fi
 
-DEPLOY_HOST="${PI_DEPLOY_HOST:-${PI_STATIC_IP:-$PI_HOST}}"
 log "Pre-deploy: data symlink check ($PI_USER@$DEPLOY_HOST)"
 
 # Classify Pi state (fresh vs broken) before soft-failing
@@ -93,12 +93,13 @@ case "$PI_STATE" in
     ;;
 esac
 
-if ssh -o ConnectTimeout=15 "$PI_USER@$DEPLOY_HOST" \
-  "REMOTE_DIR='$REMOTE_DIR' STORAGE_TYPE='$STORAGE_TYPE' bash -s" \
-  < "$SCRIPT_DIR/../pi/ensure-data-symlink.sh" repair 2>/dev/null \
-  && ssh -o ConnectTimeout=15 "$PI_USER@$DEPLOY_HOST" \
-  "REMOTE_DIR='$REMOTE_DIR' STORAGE_TYPE='$STORAGE_TYPE' bash -s" \
-  < "$SCRIPT_DIR/../lib/ensure-data-symlink.sh" verify 2>/dev/null; then
+if ssh -o ConnectTimeout=15 -o BatchMode=yes "$PI_USER@$DEPLOY_HOST" \
+  "REMOTE_DIR='$REMOTE_DIR' STORAGE_TYPE='$STORAGE_TYPE' bash -c '
+    s=\"/usr/local/lib/pi-gateway/scripts/pi/ensure-data-symlink.sh\"
+    [[ -x \"\$s\" ]] || s=\"\${REMOTE_DIR}/scripts/pi/ensure-data-symlink.sh\"
+    [[ -f \"\$s\" ]] || exit 1
+    bash \"\$s\" repair && bash \"\$s\" verify
+  '"; then
   log "Pre-deploy: symlink repaired"
   exit 0
 fi

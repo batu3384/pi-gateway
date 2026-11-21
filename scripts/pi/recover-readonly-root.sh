@@ -29,16 +29,6 @@ PI_GATEWAY_USER="$(pi_user_from_remote_dir "$REMOTE_DIR")"
 needs_ssd() {
   needs_ssd_storage
 }
-# hybrid kalintisi: ssd-root'ta /mnt/ssd fstab yok
-if needs_ssd; then
-  # Health/recover dongusunda 15x2s beklemeyi kes — disk yoksa hizli degraded
-  local_fstab_attempts=15
-  if dns_degraded_on_ssd_loss && ! mountpoint -q /mnt/ssd 2>/dev/null; then
-    local_fstab_attempts="${ENSURE_FSTAB_MAX_ATTEMPTS:-3}"
-  fi
-  ENSURE_FSTAB_MAX_ATTEMPTS="$local_fstab_attempts" bash "$SCRIPT_DIR/ensure-ssd-fstab.sh" \
-    || log "WARN: fstab kontrolu basarisiz"
-fi
 if is_ssd_root_mode && ! root_on_ssd; then
   log "HATA: STORAGE_TYPE=ssd-root ama root mmcblk — cutover/EEPROM onar (repair-cutover-bootfs.sh)"
   exit 1
@@ -159,6 +149,15 @@ main() {
   if ! recover_lock_acquire; then
     log "HATA: kurtarma kilidi alinamadi (timeout)"
     exit 1
+  fi
+  # root rw + kilit altinda fstab dogrulamasi (RO root'ta /etc/fstab yazma hatasi olmaz)
+  if needs_ssd; then
+    local local_fstab_attempts=15
+    if dns_degraded_on_ssd_loss && ! mountpoint -q /mnt/ssd 2>/dev/null; then
+      local_fstab_attempts="${ENSURE_FSTAB_MAX_ATTEMPTS:-3}"
+    fi
+    ENSURE_FSTAB_MAX_ATTEMPTS="$local_fstab_attempts" bash "$SCRIPT_DIR/ensure-ssd-fstab.sh" \
+      || log "WARN: fstab kontrolu basarisiz"
   fi
   if ! storage_restore_pending && stack_fully_healthy && root_rw_ok && docker_sandbox_ok; then
     log "Stack saglikli ve root rw — kurtarma gerekmedi"

@@ -20,6 +20,10 @@ ACTION=="add|remove", SUBSYSTEM=="block", ENV{ID_FS_LABEL}=="pi-data", \
 ACTION=="add|change", SUBSYSTEM=="block", SUBSYSTEMS=="usb", ATTRS{idVendor}=="152d", ATTRS{idProduct}=="0583", \
   ENV{UDISKS_IGNORE}="1", ENV{UDISKS_AUTO}="0", ENV{ID_ATA}=""
 
-# BOT kopru FIFO tasmasi onleme (256KB -> 120KB / 240 sektor) + SSD non-rotational
+# BOT kopru FIFO tasmasi + async readahead sessiz okuma bozulmasi onleme
+# (JMS583 BOT + Pi 4B VL805: read_ahead_kb > 0 buyuk okumalarda sessiz veri bozulmasi uretir.
+#  ONEMLI: Linux 6.18'de max_sectors_kb yazimi read_ahead_kb'yi 128'e sifirlar; RUN+= tum ATTR{}
+#  yazimlarindan sonra calistigi icin read_ahead_kb kesin 0 olarak sabitlenir!)
 ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="sd[a-z]", SUBSYSTEMS=="usb", ATTRS{idVendor}=="152d", ATTRS{idProduct}=="0583", \
-  ATTR{queue/max_sectors_kb}="120", ATTR{queue/rotational}="0"
+  ATTR{queue/max_sectors_kb}="120", ATTR{queue/rotational}="0", \
+  RUN+="/bin/sh -c 'echo 0 > /sys%p/queue/read_ahead_kb'"

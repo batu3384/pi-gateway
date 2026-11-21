@@ -129,8 +129,6 @@ for _i in "${ISSUES[@]+"${ISSUES[@]}"}"; do
     ssd-health-fail|usb-ssd-disconnect)
       _has_ssd_issue=1
       ;;
-    kernel-io-errors)
-      ;;
     *)
       _ssd_only=0
       break

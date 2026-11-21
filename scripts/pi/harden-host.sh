@@ -78,15 +78,16 @@ mask_headless_noise() {
 }
 
 apply_kernel_and_nm_tuning() {
-  if [[ -f "$REMOTE_DIR/host/sysctl.d/99-pi-gateway-net.conf" ]]; then
+  local sysctl_src="$REMOTE_DIR/host/sysctl/99-pi-gateway.conf"
+  if [[ -f "$sysctl_src" ]]; then
     echo "tcp_bbr" | sudo tee /etc/modules-load.d/pi-gateway-bbr.conf >/dev/null
-    sudo modprobe tcp_bbr 2>/dev/null || true
-    sudo install -o root -g root -m 644 \
-      "$REMOTE_DIR/host/sysctl.d/99-pi-gateway-net.conf" \
-      /etc/sysctl.d/99-pi-gateway-net.conf
-    sudo /usr/sbin/sysctl -p /etc/sysctl.d/99-pi-gateway-net.conf >/dev/null 2>&1 || true
+    sudo modprobe tcp_bbr 2>/dev/null || log "WARN: tcp_bbr modulu yuklenemedi"
+    # Eski cift dosyayi temizle (99-pi-gateway-net.conf, 99-pi-gateway.conf'tan once siralanip eziliyordu)
+    sudo rm -f /etc/sysctl.d/99-pi-gateway-net.conf
+    sudo install -o root -g root -m 644 "$sysctl_src" /etc/sysctl.d/99-pi-gateway.conf
+    sudo /usr/sbin/sysctl -p /etc/sysctl.d/99-pi-gateway.conf >/dev/null || log "WARN: sysctl -p kismi hata"
     sudo /usr/sbin/sysctl --system >/dev/null 2>&1 || true
-    log "Kernel sysctl (BBR + fq + ARP flux + zram) uygulandi"
+    log "Kernel sysctl (BBR + fq + ARP flux + zram) uygulandi (/etc/sysctl.d/99-pi-gateway.conf)"
   fi
   if [[ -f "$REMOTE_DIR/host/NetworkManager/dispatcher.d/90-pi-gateway-wifi-failover" ]] \
     && [[ -d /etc/NetworkManager/dispatcher.d ]]; then
@@ -104,9 +105,10 @@ apply_kernel_and_nm_tuning() {
     fi
   fi
   if [[ "$(cat "/sys/class/net/${eth_iface}/carrier" 2>/dev/null || echo 0)" == "1" ]] \
+    && ip -4 addr show dev "$eth_iface" scope global 2>/dev/null | grep -q 'inet ' \
     && command -v nmcli >/dev/null 2>&1; then
-    if [[ "$(nmcli radio wifi 2>/dev/null || true)" == "enabled" ]]; then
-      sudo nmcli radio wifi off >/dev/null 2>&1 || true
+    if [[ "$(LC_ALL=C nmcli radio wifi 2>/dev/null || true)" == "enabled" ]]; then
+      sudo LC_ALL=C nmcli radio wifi off >/dev/null 2>&1 || true
       log "Kablolu ${eth_iface} aktif — Pi Wi-Fi radyosu kapatildi"
     fi
   fi

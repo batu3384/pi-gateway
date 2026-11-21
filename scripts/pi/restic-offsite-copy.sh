@@ -25,7 +25,12 @@ else
   LOCAL_REPO="${RESTIC_REPOSITORY:-/mnt/ssd/pi-gateway-data/backups/restic}"
 fi
 
-if storage_degraded || ! mountpoint -q /mnt/ssd 2>/dev/null; then
+if is_ssd_root_mode; then
+  if ! root_on_ssd; then
+    log "ssd-root ama root SSD degil — offsite copy atlandi"
+    exit 0
+  fi
+elif storage_degraded || ! mountpoint -q /mnt/ssd 2>/dev/null; then
   log "SSD degraded/yok — offsite copy atlandi"
   exit 0
 fi
@@ -36,16 +41,24 @@ AWS_SECRET_ACCESS_KEY="${RESTIC_OFFSITE_SECRET_ACCESS_KEY:-${AWS_SECRET_ACCESS_K
 [[ -n "$AWS_ACCESS_KEY_ID" && -n "$AWS_SECRET_ACCESS_KEY" ]] \
   || { log "HATA: RESTIC_OFFSITE_ACCESS_KEY_ID / RESTIC_OFFSITE_SECRET_ACCESS_KEY bos"; exit 1; }
 
-export RESTIC_PASSWORD AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
+RESTIC_FROM_PASSWORD="${RESTIC_PASSWORD}"
+export RESTIC_PASSWORD RESTIC_FROM_PASSWORD AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
 log "copy: local:$LOCAL_REPO -> ${RESTIC_OFFSITE_REPOSITORY}"
-if ! timeout "$RESTIC_OFFSITE_COPY_TIMEOUT_SEC" docker run --rm --network host \
-  -e RESTIC_PASSWORD \
-  -e AWS_ACCESS_KEY_ID \
-  -e AWS_SECRET_ACCESS_KEY \
-  -e RESTIC_REPOSITORY="${RESTIC_OFFSITE_REPOSITORY}" \
-  -v "${LOCAL_REPO}:/local:ro" \
-  "$RESTIC_IMAGE" \
-  copy --from-repo "local:/local"; then
+_run_offsite() {
+  timeout "$RESTIC_OFFSITE_COPY_TIMEOUT_SEC" docker run --rm --network host \
+    -e RESTIC_PASSWORD \
+    -e RESTIC_FROM_PASSWORD \
+    -e AWS_ACCESS_KEY_ID \
+    -e AWS_SECRET_ACCESS_KEY \
+    -e RESTIC_REPOSITORY="${RESTIC_OFFSITE_REPOSITORY}" \
+    -v "${LOCAL_REPO}:/local:ro" \
+    "$RESTIC_IMAGE" "$@"
+}
+if ! _run_offsite snapshots --no-lock >/dev/null 2>&1; then
+  log "Offsite repo ilk kez hazirlaniyor (copy-chunker-params)"
+  _run_offsite init --copy-chunker-params --from-repo "local:/local" --no-lock || true
+fi
+if ! _run_offsite copy --no-lock --from-repo "local:/local"; then
   log "HATA: restic copy basarisiz"
   # shellcheck source=../lib/notify.sh
   source "$SCRIPT_DIR/../lib/notify.sh"

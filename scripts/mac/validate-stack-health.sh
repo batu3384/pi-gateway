@@ -225,9 +225,12 @@ grep -q 'mmcblk.*(error|timeout)' "$sd_health" \
 if grep -Fq "ext4.*(error|checksum)|I/O error|mmcblk.*(error|timeout)|Buffer I/O error" "$sd_health"; then
   die "check-sd-health kernel-io-errors hâlâ USB SSD (sdb) EXT4 yakalıyor"
 fi
-grep -A20 '_ssd_only=1' "$sd_health" | grep -q 'kernel-io-errors' \
-  || die "check-sd-health _ssd_only kernel-io-errors ile SSD yolunu kiriyor"
-ok "check-sd-health SSD I/O SD-kart telegrami degil"
+grep -A15 '_ssd_only=1' "$sd_health" | grep -q 'ssd-health-fail|usb-ssd-disconnect' \
+  || die "check-sd-health _ssd_only ssd-health-fail/usb-ssd-disconnect yolu yok"
+if grep -A15 '_ssd_only=1' "$sd_health" | grep -q 'kernel-io-errors'; then
+  die "check-sd-health _ssd_only mmcblk SD kernel-io-errors hatasini yutuyor"
+fi
+ok "check-sd-health SSD I/O SD-kart telegrami degil (mmcblk SD hatasi gizlenmez)"
 
 grep -q '__CADDY_BASIC_AUTH__' "$PROJECT_DIR/config/caddy/Caddyfile.template" \
   && grep -A3 'http://gateway\.__LAN_DOMAIN__' "$PROJECT_DIR/config/caddy/Caddyfile.template" | grep -q '__CADDY_BASIC_AUTH__' \

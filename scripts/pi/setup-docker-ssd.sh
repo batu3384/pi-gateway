@@ -171,7 +171,7 @@ bring_up_stack() {
   log "Stack yeniden baslatiliyor..."
   cd "${REMOTE_DIR}/compose"
   # shellcheck source=../lib/compose-profiles.sh
-  source "${REMOTE_DIR}/scripts/lib/compose-profiles.sh"
+  source "$SCRIPT_DIR/../lib/compose-profiles.sh"
   mapfile -t profiles < <(compose_profiles)
   docker compose --env-file ../.env "${profiles[@]}" up -d
 }

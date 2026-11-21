@@ -83,8 +83,12 @@ _fsck_try_restore_stack() {
   if SKIP_RECOVER_LOCK=true REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/recover-readonly-root.sh"; then
     return 0
   fi
-  post_repair="${REMOTE_DIR}/scripts/pi/repair-post-ssd-recovery.sh"
-  [[ -f "$post_repair" ]] || post_repair="$SCRIPT_DIR/repair-post-ssd-recovery.sh"
+  if [[ "$(id -u)" -eq 0 && -x "$SCRIPT_DIR/repair-post-ssd-recovery.sh" ]]; then
+    post_repair="$SCRIPT_DIR/repair-post-ssd-recovery.sh"
+  else
+    post_repair="${REMOTE_DIR}/scripts/pi/repair-post-ssd-recovery.sh"
+    [[ -f "$post_repair" ]] || post_repair="$SCRIPT_DIR/repair-post-ssd-recovery.sh"
+  fi
   REMOTE_DIR="$REMOTE_DIR" bash "$post_repair" || true
   if SKIP_RECOVER_LOCK=true REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/recover-readonly-root.sh"; then
     return 0

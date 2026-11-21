@@ -48,7 +48,7 @@ if docker info >/dev/null 2>&1; then
     -v "${LOCAL_REPO}:/repo:ro" \
     -v "${tmpdir}:/restore" \
     "$RESTIC_IMAGE" \
-    -r "local:/repo" restore "$DRILL_SUBSET" --target /restore; then
+    -r "local:/repo" --no-lock restore "$DRILL_SUBSET" --target /restore; then
     restore_rc=0
   else
     restore_rc=$?
@@ -56,7 +56,7 @@ if docker info >/dev/null 2>&1; then
 elif command -v restic >/dev/null 2>&1; then
   log "docker yok — native restic"
   if run_with_timeout "$DRILL_TIMEOUT_SEC" env RESTIC_PASSWORD="$RESTIC_PASSWORD" \
-    restic -r "$LOCAL_REPO" restore "$DRILL_SUBSET" --target "$tmpdir"; then
+    restic -r "$LOCAL_REPO" --no-lock restore "$DRILL_SUBSET" --target "$tmpdir"; then
     restore_rc=0
   else
     restore_rc=$?
@@ -75,11 +75,12 @@ fi
 
 log "OK restore verify: config+compose+data (${file_count} dosya)"
 date -Iseconds >"$DRILL_MARKER_LOCAL"
+rm -f "$DRILL_FAILURE_MARKER_LOCAL"
 log "Mac stamp: $DRILL_MARKER_LOCAL"
 
 if [[ -n "$PI_HOST" ]]; then
-  if ssh -o ConnectTimeout=15 -o BatchMode=yes "$PI_USER@$PI_HOST" \
-    "sudo mkdir -p /var/lib/pi-gateway && sudo chown '$PI_USER:$PI_USER' /var/lib/pi-gateway && date -Iseconds | sudo tee '$DRILL_MARKER_PI' >/dev/null && sudo chmod 644 '$DRILL_MARKER_PI'" 2>/dev/null; then
+  if ssh -o ConnectTimeout=15 -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3 "$PI_USER@$PI_HOST" \
+    "sudo mkdir -p /var/lib/pi-gateway && sudo chown '$PI_USER:$PI_USER' /var/lib/pi-gateway && date -Iseconds | sudo tee '$DRILL_MARKER_PI' >/dev/null && sudo chmod 644 '$DRILL_MARKER_PI' && sudo rm -f '$DRILL_FAILURE_MARKER_PI'" 2>/dev/null; then
     log "Pi stamp: $DRILL_MARKER_PI"
   else
     log "WARN: Pi drill stamp yazilamadi (SSH/sudo)"

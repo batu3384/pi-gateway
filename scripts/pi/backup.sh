@@ -25,8 +25,11 @@ mkdir -p "$STAGING/config"
 # AdGuardHome.yaml runtime state — restore: render-config + apply-adguard-*
 rsync -a \
   --exclude 'caddy/certs/' \
+  --exclude 'caddy/Caddyfile' \
   --exclude 'adguard/AdGuardHome.yaml' \
   --exclude 'gatus/config.yaml' \
+  --exclude 'tailscale/acl.hujson' \
+  --exclude 'crowdsec/bouncer/local_api_credentials.yaml' \
   "$REMOTE_DIR/config/" "$STAGING/config/"
 # .env sifreleri duz metin yedeklenmez — anahtar listesi yeterli (restic sifreli repo)
 if [[ -f "$REMOTE_DIR/.env" ]]; then

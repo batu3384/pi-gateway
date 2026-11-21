@@ -14,12 +14,15 @@ set_containerd_root() {
 import re, sys
 from pathlib import Path
 path, root = Path(sys.argv[1]), sys.argv[2]
-text = path.read_text() if path.exists() else ""
+text = path.read_text(encoding="utf-8") if path.exists() else ""
 line = f'root = "{root}"'
 if re.search(r'^#?root\s*=', text, flags=re.M):
-    text = re.sub(r'^#?root\s*=.*', line, text, flags=re.M)
+    text = re.sub(r'^#?root\s*=.*', line, text, count=1, flags=re.M)
+elif re.search(r'^version\s*=\s*\d+', text, flags=re.M):
+    text = re.sub(r'^(version\s*=\s*\d+.*)$', r'\1\n' + line, text, count=1, flags=re.M)
 else:
     text = f'version = 2\n{line}\n{text}'
-path.write_text(text)
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text(text, encoding="utf-8")
 PY
 }

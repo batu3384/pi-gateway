@@ -21,6 +21,20 @@ RESTIC_CHOWN_TIMEOUT_SEC="${RESTIC_CHOWN_TIMEOUT_SEC:-120}"
 RESTIC_REINIT_MARKER="${RESTIC_REINIT_MARKER:-/var/lib/pi-gateway/restic-reinit}"
 RESTIC_ALLOW_REINIT="${RESTIC_ALLOW_REINIT:-false}"
 log() { echo "[restic] $*"; }
+fix_repo_ownership() {
+  local owner="${PI_USER:-}"
+  if [[ -z "$owner" || "$owner" == "root" ]]; then
+    owner="$(stat -c '%U' "$REMOTE_DIR" 2>/dev/null || echo "${USER:-root}")"
+  fi
+  [[ -n "$owner" && "$owner" != "root" ]] || return 0
+  if [[ "$(id -u)" -eq 0 ]]; then
+    timeout "$RESTIC_CHOWN_TIMEOUT_SEC" chown -R "${owner}:${owner}" "$REPO_HOST_PATH" 2>/dev/null \
+      || log "WARN: chown timeout/atlandi ($RESTIC_CHOWN_TIMEOUT_SEC s)"
+  else
+    timeout "$RESTIC_CHOWN_TIMEOUT_SEC" sudo -n chown -R "${owner}:${owner}" "$REPO_HOST_PATH" 2>/dev/null \
+      || log "WARN: chown timeout/atlandi ($RESTIC_CHOWN_TIMEOUT_SEC s)"
+  fi
+}
 [[ "$ENABLE_RESTIC" == "true" ]] || { log "atlandi (ENABLE_RESTIC=false)"; exit 0; }
 [[ -n "$RESTIC_PASSWORD" ]] || { log "HATA: RESTIC_PASSWORD .env icinde bos"; exit 1; }
 if is_ssd_root_mode; then
@@ -49,12 +63,17 @@ fi
 mkdir -p "$REPO_HOST_PATH"
 run_restic() {
   local -a extra_mounts=()
+  local cname="pi-gateway-restic-$$-${RANDOM}"
+  local rc=0
+  if [[ -f "${REMOTE_DIR}/.env" ]]; then
+    extra_mounts+=(-v "${REMOTE_DIR}/.env:/backup/env/.env:ro")
+  fi
   if [[ -d /mnt/ssd/openbot-native/config/OpenBot ]]; then
     extra_mounts+=(-v "/mnt/ssd/openbot-native/config/OpenBot:/backup/openbot:ro")
   elif [[ -d /mnt/ssd/openbot/data/.config/OpenBot ]]; then
     extra_mounts+=(-v "/mnt/ssd/openbot/data/.config/OpenBot:/backup/openbot:ro")
   fi
-  timeout "$RESTIC_TIMEOUT_SEC" docker run --rm --network none \
+  timeout "$RESTIC_TIMEOUT_SEC" docker run --rm --name "$cname" --network none \
     -e RESTIC_PASSWORD \
     -e RESTIC_REPOSITORY=local:/repo \
     -v "${REPO_HOST_PATH}:/repo" \
@@ -62,19 +81,28 @@ run_restic() {
     -v "${REMOTE_DIR}/compose:/backup/compose:ro" \
     -v "${DATA_ROOT}:/backup/data:ro" \
     ${extra_mounts[@]+"${extra_mounts[@]}"} \
-    "$RESTIC_IMAGE" "$@"
+    "$RESTIC_IMAGE" "$@" || rc=$?
+  if [[ "$rc" -eq 124 || "$rc" -eq 137 ]]; then
+    docker rm -f "$cname" >/dev/null 2>&1 || true
+  fi
+  return "$rc"
 }
 export RESTIC_PASSWORD
 if ! run_restic snapshots >/dev/null 2>&1; then
   if [[ "$REPO_WAS_PRESENT" -eq 1 ]]; then
-    log "HATA: mevcut Restic repo okunamiyor — init reddedildi; repair/recovery gerekli"
-    # shellcheck source=../lib/notify.sh
-    source "$SCRIPT_DIR/../lib/notify.sh"
-    notify_backup_fail "$(date -Iseconds)" "existing Restic repo unavailable; init refused" || true
-    exit 1
+    # Yarim kalan onceki kosudan bayat kilit kaldiysa once unlock dene
+    run_restic unlock >/dev/null 2>&1 || true
+    if ! run_restic snapshots >/dev/null 2>&1; then
+      log "HATA: mevcut Restic repo okunamiyor — init reddedildi; repair/recovery gerekli"
+      # shellcheck source=../lib/notify.sh
+      source "$SCRIPT_DIR/../lib/notify.sh"
+      notify_backup_fail "$(date -Iseconds)" "existing Restic repo unavailable; init refused" || true
+      exit 1
+    fi
+  else
+    log "Repo olusturuluyor: $REPO_HOST_PATH"
+    run_restic init
   fi
-  log "Repo olusturuluyor: $REPO_HOST_PATH"
-  run_restic init
 fi
 RESTIC_BACKUP_HOST="${RESTIC_BACKUP_HOST:-${PI_HOSTNAME:-$(hostname -s)}}"
 STAMP="$(date -Iseconds)"
@@ -88,12 +116,23 @@ do_backup() {
     local rel="${repo_norm#"${data_norm}/"}"
     extra_excludes+=(--exclude "/backup/data/${rel}")
   fi
+  if [[ -f "${REMOTE_DIR}/.env" ]]; then
+    extra_paths+=(/backup/env/.env)
+  fi
   if [[ -d /mnt/ssd/openbot-native/config/OpenBot || -d /mnt/ssd/openbot/data/.config/OpenBot ]]; then
     extra_paths+=(/backup/openbot)
     extra_excludes+=(
       --exclude '/backup/openbot/Partitions/**'
       --exclude '/backup/openbot/Cache/**'
       --exclude '/backup/openbot/Code Cache/**'
+      --exclude '/backup/openbot/GPUCache/**'
+      --exclude '/backup/openbot/GPUPersistentCache/**'
+      --exclude '/backup/openbot/DawnGraphiteCache/**'
+      --exclude '/backup/openbot/DawnWebGPUCache/**'
+      --exclude '/backup/openbot/Crashpad/**'
+      --exclude '/backup/openbot/logs/**'
+      --exclude '/backup/openbot/blob_storage/**'
+      --exclude '/backup/openbot/provider-runtimes/**'
     )
   fi
   run_restic backup \
@@ -104,6 +143,8 @@ do_backup() {
     --tag "pi-gateway" \
     --host "$RESTIC_BACKUP_HOST" \
     --exclude '/backup/data/backups/restic' \
+    --exclude '/backup/data/backups/openbot-docker-config-*.tar.gz' \
+    --exclude '/backup/data/backups/openbot_pre_6fleet_*' \
     "${extra_excludes[@]}" \
     --exclude '/backup/data/**/work/data' \
     --exclude '/backup/data/victoriametrics/flock.lock' \
@@ -117,8 +158,7 @@ if ! do_backup; then
   run_restic repair snapshots 2>/dev/null || true
   run_restic repair index 2>/dev/null || true
   run_restic prune 2>/dev/null || true
-  timeout "$RESTIC_CHOWN_TIMEOUT_SEC" sudo chown -R "${USER}:${USER}" "$REPO_HOST_PATH" 2>/dev/null \
-    || log "WARN: chown timeout/atlandi ($RESTIC_CHOWN_TIMEOUT_SEC s)"
+  fix_repo_ownership
   if ! do_backup; then
     if [[ "$RESTIC_ALLOW_REINIT" != "true" ]]; then
       log "HATA: Restic repo kurtarilamadi — otomatik reinit kapali (RESTIC_ALLOW_REINIT=true ile bilincli kurtarma)"
@@ -157,8 +197,7 @@ if ! run_restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune; 
     || log "WARN: prune hala basarisiz — snapshot alindi"
 fi
 run_restic snapshots --last
-timeout "$RESTIC_CHOWN_TIMEOUT_SEC" sudo chown -R "${USER}:${USER}" "$REPO_HOST_PATH" 2>/dev/null \
-  || log "WARN: chown timeout/atlandi ($RESTIC_CHOWN_TIMEOUT_SEC s)"
+fix_repo_ownership
 # shellcheck source=../lib/notify.sh
 source "$SCRIPT_DIR/../lib/notify.sh"
 if [[ "$REINIT_DONE" -eq 1 ]]; then

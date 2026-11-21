@@ -242,6 +242,7 @@ grep -q 'pi-ssd-health.timer' "$PROJECT_DIR/scripts/pi/bootstrap.sh" || die "ssd
 grep -q 'UDISKS_IGNORE' "$PROJECT_DIR/host/udev/99-pi-gateway-jmicron.rules" || die "udev UDISKS_IGNORE yok"
 grep -q 'ID_ATA' "$PROJECT_DIR/host/udev/99-pi-gateway-jmicron.rules" || die "udev ID_ATA clear yok"
 grep -q 'max_sectors_kb' "$PROJECT_DIR/host/udev/99-pi-gateway-jmicron.rules" || die "udev max_sectors_kb yok"
+grep -q 'echo 0 > /sys%p/queue/read_ahead_kb' "$PROJECT_DIR/host/udev/99-pi-gateway-jmicron.rules" || die "udev read_ahead_kb=0 yok (JMS583 sessiz okuma bozulmasi)"
 ok "udev jmicron"
 
 grep -q 'ssd-alive.sh' "$PROJECT_DIR/scripts/pi/install-privileged-scripts.sh" || die "priv ssd-alive yok"

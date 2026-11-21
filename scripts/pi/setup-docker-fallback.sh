@@ -63,6 +63,12 @@ if path.exists():
 cfg["data-root"] = root
 path.write_text(json.dumps(cfg, indent=2) + "\n")
 PY
+local_was_active=0
+if systemctl is-active --quiet docker 2>/dev/null || systemctl is-active --quiet containerd 2>/dev/null; then
+  local_was_active=1
+  run_root systemctl stop docker docker.socket containerd 2>/dev/null || true
+  sleep 1
+fi
 set_containerd_root "$CONTAINERD_LEGACY_ROOT"
 restore_containerd_sd_backup
 run_root mkdir -p "$DROPIN_DIR"
@@ -74,8 +80,7 @@ EOF
 run_root systemctl daemon-reload
 mkdir -p "$(dirname "$STORAGE_DEGRADED_FLAG")" 2>/dev/null || true
 touch "$STORAGE_DEGRADED_FLAG" 2>/dev/null || true
-if systemctl is-active --quiet docker 2>/dev/null || systemctl is-active --quiet containerd 2>/dev/null; then
-  run_root systemctl stop docker docker.socket 2>/dev/null || true
+if [[ "$local_was_active" -eq 1 ]]; then
   run_root systemctl start containerd || log "WARN: containerd start basarisiz"
   run_root systemctl start docker || log "WARN: docker restart basarisiz"
 fi

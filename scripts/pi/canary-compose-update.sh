@@ -77,7 +77,8 @@ phase_dns() {
 phase_edge() {
   log "phase 2/3: edge (gateway-state + glance + caddy)"
   ensure_public_state_dir || true
-  local edge=(gateway-state glance caddy)
+  local edge=(gateway-state glance)
+  [[ "${ENABLE_CADDY:-true}" == "true" ]] && edge+=(caddy)
   pull_if "${edge[@]}"
   compose up -d "${edge[@]}"
   wait_container_healthy gateway-state 20 || true

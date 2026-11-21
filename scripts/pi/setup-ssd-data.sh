@@ -90,10 +90,14 @@ ensure_ext4_partition() {
   if findmnt -n "$part" "$disk" 2>/dev/null | grep -q .; then
     die "Disk/partition mount durumda — format iptal: $disk $part"
   fi
-  local existing_fs
+  local existing_fs existing_pt
   existing_fs="$(lsblk -no FSTYPE "$disk" 2>/dev/null | awk 'NF{print; exit}' || true)"
-  if [[ -n "$existing_fs" && "${PI_SSD_FORCE_WIPE:-}" != "yes" ]]; then
-    die "Disk uzerinde mevcut dosya sistemi var (${existing_fs}: $disk) — veriyi korumak icin PI_SSD_FORCE_WIPE=yes gerekli"
+  existing_pt="$(lsblk -no PTTYPE,PARTTYPE "$disk" 2>/dev/null | awk 'NF{print; exit}' || true)"
+  if [[ -f /var/lib/pi-gateway/ssd-initialized && "${PI_SSD_FORCE_WIPE:-}" != "yes" ]]; then
+    die "SSD daha once baslatilmis (/var/lib/pi-gateway/ssd-initialized) — bozuk superblock olasiligina karsi format iptal; once e2fsck veya PI_SSD_FORCE_WIPE=yes"
+  fi
+  if [[ ( -n "$existing_fs" || -n "$existing_pt" ) && "${PI_SSD_FORCE_WIPE:-}" != "yes" ]]; then
+    die "Disk uzerinde mevcut dosya sistemi/partition tablosu var (${existing_fs:-$existing_pt}: $disk) — veriyi korumak icin PI_SSD_FORCE_WIPE=yes gerekli"
   fi
   if [[ "${PI_SSD_CONFIRM_FORMAT:-}" != "yes" ]]; then
     die "Yeni format icin PI_SSD_CONFIRM_FORMAT=yes gerekli (disk: $disk, ~${size_gb}GB)"

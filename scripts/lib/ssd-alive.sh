@@ -1046,7 +1046,7 @@ ssd_active_sd_token() {
   local dev
   dev="$(ssd_mount_block_dev)"
   [[ "$dev" == /dev/sd* ]] || return 1
-  if [[ "$dev" =~ /dev/sd([a-z]+) ]]; then
+  if [[ "$dev" =~ /dev/(sd[a-z]+) ]]; then
     printf '%s\n' "${BASH_REMATCH[1]}"
     return 0
   fi
@@ -1101,7 +1101,7 @@ ssd_purge_stale_block_devs() {
   labeled="$(blkid -L "$by_label" 2>/dev/null || true)"
   expect_vid="$(printf '%s' "$SSD_USB_VID" | tr '[:upper:]' '[:lower:]')"
   expect_pid="$(printf '%s' "$SSD_USB_PID" | tr '[:upper:]' '[:lower:]')"
-  for disk in /dev/sd[a-z]; do
+  for disk in /dev/sd[a-z] /dev/sd[a-z][a-z]; do
     [[ -b "$disk" ]] || continue
     [[ "$disk" == "$base" ]] && continue
     [[ -n "$labeled" && "$labeled" == "${disk}"* ]] && continue
@@ -1131,7 +1131,7 @@ ssd_purge_stale_block_devs() {
   command -v udevadm >/dev/null 2>&1 && _ssd_alive_root udevadm settle --timeout=10 2>/dev/null || true
 }
 
-# vcgencmd get_throttled — bit0 now, bit16 occurred
+# vcgencmd get_throttled — yalniz canli undervolt (bit0); gecmis yapiskan bit16 reboot'a kadar USB reset'i kilitlemesin
 ssd_under_voltage() {
   command -v vcgencmd >/dev/null 2>&1 || return 1
   local raw hex val
@@ -1139,5 +1139,5 @@ ssd_under_voltage() {
   hex="${raw#*0x}"
   [[ "$hex" =~ ^[0-9a-fA-F]+$ ]] || return 1
   val=$((16#$hex))
-  (( (val & 0x1) != 0 || (val & 0x10000) != 0 ))
+  (( (val & 0x1) != 0 ))
 }

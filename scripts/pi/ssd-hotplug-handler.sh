@@ -142,21 +142,41 @@ if ssd_mount_healthy; then
   run_root mkdir -p "$(dirname "$SSD_HOTPLUG_STATE_FILE")" 2>/dev/null || true
   run_root touch "$SSD_HOTPLUG_STATE_FILE" 2>/dev/null || true
   mark_stack_recover_cooldown
-  REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/repair-post-ssd-recovery.sh" \
-    || log "WARN: post-ssd repair"
   # SSD recovery notification is owned by recover-readonly-root.sh.
   ssd_usb_reset_clear 2>/dev/null || true
   declare -F ssd_usb_dropout_epoch_clear >/dev/null 2>&1 && ssd_usb_dropout_epoch_clear 2>/dev/null || true
   ssd_ghost_block_cleanup 2>/dev/null || true
   ssd_purge_stale_block_devs 2>/dev/null || true
+  _need_fsck=0
   if declare -F ssd_filesystem_needs_fsck >/dev/null 2>&1 && ssd_filesystem_needs_fsck; then
     log "WARN: aktif SSD ext4 fsck gerekli — SSD_FSCK_AUTO veya ssd-fsck.sh --run"
     if [[ "${SSD_FSCK_AUTO:-false}" == "true" ]] && [[ -x "$SCRIPT_DIR/ssd-fsck.sh" ]]; then
-      SKIP_RECOVER_LOCK=true REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/ssd-fsck.sh" --run \
-        || log "WARN: otomatik fsck basarisiz"
+      _need_fsck=1
     fi
   fi
   recover_lock_release
+  # Uzun suren Restic repair (<=2h) / e2fsck 420s hotplug birimi icinde kilit tutmasin
+  if command -v systemd-run >/dev/null 2>&1 && [[ -d /run/systemd/system ]]; then
+    run_root systemd-run --no-block --unit=pi-gateway-post-ssd-repair \
+      --property=TimeoutStartSec=7200 \
+      --setenv="REMOTE_DIR=${REMOTE_DIR}" \
+      /usr/bin/bash "$SCRIPT_DIR/repair-post-ssd-recovery.sh" >/dev/null 2>&1 \
+      || log "WARN: post-ssd repair dispatch basarisiz"
+    if [[ "$_need_fsck" -eq 1 ]]; then
+      run_root systemd-run --no-block --unit=pi-gateway-ssd-fsck-auto \
+        --property=TimeoutStartSec=1800 \
+        --setenv="REMOTE_DIR=${REMOTE_DIR}" \
+        /usr/bin/bash "$SCRIPT_DIR/ssd-fsck.sh" --run >/dev/null 2>&1 \
+        || log "WARN: otomatik fsck dispatch basarisiz"
+    fi
+  else
+    REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/repair-post-ssd-recovery.sh" \
+      || log "WARN: post-ssd repair"
+    if [[ "$_need_fsck" -eq 1 ]]; then
+      REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/ssd-fsck.sh" --run \
+        || log "WARN: otomatik fsck basarisiz"
+    fi
+  fi
   exit 0
 fi
 log "SSD mount yok / sagliksiz"

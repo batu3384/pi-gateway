@@ -15,10 +15,14 @@ apply_unified_login
 
 log() { echo "[sync-passwords] $*"; }
 
+failed=0
 run() {
   local name="$1" script="$2"
   log ">> $name"
-  REMOTE_DIR="$REMOTE_DIR" bash "$script" || log "WARN: $name basarisiz"
+  if ! REMOTE_DIR="$REMOTE_DIR" bash "$script"; then
+    log "HATA: $name basarisiz"
+    failed=1
+  fi
 }
 
 [[ -f "$REMOTE_DIR/.env" ]] || { log "HATA: .env yok"; exit 1; }
@@ -31,8 +35,15 @@ fi
 # Grafana compose env = AGH; reset live admin if container up
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx grafana; then
   log ">> Grafana admin reset"
-  docker exec grafana grafana cli admin reset-admin-password "${GRAFANA_ADMIN_PASSWORD:-$AGH_ADMIN_PASSWORD}" \
-    >/dev/null 2>&1 || log "WARN: Grafana reset basarisiz (container eski olabilir)"
+  if ! docker exec -e "GF_RESET_PASS=${GRAFANA_ADMIN_PASSWORD:-$AGH_ADMIN_PASSWORD}" grafana \
+    sh -c 'grafana cli admin reset-admin-password "$GF_RESET_PASS"' >/dev/null 2>&1; then
+    log "WARN: Grafana reset basarisiz (container eski olabilir)"
+    failed=1
+  fi
 fi
 
+if [[ "$failed" -ne 0 ]]; then
+  log "HATA: bir veya daha fazla servis sifre senkronu basarisiz"
+  exit 1
+fi
 log "Tamamlandi"

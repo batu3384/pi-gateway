@@ -62,7 +62,7 @@ USB-SATA adapter with ASMedia chipset. 24/7 USB boot with JMicron is not recomme
 
 Kernel quirk alone is not enough when the bridge flaps after boot. Pi Gateway software path:
 
-1. **Prevent** — cmdline: `usb-storage.quirks=152d:0583:u` (UAS off) + `usbcore.quirks=152d:0583:k` (`USB_QUIRK_NO_LPM`) + `usbcore.autosuspend=-1`. fstab: `nodiscard`. udev: `power/control=on`, USB3 LPM U1/U2 off.
+1. **Prevent** — cmdline: `usb-storage.quirks=152d:0583:u` (UAS off) + `usbcore.quirks=152d:0583:k` (`USB_QUIRK_NO_LPM`) + `usbcore.autosuspend=-1`. fstab: `nodiscard`. udev: `power/control=on`, USB3 LPM U1/U2 off, `queue/max_sectors_kb=120`, `queue/read_ahead_kb=0` (prevents silent async readahead read corruption on JMS583 BOT + Pi 4B VL805).
 2. **Detect** — `ssd_mount_healthy()`: `mountpoint` + timed write probe. `pi-ssd-health.timer` every **90s** (plus health-check 2min). udev `add|remove` → `pi-ssd-watch.service`.
 3. **Soft-reset merdiven** — (1) LPM/autosuspend off (2) hung mount `umount -l` (3) usb-storage unbind/bind (4a) **bus dropout:** tum USB portlari ayni anda disable (`ssd_usb_port_bus_wide_cycle`, ~15s OFF — Pi4 PPPS yok, sirali tek-port VBUS kesmez) (4b) **hang:** hatirlanan/sirali port cycle (5) ghost `device/delete` (6) xHCI rebind — bus dropout'ta otomatik. Dropout fail rate-limit yakmaz.
 4. **Degraded** — if still dead: `/run/pi-gateway/storage-degraded`, stop app containers, `COMPOSE_RECOVER_MODE=core-dns`. Host `:53` DoT fallback (`pi-gateway-dns-fallback.service`) keeps LAN DNS up while dockerd/overlay is wedged.

@@ -122,7 +122,9 @@ elif [[ "$STORAGE_TYPE" == "ssd-root" || "$STORAGE_TYPE" == "ssd" ]]; then
     log "HATA: ssd-root bekleniyor ama root SD ($ROOT_SRC)"
     exit 1
   fi
-  run_step_critical "ssd-root harden" env REMOTE_DIR="$REMOTE_DIR" CONFIRM_NEUTRALIZE="${CONFIRM_NEUTRALIZE:-}" CONFIRM_EEPROM_FIX="${CONFIRM_EEPROM_FIX:-}" "$SCRIPT_DIR/ssd-root-harden.sh"
+  CONFIRM_NEUTRALIZE="${CONFIRM_NEUTRALIZE:-}" \
+    CONFIRM_EEPROM_FIX="${CONFIRM_EEPROM_FIX:-}" \
+    run_step_critical "ssd-root harden" "$SCRIPT_DIR/ssd-root-harden.sh"
 fi
 run_step_critical "AdGuard yapilandirma" "$SCRIPT_DIR/configure-adguard.sh"
 run_step_optional "AdGuard filter timer" "$SCRIPT_DIR/setup-adguard-timers.sh"

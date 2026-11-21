@@ -52,7 +52,7 @@ fi
 # SMART disk'e gider; mount partition (sdb1 / nvme0n1p1)
 if [[ "$ssd_dev" =~ ^/dev/nvme[0-9]+n[0-9]+p[0-9]+$ ]]; then
   ssd_dev="${ssd_dev%p*}"
-elif [[ "$ssd_dev" =~ ^/dev/sd[a-z][0-9]+$ ]]; then
+elif [[ "$ssd_dev" =~ ^/dev/sd[a-z]+[0-9]+$ ]]; then
   ssd_dev="${ssd_dev%%[0-9]*}"
 fi
 [[ -b "$ssd_dev" ]] || {
@@ -74,21 +74,25 @@ run_smart() {
   smartctl_bin -A -d "$dtype" "$ssd_dev" 2>/dev/null || true
 }
 
+smart_health_passed() {
+  printf '%s\n' "$1" | grep -qiE 'SMART overall-health self-assessment test result:[[:space:]]*(PASSED|OK)|SMART Health Status:[[:space:]]*OK'
+}
+
 if [[ -n "${SSD_SMART_DEVICE_TYPE:-}" ]]; then
   health_out="$(run_smart "$SSD_SMART_DEVICE_TYPE" 2>/dev/null || true)"
 elif [[ "$ssd_dev" == /dev/sd* ]]; then
   # 152d:0583 drivedb'de sntjmicron (NVMe) kayitli; SATA kutuda gecersiz CDB gondermemek icin once sat
   health_out="$(run_smart sat 2>/dev/null || true)"
-  if ! echo "$health_out" | grep -qiE 'PASSED|OK'; then
+  if ! smart_health_passed "$health_out"; then
     health_out="$(run_smart auto 2>/dev/null || true)"
   fi
 else
   health_out="$(run_smart auto 2>/dev/null || true)"
-  if ! echo "$health_out" | grep -qiE 'PASSED|OK'; then
+  if ! smart_health_passed "$health_out"; then
     health_out="$(run_smart sat 2>/dev/null || true)"
   fi
 fi
-if ! echo "$health_out" | grep -qiE 'PASSED|OK'; then
+if ! smart_health_passed "$health_out"; then
   log "WARN: SMART health FAIL veya okunamadi ($ssd_dev)"
   # shellcheck source=../lib/notify.sh
   source "$SCRIPT_DIR/../lib/notify.sh"

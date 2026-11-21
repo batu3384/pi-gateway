@@ -30,12 +30,12 @@ count_snapshots() {
   local out
   if command -v restic >/dev/null 2>&1; then
     out="$(run_with_timeout 120 env RESTIC_PASSWORD="$RESTIC_PASSWORD" \
-      restic -r "$repo" snapshots --json 2>/dev/null)" || { echo 0; return 0; }
+      restic -r "$repo" --no-lock snapshots --json 2>/dev/null)" || { echo 0; return 0; }
   elif command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
     out="$(run_with_timeout 120 docker run --rm --network none \
       -e RESTIC_PASSWORD \
       -v "${repo}:/repo:ro" \
-      "$RESTIC_IMAGE" -r "local:/repo" snapshots --json 2>/dev/null)" || { echo 0; return 0; }
+      "$RESTIC_IMAGE" -r "local:/repo" --no-lock snapshots --json 2>/dev/null)" || { echo 0; return 0; }
   else
     echo 0
     return 0
@@ -47,57 +47,66 @@ count_snapshots() {
 check_restic_repo() {
   local repo="$1"
   local timeout_sec="${RESTIC_PULL_CHECK_TIMEOUT_SEC:-600}"
-  # ponytail: Mac native restic (0.19+) Pi pin (0.17.x) ile farkli check sonucu verebilir
+  # ponytail: Mac native restic (0.19+) Pi pin (0.17.x) ile farkli check sonucu verebilir; :ro mount --no-lock sart
   if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
     run_with_timeout "$timeout_sec" docker run --rm --network none \
       -e RESTIC_PASSWORD \
       -v "${repo}:/repo:ro" \
-      "$RESTIC_IMAGE" -r "local:/repo" check >/dev/null
+      "$RESTIC_IMAGE" -r "local:/repo" --no-lock check >/dev/null
   elif command -v restic >/dev/null 2>&1; then
     run_with_timeout "$timeout_sec" env RESTIC_PASSWORD="$RESTIC_PASSWORD" \
-      restic -r "$repo" check >/dev/null
+      restic -r "$repo" --no-lock check >/dev/null
   else
     return 1
   fi
 }
 
+SSH_OPTS=(-o ConnectTimeout=15 -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3)
+RSYNC_SSH="ssh -o ConnectTimeout=15 -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
+# Mac uyku uyanma yarisi (launchd): Pi SSH erisimi icin kisa bekleme
+for _try in 1 2 3 4 5 6; do
+  if ssh "${SSH_OPTS[@]}" "$PI_USER@$PI_HOST" true 2>/dev/null; then
+    break
+  fi
+  [[ "$_try" -eq 6 ]] && die "Pi SSH erisilemedi: $PI_USER@$PI_HOST"
+  sleep 10
+done
+
 # Reinit / shrink gate: --delete eski offsite'i silmesin
-if ssh -o ConnectTimeout=15 -o BatchMode=yes "$PI_USER@$PI_HOST" \
+if ssh "${SSH_OPTS[@]}" "$PI_USER@$PI_HOST" \
   "test -f '$RESTIC_REINIT_MARKER'" 2>/dev/null; then
   die "Pi restic-reinit marker var ($RESTIC_REINIT_MARKER) — --delete yasak. Corrupt repo inceleyin; marker'i bilinçli silin."
 fi
 
-remote_tmp="$(mktemp -d)"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 stage_root="$LOCAL_DEST/.restic-stage.$$"
 stage_restic="$stage_root/restic"
 stage_config="$LOCAL_DEST/config-snapshots/.stage-$STAMP"
-trap 'rm -rf "$remote_tmp" "$stage_root" "$stage_config"' EXIT
+trap 'rm -rf "$stage_root" "$stage_config"' EXIT
 mkdir -p "$stage_restic" "$stage_config"
-log "On kontrol: snapshot sayisi"
-if ! rsync -az --timeout=300 \
+log "Restic repo cekiliyor (incremental --link-dest): $PI_USER@$PI_HOST:$RESTIC_REMOTE"
+rsync_link_args=()
+[[ -d "$LOCAL_DEST/restic" ]] && rsync_link_args=(--link-dest="$LOCAL_DEST/restic")
+if ! rsync -az --timeout=300 -e "$RSYNC_SSH" \
+  "${rsync_link_args[@]}" \
   "$PI_USER@$PI_HOST:$RESTIC_REMOTE/" \
-  "$remote_tmp/restic/"; then
+  "$stage_restic/"; then
   die "Pi restic repo cekilemedi: $RESTIC_REMOTE"
 fi
-remote_n="$(count_snapshots "$remote_tmp/restic")"
+remote_n="$(count_snapshots "$stage_restic")"
 local_n="$(count_snapshots "$LOCAL_DEST/restic")"
 log "snapshot remote=$remote_n local=$local_n"
-if [[ "$local_n" -gt 0 && "$remote_n" -lt "$local_n" ]]; then
-  log "WARN: remote snapshot ($remote_n) < local ($local_n) — reinit/shrink olasi; remote check gecerse devam"
-fi
 if [[ "$remote_n" -eq 0 ]]; then
   die "Pi restic repo bos veya okunamadi — offsite ezilmez"
 fi
+if [[ "$local_n" -gt 0 && "$remote_n" -lt "$local_n" && "${ALLOW_SHRINK:-}" != "yes" ]]; then
+  die "remote snapshot ($remote_n) < local ($local_n) — beklenmeyen kuculme; bilincli onay icin ALLOW_SHRINK=yes"
+fi
 
 log "Restic repository check"
-check_restic_repo "$remote_tmp/restic" \
+check_restic_repo "$stage_restic" \
   || die "Restic repository check basarisiz — .last-success yazilmiyor"
 
-log "Restic repo: $PI_USER@$PI_HOST:$RESTIC_REMOTE -> $LOCAL_DEST/restic"
-if ! rsync -a "$remote_tmp/restic/" "$stage_restic/"; then
-  die "restic rsync basarisiz — .last-success yazilmiyor"
-fi
 previous_restic="$LOCAL_DEST/.restic-previous.$$"
 if [[ -d "$LOCAL_DEST/restic" ]]; then
   mv "$LOCAL_DEST/restic" "$previous_restic" \
@@ -110,7 +119,7 @@ fi
 rm -rf "$previous_restic"
 
 log "Config snapshot (secrets haric)"
-if ! rsync -avz \
+if ! rsync -avz --timeout=120 -e "$RSYNC_SSH" \
   --exclude '.env' \
   --exclude 'data/**' \
   --exclude 'crowdsec/bouncer/local_api_credentials.yaml' \

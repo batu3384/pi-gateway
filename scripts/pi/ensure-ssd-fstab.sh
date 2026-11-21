@@ -60,7 +60,7 @@ find_ssd_partition() {
     log "WARN: fstab kimligi mevcut diski gostermiyor — yeniden aranacak"
   fi
   root="$(root_disk)"
-  for dev in /dev/sd[a-z]; do
+  for dev in /dev/sd[a-z] /dev/sd[a-z][a-z]; do
     [[ -b "$dev" ]] || continue
     base="$(basename "$dev")"
     [[ "$root" == *"$base"* ]] && continue
@@ -86,7 +86,7 @@ find_ssd_partition() {
   return 1
 }
 fstab_entry_id() {
-  awk -v mnt="$MOUNT" '$2 == mnt {print $1; exit}' /etc/fstab 2>/dev/null
+  awk -v mnt="$MOUNT" '$1 !~ /^#/ && $2 == mnt {print $1; exit}' /etc/fstab 2>/dev/null
 }
 fstab_entry_matches() {
   local part="$1"
@@ -97,24 +97,30 @@ fstab_entry_matches() {
 }
 write_fstab_entry() {
   local part="$1"
-  local entry id_spec
+  local entry id_spec existing tmp_fstab
   id_spec="$(partition_id "$part")" || {
     log "WARN: partition kimligi alinamadi: $part"
     return 1
   }
   entry="${id_spec} ${MOUNT} ext4 defaults,noatime,nodiscard,nofail,x-systemd.device-timeout=30 0 2"
   if fstab_entry_matches "$part" \
-    && awk -v mnt="$MOUNT" '$2 == mnt && $4 ~ /(^|,)nodiscard(,|$)/ { found=1 } END { exit !found }' /etc/fstab; then
+    && awk -v mnt="$MOUNT" '$1 !~ /^#/ && $2 == mnt && $4 ~ /(^|,)nodiscard(,|$)/ { found=1 } END { exit !found }' /etc/fstab; then
     log "fstab OK ($MOUNT -> $part)"
     return 0
   fi
-  if fstab_entry_id >/dev/null 2>&1; then
+  existing="$(fstab_entry_id || true)"
+  tmp_fstab="$(mktemp)"
+  if [[ -n "$existing" ]]; then
     log "fstab guncelleniyor (eski satir degisiyor)"
-    run_root sed -i.bak "/[[:space:]]${MOUNT//\//\\/}[[:space:]]/d" /etc/fstab
+    awk -v mnt="$MOUNT" '!($1 !~ /^#/ && $2 == mnt)' /etc/fstab >"$tmp_fstab"
   else
     log "fstab ekleniyor: $entry"
+    cat /etc/fstab >"$tmp_fstab"
   fi
-  run_root bash -c "echo '$entry' >> /etc/fstab"
+  printf '%s\n' "$entry" >>"$tmp_fstab"
+  run_root cp -a /etc/fstab /etc/fstab.bak 2>/dev/null || true
+  run_root install -o root -g root -m 644 "$tmp_fstab" /etc/fstab
+  rm -f "$tmp_fstab"
   run_root systemctl daemon-reload 2>/dev/null || true
   log "fstab guncellendi"
 }
