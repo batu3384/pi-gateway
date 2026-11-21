@@ -1,8 +1,12 @@
 ---
 name: career-scan
-description: "profile.md doluysa açık ilan tarar. Boşsa durur. CV yalnız seçilen ilan için. Spider rutinlerinde kullan."
+description: "profile.md ve shared/user_profile.md'ye göre açık ilan, eğitim ve sertifika tarar. Spider rutinlerinde kullan."
 ---
 
-# İlan
+# Kariyer ve Eğitim Taraması (Spider)
 
-`profile.md` içinde «Hedef rol» boşsa dur. En fazla dört açık ilan. Kapalı sayfayı yazma. CV ve ön yazı ancak Batuhan bir ilanı seçince. `shared/career_pipeline.md` tek yazma yerin.
+`profile.md`, `shared/user_profile.md` ve `shared/tech_radar.md` dosyalarını oku. Yalnızca hem `profile.md` hem `shared/user_profile.md` boş veya şablon halindeyse «Tarayacak profil yok» de ve dur; doluysa hedef rolleri ve uzmanlık alanlarını kullan.
+
+En fazla **4 doğrulanmış, hâlâ açık** ilan / sertifika / eğitim fırsatı sun. Sayfayı açmadan yazma; kapalı veya süresi geçmiş kaydı atla. CV ve ön yazı yalnızca Batuhan seçtiği ilan için hazırlanır.
+
+Büyük karşılaştırmaları `reports/` altına etkileşimli HTML olarak kaydet. `shared/career_pipeline.md` tablosuna tarih + `[open|applied|closed]` durumuyla işle.

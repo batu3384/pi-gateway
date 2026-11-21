@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sıfır-token filo bekçisi. Sağlıklıysa LLM yok; eşik/servis bozuksa Jarvis'e bir uyarı.
+# Sıfır-token filo bekçisi. Sağlıklıysa LLM yok; eşik/servis/konteyner/OOM/rutin bozuksa Jarvis'e bir uyarı.
 set -euo pipefail
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER:-pi}/pi-gateway}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -12,12 +12,15 @@ if [[ -f "${SCRIPT_DIR}/../lib/openbot-paths.sh" ]]; then
   # shellcheck source=../lib/openbot-paths.sh
   source "${SCRIPT_DIR}/../lib/openbot-paths.sh"
   FLEET="${OPENBOT_FLEET_ROOT:-$(openbot_data_root)/fleet}"
+  OB_DB="$(openbot_db_path)"
 else
   FLEET="${OPENBOT_FLEET_ROOT:-/mnt/ssd/openbot-native/fleet}"
+  OB_DB="/mnt/ssd/openbot-native/config/OpenBot/openbot.db"
 fi
 HB="${FLEET}/jarvis/watchdog-heartbeat.txt"
 STATE="${FLEET}/jarvis/.watchdog-state"
 LOG="${FLEET}/jarvis/watchdog.log"
+ROTATE_STAMP="${FLEET}/jarvis/.last-shared-rotate"
 COOLDOWN_SEC="${WATCHDOG_COOLDOWN_SEC:-1800}"
 RAM_MIN_KB=$((350 * 1024))
 TEMP_MAX=75000
@@ -27,6 +30,19 @@ mkdir -p "${FLEET}/jarvis"
 if [[ -f "$LOG" ]] && [[ "$(wc -l <"$LOG" 2>/dev/null || echo 0)" -gt 500 ]]; then
   tail -n 300 "$LOG" >"${LOG}.tmp" && mv -f "${LOG}.tmp" "$LOG"
 fi
+
+# Günde bir kez shared/*.md rolling arşivleme (sıfır LLM, non-fatal)
+now_epoch="$(date +%s)"
+last_rot="$(cat "$ROTATE_STAMP" 2>/dev/null || echo 0)"
+if [[ ! "$last_rot" =~ ^[0-9]+$ ]] || (( now_epoch - last_rot >= 86400 )); then
+  rot_bin="${SCRIPT_DIR}/fleet-shared-rotate.sh"
+  [[ -x "$rot_bin" ]] || rot_bin="${REMOTE_DIR}/scripts/pi/fleet-shared-rotate.sh"
+  if [[ -x "$rot_bin" ]]; then
+    OPENBOT_FLEET_ROOT="$FLEET" bash "$rot_bin" >>"$LOG" 2>&1 || true
+    printf '%s\n' "$now_epoch" >"$ROTATE_STAMP" 2>/dev/null || true
+  fi
+fi
+
 problems=()
 
 mem_kb="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)"
@@ -58,10 +74,24 @@ while read -r mount pct; do
   problems+=("disk ${mount} %${pct} > ${DISK_MAX}")
 done < <(df -P "${df_targets[@]}" 2>/dev/null | awk -v max="$DISK_MAX" 'NR>1 {gsub(/%/,"",$5); if ($5+0>max) print $6, $5}')
 
-for c in adguard unbound caddy; do
-  st="$(docker inspect -f '{{.State.Status}}' "$c" 2>/dev/null || echo missing)"
-  if [[ "$st" != "running" ]]; then
-    problems+=("container ${c} ${st}")
+# Aktif stack konteynerlerinin tamamı (running + healthy)
+containers=(adguard unbound glance gateway-state)
+[[ "${ENABLE_CADDY:-true}" == "true" ]] && containers+=(caddy)
+[[ "${ENABLE_GATUS:-true}" == "true" ]] && containers+=(gatus)
+[[ "${ENABLE_DOZZLE:-true}" == "true" ]] && containers+=(dozzle docker-socket-proxy)
+[[ "${ENABLE_MONITORING:-true}" == "true" ]] && containers+=(victoriametrics grafana node-exporter)
+[[ "${ENABLE_NETALERTX:-true}" == "true" ]] && containers+=(netalertx)
+[[ "${ENABLE_CROWDSEC:-true}" == "true" ]] && containers+=(crowdsec)
+[[ "${ENABLE_N8N:-false}" == "true" ]] && containers+=(n8n)
+
+for c in "${containers[@]}"; do
+  st="$(docker inspect -f '{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$c" 2>/dev/null || echo 'missing|none')"
+  c_state="${st%%|*}"
+  c_health="${st##*|}"
+  if [[ "$c_state" != "running" ]]; then
+    problems+=("container ${c} ${c_state}")
+  elif [[ "$c_health" == "unhealthy" ]]; then
+    problems+=("container ${c} unhealthy")
   fi
 done
 
@@ -78,6 +108,36 @@ fi
 failed_units="$(systemctl --failed --no-legend --plain 2>/dev/null | awk '/^(pi-gateway-|pi-ssd-|pi-data-|openbot)/ {print $1}' | paste -sd, - || true)"
 if [[ -n "$failed_units" ]]; then
   problems+=("failed systemd: ${failed_units}")
+fi
+
+# Son 10 dakikada OOM killer olayı
+oom_recent="$(journalctl -k --since '10 minutes ago' --no-pager 2>/dev/null | grep -ciE 'out of memory|oom-killer|killed process' || true)"
+if [[ "${oom_recent:-0}" -gt 0 ]]; then
+  problems+=("OOM killer son 10dk (${oom_recent} olay)")
+fi
+
+# Son 20 dakikada başarısız OpenBot rutini (sessiz rutin arızası körlüğünü önler)
+if [[ -f "$OB_DB" ]] && command -v python3 >/dev/null 2>&1; then
+  failed_routines="$(python3 - "$OB_DB" <<'PY' 2>/dev/null || true
+import sqlite3, sys
+con = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
+rows = con.execute("""
+    select distinct ar.name, substr(coalesce(rr.error, ''), 1, 80)
+    from projection_routine_runs rr
+    join projection_agent_routines ar on ar.routine_id = rr.routine_id
+    where rr.status='failed'
+      and datetime(rr.created_at) >= datetime('now', '-20 minutes')
+    limit 5
+""").fetchall()
+con.close()
+for name, err in rows:
+    print(f"{name}: {err}" if err else name)
+PY
+)"
+  while IFS= read -r fr; do
+    [[ -n "$fr" ]] || continue
+    problems+=("OpenBot rutin hatası: ${fr}")
+  done <<<"$failed_routines"
 fi
 
 stamp="$(date -Is)"

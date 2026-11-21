@@ -1,13 +1,13 @@
 ---
 name: pi-gateway-ops
-description: "Pi Gateway ev sunucusu ops. Sistem/stack/durum/yedek/DNS/container sorularında kullan. Forgejo/Syncthing YOK."
-version: 3.0.0
+description: "Pi Gateway ev sunucusu ops. Sistem/stack/durum/yedek/DNS/container/trend sorularında kullan. Forgejo/Syncthing YOK."
+version: 3.1.0
 author: Pi Gateway
 license: MIT
 platforms: [linux]
 metadata:
   openbot:
-    tags: [Pi-Gateway, ops, health, docker, restic]
+    tags: [Pi-Gateway, ops, health, docker, restic, trends]
 ---
 # Pi Gateway ops
 
@@ -31,14 +31,20 @@ Senkron gerekirse:
 sudo bash __REMOTE_DIR__/scripts/pi/install-privileged-scripts.sh
 ```
 
-## Hızlı durum
+## Hızlı durum & 7 günlük trend brifingi
 
 ```bash
+# Anlık sistem fotoğrafı
 REMOTE_DIR=__REMOTE_DIR__ bash __REMOTE_DIR__/scripts/pi/jarvis-snapshot.sh
+
+# Sabah / trend brifingi (anlık + VictoriaMetrics 7g trend + OpenBot 24s filo durumu)
+REMOTE_DIR=__REMOTE_DIR__ bash __REMOTE_DIR__/scripts/pi/jarvis-health-brief.sh
+
+# Derin sistem sağlığı
 REMOTE_DIR=__REMOTE_DIR__ bash __REMOTE_DIR__/scripts/pi/health-check.sh
 ```
 
-Cevap kısa ve net olsun: temel metrikler, konteyner durumu, varsa failed unit, disk/RAM özeti.
+Cevap kısa ve net olsun: temel metrikler, 7g eğilimler, konteyner durumu, varsa failed unit/rutin, disk/RAM özeti.
 
 ## Yedek
 
