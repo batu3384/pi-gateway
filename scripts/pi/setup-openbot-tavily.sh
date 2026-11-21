@@ -1,8 +1,15 @@
 #!/usr/bin/env bash
 # Tavily, yalnız OpenCode (Jarvis / z.ai). Anahtar ortamdan gelir, repoya yazılmaz.
 set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=../lib/openbot-paths.sh
+source "${SCRIPT_DIR}/../lib/openbot-paths.sh"
 ENVF="${TAVILY_ENV:-/mnt/ssd/openbot/tavily.env}"
-BUN="${OPENBOT_BUN:-/mnt/ssd/openbot-native/config/OpenBot/provider-runtimes/bun/linux-arm64/1.4.4/bin/bun}"
+if [[ -z "${OPENBOT_BUN:-}" ]]; then
+  _bun_root="$(openbot_state_dir)/provider-runtimes/bun/linux-arm64"
+  OPENBOT_BUN="$(find "$_bun_root" -maxdepth 3 -type f -name bun -perm -u+x 2>/dev/null | sort -V | tail -1 || true)"
+fi
+BUN="${OPENBOT_BUN:-$(openbot_state_dir)/provider-runtimes/bun/linux-arm64/1.4.4/bin/bun}"
 DROP="/etc/systemd/system/openbot.service.d/tavily-env.conf"
 
 log() { echo "[openbot-tavily] $*"; }
@@ -50,4 +57,7 @@ sudo tee "$DROP" >/dev/null <<EOF
 EnvironmentFile=-${ENVF}
 EOF
 sudo systemctl daemon-reload
+if systemctl is-active --quiet openbot.service 2>/dev/null; then
+  sudo systemctl restart openbot.service
+fi
 log "systemd EnvironmentFile hazır. OpenCode eklentisi: @tavily/opencode-plugin"

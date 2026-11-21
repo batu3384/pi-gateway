@@ -6,8 +6,8 @@ author: Pi Gateway
 license: MIT
 platforms: [linux]
 metadata:
-  hermes:
-    tags: [Pi-Gateway, Telegram, SSD]
+  openbot:
+    tags: [Pi-Gateway, OpenBot, SSD]
 ---
 # SSD saglik
 

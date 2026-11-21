@@ -87,7 +87,7 @@ print(agent_id, model)
 PY
 
 if [[ "$was_active" == true ]]; then
-  sudo openbot start
+  sudo systemctl start openbot.service
   sleep 6
 fi
 

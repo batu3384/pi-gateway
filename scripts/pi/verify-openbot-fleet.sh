@@ -84,11 +84,11 @@ jarvis = [json.loads(b) for b, in con.execute("select agent_json from projection
 if jarvis.get("provider") != "opencode":
     print("FAIL Jarvis provider opencode değil", file=sys.stderr)
     sys.exit(1)
-# Son 24 saatte provider hatası ("Gemini is not downloaded" / "version cannot be read") varsa fail ver
+# Son 24 saatte provider hatası ("Gemini is not downloaded" / "version cannot be read") varsa uyar (ISO-8601 UTC hizalı)
 recent_err = con.execute(
     """select count(*) from projection_routine_runs
        where status='failed'
-         and created_at >= datetime('now', '-24 hours')
+         and datetime(created_at) >= datetime('now', '-24 hours')
          and (error like '%not downloaded%' or error like '%version cannot be read%')"""
 ).fetchone()[0]
 if recent_err > 0:
@@ -96,10 +96,15 @@ if recent_err > 0:
 print(f"OK agents={len(want)} routines={routines} jarvis={jarvis.get('model')} recent_provider_errs={recent_err}")
 PY
 
-FLEET="${OPENBOT_FLEET_ROOT:-/mnt/ssd/openbot-native/fleet}"
+FLEET="${OPENBOT_FLEET_ROOT:-$(openbot_data_root)/fleet}"
 for agent in jarvis falcon spider ultron cipher iron; do
   [[ -e "${FLEET}/${agent}" ]] && ok "workspace $agent" || bad "workspace yok: $agent"
 done
+if grep -rn '__REMOTE_DIR__' "${FLEET}/jarvis/.agents/skills" "${FLEET}/jarvis/.claude/skills" >/dev/null 2>&1; then
+  bad "Jarvis becerilerinde işlenmemiş __REMOTE_DIR__ yer tutucusu var (setup-openbot-fleet.sh --files-only)"
+else
+  ok "Jarvis beceri yolları"
+fi
 
 case "${NOTIFY_BACKEND:-openbot}" in
   openbot|both) ok "NOTIFY_BACKEND=${NOTIFY_BACKEND:-openbot}" ;;

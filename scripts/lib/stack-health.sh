@@ -182,6 +182,13 @@ degraded_stop_optional_apps() {
   for svc in n8n gatus crowdsec dozzle docker-socket-proxy netalertx victoriametrics grafana node-exporter openbot; do
     docker stop "$svc" >/dev/null 2>&1 || true
   done
+  if systemctl is-active --quiet openbot.service 2>/dev/null; then
+    if [[ "$(id -u)" -eq 0 ]]; then
+      systemctl stop openbot.service >/dev/null 2>&1 || true
+    else
+      sudo -n systemctl stop openbot.service >/dev/null 2>&1 || true
+    fi
+  fi
   [[ -n "$remote_dir" ]] || true
 }
 mark_stack_recover_cooldown() {

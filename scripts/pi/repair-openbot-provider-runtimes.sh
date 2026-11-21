@@ -64,7 +64,7 @@ AGY_1512_ASSET_SHA="594046de1b91561f7fe16476365e3843038ecca56f5f59af45cf9d3091e4
 AGY_1512_BIN_SHA="f8bb8d22dfb676ac0a69effe534283274f860095bfdca62a7caa69de459784ed"
 OPENCODE_BIN_SHA="fc1ad8f2dffed8494e31265837f78d1e6ce5200f5c1c50e953cd9b63e607efdb"
 
-WORKDIR="${OPENBOT_REPAIR_TMP:-/mnt/ssd/openbot-native/tmp/provider-repair}"
+WORKDIR="${OPENBOT_REPAIR_TMP:-$(openbot_data_root)/tmp/provider-repair}"
 mkdir -p "$WORKDIR"
 tmpdir="$(mktemp -d "${WORKDIR}/run.XXXXXX")"
 cleanup() { rm -rf "$tmpdir"; }
@@ -159,13 +159,13 @@ if [[ -x "${SCRIPT_DIR}/setup-openbot-zai-jarvis.sh" ]]; then
 fi
 
 log "openbot başlatılıyor"
-sudo openbot restart
+sudo systemctl restart openbot.service
 sleep 8
 sudo openbot status | head -10 || true
 
 log "bun doğrulama"
 "${dest_bun}/bin/bun" --version
 "${dest_oc}/bin/opencode" --version
-"${dest_agy}/bin/antigravity" --version 2>/dev/null || log "WARN: antigravity --version headless ortamda atlandı"
+"${dest_agy}/bin/antigravity" --version
 
 log "OK — jarvis-send testi: jarvis-send.sh ping"

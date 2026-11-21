@@ -90,7 +90,7 @@ for _ in $(seq 1 "$_wait_iters"); do
   [[ -f "${AUTO_DIR}/url" && -f "${AUTO_DIR}/headers" ]] && break
   sleep 2
 done
-[[ -f "${AUTO_DIR}/url" ]] || {
+[[ -f "${AUTO_DIR}/url" && -f "${AUTO_DIR}/headers" ]] || {
   echo "[jarvis-send] automation hazır değil (openbot.service çalışıyor mu?)" >&2
   exit 1
 }

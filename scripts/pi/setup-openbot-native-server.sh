@@ -92,8 +92,10 @@ sleep 8
 sudo openbot status 2>/dev/null | head -20 || true
 
 REMOTE_DIR="$REMOTE_DIR" OPENBOT_DATA_ROOT="$OPENBOT_DATA_ROOT" \
-  bash "${SCRIPT_DIR}/setup-openbot-jarvis-migration.sh"
-REMOTE_DIR="$REMOTE_DIR" bash "${SCRIPT_DIR}/setup-openbot-jarvis-automation.sh"
+  bash "${SCRIPT_DIR}/setup-openbot-jarvis-migration.sh" \
+  || log "WARN: jarvis migration atlandı (ilk kurulumda önce openbot login + setup-openbot-fleet.sh)"
+REMOTE_DIR="$REMOTE_DIR" bash "${SCRIPT_DIR}/setup-openbot-jarvis-automation.sh" \
+  || log "WARN: jarvis automation atlandı (setup-openbot-fleet.sh sonrası tekrarlayın)"
 REMOTE_DIR="$REMOTE_DIR" bash "${SCRIPT_DIR}/repair-openbot-provider-runtimes.sh" \
   || log "WARN: provider-runtimes onarımı atlandı"
 

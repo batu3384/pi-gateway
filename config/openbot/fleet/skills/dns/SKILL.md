@@ -6,8 +6,8 @@ author: Pi Gateway
 license: MIT
 platforms: [linux]
 metadata:
-  hermes:
-    tags: [Pi-Gateway, Telegram, DNS]
+  openbot:
+    tags: [Pi-Gateway, OpenBot, DNS]
 ---
 # DNS kapsam
 

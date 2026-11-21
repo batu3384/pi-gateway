@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
 # OpenBot 6 ajan filosu. AdGuard / compose konteynerlerine dokunmaz.
+# --files-only: DB/servis dokunmadan yalnızca AGENTS.md + skills (placeholder ikamesi dahil) senkronlar.
 set -euo pipefail
+FILES_ONLY=0
+[[ "${1:-}" == "--files-only" ]] && FILES_ONLY=1
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${SCRIPT_DIR}/../lib/env-file.sh" ]]; then
+  # shellcheck source=../lib/env-file.sh
+  source "${SCRIPT_DIR}/../lib/env-file.sh"
+  read_remote_dotenv || true
+fi
 # shellcheck source=../lib/openbot-paths.sh
 source "${SCRIPT_DIR}/../lib/openbot-paths.sh"
 
@@ -16,11 +24,12 @@ BACKUP="${BACKUP_ROOT}/openbot_pre_6fleet_${STAMP}"
 
 log() { echo "[openbot-fleet] $*"; }
 
-[[ -f "$DB" ]] || { log "HATA: $DB yok"; exit 1; }
+if [[ "$FILES_ONLY" -eq 0 ]]; then
+  [[ -f "$DB" ]] || { log "HATA: $DB yok"; exit 1; }
 
-log "yedek → $BACKUP"
-mkdir -p "$BACKUP"
-python3 - "$DB" "$BACKUP/openbot.db" <<'PY'
+  log "yedek → $BACKUP"
+  mkdir -p "$BACKUP"
+  python3 - "$DB" "$BACKUP/openbot.db" <<'PY'
 import sqlite3, sys
 src = sqlite3.connect(sys.argv[1])
 dst = sqlite3.connect(sys.argv[2])
@@ -28,12 +37,15 @@ src.backup(dst)
 dst.close()
 src.close()
 PY
-if [[ -d "${DATA_ROOT}/OpenBot/Agents" ]]; then
-  tar -C "$DATA_ROOT" -czf "$BACKUP/Agents.tgz" OpenBot/Agents
+  if [[ -d "${DATA_ROOT}/OpenBot/Agents" ]]; then
+    tar -C "$DATA_ROOT" -czf "$BACKUP/Agents.tgz" OpenBot/Agents
+  fi
+  [[ -f "${HOME}/.config/opencode/opencode.json" ]] && \
+    cp -a "${HOME}/.config/opencode/opencode.json" "$BACKUP/opencode.json"
+  log "yedek tamam"
+else
+  [[ -d "$FLEET" ]] || { log "atlandı ($FLEET yok)"; exit 0; }
 fi
-[[ -f "${HOME}/.config/opencode/opencode.json" ]] && \
-  cp -a "${HOME}/.config/opencode/opencode.json" "$BACKUP/opencode.json"
-log "yedek tamam"
 
 mkdir -p \
   "$FLEET/shared" \
@@ -78,9 +90,13 @@ done
 install_skill() {
   local agent="$1" skill="$2" src="$3"
   [[ -f "$src" ]] || return 0
+  local rendered
+  rendered="$(mktemp)"
+  sed "s|__REMOTE_DIR__|${REMOTE_DIR}|g" "$src" >"$rendered"
   mkdir -p "$FLEET/$agent/.agents/skills/$skill" "$FLEET/$agent/.claude/skills/$skill"
-  install -m 0644 "$src" "$FLEET/$agent/.agents/skills/$skill/SKILL.md"
-  install -m 0644 "$src" "$FLEET/$agent/.claude/skills/$skill/SKILL.md"
+  install -m 0644 "$rendered" "$FLEET/$agent/.agents/skills/$skill/SKILL.md"
+  install -m 0644 "$rendered" "$FLEET/$agent/.claude/skills/$skill/SKILL.md"
+  rm -f "$rendered"
 }
 install_skill jarvis heimdall-alert "${REMOTE_DIR}/config/openbot/fleet/skills/heimdall-alert/SKILL.md"
 install_skill jarvis tavily-research "${REMOTE_DIR}/config/openbot/fleet/skills/tavily-research/SKILL.md"
@@ -108,21 +124,21 @@ Tek yazıcı. Başkası yalnız okur.
 - weekly_plan.md — Iron
 EOF
 
-old_ws="${DATA_ROOT}/OpenBot/Agents/agent-6d0f3e6e-047a-4ec0-9697-d093cf953716"
-if [[ -d "$old_ws" && ! -L "$old_ws" ]]; then
-  for skill_root in .agents .claude; do
-    if [[ -d "$old_ws/$skill_root" && ! -d "$FLEET/jarvis/$skill_root" ]]; then
-      cp -a "$old_ws/$skill_root" "$FLEET/jarvis/$skill_root"
-    fi
-  done
+# Kullanılmayan eski duplicate watchdog kopyasını temizle (unit repo kopyasını çalıştırır)
+rm -f "$FLEET/jarvis/pi-watchdog.sh" 2>/dev/null || true
+
+if [[ "$FILES_ONLY" -eq 1 ]]; then
+  log "filo prompt + beceri senkronu tamam ($FLEET)"
+  exit 0
 fi
 
-install -m 0755 "${SCRIPT_DIR}/pi-fleet-watchdog.sh" "$FLEET/jarvis/pi-watchdog.sh"
+old_ws="${DATA_ROOT}/OpenBot/Agents/agent-6d0f3e6e-047a-4ec0-9697-d093cf953716"
 
 log "openbot durduruluyor (compose/AdGuard durmaz)"
 sudo systemctl stop openbot.service
 
 export DB FLEET DATA_ROOT
+export JARVIS_OPENCODE_MODEL="${JARVIS_OPENCODE_MODEL:-zai-coding-plan/glm-5.3-flash}"
 python3 - <<'PY'
 import json, os, sqlite3, uuid
 from datetime import datetime, timezone
@@ -131,7 +147,7 @@ db = sqlite3.connect(os.environ["DB"])
 fleet = os.environ["FLEET"]
 now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
 ns = uuid.UUID("6d0f3e6e-047a-4ec0-9697-d093cf953716")
-jarvis_model = "zai-coding-plan/glm-5.3-flash"
+jarvis_model = os.environ.get("JARVIS_OPENCODE_MODEL") or "zai-coding-plan/glm-5.3-flash"
 gemini_model = "gemini-3.8-flash"
 # OpenCode workspace modu Linux'ta başlamıyor (yalnız macOS). Kabuk yasağı SOUL'da.
 
@@ -158,9 +174,9 @@ seq = db.execute("select coalesce(max(last_event_sequence),0) from projection_ag
 
 for order, spec in enumerate(specs):
     name, folder, access, computer, _unused, effort, color, title, desc, fixed = spec
-    agent_id = fixed or f"agent-{uuid.uuid5(ns, folder)}"
-    thread_id = f"openbot-thread-{agent_id}"
     prev = existing.get(name)
+    agent_id = prev[0] if prev else (fixed or f"agent-{uuid.uuid5(ns, folder)}")
+    thread_id = f"openbot-thread-{agent_id}"
     base = prev[1] if prev else {}
     base.update({
         "id": agent_id,

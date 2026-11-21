@@ -73,6 +73,15 @@ run_restic() {
   elif [[ -d /mnt/ssd/openbot/data/.config/OpenBot ]]; then
     extra_mounts+=(-v "/mnt/ssd/openbot/data/.config/OpenBot:/backup/openbot:ro")
   fi
+  if [[ -d /mnt/ssd/openbot-native/fleet ]]; then
+    extra_mounts+=(-v "/mnt/ssd/openbot-native/fleet:/backup/openbot-fleet:ro")
+  fi
+  if [[ -f /mnt/ssd/openbot/zai.env ]]; then
+    extra_mounts+=(-v "/mnt/ssd/openbot/zai.env:/backup/openbot-env/zai.env:ro")
+  fi
+  if [[ -f /mnt/ssd/openbot/tavily.env ]]; then
+    extra_mounts+=(-v "/mnt/ssd/openbot/tavily.env:/backup/openbot-env/tavily.env:ro")
+  fi
   timeout "$RESTIC_TIMEOUT_SEC" docker run --rm --name "$cname" --network none \
     -e RESTIC_PASSWORD \
     -e RESTIC_REPOSITORY=local:/repo \
@@ -134,6 +143,12 @@ do_backup() {
       --exclude '/backup/openbot/blob_storage/**'
       --exclude '/backup/openbot/provider-runtimes/**'
     )
+  fi
+  if [[ -d /mnt/ssd/openbot-native/fleet ]]; then
+    extra_paths+=(/backup/openbot-fleet)
+  fi
+  if [[ -f /mnt/ssd/openbot/zai.env || -f /mnt/ssd/openbot/tavily.env ]]; then
+    extra_paths+=(/backup/openbot-env)
   fi
   run_restic backup \
     /backup/config \

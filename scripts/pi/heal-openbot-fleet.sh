@@ -140,7 +140,7 @@ while :; do
   if systemctl is-active --quiet openbot.service; then
     auto="$(openbot_automation_dir)"
     if [[ -f "${auto}/url" && -f "${auto}/headers" ]]; then
-      log "automation hazır (${_auto_wait}s)"
+      log "automation hazır ($((_auto_wait * 2))s)"
       break
     fi
   fi
@@ -150,7 +150,7 @@ while :; do
     exit 1
   }
   if ((_auto_wait % 5 == 0)); then
-    log "bekleniyor… openbot=$(systemctl is-active openbot.service 2>/dev/null || echo ?) ${_auto_wait}s"
+    log "bekleniyor… openbot=$(systemctl is-active openbot.service 2>/dev/null || echo ?) $((_auto_wait * 2))s"
   fi
   sleep 2
 done
@@ -173,8 +173,9 @@ fi
 
 if [[ "${OPENBOT_HEAL_PROBE_AGENTS:-false}" == "true" && "${OPENBOT_HEAL_QUICK:-}" != "true" ]]; then
   log "Antigravity smoke (Falcon rutin sırası değil — kısa mesaj)"
+  # JARVIS_AGENT_ID=.env'den export edilmiş olabilir; boşaltmazsak jarvis-send.sh Falcon yerine Jarvis'i çağırır.
   if REMOTE_DIR="$REMOTE_DIR" OPENBOT_JARVIS_WAIT_DELIVERY=true \
-    JARVIS_AGENT_NAME=Falcon OPENBOT_ALERT_WAIT_SEC=180 \
+    JARVIS_AGENT_ID="" JARVIS_AGENT_NAME=Falcon OPENBOT_ALERT_WAIT_SEC=180 \
     bash "${SCRIPT_DIR}/jarvis-send.sh" --wait --timeout 180 --id "pi-gateway:heal-falcon" \
     "Heimdall · durum
 

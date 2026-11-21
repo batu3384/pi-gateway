@@ -32,8 +32,9 @@ else
 fi
 
 if [[ "${OPENBOT_DOCKER_PURGE:-false}" == "true" ]]; then
-  log "PURGE: ${OPENBOT_DOCKER_DIR} siliniyor (core dump'lar dahil)"
-  rm -rf "${OPENBOT_DOCKER_DIR}"
+  log "PURGE: ${OPENBOT_DOCKER_DIR} temizleniyor (native zai.env / tavily.env korunur)"
+  find "${OPENBOT_DOCKER_DIR}" -mindepth 1 -maxdepth 1 \
+    ! -name 'zai.env' ! -name 'tavily.env' -exec rm -rf -- {} +
 else
   find "${OPENBOT_DOCKER_DIR}/data" -maxdepth 1 -name 'core.*' -type f -delete 2>/dev/null || true
   log "compose.yaml ve data dizini duruyor; tam silme için OPENBOT_DOCKER_PURGE=true"

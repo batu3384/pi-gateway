@@ -8,7 +8,13 @@ if [[ -f "${SCRIPT_DIR}/../lib/env-file.sh" ]]; then
   source "${SCRIPT_DIR}/../lib/env-file.sh"
   read_remote_dotenv || true
 fi
-FLEET="${OPENBOT_FLEET_ROOT:-/mnt/ssd/openbot-native/fleet}"
+if [[ -f "${SCRIPT_DIR}/../lib/openbot-paths.sh" ]]; then
+  # shellcheck source=../lib/openbot-paths.sh
+  source "${SCRIPT_DIR}/../lib/openbot-paths.sh"
+  FLEET="${OPENBOT_FLEET_ROOT:-$(openbot_data_root)/fleet}"
+else
+  FLEET="${OPENBOT_FLEET_ROOT:-/mnt/ssd/openbot-native/fleet}"
+fi
 HB="${FLEET}/jarvis/watchdog-heartbeat.txt"
 STATE="${FLEET}/jarvis/.watchdog-state"
 LOG="${FLEET}/jarvis/watchdog.log"
@@ -33,10 +39,24 @@ if [[ "${temp:-0}" -ge "$TEMP_MAX" ]]; then
   problems+=("CPU $((temp / 1000))C >= 75C")
 fi
 
+if command -v vcgencmd >/dev/null 2>&1; then
+  thr_hex="$(vcgencmd get_throttled 2>/dev/null | cut -d= -f2 || echo '0x0')"
+  if [[ "$thr_hex" =~ ^0x[0-9a-fA-F]+$ ]]; then
+    thr_now=$(( thr_hex & 0x7 ))
+    if (( thr_now != 0 )); then
+      problems+=("Pi throttle aktif (${thr_hex})")
+    fi
+  fi
+fi
+
+df_targets=(/)
+if mountpoint -q /mnt/ssd 2>/dev/null; then
+  df_targets+=(/mnt/ssd)
+fi
 while read -r mount pct; do
   [[ -n "${pct:-}" ]] || continue
   problems+=("disk ${mount} %${pct} > ${DISK_MAX}")
-done < <(df -P / /mnt/ssd 2>/dev/null | awk -v max="$DISK_MAX" 'NR>1 {gsub(/%/,"",$5); if ($5+0>max) print $6, $5}')
+done < <(df -P "${df_targets[@]}" 2>/dev/null | awk -v max="$DISK_MAX" 'NR>1 {gsub(/%/,"",$5); if ($5+0>max) print $6, $5}')
 
 for c in adguard unbound caddy; do
   st="$(docker inspect -f '{{.State.Status}}' "$c" 2>/dev/null || echo missing)"
@@ -45,8 +65,24 @@ for c in adguard unbound caddy; do
   fi
 done
 
+if command -v dig >/dev/null 2>&1; then
+  if ! dig +time=2 +tries=1 @127.0.0.1 -p 53 "gateway.${LAN_DOMAIN:-home}" A 2>/dev/null | grep -q 'status: NOERROR'; then
+    problems+=("DNS :53 yanıt vermiyor")
+  fi
+fi
+
+if ! systemctl is-active --quiet openbot.service 2>/dev/null; then
+  problems+=("openbot.service aktif değil")
+fi
+
+failed_units="$(systemctl --failed --no-legend --plain 2>/dev/null | awk '/^(pi-gateway-|pi-ssd-|pi-data-|openbot)/ {print $1}' | paste -sd, - || true)"
+if [[ -n "$failed_units" ]]; then
+  problems+=("failed systemd: ${failed_units}")
+fi
+
 stamp="$(date -Is)"
 if [[ ${#problems[@]} -eq 0 ]]; then
+  rm -f "$STATE" 2>/dev/null || true
   printf '%s\n' "$stamp" >"$HB"
   exit 0
 fi

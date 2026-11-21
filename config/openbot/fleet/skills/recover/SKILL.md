@@ -6,8 +6,8 @@ author: Pi Gateway
 license: MIT
 platforms: [linux]
 metadata:
-  hermes:
-    tags: [Pi-Gateway, Telegram, Recovery]
+  openbot:
+    tags: [Pi-Gateway, OpenBot, Recovery]
 ---
 # SSD kurtarma (`/recover` ve `/recover onay`)
 

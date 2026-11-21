@@ -6,8 +6,8 @@ author: Pi Gateway
 license: MIT
 platforms: [linux]
 metadata:
-  hermes:
-    tags: [Pi-Gateway, Telegram, Menu]
+  openbot:
+    tags: [Pi-Gateway, OpenBot, Menu]
 ---
 # Pi Gateway Durum Kartı
 

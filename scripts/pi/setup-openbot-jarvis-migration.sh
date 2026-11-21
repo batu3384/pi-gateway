@@ -27,10 +27,10 @@ fi
 
 HERMES_CRON="${HERMES_HOME:-$HOME/.hermes}/cron/jobs.json"
 if [[ -f "$HERMES_CRON" ]]; then
-  python3 - <<PY
-import json
+  python3 - "$HERMES_CRON" <<'PY'
+import json, sys
 from pathlib import Path
-p = Path("${HERMES_CRON}")
+p = Path(sys.argv[1])
 data = json.loads(p.read_text())
 jobs = data.get("jobs", data if isinstance(data, list) else [])
 for j in jobs:
@@ -70,7 +70,7 @@ if [[ -n "$AGENT_JSON" && -d "$AGENT_JSON" ]]; then
     cp "${REMOTE_DIR}/config/openbot/fleet/jarvis.md" "${AGENT_JSON}/SOUL.md"
     cp "${REMOTE_DIR}/config/openbot/fleet/jarvis.md" "${AGENT_JSON}/AGENTS.md"
   fi
-  for s in pi-gateway-ops menu dns ssd backup recover; do
+  for s in pi-gateway-ops menu dns ssd backup recover heimdall-alert tavily-research; do
     for root in .agents .claude; do
       mkdir -p "${AGENT_JSON}/${root}/skills"
       rm -rf "${AGENT_JSON}/${root}/skills/${s}"
@@ -81,7 +81,7 @@ if [[ -n "$AGENT_JSON" && -d "$AGENT_JSON" ]]; then
   log "Jarvis workspace: $AGENT_JSON"
 fi
 
-if [[ -x "${SCRIPT_DIR}/setup-openbot-zai-jarvis.sh" ]]; then
+if [[ -x "${SCRIPT_DIR}/setup-openbot-zai-jarvis.sh" && -f "${OPENBOT_ZAI_ENV:-/mnt/ssd/openbot/zai.env}" ]]; then
   REMOTE_DIR="$REMOTE_DIR" bash "${SCRIPT_DIR}/setup-openbot-zai-jarvis.sh"
 fi
 

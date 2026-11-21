@@ -26,16 +26,8 @@ Filo (`setup-openbot-fleet.sh`, veri `/mnt/ssd/openbot-native/fleet`):
 | 21:45 | Iron | Gün kapanışı |
 | Pazar 20:00 | Iron | Haftalık plan |
 
-Jarvis eski 07:00 / 18:55 / 19:00 / 23:00 bültenleri kapalı. `jarvis-fx-prepare.timer` kapalı.
-
-| Saat | Rutin |
-|------|--------|
-| 07:00 | Günaydın Panosu |
-| 18:54 | `jarvis-fx-prepare.timer` → `.../pi-gateway-fx-latest.txt` |
-| 18:55 | Piyasa Özeti |
-| 19:00 | Akşam Gündem |
-| 23:00 | Gece Teknoloji |
+Emekli edilen eski Jarvis bülten rutinleri (`07:00 Günaydın Panosu`, `18:54 jarvis-fx-prepare.timer`, `18:55 Piyasa Özeti`, `19:00 Akşam Gündem`, `23:00 Gece Teknoloji`) kapalıdır; haber ve planlama filo ajanlarına devredilmiştir.
 
 Uyarılar: `NOTIFY_BACKEND=openbot` → `jarvis-send.sh --wait` (tur bitince mobil push). Doğrulama: `FLEET_VERIFY_LIVE_ALERT=true bash scripts/pi/verify-openbot-fleet.sh`.
 
-Jarvis host’ta çalışır: `docker`, `systemctl`, `~/pi-gateway/scripts/pi/*` — Hermes modeli.
+Jarvis host’ta çalışır: `docker`, `systemctl`, `~/pi-gateway/scripts/pi/*` (native `openbot.service`).

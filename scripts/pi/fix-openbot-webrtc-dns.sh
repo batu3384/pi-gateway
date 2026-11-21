@@ -8,8 +8,7 @@ HOSTS_FILE="/etc/hosts"
 TURN_HOST="turn2.openbot.run"
 
 log() { echo "[openbot-webrtc-dns] $*"; }
-
-[[ "$(id -u)" -eq 0 ]] && die() { log "HATA: $*"; exit 1; } || die() { log "HATA: $*"; exit 1; }
+die() { log "HATA: $*"; exit 1; }
 
 _dig_out="$(dig +time=3 +tries=1 +short "${TURN_HOST}" A 2>/dev/null || true)"
 ip="$(printf '%s\n' "$_dig_out" | grep -E '^[0-9.]+$' | head -1 || true)"
@@ -20,7 +19,8 @@ fi
 
 line="${ip} ${TURN_HOST} ${TURN_HOST}. ${MARKER}"
 if grep -qF "$MARKER" "$HOSTS_FILE" 2>/dev/null; then
-  sudo sed -i.bak-openbot-turn "/${MARKER//\//\\/}/c\\${line}" "$HOSTS_FILE"
+  sudo sed -i "/${MARKER//\//\\/}/c\\${line}" "$HOSTS_FILE"
+  sudo rm -f "${HOSTS_FILE}.bak-openbot-turn" 2>/dev/null || true
 else
   printf '%s\n' "$line" | sudo tee -a "$HOSTS_FILE" >/dev/null
 fi
