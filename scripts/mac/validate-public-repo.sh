@@ -21,14 +21,18 @@ if grep -E '^export$' Makefile >/dev/null 2>&1; then
   die "Makefile global export — secret leak riski"
 fi
 
-# Tracked dosyalarda gercek secret pattern (placeholder haric)
-if git grep -E 'AA[A-Za-z0-9_-]{30,}' -- ':!*.example' ':!scripts/mac/validate-public-repo.sh' 2>/dev/null \
-  | grep -v 'CHANGE_ME' | grep -v 'YOUR_' | head -1; then
+# Tracked dosyalarda gercek secret pattern (placeholder haric; pipefail SIGPIPE-safe capture)
+_tok_hits="$(git grep -nE 'AA[A-Za-z0-9_-]{30,}' -- ':!*.example' ':!scripts/mac/validate-public-repo.sh' 2>/dev/null \
+  | grep -v 'CHANGE_ME' | grep -v 'YOUR_' || true)"
+if [[ -n "$_tok_hits" ]]; then
+  printf '%s\n' "$_tok_hits" | head -5 >&2
   die "Telegram/API token benzeri pattern tracked dosyada"
 fi
 
-if git grep -E '@(gmail|github)\.com' -- ':!*.example' 2>/dev/null \
-  | grep -v 'example.com' | grep -v '@home.local' | head -1; then
+_mail_hits="$(git grep -nE '@(gmail|github)\.com' -- ':!*.example' 2>/dev/null \
+  | grep -v 'example.com' | grep -v '@home.local' || true)"
+if [[ -n "$_mail_hits" ]]; then
+  printf '%s\n' "$_mail_hits" | head -5 >&2
   die "Gercek e-posta tracked dosyada (example.com / home.local haric)"
 fi
 
@@ -41,9 +45,12 @@ if [[ -n "$_lan_hits" ]]; then
 fi
 unset _lan_hits
 
-if git grep -E 'batu@' -- ':!scripts/mac/validate-public-repo.sh' 2>/dev/null | head -1; then
+_user_hits="$(git grep -nE 'batu@' -- ':!scripts/mac/validate-public-repo.sh' 2>/dev/null || true)"
+if [[ -n "$_user_hits" ]]; then
+  printf '%s\n' "$_user_hits" | head -5 >&2
   die "Kisisel kullanici adi tracked dosyada"
 fi
+unset _tok_hits _mail_hits _user_hits
 
 [[ -f config/tailscale/acl.hujson ]] && git ls-files --error-unmatch config/tailscale/acl.hujson >/dev/null 2>&1 \
   && die "acl.hujson hala tracked — git rm --cached gerekli"

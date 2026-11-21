@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../lib/common.sh"
 load_env
 
-require_cmd docker envsubst python3
+require_cmd envsubst python3
 
 [[ -f "$PROJECT_DIR/.env" ]] || die "Missing .env - cp .env.example .env"
 [[ -n "${AGH_ADMIN_PASSWORD:-}" ]] || die "Set AGH_ADMIN_PASSWORD in .env"
@@ -99,21 +99,39 @@ if [[ -f "$SCRIPT_DIR/test-ssd-chaos.sh" ]]; then
   "$SCRIPT_DIR/test-ssd-chaos.sh"
 fi
 
-# Mac: docker compose plugin yoksa docker-compose (v2 standalone / OrbStack)
+# Mac: docker compose plugin yoksa docker-compose; CI'da zorunlu, lokal Mac'te Docker yoksa uyar (Pi/CI dogrular)
 compose_config() {
   local yml="$PROJECT_DIR/compose/docker-compose.yml"
   local envf="$PROJECT_DIR/.env"
   local -a prof=(--profile caddy --profile gatus --profile dozzle --profile netalert --profile crowdsec --profile monitoring)
-  if docker compose version >/dev/null 2>&1; then
+  if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
     docker compose -f "$yml" --env-file "$envf" "${prof[@]}" config -q
+    log "docker-compose validation: OK"
   elif command -v docker-compose >/dev/null 2>&1; then
     docker-compose -f "$yml" --env-file "$envf" "${prof[@]}" config -q
+    log "docker-compose validation: OK"
+  elif [[ "${CI:-false}" == "true" ]]; then
+    die "docker compose / docker-compose yok (CI zorunlu)"
   else
-    die "docker compose / docker-compose yok"
+    python3 - "$yml" <<'PY'
+import sys
+from pathlib import Path
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+if "\t" in text:
+    raise SystemExit("docker-compose.yml tab karakteri iceriyor")
+try:
+    import yaml  # type: ignore
+    data = yaml.safe_load(text)
+    if not isinstance(data, dict) or not isinstance(data.get("services"), dict):
+        raise SystemExit("docker-compose.yml services blogu gecersiz")
+except ImportError:
+    if "services:" not in text:
+        raise SystemExit("docker-compose.yml services blogu yok")
+PY
+    log "WARN: lokal docker yok — compose temel kontrol OK (tam config Pi/CI dogrular)"
   fi
 }
 compose_config
-log "docker-compose validation: OK"
 
 for f in \
   "$PROJECT_DIR/config/adguard/AdGuardHome.yaml" \
@@ -137,9 +155,10 @@ if grep -Eq '^[[:space:]]+site:' "$PROJECT_DIR/config/glance/glance.yml.template
   die "Glance template invalid site: key (causes v0.8.8 SIGSEGV)"
 fi
 
-python3 - "$PROJECT_DIR" <<'PY' || die "Privileged script closure eksigi"
+python3 - "$PROJECT_DIR" <<'PY' || die "Privileged script closure veya systemd unit dogrulama eksigi"
 import re
 import sys
+from collections import deque
 from pathlib import Path
 
 root = Path(sys.argv[1])
@@ -150,28 +169,69 @@ if not m:
     raise SystemExit(1)
 installed = set(re.findall(r"(scripts/(?:pi|lib)/[A-Za-z0-9_.-]+)", m.group(1)))
 
-roots = [
+# 1. Systemd unit static checks + collect all /usr/local/lib/pi-gateway entrypoints
+systemd_errors = []
+queue: deque[str] = deque()
+seen_roots: set[str] = set()
+for unit in sorted((root / "host/systemd").glob("*.service")):
+    utext = unit.read_text(encoding="utf-8")
+    is_oneshot = bool(re.search(r"^Type=oneshot\b", utext, re.M))
+    restart_m = re.search(r"^Restart=(\S+)", utext, re.M)
+    if is_oneshot and restart_m and restart_m.group(1) != "no":
+        systemd_errors.append(f"{unit.name}: Type=oneshot + Restart={restart_m.group(1)} gecersiz")
+    for rel in re.findall(r"/usr/local/lib/pi-gateway/(scripts/(?:pi|lib)/[A-Za-z0-9_.-]+)", utext):
+        if rel not in seen_roots:
+            seen_roots.add(rel)
+            queue.append(rel)
+            if rel not in installed:
+                systemd_errors.append(f"{unit.name} -> {rel} install-privileged-scripts.sh icinde yok")
+
+for rel in (
     "scripts/pi/health-check.sh",
     "scripts/pi/recover-readonly-root.sh",
     "scripts/pi/recover-stack.sh",
     "scripts/pi/recover-compose-up.sh",
     "scripts/pi/ssd-hotplug-handler.sh",
     "scripts/pi/sync-modem-inventory.sh",
-]
-ref_re = re.compile(r"\$\{?SCRIPT_DIR\}?/(\.\./lib/)?([A-Za-z0-9_.-]+\.(?:sh|py))")
-missing = []
-for rel in roots:
+    "scripts/pi/setup-ssd-data.sh",
+):
+    if rel not in seen_roots:
+        seen_roots.add(rel)
+        queue.append(rel)
+
+# 2. Full transitive closure over SCRIPT_DIR / self_dir references
+ref_re = re.compile(r"\$\{?(?:SCRIPT_DIR|self_dir)\}?/(\.\./(?:lib|pi)/)?([A-Za-z0-9_.-]+\.(?:sh|py))")
+visited: set[str] = set()
+missing: list[str] = []
+while queue:
+    rel = queue.popleft()
+    if rel in visited or not (root / rel).is_file():
+        continue
+    visited.add(rel)
+    parent_is_lib = rel.startswith("scripts/lib/")
     text = (root / rel).read_text(encoding="utf-8")
     for line in text.splitlines():
         s = line.lstrip()
         if s.startswith("#"):
             continue
-        for lib_prefix, name in ref_re.findall(line):
-            target = f"scripts/lib/{name}" if lib_prefix else f"scripts/pi/{name}"
-            if (root / target).is_file() and target not in installed:
-                missing.append(f"{rel} -> {target}")
+        for prefix, name in ref_re.findall(line):
+            if prefix == "../lib/":
+                target = f"scripts/lib/{name}"
+            elif prefix == "../pi/":
+                target = f"scripts/pi/{name}"
+            else:
+                target = f"scripts/{'lib' if parent_is_lib else 'pi'}/{name}"
+            if (root / target).is_file():
+                if target not in installed:
+                    missing.append(f"{rel} -> {target}")
+                elif target not in visited:
+                    queue.append(target)
+
+if systemd_errors:
+    print("Systemd unit hatalari:", *systemd_errors, sep="\n  ", file=sys.stderr)
 if missing:
-    print("install-privileged-scripts.sh eksik:", *missing, sep="\n  ", file=sys.stderr)
+    print("install-privileged-scripts.sh transitive eksik:", *sorted(set(missing)), sep="\n  ", file=sys.stderr)
+if systemd_errors or missing:
     raise SystemExit(1)
 PY
 
