@@ -132,15 +132,25 @@ printf '%s\n' '{"layoutVersion":1,"version":"1.5.12","target":"linux-arm64","exe
   >"${dest_agy}/antigravity-package.json"
 write_install_record "$dest_agy" antigravity "1.5.12"
 
-log "hosted openbot.env → yönetilen runtime yolları"
+log "hosted openbot.env + systemd drop-in → yönetilen runtime yolları"
+# openbot-hosted-server openbot.env içinden yalnızca DISPLAY_SIZE ve AUTH_API_URL okur;
+# OPENBOT_OPENCODE_PATH ve OPENBOT_ANTIGRAVITY_PATH systemd Environment= ile verilmek zorunda.
 sudo tee "$ENV_FILE" >/dev/null <<EOF
 OPENBOT_DISPLAY_SIZE=1024x768
 OPENBOT_OPENCODE_PATH=${dest_oc}/bin/opencode
 OPENBOT_ANTIGRAVITY_PATH=${dest_agy}/bin/antigravity
 EOF
+sudo mkdir -p /etc/systemd/system/openbot.service.d
+sudo tee /etc/systemd/system/openbot.service.d/provider-paths.conf >/dev/null <<EOF
+[Service]
+Environment=OPENBOT_OPENCODE_PATH=${dest_oc}/bin/opencode
+Environment=OPENBOT_ANTIGRAVITY_PATH=${dest_agy}/bin/antigravity
+EOF
+sudo systemctl disable --now openbot-update.timer 2>/dev/null || true
+sudo systemctl daemon-reload
 
-if [[ -f "$ZAI_ENV" ]] && ! grep -q 'source.*zai.env' /home/batu/.profile 2>/dev/null; then
-  echo "set -a; source ${ZAI_ENV}; set +a" >>/home/batu/.profile
+if [[ -f "$ZAI_ENV" ]] && ! grep -q 'source.*zai.env' "${HOME}/.profile" 2>/dev/null; then
+  echo "set -a; source ${ZAI_ENV}; set +a" >>"${HOME}/.profile"
 fi
 
 if [[ -x "${SCRIPT_DIR}/setup-openbot-zai-jarvis.sh" ]]; then

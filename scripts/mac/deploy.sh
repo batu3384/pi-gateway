@@ -35,9 +35,11 @@ load_compose_profiles
 # shellcheck disable=SC2154
 PROFILES=("${profiles[@]}")
 
+SSH_OPTS=(-o ConnectTimeout=15 -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3)
 log "Deploy mode=$DEPLOY_MODE -> $PI_USER@$SSH_HOST:$REMOTE_DIR"
-ssh -o ConnectTimeout=15 "$PI_USER@$SSH_HOST" "mkdir -p '$REMOTE_DIR'"
-rsync -avz --delete \
+ssh "${SSH_OPTS[@]}" "$PI_USER@$SSH_HOST" "mkdir -p '$REMOTE_DIR'"
+rsync -avz --delete --chmod=go-w \
+  -e "ssh -o ConnectTimeout=15 -o BatchMode=yes -o ServerAliveInterval=15 -o ServerAliveCountMax=3" \
   --exclude '.git' \
   --exclude '__pycache__' \
   --exclude '*.pyc' \
@@ -59,20 +61,25 @@ rsync -avz --delete \
   --exclude 'legacy/' \
   "$PROJECT_DIR/" "$PI_USER@$SSH_HOST:$REMOTE_DIR/"
 DEPLOY_STAGE="${REMOTE_DIR}/.deploy-tmp.$$"
-ssh -o ConnectTimeout=15 "$PI_USER@$SSH_HOST" "install -d -m 700 '$DEPLOY_STAGE'"
-scp "$PROJECT_DIR/.env" "$PI_USER@$SSH_HOST:${DEPLOY_STAGE}/pi-gateway.env.new"
-ssh "$PI_USER@$SSH_HOST" "REMOTE_DIR='$REMOTE_DIR' DEPLOY_STAGE='$DEPLOY_STAGE' bash -s" <<'ENVMERGE'
+ssh "${SSH_OPTS[@]}" "$PI_USER@$SSH_HOST" "install -d -m 700 '$DEPLOY_STAGE'"
+if ! scp "${SSH_OPTS[@]}" "$PROJECT_DIR/.env" "$PI_USER@$SSH_HOST:${DEPLOY_STAGE}/pi-gateway.env.new"; then
+  ssh "${SSH_OPTS[@]}" "$PI_USER@$SSH_HOST" "rm -rf '$DEPLOY_STAGE'" 2>/dev/null || true
+  die ".env scp basarisiz"
+fi
+ssh "${SSH_OPTS[@]}" "$PI_USER@$SSH_HOST" "REMOTE_DIR='$REMOTE_DIR' DEPLOY_STAGE='$DEPLOY_STAGE' bash -s" <<'ENVMERGE'
 set -euo pipefail
+umask 077
 R="${REMOTE_DIR}"
 STAGE="${DEPLOY_STAGE}"
 trap 'rm -rf "$STAGE"' EXIT
 NEW="${STAGE}/pi-gateway.env.new"
 OLD="${R}/.env"
 OUT="${R}/.env"
-PRESERVE='N8N_ENCRYPTION_KEY CROWDSEC_BOUNCER_KEY CROWDSEC_API_KEY'
+PRESERVE='N8N_ENCRYPTION_KEY CROWDSEC_BOUNCER_KEY CROWDSEC_API_KEY OPENBOT_JARVIS_AUTOMATION NOTIFY_BACKEND OPENBOT_JARVIS OPENBOT_NATIVE OPENBOT_DATA_ROOT OPENBOT_STATE_DIR OPENBOT_USER OPENBOT_SERVER_NAME JARVIS_AGENT_ID NETALERTX_GID'
 python3 - "$NEW" "$OLD" "$OUT" $PRESERVE <<'PY'
 import os
 import sys
+import tempfile
 from pathlib import Path
 new_path, old_path, out_path = Path(sys.argv[1]), Path(sys.argv[2]), Path(sys.argv[3])
 preserve = set(sys.argv[4:])
@@ -80,7 +87,7 @@ def parse(path: Path) -> dict[str, str]:
     data = {}
     if not path.is_file():
         return data
-    for line in path.read_text().splitlines():
+    for line in path.read_text(encoding="utf-8").splitlines():
         if not line or line.lstrip().startswith("#") or "=" not in line:
             continue
         k, _, v = line.partition("=")
@@ -93,7 +100,7 @@ for k in preserve:
     nv = new.get(k, "").strip()
     if ov and (not nv or nv.startswith("CHANGE_ME") or nv.startswith("Degistir")):
         new[k] = old[k]
-lines = new_path.read_text().splitlines() if new_path.is_file() else []
+lines = new_path.read_text(encoding="utf-8").splitlines() if new_path.is_file() else []
 out_lines = []
 seen = set()
 for line in lines:
@@ -104,16 +111,26 @@ for line in lines:
             out_lines.append(f"{k}={new[k]}")
             continue
     out_lines.append(line)
-for k in preserve:
+for k in sorted(preserve):
     if k in new and k not in seen:
         out_lines.append(f"{k}={new[k]}")
-out_path.write_text("\n".join(out_lines) + "\n")
-os.chmod(out_path, 0o600)
+fd, tmp_name = tempfile.mkstemp(prefix=".env.tmp.", dir=str(out_path.parent))
+try:
+    os.fchmod(fd, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(out_lines) + "\n")
+    os.replace(tmp_name, out_path)
+except Exception:
+    try:
+        os.unlink(tmp_name)
+    except OSError:
+        pass
+    raise
 print(f"[env-merge] preserved={','.join(sorted(preserve & set(old))) or 'none'}")
 PY
 chmod 600 "$OUT"
 ENVMERGE
-"$SCRIPT_DIR/sync-rendered-configs.sh" || die "Rendered config sync basarisiz"
+SYNC_SKIP_ENV=true "$SCRIPT_DIR/sync-rendered-configs.sh" || die "Rendered config sync basarisiz"
 
 DEPLOY_HOST="${PI_DEPLOY_HOST:-$(deploy_host)}"
 

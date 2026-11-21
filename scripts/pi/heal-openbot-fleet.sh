@@ -36,8 +36,13 @@ agy_ok() {
   "$agy" --version >/dev/null 2>&1
 }
 
+DROP_PROVIDER="/etc/systemd/system/openbot.service.d/provider-paths.conf"
 ensure_hosted_env() {
   if [[ ! -f "$ENV_FILE" ]] || ! grep -q "OPENBOT_ANTIGRAVITY_PATH=" "$ENV_FILE" 2>/dev/null; then
+    need_repair=1
+    return
+  fi
+  if [[ ! -f "$DROP_PROVIDER" ]] || ! grep -q "OPENBOT_ANTIGRAVITY_PATH=${DEST_AGY}" "$DROP_PROVIDER" 2>/dev/null; then
     need_repair=1
     return
   fi
@@ -98,9 +103,29 @@ else
   fi
 fi
 
-agent_patch="$(patch_agents_antigravity_model || true)"
-if [[ -n "$agent_patch" ]]; then
-  printf '%s\n' "$agent_patch"
+# Canlı WAL DB'ye openbot çalışırken doğrudan yazma — önce read-only kontrol, değişiklik gerekirse durdurup uygula
+agents_need_patch() {
+  local db
+  db="$(openbot_db_path)"
+  [[ -f "$db" ]] || return 1
+  python3 - "$db" <<'PY'
+import json, sqlite3, sys
+con = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
+for _, blob in con.execute("select agent_id, agent_json from projection_agents"):
+    a = json.loads(blob)
+    if a.get("provider") != "antigravity":
+        continue
+    if a.get("model") != "gemini-3.8-flash" or a.get("reasoningEffort") == "high" or a.get("notifications") is not True or a.get("allowAutomation") is not True:
+        sys.exit(0)
+sys.exit(1)
+PY
+}
+
+if agents_need_patch; then
+  log "openbot durduruluyor (agent DB yaması — canlı WAL yazımı yasak)"
+  sudo systemctl stop openbot.service 2>/dev/null || true
+  agent_patch="$(patch_agents_antigravity_model || true)"
+  [[ -n "$agent_patch" ]] && printf '%s\n' "$agent_patch"
   need_repair=1
 fi
 

@@ -9,8 +9,9 @@ source "${SCRIPT_DIR}/../lib/env-file.sh"
 source "${SCRIPT_DIR}/../lib/openbot-paths.sh"
 read_remote_dotenv || true
 
-export OPENBOT_STATE_DIR="$(openbot_state_dir)"
-export OPENBOT_DATA_ROOT="$(openbot_data_root)"
+OPENBOT_STATE_DIR="$(openbot_state_dir)"
+OPENBOT_DATA_ROOT="$(openbot_data_root)"
+export OPENBOT_STATE_DIR OPENBOT_DATA_ROOT
 
 log() { echo "[jarvis-automation-setup] $*"; }
 

@@ -64,9 +64,15 @@ panel_url() {
 # Telegram bildirimlerinde panel linki (TS IP :PORT öncelikli)
 notify_panel_url() {
   local panel_id="$1"
-  local remote_dir="${REMOTE_DIR:-${HOME}/pi-gateway}"
-  local panels_py="${remote_dir}/scripts/lib/telegram-panels.py"
-  local url=""
+  local self_dir remote_dir panels_py url=""
+  self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  remote_dir="${REMOTE_DIR:-${HOME}/pi-gateway}"
+  if [[ "$(id -u)" -eq 0 ]]; then
+    panels_py="${self_dir}/telegram-panels.py"
+  else
+    panels_py="${remote_dir}/scripts/lib/telegram-panels.py"
+    [[ -f "$panels_py" ]] || panels_py="${self_dir}/telegram-panels.py"
+  fi
   if [[ -f "$panels_py" ]]; then
     url="$(PANEL_PROTOCOL="${PANEL_PROTOCOL:-}" ENABLE_TLS="${ENABLE_TLS:-}" \
       PI_STATIC_IP="${PI_STATIC_IP:-}" LAN_DOMAIN="${LAN_DOMAIN:-home}" \
@@ -100,12 +106,17 @@ notify_ensure_dir() {
 notify_own() {
   [[ "$(id -u)" -eq 0 ]] || return 0
   local owner="${NOTIFY_OWNER:-${PI_USER:-pi}}"
-  chown "$owner:$owner" "$@" 2>/dev/null || true
+  chown -h "$owner:$owner" "$@" 2>/dev/null || true
 }
-# notify_write <dosya> <icerik> — root yazdiysa sahipligi owner'a devret
+# notify_write <dosya> <icerik> — symlink takip etmeden atomik yaz
 notify_write() {
-  printf '%s\n' "$2" > "$1" 2>/dev/null || return 1
-  notify_own "$1"
+  local dst="$1" val="$2" tmp
+  [[ ! -L "$dst" ]] || return 1
+  tmp="$(mktemp "${dst}.tmp.XXXXXX" 2>/dev/null)" || return 1
+  printf '%s\n' "$val" > "$tmp" 2>/dev/null || { rm -f "$tmp"; return 1; }
+  notify_own "$tmp"
+  chmod 664 "$tmp" 2>/dev/null || true
+  mv -f "$tmp" "$dst" 2>/dev/null || { rm -f "$tmp"; return 1; }
 }
 
 notify_send_lock_acquire() {

@@ -85,7 +85,8 @@ fi
   exit 1
 }
 
-for _ in $(seq 1 45); do
+_wait_iters="${JARVIS_AUTOMATION_WAIT_ITERS:-15}"
+for _ in $(seq 1 "$_wait_iters"); do
   [[ -f "${AUTO_DIR}/url" && -f "${AUTO_DIR}/headers" ]] && break
   sleep 2
 done
@@ -118,7 +119,7 @@ with open(sys.argv[1], "w", encoding="utf-8") as fh:
     json.dump(payload, fh, ensure_ascii=False)
 PY
 
-curl -fsS --proto '=http' --max-redirs 0 -X POST "${base}/v1/agents/${JARVIS_AGENT_ID}/messages" \
+curl -fsS --connect-timeout 5 --max-time 30 --proto '=http' --max-redirs 0 -X POST "${base}/v1/agents/${JARVIS_AGENT_ID}/messages" \
   -H @"${AUTO_DIR}/headers" \
   -H "Content-Type: application/json" \
   --data-binary @"$payload" >"$receipt"

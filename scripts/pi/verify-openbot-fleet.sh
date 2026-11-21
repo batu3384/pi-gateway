@@ -28,12 +28,18 @@ if [[ -d "$agy_root" ]]; then
   for legacy in 1.5.4 1.5.5; do
     [[ -x "${agy_root}/${legacy}/bin/antigravity" ]] && bad "antigravity ${legacy} kaldır (repair-openbot-provider-runtimes)"
   done
-  agy="$(grep -E '^OPENBOT_ANTIGRAVITY_PATH=' /opt/OpenBot/hosted/openbot.env 2>/dev/null | cut -d= -f2-)"
-  [[ -x "$agy" ]] && ok "antigravity ${agy##*/}" || bad "OPENBOT_ANTIGRAVITY_PATH eksik"
-  if "$agy" --version >/dev/null 2>&1; then
-    ok "antigravity --version"
+  agy="$(grep -E '^Environment=OPENBOT_ANTIGRAVITY_PATH=' /etc/systemd/system/openbot.service.d/provider-paths.conf 2>/dev/null | cut -d= -f3-)"
+  if [[ -z "$agy" ]]; then
+    bad "systemd drop-in provider-paths.conf OPENBOT_ANTIGRAVITY_PATH eksik (openbot-hosted-server openbot.env'i yok sayar)"
+  elif [[ ! -x "$agy" ]]; then
+    bad "OPENBOT_ANTIGRAVITY_PATH çalıştırılabilir değil: $agy"
   else
-    bad "antigravity --version başarısız"
+    ok "antigravity systemd drop-in ${agy##*/}"
+    if "$agy" --version >/dev/null 2>&1; then
+      ok "antigravity --version"
+    else
+      bad "antigravity --version başarısız"
+    fi
   fi
 fi
 
@@ -78,7 +84,16 @@ jarvis = [json.loads(b) for b, in con.execute("select agent_json from projection
 if jarvis.get("provider") != "opencode":
     print("FAIL Jarvis provider opencode değil", file=sys.stderr)
     sys.exit(1)
-print(f"OK agents={len(want)} routines={routines} jarvis={jarvis.get('model')}")
+# Son 24 saatte provider hatası ("Gemini is not downloaded" / "version cannot be read") varsa fail ver
+recent_err = con.execute(
+    """select count(*) from projection_routine_runs
+       where status='failed'
+         and created_at >= datetime('now', '-24 hours')
+         and (error like '%not downloaded%' or error like '%version cannot be read%')"""
+).fetchone()[0]
+if recent_err > 0:
+    print(f"WARN son 24s provider kaynaklı {recent_err} rutin hatası (openbot.db)", file=sys.stderr)
+print(f"OK agents={len(want)} routines={routines} jarvis={jarvis.get('model')} recent_provider_errs={recent_err}")
 PY
 
 FLEET="${OPENBOT_FLEET_ROOT:-/mnt/ssd/openbot-native/fleet}"

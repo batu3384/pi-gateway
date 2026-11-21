@@ -57,10 +57,10 @@ agent = match[0] if len(match) == 1 else (rows[0] if len(rows) == 1 else None)
 if not agent:
     raise SystemExit(1)
 ws = agent.get("workspacePath", "")
-if ws.startswith("/data/"):
-    ws = str(root / ws.removeprefix("/data/"))
-elif ws.startswith("/data/OpenBot/"):
+if ws.startswith("/data/OpenBot/"):
     ws = str(root / "OpenBot" / ws.removeprefix("/data/OpenBot/"))
+elif ws.startswith("/data/"):
+    ws = str(root / ws.removeprefix("/data/"))
 print(ws)
 PY
 )" || AGENT_JSON=""

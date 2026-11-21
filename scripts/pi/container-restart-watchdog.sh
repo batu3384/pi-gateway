@@ -8,6 +8,10 @@ source "$SCRIPT_DIR/../lib/env-file.sh"
 read_remote_dotenv || { echo "[container-watch] HATA: .env" >&2; exit 1; }
 # shellcheck source=../lib/notify.sh
 source "$SCRIPT_DIR/../lib/notify.sh"
+if [[ -f "$SCRIPT_DIR/../lib/stack-health.sh" ]]; then
+  # shellcheck source=../lib/stack-health.sh
+  source "$SCRIPT_DIR/../lib/stack-health.sh"
+fi
 
 THRESHOLD="${CONTAINER_RESTART_ALERT_THRESHOLD:-3}"
 REPEAT_SEC="${CONTAINER_RESTART_REPEAT_SEC:-21600}"
@@ -41,6 +45,11 @@ total = sum(e["delta"] for e in events if now - e["at"] < window)
 assert total >= threshold, "gercek dongu alarm olmali"
 PY
   log "self-check OK"
+  exit 0
+fi
+
+if declare -F recover_service_running >/dev/null 2>&1 && recover_service_running; then
+  log "stack recover suruyor — bu tick atlandi"
   exit 0
 fi
 

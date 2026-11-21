@@ -67,7 +67,7 @@ if notify_send_with_transition "send-rc" "fail" "x" "" "HTML"; then
 fi
 unset -f notify_send_message
 source "$SCRIPT_DIR/../lib/notify.sh"
-OPENBOT_JARVIS_AUTOMATION=false OPENBOT_ALERT_WEBHOOK_URL= \
+OPENBOT_JARVIS_AUTOMATION=false OPENBOT_ALERT_WEBHOOK_URL='' \
   notify_send_message "kapalı" && fail "kapalı kanal başarılı sayıldı"
 ok "HTML detail contract"
 

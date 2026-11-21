@@ -28,10 +28,7 @@ count="$(PAYLOAD="$payload" python3 -c 'import json,os; print(json.loads(os.envi
 [[ "$count" != "0" ]] || exit 0
 plain="$(PAYLOAD="$payload" python3 -c 'import json,os; print(json.loads(os.environ["PAYLOAD"]).get("plain") or "")')"
 rowid="$(PAYLOAD="$payload" python3 -c 'import json,os; print(json.loads(os.environ["PAYLOAD"]).get("max_rowid") or 0)')"
-text="Heimdall · uyarı
-Yeni cihaz
-
-${plain}"
-if notify_send_message "$text"; then
+text="$(notify_escape_html "$plain")"
+if notify_telegram "🆕 Ağda Yeni Cihaz" "$text" "netalert-new-device" "HTML"; then
   python3 "$py" --db "$db" --state "$state" --commit-rowid "$rowid" >/dev/null
 fi

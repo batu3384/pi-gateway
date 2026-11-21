@@ -30,12 +30,17 @@ else
 fi
 
 sudo mkdir -p "/etc/systemd/system/openbot.service.d"
-# 4GB: MemoryMax DNS yığınını korur. Swap tavanı zram'ın ajanlara ayrılan payı.
+# 4GB Pi: DNS yığını her zaman öncelikli (OOMScoreAdjust=300; upstream -500'ü ez).
+# MemoryMax=2200M OpenBot'un kendi host_memory_low (~1 GiB boşluk) eşiğini geçer, MemoryHigh=1800M yumuşak sınırlar.
 sudo tee /etc/systemd/system/openbot.service.d/pi-gateway.conf >/dev/null <<EOF
 [Service]
-MemoryMax=2800M
-MemorySwapMax=1536M
+MemoryHigh=1800M
+MemoryMax=2200M
+MemorySwapMax=1024M
+OOMScoreAdjust=300
 EOF
+# Saatlik otomatik güncelleme provider-runtimes sürüm uyumsuzluğu yaratabilir — kontrollü güncelleme kullan.
+sudo systemctl disable --now openbot-update.timer 2>/dev/null || true
 sudo systemctl daemon-reload
 
 sudo systemctl stop openbot.service 2>/dev/null || true

@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 # Sıfır-token filo bekçisi. Sağlıklıysa LLM yok; eşik/servis bozuksa Jarvis'e bir uyarı.
-set -u
-REMOTE_DIR="${REMOTE_DIR:-/home/${USER:-batu}/pi-gateway}"
+set -euo pipefail
+REMOTE_DIR="${REMOTE_DIR:-/home/${USER:-pi}/pi-gateway}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${SCRIPT_DIR}/../lib/env-file.sh" ]]; then
+  # shellcheck source=../lib/env-file.sh
+  source "${SCRIPT_DIR}/../lib/env-file.sh"
+  read_remote_dotenv || true
+fi
 FLEET="${OPENBOT_FLEET_ROOT:-/mnt/ssd/openbot-native/fleet}"
 HB="${FLEET}/jarvis/watchdog-heartbeat.txt"
 STATE="${FLEET}/jarvis/.watchdog-state"
@@ -12,6 +18,9 @@ TEMP_MAX=75000
 DISK_MAX=85
 
 mkdir -p "${FLEET}/jarvis"
+if [[ -f "$LOG" ]] && [[ "$(wc -l <"$LOG" 2>/dev/null || echo 0)" -gt 500 ]]; then
+  tail -n 300 "$LOG" >"${LOG}.tmp" && mv -f "${LOG}.tmp" "$LOG"
+fi
 problems=()
 
 mem_kb="$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)"
@@ -61,8 +70,9 @@ $(printf -- '- %s\n' "${problems[@]}")
 Sonraki: tanı yaz. Konteyneri yeniden başlatma. Özeti shared/system_health.md dosyasına aynı kartla işle."
 
 printf '%s\n' "$stamp alert" >>"$LOG"
+_js="${REMOTE_DIR}/scripts/pi/jarvis-send.sh"
 if REMOTE_DIR="$REMOTE_DIR" \
-  bash "${REMOTE_DIR}/scripts/pi/jarvis-send.sh" "$body" >>"$LOG" 2>&1; then
+  bash "$_js" "$body" >>"$LOG" 2>&1; then
   printf '%s %s\n' "$sig" "$now" >"$STATE"
 else
   printf '%s jarvis-send fail\n' "$stamp" >>"$LOG"

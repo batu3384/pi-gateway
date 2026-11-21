@@ -2,9 +2,26 @@
 # Pi Gateway → OpenBot Jarvis uyarı köprüsü (workflow/routine webhook).
 set -euo pipefail
 
+_openbot_jarvis_send_script() {
+  local self_dir pg cand
+  self_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  pg="${REMOTE_DIR:-${HOME}/pi-gateway}"
+  # Root systemd birimlerinde root-owned kopya once (trust boundary)
+  if [[ "$(id -u)" -eq 0 ]]; then
+    cand="${self_dir}/../pi/jarvis-send.sh"
+    [[ -x "$cand" ]] && { printf '%s' "$cand"; return 0; }
+    return 1
+  fi
+  for cand in "${pg}/scripts/pi/jarvis-send.sh" "${self_dir}/../pi/jarvis-send.sh"; do
+    [[ -x "$cand" ]] && { printf '%s' "$cand"; return 0; }
+  done
+  return 1
+}
+
 openbot_notify_enabled() {
-  [[ "${OPENBOT_JARVIS_AUTOMATION:-}" == "true" ]] && [[ -x "${REMOTE_DIR:-}/scripts/pi/jarvis-send.sh" ]] \
-    && return 0
+  if [[ "${OPENBOT_JARVIS_AUTOMATION:-}" == "true" ]] && _openbot_jarvis_send_script >/dev/null 2>&1; then
+    return 0
+  fi
   [[ -n "${OPENBOT_ALERT_WEBHOOK_URL:-}" ]]
 }
 
@@ -44,13 +61,15 @@ openbot_notify_send() {
   local parse_mode="${2:-}"
   local body plain title
   local pg="${REMOTE_DIR:-${HOME}/pi-gateway}"
-  if [[ "${OPENBOT_JARVIS_AUTOMATION:-}" == "true" && -x "${pg}/scripts/pi/jarvis-send.sh" ]]; then
+  local js_path=""
+  js_path="$(_openbot_jarvis_send_script 2>/dev/null || true)"
+  if [[ "${OPENBOT_JARVIS_AUTOMATION:-}" == "true" && -n "$js_path" ]]; then
     if [[ "$parse_mode" == "HTML" ]]; then
       plain="$(openbot_notify_plaintext "$text")"
     else
       plain="$text"
     fi
-    local js=( "${pg}/scripts/pi/jarvis-send.sh" )
+    local js=( "$js_path" )
     # Varsayılan: kuyruğa bırak (202). Timer birimleri LLM turunu bekleyemez.
     if [[ "${OPENBOT_JARVIS_WAIT_DELIVERY:-false}" == "true" ]]; then
       js+=( --wait --timeout "${OPENBOT_ALERT_WAIT_SEC:-120}" )

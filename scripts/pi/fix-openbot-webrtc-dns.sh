@@ -11,7 +11,8 @@ log() { echo "[openbot-webrtc-dns] $*"; }
 
 [[ "$(id -u)" -eq 0 ]] && die() { log "HATA: $*"; exit 1; } || die() { log "HATA: $*"; exit 1; }
 
-ip="$(dig +short "${TURN_HOST}" A 2>/dev/null | grep -E '^[0-9.]+$' | head -1)"
+_dig_out="$(dig +time=3 +tries=1 +short "${TURN_HOST}" A 2>/dev/null || true)"
+ip="$(printf '%s\n' "$_dig_out" | grep -E '^[0-9.]+$' | head -1 || true)"
 if [[ -z "$ip" ]]; then
   ip="$(getent ahostsv4 "${TURN_HOST}" 2>/dev/null | awk '{print $1; exit}')"
 fi

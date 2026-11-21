@@ -42,6 +42,7 @@ STATE_PATH = Path(os.environ.get("QUAKE_STATE", "/var/lib/pi-gateway/quake-state
 PARTIAL_WARN_PATH = STATE_PATH.with_name("quake-partial-warn.json")
 PARTIAL_WARN_MIN_SEC = int(os.environ.get("QUAKE_PARTIAL_WARN_MIN_SEC", "900"))
 AFAD = "https://deprem.afad.gov.tr/apiv2/event/filter"
+AFAD_FALLBACK = "https://servisnet.afad.gov.tr/apigateway/deprem/apiv2/event/filter"
 KANDILLI_HTTPS = "https://www.koeri.boun.edu.tr/scripts/lst0.asp"
 KANDILLI = os.environ.get(
     "QUAKE_KANDILLI_URL",
@@ -220,11 +221,20 @@ def fetch_afad() -> list[dict[str, Any]]:
         {
             "start": start.strftime("%Y-%m-%dT%H:%M:%S"),
             "end": end.strftime("%Y-%m-%dT%H:%M:%S"),
-            "minMag": min(LOCAL_MAG, 3.0),
+            "minmag": min(LOCAL_MAG, 3.0),
         }
     )
-    url = f"{AFAD}?{params}"
-    data = json.loads(_http_get(url).decode("utf-8"))
+    last_exc: Exception | None = None
+    raw_bytes: bytes | None = None
+    for base in (AFAD, AFAD_FALLBACK):
+        try:
+            raw_bytes = _http_get(f"{base}?{params}")
+            break
+        except (OSError, TimeoutError, urllib.error.URLError) as exc:
+            last_exc = exc
+    if raw_bytes is None:
+        raise last_exc or RuntimeError("AFAD unreachable")
+    data = json.loads(raw_bytes.decode("utf-8"))
     rows: list[Any]
     if isinstance(data, list):
         rows = data

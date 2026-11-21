@@ -23,14 +23,16 @@ if [[ -f /run/pi-gateway/health-last-exit.txt ]]; then
   details="$(tr '\n' '; ' < /run/pi-gateway/health-last-exit.txt | sed 's/; $//')"
 fi
 if [[ -z "$details" ]]; then
+  _jlog="$(journalctl -t pi-gateway-health -n 40 --no-pager 2>/dev/null || true)"
   details="$(
-    journalctl -t pi-gateway-health -n 40 --no-pager 2>/dev/null \
+    printf '%s\n' "$_jlog" \
       | grep -E ' FAIL ' \
       | tail -5 \
       | sed -E 's/^[^ ]+ [^ ]+ [^ ]+ [^ ]+ //; s/^pi-gateway-health\[[0-9]+\]: //' \
       | tr '\n' '; ' \
       | sed 's/; $//' || true
   )"
+  unset _jlog
 fi
 
 # SLA / SD yalniz — health-check veya check-sd-health zaten bildirdi
