@@ -31,6 +31,10 @@ run_as_needed() {
 
 usage_pct() {
   local mount="$1"
+  if [[ "$mount" != "/" ]] && ! mountpoint -q "$mount" 2>/dev/null; then
+    echo ""
+    return 0
+  fi
   df -P "$mount" 2>/dev/null | awk 'NR==2 {gsub(/%/,""); print $5}' || echo ""
 }
 
@@ -198,12 +202,15 @@ _ensure_state_dir() {
 }
 
 _install_state_file() {
-  local src="$1" dst="$2" dir
+  local src="$1" dst="$2" dir stage
   dir="$(dirname "$dst")"
+  stage="${dir}/.$(basename "$dst").tmp.$$"
   if [[ "$(id -u)" -eq 0 ]] || { [[ -d "$dir" && -w "$dir" ]] && [[ ! -e "$dst" || -w "$dst" ]]; }; then
-    install -m 644 "$src" "$dst"
+    install -m 644 "$src" "$stage"
+    mv -f "$stage" "$dst"
   else
-    run_as_needed install -m 644 "$src" "$dst"
+    run_as_needed install -m 644 "$src" "$stage"
+    run_as_needed mv -f "$stage" "$dst"
   fi
   if [[ -e "$dst" && "$(_owner_of "$dst")" != "$STATE_OWNER" ]]; then
     run_as_needed chown "${STATE_OWNER}:${STATE_OWNER}" "$dst" 2>/dev/null || true
@@ -216,6 +223,14 @@ _ensure_state_dir "$(dirname "$STATE_JSON")" ""
 _ensure_state_dir "$PUBLIC_DIR" 755
 _install_state_file "$tmp" "$METRICS_FILE"
 rm -f "$tmp"
+
+# AdGuard metriklerini state.json'dan ONCE guncelle (adguard_blocked_pct taze olsun)
+_agh_export="${SCRIPT_DIR}/export-adguard-metrics.sh"
+[[ -x "$_agh_export" ]] || _agh_export="${REMOTE_DIR}/scripts/pi/export-adguard-metrics.sh"
+if [[ -x "$_agh_export" ]]; then
+  REMOTE_DIR="$REMOTE_DIR" bash "$_agh_export" \
+    || echo "[export-state] WARN export-adguard-metrics failed" >&2
+fi
 
 json_tmp="$(mktemp)"
 python3 - "$json_tmp" "$STATE_JSON" "$ts" "$degraded" "$ssd_ok" "$docker_ssd" "${root_pct:-}" "${ssd_pct:-}" \
@@ -357,12 +372,6 @@ PY
 _install_state_file "$json_tmp" "$STATE_JSON"
 _install_state_file "$json_tmp" "$PUBLIC_STATE_JSON"
 rm -f "$json_tmp"
-_agh_export="${SCRIPT_DIR}/export-adguard-metrics.sh"
-[[ -x "$_agh_export" ]] || _agh_export="${REMOTE_DIR}/scripts/pi/export-adguard-metrics.sh"
-if [[ -x "$_agh_export" ]]; then
-  REMOTE_DIR="$REMOTE_DIR" bash "$_agh_export" \
-    || echo "[export-state] WARN export-adguard-metrics failed" >&2
-fi
 _ssd_usb_py="${SCRIPT_DIR}/../lib/ssd-usb-metrics.py"
 [[ -f "$_ssd_usb_py" ]] || _ssd_usb_py="${REMOTE_DIR}/scripts/lib/ssd-usb-metrics.py"
 if [[ -f "$_ssd_usb_py" ]]; then
@@ -401,6 +410,6 @@ if [[ "$panel_ms" =~ ^[0-9]+$ ]] && (( panel_ms > PANEL_LATENCY_WARN_MS )); then
 fi
 if [[ "$slow" -eq 1 ]]; then
   notify_latency_slow "$(hostname -s 2>/dev/null || echo pi-gateway)" "$detail" || true
-else
+elif [[ "$dns_ms" =~ ^[0-9]+$ && "$panel_ms" =~ ^[0-9]+$ ]]; then
   notify_latency_ok || true
 fi

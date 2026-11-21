@@ -103,7 +103,7 @@ fi
 if notify_enabled && ((${#bypass_lines[@]})); then
   detail="Bypass: ${bypass_count} cihaz — %${pct} kapsam"
   action="$(printf '%s\n' "${bypass_lines[@]}" | head -5 | tr '\n' ' · ')"
-  action="${action} · Android Ozel DNS kapali · make remediate-dns"
+  action="$(notify_escape_html "$action") · Android Ozel DNS kapali · make remediate-dns"
   body="$(notify_html_alert "$detail" "$action")"
   notify_telegram "📡 DNS Kapsam" "$body" "dns-remediate" "HTML" || log "WARN: Telegram"
 fi

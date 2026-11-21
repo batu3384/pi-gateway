@@ -160,9 +160,9 @@ grep -q '"budgets"' "$PROJECT_DIR/config/adguard/filter-lists.json" \
 python3 -m json.tool "$PROJECT_DIR/config/adguard/filter-lists.json" >/dev/null \
   || die "filter-lists.json gecersiz JSON"
 grep -q '@latest' "$PROJECT_DIR/config/adguard/filter-lists.json" \
-  && die "filter-lists.json @latest pin yok"
-grep -q 'e681da879e1b4aaed4962170d0e278d6817542df' "$PROJECT_DIR/config/adguard/filter-lists.json" \
-  || die "filter-lists.json HaGeZi SHA pin yok"
+  && die "filter-lists.json @latest yasak (jsDelivr 403/kararsiz)"
+grep -q 'raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/' "$PROJECT_DIR/config/adguard/filter-lists.json" \
+  || die "filter-lists.json HaGeZi guncel main raw URL yok"
 grep -q 'ADGUARD_CACHE_TTL_MIN=60' "$PROJECT_DIR/.env.example" \
   || die ".env.example ADGUARD_CACHE_TTL_MIN=60 yok"
 grep -q 'ADGUARD_CACHE_TTL_MIN:60' "$PROJECT_DIR/scripts/pi/ensure-dns-perf-profile.sh" \

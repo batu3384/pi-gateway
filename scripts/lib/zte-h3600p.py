@@ -326,6 +326,8 @@ def merge_devices(devices: list[dict[str, Any]]) -> list[dict[str, Any]]:
             if value not in ("", None, "unknown"):
                 if field == "name" and current.get("name"):
                     continue
+                if field == "active" and current.get("active") is True and value is False:
+                    continue
                 current[field] = value
         current.setdefault("source", device.get("source", "zte"))
     result = []
@@ -354,7 +356,10 @@ class ZteH3600P:
         self.session_token = ""
         self.logged_in = False
         self.guid = int(time.time() * 1000)
-        handlers: list[Any] = [urllib.request.HTTPCookieProcessor(CookieJar())]
+        handlers: list[Any] = [
+            urllib.request.ProxyHandler({}),
+            urllib.request.HTTPCookieProcessor(CookieJar()),
+        ]
         if self.base_url.lower().startswith("https://"):
             ca_file = os.environ.get("MODEM_TLS_CA_FILE", "").strip()
             if ca_file:
@@ -511,6 +516,7 @@ class ZteH3600P:
         token = _page_session_token(html) or self.session_token
         if not token:
             raise AdapterError("lan dhcp session token empty")
+        self.session_token = token
         group_xml = self.request(
             "/",
             params={

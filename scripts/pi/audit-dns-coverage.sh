@@ -135,7 +135,11 @@ def parse_neigh():
         if len(parts) < 2:
             continue
         ip, state = parts[0], parts[-1]
-        llmac = parts[parts.index("lladdr") + 1].lower() if "lladdr" in parts else ""
+        llmac = ""
+        if "lladdr" in parts:
+            ll_idx = parts.index("lladdr") + 1
+            if ll_idx < len(parts):
+                llmac = parts[ll_idx].lower()
         if ":" in ip and llmac:
             try:
                 ipv6_macs[str(ipaddress.ip_address(ip))] = llmac
@@ -217,12 +221,22 @@ def load_names():
                         txt = str(last_seen).strip()
                         if txt:
                             from datetime import datetime
+                            now_cmp = datetime.now(timezone.utc).timestamp()
                             try:
-                                ts = datetime.fromisoformat(txt.replace("Z", "+00:00")).timestamp()
+                                parsed_dt = datetime.fromisoformat(txt.replace("Z", "+00:00"))
+                                if parsed_dt.tzinfo is None:
+                                    ts_local = parsed_dt.timestamp()
+                                    ts_utc = parsed_dt.replace(tzinfo=timezone.utc).timestamp()
+                                    ts = ts_utc if ts_local > now_cmp + 300 else ts_local
+                                else:
+                                    ts = parsed_dt.timestamp()
                             except ValueError:
                                 for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
                                     try:
-                                        ts = datetime.strptime(txt, fmt).timestamp()
+                                        parsed_dt = datetime.strptime(txt, fmt)
+                                        ts_local = parsed_dt.timestamp()
+                                        ts_utc = parsed_dt.replace(tzinfo=timezone.utc).timestamp()
+                                        ts = ts_utc if ts_local > now_cmp + 300 else ts_local
                                         break
                                     except ValueError:
                                         pass

@@ -182,13 +182,22 @@ def validate_source_sample(sample: str, url: str) -> None:
         raise RuntimeError("empty or HTML response")
     if not re.search(r"(?m)^\s*(?:!|#|0\.0\.0\.0|127\.0\.0\.1|::|@@?\|\||\|\|)", sample):
         raise RuntimeError("filter syntax marker not found")
-    lines = [ln for ln in sample.splitlines() if ln.strip() and not ln.strip().startswith("#")]
+    lines = [
+        ln.strip()
+        for ln in sample.splitlines()
+        if ln.strip() and not ln.strip().startswith(("#", "!"))
+    ]
     if len(lines) < 3:
         raise RuntimeError("sample too small")
-    regex_rules = sum(1 for ln in lines if ln.strip().startswith("/") and ln.strip().endswith("/"))
+    regex_rules = sum(1 for ln in lines if ln.startswith("/") and ln.endswith("/"))
     if regex_rules > max(20, len(lines) // 4):
         raise RuntimeError(f"regex-heavy sample ({regex_rules}/{len(lines)})")
-    broad = sum(1 for ln in lines if re.search(r"\|\|[^|^]+/\^", ln))
+    broad = sum(
+        1
+        for ln in lines
+        if re.search(r"\|\|[^|^]+/\^", ln)
+        or re.match(r"^\|\|(?:\*|[a-z0-9-]+)\^$", ln, re.I)
+    )
     if broad > max(10, len(lines) // 10):
         raise RuntimeError(f"broad-domain sample ({broad}/{len(lines)})")
 
@@ -196,8 +205,9 @@ def validate_source_sample(sample: str, url: str) -> None:
 def source_line_delta_limit(
     old_lines: int, source_metadata: dict[str, Any] | None = None
 ) -> int:
-    expected_max_lines = _int_or_zero((source_metadata or {}).get("max_rules")) * 2
-    return max(500, old_lines // 2, expected_max_lines)
+    # Buyuk ani kesinti/zehirlenmeyi yakala: onceki satir sayisinin %50'si (taban 500)
+    _ = source_metadata
+    return max(500, old_lines // 2)
 
 
 class _NoRedirect(HTTPRedirectHandler):
@@ -1088,7 +1098,17 @@ def self_check() -> None:
         "||ads.example^\n||tracker.example^\n||bad.example^\n",
         "https://example.test/list.txt",
     )
-    assert source_line_delta_limit(4687, {"max_rules": 4000000}) == 8000000
+    try:
+        validate_source_sample(
+            "\n".join(["||com^"] * 12) + "\n",
+            "https://example.test/broad.txt",
+        )
+    except RuntimeError as exc:
+        assert "broad-domain" in str(exc)
+    else:
+        raise AssertionError("broad TLD rule sample accepted")
+    assert source_line_delta_limit(4687, {"max_rules": 4000000}) == 2343
+    assert source_line_delta_limit(100, {"max_rules": 4000000}) == 500
     bad = {"filters": [{"url": "https://example.test/list.txt", "enabled": False, "rules_count": 0}]}
     errors, _ = validate_filter_status(
         bad, [("Test", "https://example.test/list.txt")], sample_meta

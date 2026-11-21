@@ -114,9 +114,11 @@ def query_dot(q: bytes) -> bytes:
     payload = struct.pack("!H", len(q)) + q
     last_err: OSError | None = None
     for host, port, sni in UPSTREAMS:
+        raw: socket.socket | None = None
         try:
             raw = socket.create_connection((host, port), timeout=DOT_TIMEOUT)
             tls = _SSL_CTX.wrap_socket(raw, server_hostname=sni)
+            raw = None
             with tls:
                 tls.settimeout(DOT_TIMEOUT)
                 tls.sendall(payload)
@@ -137,24 +139,35 @@ def query_dot(q: bytes) -> bytes:
                     body += chunk
                 return body
         except OSError as exc:
+            if raw is not None:
+                try:
+                    raw.close()
+                except OSError:
+                    pass
             last_err = exc
     if last_err is not None:
         raise last_err
     return b""
 
 
-def _handle_udp(sock: socket.socket, data: bytes, src: tuple) -> None:
-    host = src[0]
+def _client_allowed(host: str) -> bool:
     if host.startswith("::ffff:"):
         host = host[7:]
-    if not allowed(host):
+    return allowed(host)
+
+
+def _handle_udp(sock: socket.socket, data: bytes, src: tuple) -> None:
+    if not _client_allowed(src[0]):
         return
     try:
         ans = _answer(data)
     except OSError:
-        return
+        ans = servfail(data)
     if ans:
-        sock.sendto(ans, src)
+        try:
+            sock.sendto(ans, src)
+        except OSError:
+            pass
 
 
 def _tcp_busy(conn: socket.socket) -> None:
@@ -310,6 +323,8 @@ def serve() -> int:
                 try:
                     data, src = sock.recvfrom(MAX_DNS)
                 except OSError:
+                    continue
+                if not _client_allowed(src[0]):
                     continue
                 if not _spawn(_handle_udp, (sock, data, src)):
                     fail = servfail(data)

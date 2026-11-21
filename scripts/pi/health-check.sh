@@ -91,10 +91,10 @@ if [[ "${DOCKER_OK}" == "1" ]] && [[ "$STACK_AUTO_RECOVER" == "true" ]] && {
 fi
 if [[ "${DOCKER_INVENTORY}" == "1" ]]; then
 _DOCKER_PS="$(docker ps --format '{{.Names}} {{.Status}}' 2>/dev/null || true)"
-if ! grep -qE '^unbound ' <<<"$_DOCKER_PS"; then
+if ! grep -qE '^unbound Up' <<<"$_DOCKER_PS"; then
   note_fail "container unbound down"
 fi
-if ! grep -qE '^adguard ' <<<"$_DOCKER_PS"; then
+if ! grep -qE '^adguard Up' <<<"$_DOCKER_PS"; then
   note_fail "container adguard down"
 fi
 if storage_degraded; then
@@ -102,7 +102,7 @@ if storage_degraded; then
   [[ -d "${REMOTE_DIR}/data" && ! -L "${REMOTE_DIR}/data" ]] || note_fail "storage-degraded-data-missing"
 else
   if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
-    if ! grep -qE '^caddy ' <<<"$_DOCKER_PS"; then
+    if ! grep -qE '^caddy Up' <<<"$_DOCKER_PS"; then
       note_fail "container caddy down"
     fi
     if ! stack_gateway_ok; then
@@ -112,7 +112,7 @@ else
   if is_ssd_root_mode; then
     root_on_ssd || note_fail "root-still-on-sd-mmcblk"
     [[ -d "${REMOTE_DIR}/data" && ! -L "${REMOTE_DIR}/data" ]] || note_fail "data-native-missing"
-  elif [[ "$STORAGE_TYPE" == "hybrid" || "$STORAGE_TYPE" == "ssd-data" ]]; then
+  elif [[ "${STORAGE_TYPE:-hybrid}" == "hybrid" || "${STORAGE_TYPE:-hybrid}" == "ssd-data" ]]; then
     if [[ ! -L "${REMOTE_DIR}/data" ]] || [[ "$(readlink -f "${REMOTE_DIR}/data")" != "/mnt/ssd/pi-gateway-data" ]]; then
       if declare -F ssd_mount_healthy >/dev/null 2>&1 && ssd_mount_healthy; then
         note_fail "data-ssd-symlink-broken"
@@ -152,16 +152,19 @@ else
     fi
     if grep -qE '^netalertx ' <<<"$_DOCKER_PS"; then
       _na_started="$(docker inspect -f '{{.State.StartedAt}}' netalertx 2>/dev/null || true)"
-      # Eski log (ayni container ID) her tick stop+start yapmasin
-      if [[ -n "$_na_started" ]] \
-        && docker logs netalertx --since "$_na_started" 2>&1 \
-          | grep -q 'database disk image is malformed'; then
+      # Eski log (ayni container ID) her tick stop+start yapmasin (SIGPIPE guvenli capture)
+      _na_logs=""
+      if [[ -n "$_na_started" ]]; then
+        _na_logs="$(docker logs netalertx --since "$_na_started" 2>&1 || true)"
+      fi
+      if [[ -n "$_na_logs" ]] && grep -q 'database disk image is malformed' <<<"$_na_logs"; then
         logger -t "$LOG_TAG" "netalertx sqlite malformed — stop+karantina"
         docker stop netalertx >/dev/null 2>&1 || true
         [[ -x "$heal" ]] && bash "$heal" || true
       fi
-      unset _na_started
-      docker ps --format '{{.Names}}' | grep -q '^netalertx$' && return 0
+      unset _na_started _na_logs
+      _na_names="$(docker ps --format '{{.Names}}' 2>/dev/null || true)"
+      grep -qx 'netalertx' <<<"$_na_names" && return 0
     fi
     if [[ -x "$heal" ]]; then
       logger -t "$LOG_TAG" "netalertx down — db integrity + start"
@@ -169,7 +172,8 @@ else
     fi
     docker start netalertx >/dev/null 2>&1 || true
     sleep 2
-    docker ps --format '{{.Names}}' | grep -q '^netalertx$' && return 0
+    _na_names="$(docker ps --format '{{.Names}}' 2>/dev/null || true)"
+    grep -qx 'netalertx' <<<"$_na_names" && return 0
     note_fail "optional-netalertx-down"
   }
   [[ "${ENABLE_NETALERTX:-true}" == "true" ]] && optional_netalertx_ok
@@ -235,10 +239,11 @@ if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qx adguard; then
   unset _agh_logs _agh_health _agh_started _bbolt _bbolt_rc
 fi
 adguard_dns_ok() {
-  local aaaa
-  dig +time=2 +tries=1 @"${PI_STATIC_IP}" cloudflare.com A >/dev/null 2>&1 \
-    && dig +time=2 +tries=1 @"${PI_STATIC_IP}" doubleclick.net A 2>/dev/null | grep -Eq '0\.0\.0\.0|127\.0\.0\.0|NXDOMAIN' \
-    || return 1
+  local cf_out blk_out aaaa
+  cf_out="$(dig +time=2 +tries=1 @"${PI_STATIC_IP}" cloudflare.com A 2>/dev/null || true)"
+  grep -q 'status: NOERROR' <<<"$cf_out" || return 1
+  blk_out="$(dig +time=2 +tries=1 @"${PI_STATIC_IP}" doubleclick.net A 2>/dev/null || true)"
+  grep -Eq '0\.0\.0\.0|127\.0\.0\.1|NXDOMAIN' <<<"$blk_out" || return 1
   aaaa="$(dig +time=2 +tries=1 +short @"${PI_STATIC_IP}" doubleclick.net AAAA 2>/dev/null || true)"
   aaaa="${aaaa%%$'\n'*}"
   [[ -z "$aaaa" || "$aaaa" == "::" || "$aaaa" == "::1" ]] || return 1
@@ -247,6 +252,34 @@ adguard_dns_ok() {
     aaaa="${aaaa%%$'\n'*}"
     [[ -z "$aaaa" ]]
   fi
+}
+agh_dns_config_ok() {
+  local base="$1" cookie="$2"
+  ADGUARD_BLOCKED_TTL="${ADGUARD_BLOCKED_TTL:-300}" \
+  ADGUARD_RATELIMIT_SUBNET_IPV4="${ADGUARD_RATELIMIT_SUBNET_IPV4:-32}" \
+  ADGUARD_RATELIMIT_SUBNET_IPV6="${ADGUARD_RATELIMIT_SUBNET_IPV6:-128}" \
+  ADGUARD_UPSTREAM_TIMEOUT="${ADGUARD_UPSTREAM_TIMEOUT:-2}" \
+  ADGUARD_CACHE_TTL_MIN="${ADGUARD_CACHE_TTL_MIN:-60}" \
+  ADGUARD_AAAA_DISABLED="${ADGUARD_AAAA_DISABLED:-true}" \
+  agh_dns_info "$base" "$cookie" | python3 -c "
+import json, os, sys
+d = json.load(sys.stdin)
+upstream = d.get('upstream_dns') or []
+udp_ok = any(str(u).startswith('udp://127.0.0.1:') for u in upstream)
+tcp_off = not any(str(u).startswith('tcp://') for u in upstream)
+ptr_ok = d.get('use_private_ptr_resolvers') is False
+ttl_ok = d.get('blocked_response_ttl') == int(os.environ['ADGUARD_BLOCKED_TTL'])
+v4_ok = int(d.get('ratelimit_subnet_len_ipv4') or 0) == int(os.environ['ADGUARD_RATELIMIT_SUBNET_IPV4'])
+v6_ok = int(d.get('ratelimit_subnet_len_ipv6') or 0) == int(os.environ['ADGUARD_RATELIMIT_SUBNET_IPV6'])
+opt_ok = d.get('cache_optimistic') is True
+to_ok = int(d.get('upstream_timeout') or 0) == int(os.environ['ADGUARD_UPSTREAM_TIMEOUT'])
+ttl_min_ok = int(d.get('cache_ttl_min') or 0) == int(os.environ['ADGUARD_CACHE_TTL_MIN'])
+aaaa_want = os.environ['ADGUARD_AAAA_DISABLED'].lower() in ('true', '1', 'yes')
+aaaa_ok = bool(d.get('disable_ipv6')) is aaaa_want
+fb = [str(u) for u in (d.get('fallback_dns') or [])]
+fb_ok = 'tls://1.1.1.2' in fb and 'tls://9.9.9.9' in fb
+print('1' if udp_ok and tcp_off and ptr_ok and ttl_ok and v4_ok and v6_ok and opt_ok and to_ok and ttl_min_ok and aaaa_ok and fb_ok else '0')
+" 2>/dev/null || echo 0
 }
 if ! adguard_dns_ok; then
   sleep 1
@@ -267,6 +300,7 @@ if ! agh_rewrite_ok; then
 fi
 if [[ -n "${AGH_ADMIN_PASSWORD:-}" ]] && agh_rewrite_ok; then
   COOKIE="$(mktemp)"
+  trap 'rm -f "${COOKIE:-}"' EXIT
   BASE="http://127.0.0.1:${ADGUARD_WEB_PORT}"
   _filters_py="${SCRIPT_DIR}/../lib/adguard-filters.py"
   [[ -f "$_filters_py" ]] || _filters_py="${REMOTE_DIR}/scripts/lib/adguard-filters.py"
@@ -310,25 +344,7 @@ print('1' if d.get('enabled') is True else '0')
 import json,sys
 print(len(json.load(sys.stdin)))
 " 2>/dev/null || echo 0)"
-    dns_ok="$(agh_dns_info "$BASE" "$COOKIE" | python3 -c "
-import json,sys
-d=json.load(sys.stdin)
-upstream = d.get('upstream_dns') or []
-udp_ok = any(u.startswith('udp://127.0.0.1:') for u in upstream)
-tcp_off = not any(str(u).startswith('tcp://') for u in upstream)
-ptr_ok = d.get('use_private_ptr_resolvers') is False
-ttl_ok = d.get('blocked_response_ttl') == int('${ADGUARD_BLOCKED_TTL:-300}')
-v4_ok = int(d.get('ratelimit_subnet_len_ipv4') or 0) == int('${ADGUARD_RATELIMIT_SUBNET_IPV4:-32}')
-v6_ok = int(d.get('ratelimit_subnet_len_ipv6') or 0) == int('${ADGUARD_RATELIMIT_SUBNET_IPV6:-128}')
-opt_ok = d.get('cache_optimistic') is True
-to_ok = int(d.get('upstream_timeout') or 0) == int('${ADGUARD_UPSTREAM_TIMEOUT:-2}')
-ttl_min_ok = int(d.get('cache_ttl_min') or 0) == int('${ADGUARD_CACHE_TTL_MIN:-60}')
-aaaa_want = '${ADGUARD_AAAA_DISABLED:-true}'.lower() in ('true','1','yes')
-aaaa_ok = bool(d.get('disable_ipv6')) is aaaa_want
-fb = [str(u) for u in (d.get('fallback_dns') or [])]
-fb_ok = 'tls://1.1.1.2' in fb and 'tls://9.9.9.9' in fb
-print('1' if udp_ok and tcp_off and ptr_ok and ttl_ok and v4_ok and v6_ok and opt_ok and to_ok and ttl_min_ok and aaaa_ok and fb_ok else '0')
-" 2>/dev/null || echo 0)"
+    dns_ok="$(agh_dns_config_ok "$BASE" "$COOKIE")"
     if [[ -f "$_filter_in_progress" ]]; then
       _ip_now="$(date +%s)"
       _ip_mt="$(stat -c %Y "$_filter_in_progress" 2>/dev/null || echo 0)"
@@ -357,7 +373,7 @@ print('1' if udp_ok and tcp_off and ptr_ok and ttl_ok and v4_ok and v6_ok and op
           systemctl reset-failed pi-gateway-adguard-filters.service 2>/dev/null || true
         fi
       else
-        if [[ "${ADGUARD_AUTO_HEAL:-true}" == "true" ]]; then
+        if [[ "${ADGUARD_AUTO_HEAL:-false}" == "true" ]]; then
           logger -t "$LOG_TAG" "adguard-filter-governance — auto-heal (filters)"
           if ! ADGUARD_FILTER_FORCE_REFRESH=true REMOTE_DIR="$REMOTE_DIR" \
             bash "$(_pi_home_script apply-adguard-filters.sh)"; then
@@ -388,25 +404,7 @@ print(sum((f.get('rules_count') or 0) for f in d.get('filters',[])))
         if ! REMOTE_DIR="$REMOTE_DIR" bash "$(_pi_home_script apply-adguard-dns.sh)"; then
           logger -t "$LOG_TAG" "WARN adguard dns auto-heal basarisiz"
         fi
-        dns_ok="$(agh_dns_info "$BASE" "$COOKIE" | python3 -c "
-import json,sys
-d=json.load(sys.stdin)
-upstream = d.get('upstream_dns') or []
-udp_ok = any(u.startswith('udp://127.0.0.1:') for u in upstream)
-tcp_off = not any(str(u).startswith('tcp://') for u in upstream)
-ptr_ok = d.get('use_private_ptr_resolvers') is False
-ttl_ok = d.get('blocked_response_ttl') == int('${ADGUARD_BLOCKED_TTL:-300}')
-v4_ok = int(d.get('ratelimit_subnet_len_ipv4') or 0) == int('${ADGUARD_RATELIMIT_SUBNET_IPV4:-32}')
-v6_ok = int(d.get('ratelimit_subnet_len_ipv6') or 0) == int('${ADGUARD_RATELIMIT_SUBNET_IPV6:-128}')
-opt_ok = d.get('cache_optimistic') is True
-to_ok = int(d.get('upstream_timeout') or 0) == int('${ADGUARD_UPSTREAM_TIMEOUT:-2}')
-ttl_min_ok = int(d.get('cache_ttl_min') or 0) == int('${ADGUARD_CACHE_TTL_MIN:-60}')
-aaaa_want = '${ADGUARD_AAAA_DISABLED:-true}'.lower() in ('true','1','yes')
-aaaa_ok = bool(d.get('disable_ipv6')) is aaaa_want
-fb = [str(u) for u in (d.get('fallback_dns') or [])]
-fb_ok = 'tls://1.1.1.2' in fb and 'tls://9.9.9.9' in fb
-print('1' if udp_ok and tcp_off and ptr_ok and ttl_ok and v4_ok and v6_ok and opt_ok and to_ok and ttl_min_ok and aaaa_ok and fb_ok else '0')
-" 2>/dev/null || echo 0)"
+        dns_ok="$(agh_dns_config_ok "$BASE" "$COOKIE")"
       fi
       [[ "$dns_ok" == "1" ]] || note_fail "adguard-dns-config-drift"
     }
@@ -514,6 +512,18 @@ if [[ "$drill_max" != "0" ]] && [[ "${ENABLE_RESTIC:-true}" == "true" ]] && ! st
     fi
   fi
 fi
+# Failed Pi Gateway systemd unitleri gorunur kalsin (boot-notify vb. sessizce kalmasin)
+_failed_units="$(systemctl --failed --no-legend --plain 2>/dev/null \
+  | awk '{print $1}' \
+  | grep -E '^(pi-gateway-|pi-ssd-|pi-data-)' \
+  | grep -Ev '^(pi-gateway-health\.service|pi-gateway-adguard-filters\.service|pi-gateway-backup\.service)$' || true)"
+if [[ -n "$_failed_units" ]]; then
+  while IFS= read -r _fu; do
+    [[ -n "$_fu" ]] || continue
+    note_fail "optional-failed-unit(${_fu})"
+  done <<<"$_failed_units"
+fi
+unset _failed_units _fu
 _reap_sh="$SCRIPT_DIR/../lib/reap-dead-docker-scopes.sh"
 if [[ -f "$_reap_sh" ]]; then
   # shellcheck source=../lib/reap-dead-docker-scopes.sh
@@ -679,7 +689,7 @@ DISK_PRUNE_PCT="${DISK_PRUNE_PCT:-65}"
 INODE_WARN_PCT="${INODE_WARN_PCT:-80}"
 MEM_WARN_MB="${MEM_WARN_MB:-128}"
 for mount in / /mnt/ssd; do
-  if [[ -d "$mount" ]]; then
+  if [[ "$mount" == "/" ]] || mountpoint -q "$mount" 2>/dev/null; then
     _mount_bad=0
     usage="$(df -P "$mount" 2>/dev/null | awk 'NR==2 {gsub(/%/,""); print $5}')"
     if [[ -n "${usage:-}" && "$usage" =~ ^[0-9]+$ ]] && (( 10#$usage >= DISK_WARN_PCT )); then

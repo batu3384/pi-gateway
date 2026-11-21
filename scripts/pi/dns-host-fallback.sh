@@ -90,6 +90,27 @@ cmd_ensure() {
     cmd_stop 1
     return 0
   fi
+  # :53 deadlock kirici — fallback :53 tutarken AdGuard Restarting ise kisa devir dene
+  if systemctl is-active --quiet "$UNIT" 2>/dev/null && ! docker_overlay_at_risk; then
+    if timeout 5 /usr/bin/docker info >/dev/null 2>&1; then
+      local agh_restarting
+      agh_restarting="$(timeout 5 /usr/bin/docker inspect -f '{{.State.Restarting}}' adguard 2>/dev/null || echo false)"
+      if [[ "$agh_restarting" == "true" ]]; then
+        log "AdGuard Restarting + fallback aktif — :53 devri deneniyor"
+        cmd_stop 1
+        timeout 8 /usr/bin/docker restart adguard >/dev/null 2>&1 || true
+        local _i
+        for _i in 1 2 3 4 5 6 7 8; do
+          if agh_rewrite_ok; then
+            log "AdGuard :53 devri basarili"
+            return 0
+          fi
+          sleep 1
+        done
+        log "WARN AdGuard :53 devri basarisiz — fallback geri aciliyor"
+      fi
+    fi
+  fi
   cmd_start
 }
 

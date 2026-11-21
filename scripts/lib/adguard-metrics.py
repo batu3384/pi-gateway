@@ -16,9 +16,11 @@ def parse_ts(raw: Any) -> float | None:
     s = raw.strip().replace("Z", "+00:00")
     s = re.sub(r"(\.\d{6})\d+", r"\1", s)
     try:
-        return datetime.fromisoformat(s).timestamp()
+        ts = datetime.fromisoformat(s).timestamp()
     except ValueError:
         return None
+    # Go zero-time ("0001-01-01T00:00:00Z") veya < 2000-01-01 gecersiz kabul et
+    return ts if ts >= 946684800 else None
 
 
 def esc(label: str) -> str:
@@ -137,10 +139,17 @@ def render(
         "# HELP pi_gateway_adguard_filter_updated_timestamp_seconds Filter last_updated unix seconds",
         "# TYPE pi_gateway_adguard_filter_updated_timestamp_seconds gauge",
     ]
+    seen_filter_names: dict[str, int] = {}
     for item in status.get("filters") or []:
         if not isinstance(item, dict):
             continue
-        name = esc(str(item.get("name") or item.get("url") or "unknown"))
+        base_name = str(item.get("name") or item.get("url") or "unknown")
+        count = seen_filter_names.get(base_name, 0) + 1
+        seen_filter_names[base_name] = count
+        if count > 1:
+            suffix = item.get("id") if item.get("id") is not None else count
+            base_name = f"{base_name} #{suffix}"
+        name = esc(base_name)
         rules = int(item.get("rules_count") or 0)
         enabled = 1 if item.get("enabled") else 0
         lines.append(f'pi_gateway_adguard_filter_rules{{name="{name}"}} {rules}')
@@ -204,6 +213,18 @@ def self_check() -> None:
     assert "pi_gateway_adguard_filter_last_success_timestamp_seconds" in text
     quoted = render(1, {}, {"filters": [{"name": 'a"b', "rules_count": 1, "enabled": False}]})
     assert 'name="a\\"b"' in quoted
+    assert parse_ts("0001-01-01T00:00:00Z") is None
+    dup_out = render(
+        1,
+        {},
+        {
+            "filters": [
+                {"id": 1, "name": "Same", "rules_count": 10, "enabled": True},
+                {"id": 2, "name": "Same", "rules_count": 20, "enabled": True},
+            ]
+        },
+    )
+    assert 'name="Same"' in dup_out and 'name="Same #2"' in dup_out
     assert "pi_gateway_adguard_up 0" in render(0, {}, {})
     print("[adguard-metrics] self-check OK")
 

@@ -40,12 +40,16 @@ log() { echo "[adguard-filters] $*"; }
 
 COOKIE="$(mktemp)"
 FILTER_LOCK_FD=""
+LOCK_HELD=0
 cleanup() {
   rm -f "$COOKIE"
+  if [[ "${LOCK_HELD:-0}" -eq 1 ]]; then
+    runtime_rm "$IN_PROGRESS_FILE" 2>/dev/null || true
+  fi
   if [[ -n "${FILTER_LOCK_FD:-}" ]]; then
     flock -u "$FILTER_LOCK_FD" 2>/dev/null || true
+    exec {FILTER_LOCK_FD}>&- 2>/dev/null || true
   fi
-  runtime_rm "$IN_PROGRESS_FILE" 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -80,12 +84,22 @@ fi
 
 ensure_runtime_dir
 touch "$LOCK_FILE" 2>/dev/null || sudo touch "$LOCK_FILE"
+_lock_owner="${PI_USER:-${SUDO_USER:-${USER:-}}}"
+if [[ -z "$_lock_owner" || "$_lock_owner" == "root" ]] && [[ "$REMOTE_DIR" =~ /home/([^/]+)/ ]]; then
+  _lock_owner="${BASH_REMATCH[1]}"
+fi
+if [[ -n "$_lock_owner" && "$_lock_owner" != "root" ]]; then
+  chown "${_lock_owner}:${_lock_owner}" "$LOCK_FILE" 2>/dev/null \
+    || sudo chown "${_lock_owner}:${_lock_owner}" "$LOCK_FILE" 2>/dev/null || true
+fi
+unset _lock_owner
 chmod 664 "$LOCK_FILE" 2>/dev/null || sudo chmod 664 "$LOCK_FILE" 2>/dev/null || true
 exec {FILTER_LOCK_FD}>>"$LOCK_FILE"
 flock -w "$LOCK_WAIT_SEC" "$FILTER_LOCK_FD" || {
   log "HATA: baska filtre apply calisiyor (lock timeout ${LOCK_WAIT_SEC}s)" >&2
   exit 1
 }
+LOCK_HELD=1
 runtime_write "$IN_PROGRESS_FILE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 export BASE COOKIE REMOTE_DIR ADGUARD_FILTER_PROFILE

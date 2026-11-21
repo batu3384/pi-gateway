@@ -130,7 +130,7 @@ def load_client_aliases(path: str) -> dict[str, str]:
 
 def load_neigh_ips(iface: str = "eth0") -> tuple[dict[str, str], dict[str, list[str]]]:
     """Read kernel ARP/NDP neighbors to correlate active MACs with IPv4 and IPv6."""
-    ipv4_by_mac: dict[str, str] = {}
+    ipv4_ranked: dict[str, list[tuple[int, str]]] = {}
     ipv6_ranked: dict[str, list[tuple[int, str]]] = {}
     try:
         out = subprocess.check_output(
@@ -142,7 +142,7 @@ def load_neigh_ips(iface: str = "eth0") -> tuple[dict[str, str], dict[str, list[
     except (OSError, subprocess.SubprocessError):
         return {}, {}
 
-    priority = {"REACHABLE": 0, "DELAY": 1, "STALE": 2, "PROBE": 3}
+    priority = {"REACHABLE": 0, "DELAY": 1, "PROBE": 2, "STALE": 3}
     for line in out.splitlines():
         parts = line.split()
         if len(parts) < 3 or "lladdr" not in parts:
@@ -162,9 +162,14 @@ def load_neigh_ips(iface: str = "eth0") -> tuple[dict[str, str], dict[str, list[
             continue
         addr = ipaddress.ip_address(ip_norm)
         if addr.version == 4:
-            ipv4_by_mac.setdefault(mac, ip_norm)
+            ipv4_ranked.setdefault(mac, []).append((rank, ip_norm))
         elif addr.version == 6 and not addr.is_multicast:
             ipv6_ranked.setdefault(mac, []).append((rank, ip_norm))
+
+    ipv4_by_mac: dict[str, str] = {}
+    for mac, items4 in ipv4_ranked.items():
+        items4.sort(key=lambda pair: (pair[0], pair[1]))
+        ipv4_by_mac[mac] = items4[0][1]
 
     ipv6s_by_mac: dict[str, list[str]] = {}
     for mac, items in ipv6_ranked.items():
@@ -301,16 +306,18 @@ def plan_sync(
                     if owner_by_id.get(cid_low) == key:
                         owner_by_id.pop(cid_low, None)
 
+    claimed_existing: set[str] = set()
+
     def find_match(name: str, target_ids: list[str]) -> dict[str, Any] | None:
         match = existing_by_name.get(name.lower())
-        if match is not None:
+        if match is not None and str(match["name"]).lower() not in claimed_existing:
             return match
         ordered = [c for c in target_ids if not _is_plain_ip(c)] + [
             c for c in target_ids if _is_plain_ip(c)
         ]
         for cid in ordered:
             owner = owner_by_id.get(cid.lower())
-            if owner and owner in existing_by_name:
+            if owner and owner in existing_by_name and owner not in claimed_existing:
                 return existing_by_name[owner]
         return None
 
@@ -318,6 +325,8 @@ def plan_sync(
     for spec in desired_clients:
         target_ids = spec["ids"]
         match = find_match(spec["name"], target_ids)
+        if match is not None:
+            claimed_existing.add(str(match["name"]).lower())
         target_ips = {c.lower() for c in target_ids if _is_plain_ip(c)}
         has_mac = any(":" in c and "/" not in c and _normalise_mac(c) for c in target_ids)
         if (fresh or spec.get("name", "").lower() == "pi gateway") and match is not None and (
@@ -430,8 +439,31 @@ def plan_sync(
                     progressed = True
                     break
             if not progressed:
-                ordered_updates.extend(remaining)
-                break
+                # 2-fazli IP-swap dongu kirici: bir istemcinin cakisan IP'lerini gecici bosalt
+                broke_cycle = False
+                for idx, (o_name, upd) in enumerate(remaining):
+                    cur_ids_list = [
+                        str(x).strip()
+                        for x in (
+                            next(
+                                (c.get("ids") or [] for c in existing_clients if str(c.get("name") or "").strip() == o_name),
+                                upd.get("ids") or [],
+                            )
+                        )
+                        if str(x).strip()
+                    ]
+                    non_ip_ids = [x for x in cur_ids_list if not _is_plain_ip(x)]
+                    if non_ip_ids:
+                        temp_upd = dict(upd)
+                        temp_upd["name"] = o_name
+                        temp_upd["ids"] = non_ip_ids
+                        ordered_updates.append((o_name, temp_upd))
+                        held_now[o_name] = {x.lower() for x in non_ip_ids}
+                        broke_cycle = True
+                        break
+                if not broke_cycle:
+                    ordered_updates.extend(remaining)
+                    break
         to_update = ordered_updates
 
     return to_delete, to_add, to_update
@@ -546,6 +578,43 @@ def self_check() -> None:
     assert upd_map["laptop-a"]["ids"] == ["aa:bb:cc:dd:ee:01", "192.0.2.59"], upd_map
     assert upd_map["laptop-a"]["use_global_settings"] is False
     assert upd_map["phone-b"]["ids"] == ["bb:cc:dd:ee:ff:02", "192.0.2.51"], upd_map
+
+    # 2-way IP swap cycle: A holds .61 -> wants .62, B holds .62 -> wants .61
+    inv_swap = {
+        "fresh": True,
+        "devices": [
+            {"name": "dev-a", "ip": "192.0.2.62", "mac": "aa:bb:cc:dd:ee:61"},
+            {"name": "dev-b", "ip": "192.0.2.61", "mac": "bb:cc:dd:ee:ff:62"},
+        ],
+    }
+    existing_swap = [
+        {"name": "dev-a", "ids": ["aa:bb:cc:dd:ee:61", "192.0.2.61"], "use_global_settings": True},
+        {"name": "dev-b", "ids": ["bb:cc:dd:ee:ff:62", "192.0.2.62"], "use_global_settings": True},
+    ]
+    _, _, upd_swap = plan_sync(existing_swap, build_desired_clients(inv_swap), fresh=True)
+    # Simulate sequential AdGuard updates: no two clients may hold the same ID at any step
+    sim_state = {c["name"]: set(c["ids"]) for c in existing_swap}
+    for old_n, payload in upd_swap:
+        new_ids = set(payload["ids"])
+        for other_n, other_ids in sim_state.items():
+            if other_n != old_n:
+                assert not (new_ids & other_ids), f"swap conflict {old_n} vs {other_n}: {upd_swap}"
+        sim_state.pop(old_n, None)
+        sim_state[payload["name"]] = new_ids
+    assert sim_state["dev-a"] == {"aa:bb:cc:dd:ee:61", "192.0.2.62"}
+    assert sim_state["dev-b"] == {"bb:cc:dd:ee:ff:62", "192.0.2.61"}
+
+    # Duplicate-match prevention: second spec must not clobber already-claimed existing client
+    existing_dup = [
+        {"name": "Phone", "ids": ["aa:bb:cc:dd:ee:70", "192.0.2.70"], "use_global_settings": True},
+    ]
+    desired_dup = [
+        {"name": "Phone", "ids": ["aa:bb:cc:dd:ee:70", "192.0.2.71"]},
+        {"name": "Tablet", "ids": ["bb:cc:dd:ee:ff:72", "192.0.2.70"]},
+    ]
+    _, add_d, upd_d = plan_sync(existing_dup, desired_dup, fresh=True)
+    assert len(upd_d) == 1 and upd_d[0][0] == "Phone"
+    assert len(add_d) == 1 and add_d[0]["name"] == "Tablet" and "192.0.2.70" in add_d[0]["ids"]
     print("[sync-adguard-clients] self-check OK")
 
 
@@ -561,8 +630,7 @@ def main() -> int:
 
     inv = load_modem_inventory(os.environ.get("MODEM_INVENTORY_PATH", ""))
     if not inv.get("present") or not inv.get("devices"):
-        print("[sync-adguard-clients] SKIP: modem inventory yok")
-        return 0
+        inv = {"fresh": False, "present": False, "devices": []}
 
     pi_spec = build_pi_gateway_spec(
         os.environ.get("PI_STATIC_IP", ""),
@@ -583,6 +651,7 @@ def main() -> int:
     port = os.environ.get("ADGUARD_WEB_PORT", "8080")
     user = os.environ.get("AGH_ADMIN_USER", "admin")
     base = f"http://127.0.0.1:{port}"
+    errors = 0
     try:
         client = AghClient(base, user, password)
         existing = client.get_clients()
@@ -595,23 +664,27 @@ def main() -> int:
                 client.delete_client(cname)
                 deleted += 1
             except (OSError, urllib.error.URLError, ValueError) as exc:
+                errors += 1
                 print(f"[sync-adguard-clients] WARN delete {cname}: {exc}", file=sys.stderr)
         for old_name, payload in to_update:
             try:
                 client.update_client(old_name, payload)
                 updated += 1
             except (OSError, urllib.error.URLError, ValueError) as exc:
+                errors += 1
                 print(f"[sync-adguard-clients] WARN update {old_name}: {exc}", file=sys.stderr)
         for payload in to_add:
             try:
                 client.add_client(payload)
                 added += 1
             except (OSError, urllib.error.URLError, ValueError) as exc:
+                errors += 1
                 print(f"[sync-adguard-clients] WARN add {payload.get('name')}: {exc}", file=sys.stderr)
-        print(f"[sync-adguard-clients] OK deleted={deleted} added={added} updated={updated}")
+        print(f"[sync-adguard-clients] OK deleted={deleted} added={added} updated={updated} errors={errors}")
     except (OSError, urllib.error.URLError, ValueError) as exc:
-        print(f"[sync-adguard-clients] WARN: {exc}", file=sys.stderr)
-    return 0
+        print(f"[sync-adguard-clients] HATA: {exc}", file=sys.stderr)
+        return 1
+    return 1 if errors else 0
 
 
 if __name__ == "__main__":

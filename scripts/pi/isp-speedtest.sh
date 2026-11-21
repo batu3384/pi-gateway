@@ -10,11 +10,22 @@ MAX_SEC="${SPEEDTEST_MAX_SEC:-6}"
 
 if [[ "${1:-}" == "--self-check" ]]; then
   python3 - <<'PY'
+import json
 def calc_mbps(nbytes: int, dt: float) -> float:
     return (nbytes * 8) / dt / 1_000_000 if dt > 0 and nbytes > 0 else -1.0
 
+def parse_ookla(raw: str) -> tuple[float, float]:
+    d = json.loads(raw)
+    bw = float((d.get("download") or {}).get("bandwidth") or 0)
+    ping = float((d.get("ping") or {}).get("latency") or -1.0)
+    if bw <= 0:
+        raise ValueError("zero bandwidth")
+    return (bw * 8.0) / 1_000_000.0, ping
+
 assert abs(calc_mbps(25_000_000, 0.25) - 800.0) < 0.01
 assert calc_mbps(0, 1.0) == -1.0
+d_mbps, d_ping = parse_ookla('{"download":{"bandwidth":115000000},"ping":{"latency":4.2}}')
+assert abs(d_mbps - 920.0) < 0.01 and abs(d_ping - 4.2) < 0.01
 print("[isp-speedtest] self-check OK")
 PY
   exit 0
@@ -23,8 +34,11 @@ fi
 mkdir -p "$METRICS_DIR" 2>/dev/null || true
 python3 - "$PRIMARY_URL" "$FALLBACK_URL" "$WORKERS" "$MAX_SEC" "$OUT" <<'PY'
 from concurrent.futures import ThreadPoolExecutor
+import json
 import os
+import shutil
 import socket
+import subprocess
 import sys
 import tempfile
 import time
@@ -35,7 +49,47 @@ primary_url, fallback_url = sys.argv[1], sys.argv[2]
 workers, max_sec, out = max(1, int(sys.argv[3])), max(2.0, float(sys.argv[4])), sys.argv[5]
 UA = "Mozilla/5.0 pi-gateway-speedtest/2"
 WARMUP_SEC = 0.30
-DIRECT_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
+class _SameHostRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        old_host = (urllib.parse.urlsplit(req.full_url).hostname or "").lower()
+        new_host = (urllib.parse.urlsplit(newurl).hostname or "").lower()
+        if old_host and new_host and new_host != old_host:
+            return None
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+DIRECT_OPENER = urllib.request.build_opener(
+    urllib.request.ProxyHandler({}),
+    _SameHostRedirect(),
+)
+
+
+def bench_ookla_cli() -> tuple[float, float] | None:
+    if os.environ.get("SPEEDTEST_DISABLE_OOKLA", "false").lower() == "true":
+        return None
+    cli = shutil.which("speedtest") or (
+        "/usr/local/bin/speedtest" if os.path.isfile("/usr/local/bin/speedtest") else None
+    )
+    if not cli:
+        return None
+    try:
+        proc = subprocess.run(
+            [cli, "--accept-license", "--accept-gdpr", "--format=json"],
+            capture_output=True,
+            text=True,
+            timeout=45,
+            check=True,
+        )
+        data = json.loads(proc.stdout)
+        bw = float((data.get("download") or {}).get("bandwidth") or 0)
+        ping_ms = float((data.get("ping") or {}).get("latency") or -1.0)
+        if bw > 0:
+            return (bw * 8.0) / 1_000_000.0, ping_ms
+    except Exception:
+        return None
+    return None
 
 def _tcp_handshake_min_ms(host: str, port: int) -> float:
     ip = socket.gethostbyname(host)
@@ -103,14 +157,18 @@ def bench_parallel(url: str) -> tuple[float, float]:
     return mbps, ping_ms
 
 down = ping = -1.0
-for candidate in (primary_url, fallback_url):
-    if not candidate:
-        continue
-    try:
-        down, ping = bench_parallel(candidate)
-        break
-    except Exception:
-        continue
+ookla = bench_ookla_cli()
+if ookla is not None:
+    down, ping = ookla
+else:
+    for candidate in (primary_url, fallback_url):
+        if not candidate:
+            continue
+        try:
+            down, ping = bench_parallel(candidate)
+            break
+        except Exception:
+            continue
 text = (
     "# HELP pi_gateway_isp_download_mbps Approx download via multi-stream CDN sample (-1 fail)\n"
     "# TYPE pi_gateway_isp_download_mbps gauge\n"

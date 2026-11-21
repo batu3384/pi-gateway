@@ -1,38 +1,39 @@
 {
   "pins": {
-    "hagezi": "e681da879e1b4aaed4962170d0e278d6817542df",
-    "cname_trackers": "dd5bd59eda209a97efeee1ee7898e119c582a13b",
-    "as_of": "2026-11-17"
+    "policy": "rolling-branch-with-preflight-and-delta-guard",
+    "hagezi": "main",
+    "cname_trackers": "master",
+    "as_of": "2026-11-21"
   },
   "profiles": {
     "balanced-core": [
       ["HaGeZi Pro++", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_51.txt"],
-      ["HaGeZi TIF Medium", "https://raw.githubusercontent.com/hagezi/dns-blocklists/e681da879e1b4aaed4962170d0e278d6817542df/adblock/tif.medium.txt"],
-      ["HaGeZi DoH/DoT Bypass", "https://raw.githubusercontent.com/hagezi/dns-blocklists/e681da879e1b4aaed4962170d0e278d6817542df/adblock/doh.txt"]
+      ["HaGeZi TIF Medium", "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/tif.medium.txt"],
+      ["HaGeZi DoH/DoT Bypass", "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/doh.txt"]
     ],
     "balanced": [
       ["HaGeZi Pro++", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_51.txt"],
-      ["HaGeZi TIF Medium", "https://raw.githubusercontent.com/hagezi/dns-blocklists/e681da879e1b4aaed4962170d0e278d6817542df/adblock/tif.medium.txt"],
-      ["HaGeZi DoH/DoT Bypass", "https://raw.githubusercontent.com/hagezi/dns-blocklists/e681da879e1b4aaed4962170d0e278d6817542df/adblock/doh.txt"],
+      ["HaGeZi TIF Medium", "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/tif.medium.txt"],
+      ["HaGeZi DoH/DoT Bypass", "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/doh.txt"],
       ["HaGeZi Apple Tracker", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_67.txt"],
       ["HaGeZi Windows/Office Tracker", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_63.txt"],
       ["HaGeZi Samsung Tracker", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_61.txt"],
       ["Perflyst/Dandelion Smart TV", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_7.txt"],
       ["AWAvenue Ads Rule", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_53.txt"],
-      ["HaGeZi LG webOS Tracker", "https://raw.githubusercontent.com/hagezi/dns-blocklists/e681da879e1b4aaed4962170d0e278d6817542df/adblock/native.lgwebos.txt"],
-      ["AdGuard CNAME original trackers", "https://raw.githubusercontent.com/AdguardTeam/cname-trackers/dd5bd59eda209a97efeee1ee7898e119c582a13b/data/combined_original_trackers.txt"]
+      ["HaGeZi LG webOS Tracker", "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/native.lgwebos.txt"],
+      ["AdGuard CNAME original trackers", "https://raw.githubusercontent.com/AdguardTeam/cname-trackers/master/data/combined_original_trackers.txt"]
     ],
     "aggressive": [
       ["HaGeZi Pro++", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_51.txt"],
-      ["HaGeZi TIF Full", "https://raw.githubusercontent.com/hagezi/dns-blocklists/e681da879e1b4aaed4962170d0e278d6817542df/adblock/tif.txt"],
-      ["HaGeZi DoH/DoT Bypass", "https://raw.githubusercontent.com/hagezi/dns-blocklists/e681da879e1b4aaed4962170d0e278d6817542df/adblock/doh.txt"],
+      ["HaGeZi TIF Full", "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/tif.txt"],
+      ["HaGeZi DoH/DoT Bypass", "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/doh.txt"],
       ["HaGeZi Apple Tracker", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_67.txt"],
       ["HaGeZi Windows/Office Tracker", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_63.txt"],
       ["HaGeZi Samsung Tracker", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_61.txt"],
       ["Perflyst/Dandelion Smart TV", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_7.txt"],
       ["AWAvenue Ads Rule", "https://adguardteam.github.io/HostlistsRegistry/assets/filter_53.txt"],
-      ["HaGeZi LG webOS Tracker", "https://raw.githubusercontent.com/hagezi/dns-blocklists/e681da879e1b4aaed4962170d0e278d6817542df/adblock/native.lgwebos.txt"],
-      ["AdGuard CNAME original trackers", "https://raw.githubusercontent.com/AdguardTeam/cname-trackers/dd5bd59eda209a97efeee1ee7898e119c582a13b/data/combined_original_trackers.txt"]
+      ["HaGeZi LG webOS Tracker", "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/native.lgwebos.txt"],
+      ["AdGuard CNAME original trackers", "https://raw.githubusercontent.com/AdguardTeam/cname-trackers/master/data/combined_original_trackers.txt"]
     ]
   },
   "budgets": {
@@ -47,19 +48,19 @@
       "max_rules": 2000000,
       "max_age_hours": 168
     },
-    "https://raw.githubusercontent.com/hagezi/dns-blocklists/e681da879e1b4aaed4962170d0e278d6817542df/adblock/tif.medium.txt": {
+    "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/tif.medium.txt": {
       "category": "threat-intelligence",
       "min_rules": 10000,
       "max_rules": 1000000,
       "max_age_hours": 168
     },
-    "https://raw.githubusercontent.com/hagezi/dns-blocklists/e681da879e1b4aaed4962170d0e278d6817542df/adblock/tif.txt": {
+    "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/tif.txt": {
       "category": "threat-intelligence",
       "min_rules": 500000,
       "max_rules": 4000000,
       "max_age_hours": 168
     },
-    "https://raw.githubusercontent.com/hagezi/dns-blocklists/e681da879e1b4aaed4962170d0e278d6817542df/adblock/doh.txt": {
+    "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/doh.txt": {
       "category": "encrypted-dns",
       "min_rules": 1000,
       "max_rules": 500000,
@@ -95,13 +96,13 @@
       "max_rules": 1000000,
       "max_age_hours": 168
     },
-    "https://raw.githubusercontent.com/hagezi/dns-blocklists/e681da879e1b4aaed4962170d0e278d6817542df/adblock/native.lgwebos.txt": {
+    "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/native.lgwebos.txt": {
       "category": "lg-webos",
       "min_rules": 100,
       "max_rules": 250000,
       "max_age_hours": 168
     },
-    "https://raw.githubusercontent.com/AdguardTeam/cname-trackers/dd5bd59eda209a97efeee1ee7898e119c582a13b/data/combined_original_trackers.txt": {
+    "https://raw.githubusercontent.com/AdguardTeam/cname-trackers/master/data/combined_original_trackers.txt": {
       "category": "cname-tracking",
       "min_rules": 50,
       "max_rules": 1000000,
