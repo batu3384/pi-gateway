@@ -37,13 +37,6 @@ notify_openbot_wanted() {
   esac
 }
 
-notify_telegram_wanted() {
-  case "$(notify_backend)" in
-    telegram|both) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
 notify_enabled() {
   notify_openbot_wanted && _openbot_notify_lib && openbot_notify_enabled
 }
@@ -183,6 +176,7 @@ notify_repeat_sec_for() {
     adguard-filters) printf '%s' "$NOTIFY_SLO_REPEAT_SEC" ;;
     restic-ok) printf '%s' "${NOTIFY_BACKUP_OK_COOLDOWN_SEC:-86400}" ;;
     ibb-hki) printf '%s' "${NOTIFY_IBB_REPEAT_SEC:-21600}" ;;
+    netalert-new-device) printf '%s' "${NOTIFY_NEW_DEVICE_REPEAT_SEC:-60}" ;;
     *) printf '%s' "$NOTIFY_REPEAT_SEC" ;;
   esac
 }
@@ -400,13 +394,15 @@ notify_telegram() {
   fi
 
   notify_enabled || return 0
-  notify_send_lock_acquire || return 0
+  notify_send_lock_acquire || { [[ "${NOTIFY_STRICT_RETURN:-0}" == "1" ]] && return 2; return 0; }
   if ! notify_rate_ok "$key" "$cooldown"; then
     notify_send_lock_release
+    [[ "${NOTIFY_STRICT_RETURN:-0}" == "1" ]] && return 2
     return 0
   fi
   if ! notify_global_allow "$key"; then
     notify_send_lock_release
+    [[ "${NOTIFY_STRICT_RETURN:-0}" == "1" ]] && return 2
     return 0
   fi
 

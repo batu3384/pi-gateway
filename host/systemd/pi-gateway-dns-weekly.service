@@ -1,5 +1,5 @@
 [Unit]
-Description=Pi Gateway weekly DNS coverage Telegram report
+Description=Pi Gateway weekly DNS coverage report (OpenBot Jarvis)
 
 [Service]
 Type=oneshot

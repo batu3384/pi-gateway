@@ -62,10 +62,11 @@ SCRIPTS=(
   scripts/lib/reset-gateway-units.sh
   scripts/pi/boot-notify.sh
   scripts/pi/jarvis-send.sh
+  scripts/pi/jarvis-snapshot.sh
+  scripts/pi/pi-fleet-watchdog.sh
   scripts/pi/verify-openbot-fleet.sh
   scripts/pi/heal-openbot-fleet.sh
   scripts/pi/repair-openbot-provider-runtimes.sh
-  scripts/lib/bulletin-slo.py
   scripts/lib/reap-dead-docker-scopes.sh
   scripts/lib/adguard-api.sh
   scripts/lib/dns-dot-proxy.py
@@ -96,10 +97,19 @@ run_root() {
 }
 
 run_root mkdir -p "$LIB_DIR/scripts/pi" "$LIB_DIR/scripts/lib" /run/pi-gateway /run/pi-gateway/crowdsec-logs /usr/local/sbin
-run_root chmod 755 /run/pi-gateway/crowdsec-logs
 _pi_state_user="${SUDO_USER:-${USER:-pi}}"
 if [[ "$_pi_state_user" == "root" && "$REMOTE_DIR" =~ /home/([^/]+)/ ]]; then
   _pi_state_user="${BASH_REMATCH[1]}"
+fi
+run_root chown "${_pi_state_user}:${_pi_state_user}" /run/pi-gateway
+run_root chmod 775 /run/pi-gateway
+run_root chmod 755 /run/pi-gateway/crowdsec-logs
+if [[ -f "${REMOTE_DIR}/host/tmpfiles.d/pi-gateway.conf" ]]; then
+  _tmpf="$(mktemp)"
+  sed "s|PI_USER|${_pi_state_user}|g" "${REMOTE_DIR}/host/tmpfiles.d/pi-gateway.conf" >"$_tmpf"
+  run_root install -o root -g root -m 644 "$_tmpf" /etc/tmpfiles.d/pi-gateway.conf
+  rm -f "$_tmpf"
+  run_root systemd-tmpfiles --create /etc/tmpfiles.d/pi-gateway.conf 2>/dev/null || true
 fi
 run_root mkdir -p /var/lib/pi-gateway /var/lib/pi-gateway/metrics /var/lib/pi-gateway/public
 run_root chown "${_pi_state_user}:${_pi_state_user}" \
@@ -210,6 +220,7 @@ install_unit() {
       -e "s|/home/PI_USER|/home/${owner}|g" \
       -e "s|User=PI_USER|User=${owner}|g" \
       -e "s|Group=PI_USER|Group=${owner}|g" \
+      -e "s|chown PI_USER:PI_USER|chown ${owner}:${owner}|g" \
       -e "s|Environment=PI_USER=PI_USER|Environment=PI_USER=${owner}|g" \
       -e "s|Environment=NOTIFY_OWNER=PI_USER|Environment=NOTIFY_OWNER=${owner}|g" \
       "$src" >"$tmp"
@@ -218,6 +229,8 @@ install_unit() {
 }
 
 for unit in \
+  pi-cpufreq.service \
+  pi-fleet-watchdog.service pi-fleet-watchdog.timer \
   pi-gateway-health.service pi-gateway-health.timer \
   pi-gateway-health-failure.service \
   pi-gateway-boot-notify.service \

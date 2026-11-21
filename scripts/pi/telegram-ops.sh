@@ -159,9 +159,17 @@ print("\n".join(lines))
 PY
 }
 
+_recover_lockdir() {
+  if mkdir -p /run/pi-gateway 2>/dev/null && [[ -w /run/pi-gateway ]]; then
+    echo "/run/pi-gateway/telegram-recover.lock"
+  else
+    echo "/tmp/pi-gateway-telegram-recover.lock"
+  fi
+}
+
 _recover_lock() {
-  local lockdir="/run/pi-gateway/telegram-recover.lock"
-  mkdir -p /run/pi-gateway 2>/dev/null || true
+  local lockdir
+  lockdir="$(_recover_lockdir)"
   if mkdir "$lockdir" 2>/dev/null; then
     return 0
   fi
@@ -175,7 +183,7 @@ _recover_lock() {
 }
 
 _recover_unlock() {
-  rmdir "/run/pi-gateway/telegram-recover.lock" 2>/dev/null || true
+  rmdir "$(_recover_lockdir)" 2>/dev/null || true
 }
 
 _cmd_recover() {
@@ -239,7 +247,7 @@ Kurtarma şu an çalışıyor."
       bash "${REMOTE_DIR}/scripts/pi/recover-stack.sh" >/dev/null 2>&1 || rc=1
     fi
   fi
-  if bash "$repair" >/dev/null 2>&1 && [[ "$rc" -eq 0 ]]; then
+  if REPAIR_DEFER_OPENBOT_RESTART=true bash "$repair" >/dev/null 2>&1 && [[ "$rc" -eq 0 ]]; then
     _send $'<b>SSD kurtarma</b>\n\n✅ Tamamlandı.'
     _recover_unlock
     return 0

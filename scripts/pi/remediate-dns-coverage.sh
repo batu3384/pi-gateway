@@ -105,7 +105,7 @@ if notify_enabled && ((${#bypass_lines[@]})); then
   action="$(printf '%s\n' "${bypass_lines[@]}" | head -5 | tr '\n' ' · ')"
   action="$(notify_escape_html "$action") · Android Ozel DNS kapali · make remediate-dns"
   body="$(notify_html_alert "$detail" "$action")"
-  notify_telegram "📡 DNS Kapsam" "$body" "dns-remediate" "HTML" || log "WARN: Telegram"
+  notify_telegram "📡 DNS Kapsam" "$body" "dns-remediate" "HTML" || log "WARN: OpenBot bildirim"
 fi
 
 if [[ "$status" == "fail" ]] || ((${#bypass_lines[@]} > 0)); then

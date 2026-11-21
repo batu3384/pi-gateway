@@ -5,8 +5,7 @@ Before=docker.service
 
 [Service]
 Type=simple
-RuntimeDirectory=pi-gateway
-RuntimeDirectoryPreserve=yes
+ExecStartPre=/bin/mkdir -p /run/pi-gateway/crowdsec-logs
 ExecStart=/usr/bin/python3 /usr/local/lib/pi-gateway/scripts/lib/crowdsec-journal-feed.py
 Restart=always
 RestartSec=5

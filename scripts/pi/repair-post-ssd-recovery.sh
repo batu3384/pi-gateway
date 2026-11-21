@@ -35,8 +35,15 @@ if [[ -d "$REMOTE_DIR/compose" && "${ENABLE_CROWDSEC:-true}" == "true" ]]; then
     || log "WARN: crowdsec up"
 fi
 if systemctl is-enabled openbot.service >/dev/null 2>&1; then
-  sudo systemctl restart openbot.service 2>/dev/null \
-    || log "WARN: openbot restart"
+  if [[ "${REPAIR_DEFER_OPENBOT_RESTART:-false}" == "true" ]] && command -v systemd-run >/dev/null 2>&1; then
+    # Jarvis /recover onay komutu icinden cagrildiginda yanit gonderilmeden kendi surecini oldurme
+    sudo systemd-run --quiet --on-active=3s --unit="pi-gateway-openbot-restart-$$" \
+      systemctl restart openbot.service 2>/dev/null \
+      || log "WARN: deferred openbot restart"
+  else
+    sudo systemctl restart openbot.service 2>/dev/null \
+      || log "WARN: openbot restart"
+  fi
 fi
 # shellcheck source=../lib/reset-gateway-units.sh
 source "$SCRIPT_DIR/../lib/reset-gateway-units.sh"

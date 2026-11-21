@@ -297,8 +297,13 @@ def notify_if_needed(state: dict[str, Any]) -> int:
     resets = int(state.get("usb_resets_24h") or 0)
     io_err = int(state.get("io_errors_24h") or 0)
     last_event_ts = float(state.get("last_event_ts") or 0.0)
-    remote = os.environ.get("REMOTE_DIR", os.path.expanduser("~/pi-gateway"))
-    notify_sh = os.path.join(remote, "scripts/lib/notify.sh")
+    # Root calisirken kendi kardes privileged kopyasini kullan (user-writable $REMOTE_DIR'e dusme)
+    self_notify = Path(__file__).resolve().parent / "notify.sh"
+    if self_notify.is_file():
+        notify_sh = str(self_notify)
+    else:
+        remote = os.environ.get("REMOTE_DIR", os.path.expanduser("~/pi-gateway"))
+        notify_sh = os.path.join(remote, "scripts/lib/notify.sh")
     if not os.path.isfile(notify_sh):
         return 0
 
