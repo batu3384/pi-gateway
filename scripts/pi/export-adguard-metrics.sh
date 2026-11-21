@@ -37,17 +37,25 @@ echo '{}' >"$STATUS_FILE"
 
 write_prom() {
   local up="$1"
+  local state_owner="${PI_USER:-${SUDO_USER:-}}"
+  if [[ -z "$state_owner" || "$state_owner" == "root" ]]; then
+    state_owner="$(stat -c '%U' "$REMOTE_DIR" 2>/dev/null || echo "${USER:-pi}")"
+  fi
   python3 "$METRICS_PY" "$PROM_TMP" "$up" "$STATS_FILE" "$STATUS_FILE"
+  local stage="${OUT}.tmp.$$"
   if [[ "$(id -u)" -eq 0 ]]; then
     mkdir -p "$METRICS_DIR"
-    install -m 644 "$PROM_TMP" "$OUT"
-    chown "${USER}:${USER}" "$OUT" 2>/dev/null || true
+    install -m 644 "$PROM_TMP" "$stage"
+    [[ "$state_owner" != "root" ]] && chown "${state_owner}:${state_owner}" "$stage" 2>/dev/null || true
+    mv -f "$stage" "$OUT"
   elif [[ -d "$METRICS_DIR" && -w "$METRICS_DIR" && ( ! -e "$OUT" || -w "$OUT" ) ]]; then
-    install -m 644 "$PROM_TMP" "$OUT"
+    install -m 644 "$PROM_TMP" "$stage"
+    mv -f "$stage" "$OUT"
   else
     sudo mkdir -p "$METRICS_DIR"
-    sudo install -m 644 "$PROM_TMP" "$OUT"
-    sudo chown "${USER}:${USER}" "$OUT" 2>/dev/null || true
+    sudo install -m 644 "$PROM_TMP" "$stage"
+    [[ "$state_owner" != "root" ]] && sudo chown "${state_owner}:${state_owner}" "$stage" 2>/dev/null || true
+    sudo mv -f "$stage" "$OUT"
   fi
 }
 

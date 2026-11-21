@@ -37,14 +37,25 @@ echo "[ibb-air] $line"
 
 install_ibb_prom() {
   [[ -s "$PROM_TMP" ]] || return 0
+  local out="${PI_GATEWAY_METRICS_DIR}/pi_gateway_ibb.prom"
+  local stage="${out}.tmp.$$"
+  local owner="${PI_USER:-${_PI_STATE_USER}}"
+  if [[ -z "$owner" || "$owner" == "root" ]]; then
+    owner="$(stat -c '%U' "$REMOTE_DIR" 2>/dev/null || echo "${_PI_STATE_USER}")"
+  fi
   if [[ "$(id -u)" -eq 0 ]]; then
     mkdir -p "$PI_GATEWAY_METRICS_DIR"
-    install -m 644 "$PROM_TMP" "$PI_GATEWAY_METRICS_DIR/pi_gateway_ibb.prom"
-    chown "${_PI_STATE_USER}:${_PI_STATE_USER}" "$PI_GATEWAY_METRICS_DIR/pi_gateway_ibb.prom" 2>/dev/null || true
+    install -m 644 "$PROM_TMP" "$stage"
+    [[ "$owner" != "root" ]] && chown "${owner}:${owner}" "$stage" 2>/dev/null || true
+    mv -f "$stage" "$out"
+  elif [[ -d "$PI_GATEWAY_METRICS_DIR" && -w "$PI_GATEWAY_METRICS_DIR" && ( ! -e "$out" || -w "$out" ) ]]; then
+    install -m 644 "$PROM_TMP" "$stage"
+    mv -f "$stage" "$out"
   else
     sudo mkdir -p "$PI_GATEWAY_METRICS_DIR"
-    sudo install -m 644 "$PROM_TMP" "$PI_GATEWAY_METRICS_DIR/pi_gateway_ibb.prom"
-    sudo chown "${_PI_STATE_USER}:${_PI_STATE_USER}" "$PI_GATEWAY_METRICS_DIR/pi_gateway_ibb.prom" 2>/dev/null || true
+    sudo install -m 644 "$PROM_TMP" "$stage"
+    [[ "$owner" != "root" ]] && sudo chown "${owner}:${owner}" "$stage" 2>/dev/null || true
+    sudo mv -f "$stage" "$out"
   fi
 }
 install_ibb_prom

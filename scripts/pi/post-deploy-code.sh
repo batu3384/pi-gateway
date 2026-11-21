@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Code deploy: repo sync + privileged lib + Hermes/notify hot path.
-# Skip: bootstrap, compose canary, UFW/Kuma/CrowdSec full post-deploy.
+# Code deploy: repo sync + privileged lib + OpenBot/notify hot path.
+# Skip: bootstrap, compose canary, UFW/CrowdSec full post-deploy.
 # n8n: yalnız NODES_EXCLUDE henüz uygulanmadıysa recreate.
 set -euo pipefail
 REMOTE_DIR="${REMOTE_DIR:-/home/${USER}/pi-gateway}"
@@ -63,16 +63,11 @@ soft "Config izinleri" "$SCRIPT_DIR/fix-config-perms.sh"
 soft "SSD SMART timer" "$SCRIPT_DIR/setup-ssd-smart-timer.sh"
 soft "Restic repair" "$SCRIPT_DIR/restic-repair.sh"
 
-if [[ -n "${PI_STATIC_IP:-}" && -f "${REMOTE_DIR}/config/caddy/Caddyfile" ]]; then
-  soft "LAN IP panel yollari" "$SCRIPT_DIR/setup-caddy-lan-ip.sh"
-fi
 if command -v tailscale >/dev/null 2>&1 && tailscale status >/dev/null 2>&1; then
+  # setup-tailscale-serve.sh icinde setup-caddy-lan-ip.sh ve caddy reload zaten calisir
   soft "Tailscale panel HTTPS" "$SCRIPT_DIR/setup-tailscale-serve.sh"
-fi
-if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx caddy; then
-  log ">> Caddy reload"
-  docker exec caddy caddy reload --config /etc/caddy/Caddyfile \
-    || log "WARN: caddy reload"
+elif [[ -n "${PI_STATIC_IP:-}" && -f "${REMOTE_DIR}/config/caddy/Caddyfile" ]]; then
+  soft "LAN IP panel yollari" "$SCRIPT_DIR/setup-caddy-lan-ip.sh"
 fi
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx n8n; then
   n8n_ex="$(docker inspect n8n --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | grep '^NODES_EXCLUDE=' || true)"
@@ -80,11 +75,16 @@ if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx n8n; then
     log "n8n NODES_EXCLUDE zaten ssh kapali — recreate yok"
   else
     log ">> n8n recreate (NODES_EXCLUDE ssh)"
-    (cd "$REMOTE_DIR/compose" && docker compose --env-file ../.env up -d --no-deps n8n) \
+    (cd "$REMOTE_DIR/compose" && docker compose --env-file ../.env --profile n8n up -d --no-deps n8n) \
       || log "WARN: n8n up"
   fi
 fi
 
+if [[ -x "$SCRIPT_DIR/setup-openbot-fleet.sh" ]]; then
+  log ">> OpenBot filo prompt + beceri senkronu"
+  REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/setup-openbot-fleet.sh" --files-only \
+    || log "WARN: OpenBot filo dosya senkronu atlandi"
+fi
 OPENBOT_HEAL_QUICK=true soft "OpenBot heal" "$SCRIPT_DIR/heal-openbot-fleet.sh"
 
 soft "Home ops timers" "$SCRIPT_DIR/setup-home-ops-timers.sh"

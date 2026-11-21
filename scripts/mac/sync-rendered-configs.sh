@@ -110,7 +110,19 @@ else
 fi
 caddy_changed=0
 if [[ -f "${STAGE}/Caddyfile" ]]; then
-  if [[ ! -f "${R}/config/caddy/Caddyfile" ]] || ! cmp -s "${STAGE}/Caddyfile" "${R}/config/caddy/Caddyfile"; then
+  _caddy_same=0
+  if [[ -f "${R}/config/caddy/Caddyfile" ]]; then
+    python3 - "${STAGE}/Caddyfile" "${R}/config/caddy/Caddyfile" <<'PY' && _caddy_same=1 || true
+import re, sys
+from pathlib import Path
+def strip_blocks(txt: str) -> str:
+    txt = re.sub(r"\n?# BEGIN DIRECT IP PANELS.*?# END DIRECT IP PANELS\n?", "\n", txt, flags=re.S)
+    txt = re.sub(r"\n?# BEGIN TAILSCALE PANEL.*?# END TAILSCALE PANEL\n?", "\n", txt, flags=re.S)
+    return txt.strip()
+sys.exit(0 if strip_blocks(Path(sys.argv[1]).read_text(encoding="utf-8")) == strip_blocks(Path(sys.argv[2]).read_text(encoding="utf-8")) else 1)
+PY
+  fi
+  if [[ "$_caddy_same" -eq 0 ]]; then
     cp "${STAGE}/Caddyfile" "${R}/config/caddy/Caddyfile"
     echo "[sync] Caddyfile guncellendi"
     caddy_changed=1

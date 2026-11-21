@@ -13,7 +13,7 @@ override PI_USER := $(or $(strip $(PI_USER)),pi)
 override REMOTE_DIR := $(or $(strip $(REMOTE_DIR)),/home/$(PI_USER)/pi-gateway)
 PI_SSH_HOST ?= $(if $(strip $(PI_DEPLOY_HOST)),$(strip $(PI_DEPLOY_HOST)),$(if $(strip $(PI_HOST)),$(strip $(PI_HOST)),$(strip $(PI_STATIC_IP))))
 
-.PHONY: setup validate test render deploy deploy-code deploy-fast install discover mac-dns mac-dns-clear harden status dns-test test-remote backup-pull backup-cron backup-restore-drill restore-check verify-data config-drift pi-access trust-ca tls-certs telegram-menu firewall sync-configs docker-ssd ssd-fsck ssd-fsck-run check-pi-env doctor diagnose-remote diagnose-dns audit-dns remediate-dns suggest-ad-sniper modem-inventory diagnose-video adguard-tune recover-stack chaos-drill tailscale-acl tailscale-dns
+.PHONY: setup validate test render deploy deploy-code deploy-fast install discover mac-dns mac-dns-clear dns-fallback harden status dns-test test-remote telegram-test telegram-menu backup-pull backup-cron backup-restore-drill restore-check verify-data config-drift pi-access pi-open trust-ca tls-certs firewall sync-configs docker-ssd ssd-fsck ssd-fsck-run check-pi-env doctor diagnose-remote diagnose-dns audit-dns remediate-dns suggest-ad-sniper modem-inventory diagnose-video rollout-dns-wait adguard-tune recover-stack chaos-drill tailscale-acl tailscale-dns
 
 check-pi-env:
 	@test -n "$(PI_SSH_HOST)" || (echo "PI_STATIC_IP or PI_DEPLOY_HOST required — edit .env or run make discover" && exit 1)
@@ -155,8 +155,8 @@ rollout-dns-wait: check-pi-env
 adguard-tune: check-pi-env
 	@rsync -az --exclude 'AdGuardHome.yaml' config/adguard/ "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/config/adguard/"
 	@rsync -az config/unbound/unbound.conf "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/config/unbound/unbound.conf"
-	@rsync -az scripts/lib/dhcp-dns-offer.sh scripts/lib/env-file.sh scripts/lib/adguard-api.sh scripts/lib/adguard-filters.py scripts/lib/modem_inventory.py scripts/lib/netalert-devices.py scripts/lib/unbound-dnssec.sh scripts/lib/adguard-metrics.py scripts/lib/stack-health.sh scripts/lib/ssd-alive.sh scripts/lib/zte-h3600p.py "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/scripts/lib/"
-	@rsync -az scripts/pi/apply-adguard-dns.sh scripts/pi/apply-adguard-filters.sh scripts/pi/diagnose-dns-bypass.sh scripts/pi/audit-dns-coverage.sh scripts/pi/sync-modem-inventory.sh scripts/pi/diagnose-video-path.sh scripts/pi/ensure-adguard-blocking.sh scripts/pi/ensure-ipv6-ula.sh scripts/pi/setup-rdnss-ra.sh scripts/pi/observe-rdnss-ra.sh scripts/pi/setup-adguard-timers.sh scripts/pi/setup-firewall.sh scripts/pi/health-check.sh scripts/pi/wait-dns-rollout.sh scripts/pi/canary-compose-update.sh scripts/pi/export-adguard-metrics.sh scripts/pi/export-gateway-state.sh scripts/pi/adguard-tune.sh "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/scripts/pi/"
+	@rsync -az scripts/lib/dhcp-dns-offer.sh scripts/lib/env-file.sh scripts/lib/adguard-api.sh scripts/lib/adguard-filters.py scripts/lib/modem_inventory.py scripts/lib/netalert-devices.py scripts/lib/unbound-dnssec.sh scripts/lib/adguard-metrics.py scripts/lib/stack-health.sh scripts/lib/ssd-alive.sh scripts/lib/zte-h3600p.py scripts/lib/gateway-probes.py scripts/lib/ssd-usb-metrics.py scripts/lib/notify.sh scripts/lib/openbot-notify.sh scripts/lib/openbot-paths.sh "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/scripts/lib/"
+	@rsync -az scripts/pi/apply-adguard-dns.sh scripts/pi/apply-adguard-filters.sh scripts/pi/diagnose-dns-bypass.sh scripts/pi/audit-dns-coverage.sh scripts/pi/sync-modem-inventory.sh scripts/pi/diagnose-video-path.sh scripts/pi/ensure-adguard-blocking.sh scripts/pi/ensure-ipv6-ula.sh scripts/pi/setup-rdnss-ra.sh scripts/pi/observe-rdnss-ra.sh scripts/pi/setup-adguard-timers.sh scripts/pi/setup-firewall.sh scripts/pi/health-check.sh scripts/pi/wait-dns-rollout.sh scripts/pi/canary-compose-update.sh scripts/pi/export-adguard-metrics.sh scripts/pi/export-gateway-state.sh scripts/pi/push-slo-heartbeat.sh scripts/pi/jarvis-send.sh scripts/pi/adguard-tune.sh "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/scripts/pi/"
 	@rsync -az host/systemd/pi-gateway-adguard-filters.service host/systemd/pi-gateway-adguard-filters.timer host/systemd/pi-gateway-adguard-filters-failure.service host/systemd/pi-gateway-ipv6-ula.service host/systemd/pi-gateway-modem-inventory.service host/systemd/pi-gateway-modem-inventory.timer "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/host/systemd/"
 	@ssh -tt "$(PI_USER)@$(PI_SSH_HOST)" 'chmod +x "$(REMOTE_DIR)/scripts/lib/dhcp-dns-offer.sh" "$(REMOTE_DIR)/scripts/pi/"*.sh && REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/adguard-tune.sh"'
 
@@ -180,6 +180,7 @@ firewall: check-pi-env
 	@ssh -tt "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-firewall.sh"'
 
 docker-ssd: check-pi-env
+	@rsync -az scripts/lib/containerd-root.sh scripts/lib/env-file.sh scripts/lib/compose-profiles.sh "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/scripts/lib/"
 	@scp scripts/pi/setup-docker-ssd.sh "$(PI_USER)@$(PI_SSH_HOST):$(REMOTE_DIR)/scripts/pi/setup-docker-ssd.sh"
 	@ssh -tt "$(PI_USER)@$(PI_SSH_HOST)" 'REMOTE_DIR="$(REMOTE_DIR)" bash "$(REMOTE_DIR)/scripts/pi/setup-docker-ssd.sh"'
 

@@ -18,9 +18,9 @@ sed -e "s|/home/PI_USER/pi-gateway|${REMOTE_DIR}|g" \
 sudo install -o root -g root -m 644 "$_tmp" "/etc/systemd/system/$unit"
 rm -f "$_tmp"
 sudo systemctl daemon-reload
-sudo systemctl enable --now "$unit"
-# Apply immediately (unit RemainAfterExit; also run script for live rules)
-bash "$REMOTE_DIR/scripts/pi/setup-tailscale-panel-ports.sh" || {
+sudo systemctl enable "$unit"
+# restart: RemainAfterExit oneshot'u tek seferde canli uygular
+sudo systemctl restart "$unit" || {
   log "HATA: Tailscale panel portlari uygulanamadi"
   exit 1
 }

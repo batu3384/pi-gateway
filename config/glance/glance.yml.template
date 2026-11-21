@@ -49,12 +49,13 @@ pages:
               {{- $temp := .JSON.Float "cpu_temp_c" -}}
               {{- $ram := .JSON.Int "ram_used_pct" -}}
               {{- $ramFree := .JSON.Int "ram_avail_mib" -}}
+              {{- $ssdPct := .JSON.Int "ssd_usage_pct" -}}
               {{- $aghPct := .JSON.Float "adguard_blocked_pct" -}}
               SSD: {{ if and (eq $ssd 1) (eq $deg 0) }}Sağlıklı{{ else }}Kısıtlı{{ end }} ·
               DNS: {{ .JSON.Int "dns_latency_ms" }} ms ({{ .JSON.String "dns_coverage_status" }} · {{ printf "%.1f" $aghPct }}% engel) ·
               Hız: {{ if gt $spd 0.0 }}{{ printf "%.0f" $spd }} Mbps ({{ $ping }} ms){{ else }}—{{ end }} ·
               Donanım: {{ if gt $temp 0.0 }}{{ printf "%.1f" $temp }}°C · {{ end }}RAM %{{ $ram }} ({{ $ramFree }} MiB boş) ·
-              Disk: SD {{ .JSON.Int "root_usage_pct" }}% / SSD {{ .JSON.Int "ssd_usage_pct" }}% ·
+              Disk: SD {{ .JSON.Int "root_usage_pct" }}% / SSD {{ if ge $ssdPct 0 }}{{ $ssdPct }}%{{ else }}—{{ end }} ·
               Hava: {{ if ge $hki 0 }}HKI {{ $hki }} ({{ .JSON.String "ibb_station" }}){{ else }}—{{ end }} ·
               Offsite: {{ if lt $off 0 }}—{{ else }}{{ $off }}g{{ end }} ·
               Drill: {{ if lt $drl 0 }}—{{ else }}{{ $drl }}g{{ end }} ·

@@ -279,7 +279,7 @@ data = {
     "docker_root_on_ssd": int(sys.argv[6]),
     "containerd_on_ssd": int(sys.argv[17]),
     "root_usage_pct": int(sys.argv[7] or 0),
-    "ssd_usage_pct": int(sys.argv[8]) if sys.argv[8] else None,
+    "ssd_usage_pct": int(sys.argv[8]) if sys.argv[8] else -1,
     "offsite_backup_age_days": int(sys.argv[9]),
     "backup_restore_drill_age_days": int(sys.argv[10]),
     "restic_offsite_copy_age_days": int(sys.argv[11]),
@@ -287,6 +287,7 @@ data = {
     "dns_coverage_state_age_seconds": coverage_age,
     "ipv6_rdnss_configured": int(sys.argv[15]),
     "backup_restore_drill_failed": int(sys.argv[16]),
+    "ibb_hki": -1,
 }
 if "last_ssd_incident" in prior and prior["last_ssd_incident"] is not None:
     data["last_ssd_incident"] = prior["last_ssd_incident"]

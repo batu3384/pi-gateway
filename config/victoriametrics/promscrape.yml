@@ -1,4 +1,4 @@
-# Scrape only — alerts are health-check + Gatus + Telegram (notify.sh).
+# Scrape only — alerts are health-check + Gatus + OpenBot Jarvis (notify.sh).
 # No Alertmanager. Grafana dashboards consume this.
 global:
   scrape_interval: 30s

@@ -2,7 +2,7 @@
 # Pi Gateway deploy
 #
 # DEPLOY_MODE=full (default) — validate → rsync → bootstrap → compose → post-deploy → smoke
-# DEPLOY_MODE=code           — validate → rsync → post-deploy-code (privileged + Hermes)
+# DEPLOY_MODE=code           — validate → rsync → post-deploy-code (privileged + OpenBot/notify)
 #   make deploy-code | make deploy-fast
 #
 # Full without image pull: DEPLOY_SKIP_PULL=true make deploy
@@ -58,7 +58,6 @@ rsync -avz --delete --chmod=go-w \
   --exclude 'config/tailscale/acl.hujson' \
   --exclude 'backups' \
   --exclude '*.bak' \
-  --exclude 'legacy/' \
   "$PROJECT_DIR/" "$PI_USER@$SSH_HOST:$REMOTE_DIR/"
 DEPLOY_STAGE="${REMOTE_DIR}/.deploy-tmp.$$"
 ssh "${SSH_OPTS[@]}" "$PI_USER@$SSH_HOST" "install -d -m 700 '$DEPLOY_STAGE'"
@@ -135,15 +134,17 @@ SYNC_SKIP_ENV=true "$SCRIPT_DIR/sync-rendered-configs.sh" || die "Rendered confi
 DEPLOY_HOST="${PI_DEPLOY_HOST:-$(deploy_host)}"
 
 finish_urls() {
+  local proto="https"
+  [[ "${ENABLE_TLS:-true}" == "true" ]] || proto="http"
   DOMAIN="${LAN_DOMAIN:-home}"
   log "Deploy complete (mode=$DEPLOY_MODE)"
-  log "  Gateway : https://gateway.${DOMAIN}"
-  log "  Status  : https://status.${DOMAIN}"
-  log "  Grafana : https://grafana.${DOMAIN}"
-  log "  Logs    : https://logs.${DOMAIN}"
-  log "  DNS     : https://dns.${DOMAIN}"
+  log "  Gateway : ${proto}://gateway.${DOMAIN}"
+  log "  Status  : ${proto}://status.${DOMAIN}"
+  log "  Grafana : ${proto}://grafana.${DOMAIN}"
+  log "  Logs    : ${proto}://logs.${DOMAIN}"
+  log "  DNS     : ${proto}://dns.${DOMAIN}"
   if [[ "${ENABLE_N8N:-false}" == "true" ]]; then
-    log "  n8n     : https://n8n.${DOMAIN}"
+    log "  n8n     : ${proto}://n8n.${DOMAIN}"
   fi
   log "  UFW     : ${UFW_ADMIN_EXPOSURE:-caddy-only}"
   if [[ "${NETWORK_MODE:-router-dns}" == "router-dns" ]]; then
@@ -155,7 +156,7 @@ finish_urls() {
 
 # --- code path: no bootstrap / canary / full post-deploy ---
 if [[ "$DEPLOY_MODE" == "code" ]]; then
-  log "Code path: privileged + Hermes/notify (bootstrap/canary/UFW skip)"
+  log "Code path: privileged + OpenBot/notify (bootstrap/canary/UFW skip)"
   ssh -tt -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" \
     "chmod +x '$REMOTE_DIR/scripts/pi/post-deploy-code.sh' && REMOTE_DIR='$REMOTE_DIR' bash '$REMOTE_DIR/scripts/pi/post-deploy-code.sh'"
   if [[ "${DEPLOY_SMOKE:-false}" == "true" ]]; then
@@ -221,14 +222,18 @@ if [[ "$COMPOSE_MODE" == "core-dns" ]]; then
   ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" \
     "REMOTE_DIR='$REMOTE_DIR' COMPOSE_RECOVER_MODE=core-dns bash '$REMOTE_DIR/scripts/pi/recover-compose-up.sh'"
 else
-  if [[ "${DEPLOY_SKIP_PULL:-false}" == "true" ]]; then
-    log "canary compose up (pull skipped — DEPLOY_SKIP_PULL=true)"
-    ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" \
-      "REMOTE_DIR='$REMOTE_DIR' DEPLOY_SKIP_PULL=true bash '$REMOTE_DIR/scripts/pi/canary-compose-update.sh'"
-  elif [[ "${ENABLE_CANARY_COMPOSE_UPDATE:-true}" == "true" ]]; then
-    log "canary compose update (DNS -> edge -> rest)"
-    ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" \
-      "REMOTE_DIR='$REMOTE_DIR' bash '$REMOTE_DIR/scripts/pi/canary-compose-update.sh'"
+  if [[ "${ENABLE_CANARY_COMPOSE_UPDATE:-true}" == "true" ]]; then
+    if [[ "${DEPLOY_SKIP_PULL:-false}" == "true" ]]; then
+      log "canary compose up (pull skipped — DEPLOY_SKIP_PULL=true)"
+      ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" \
+        "REMOTE_DIR='$REMOTE_DIR' DEPLOY_SKIP_PULL=true bash '$REMOTE_DIR/scripts/pi/canary-compose-update.sh'"
+    else
+      log "canary compose update (DNS -> edge -> rest)"
+      ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" \
+        "REMOTE_DIR='$REMOTE_DIR' bash '$REMOTE_DIR/scripts/pi/canary-compose-update.sh'"
+    fi
+  elif [[ "${DEPLOY_SKIP_PULL:-false}" == "true" ]]; then
+    ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" "cd '$REMOTE_DIR/compose' && docker compose --env-file ../.env $PROFILE_ARGS up -d --remove-orphans && docker compose --env-file ../.env $PROFILE_ARGS up -d --force-recreate unbound"
   else
     ssh -o ConnectTimeout=20 "$PI_USER@$DEPLOY_HOST" "cd '$REMOTE_DIR/compose' && docker compose --env-file ../.env $PROFILE_ARGS pull && docker compose --env-file ../.env $PROFILE_ARGS up -d --remove-orphans && docker compose --env-file ../.env $PROFILE_ARGS up -d --force-recreate unbound"
   fi

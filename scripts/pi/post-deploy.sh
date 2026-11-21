@@ -166,7 +166,7 @@ if [[ "${ENABLE_RESTIC:-true}" == "true" ]]; then
     run_step_soft "Restic yedek (ilk snapshot)" "$SCRIPT_DIR/restic-backup.sh"
   fi
 fi
-if [[ "${ENABLE_DOZZLE:-true}" == "true" ]]; then
+if [[ "${ENABLE_DOZZLE:-true}" == "true" && "${UNIFIED_LOGIN:-true}" != "true" && "${SYNC_SERVICE_PASSWORDS:-false}" != "true" ]]; then
   run_step_critical "Dozzle auth" "$SCRIPT_DIR/setup-dozzle.sh"
 fi
 if [[ "${ENABLE_N8N:-false}" == "true" ]]; then
@@ -177,17 +177,21 @@ if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
   run_step_critical "NetAlertX ag envanteri" "$SCRIPT_DIR/setup-netalertx.sh"
   run_step_critical "NetAlert DB erisim" "$SCRIPT_DIR/ensure-netalert-db-access.sh"
 fi
-# LAN IP panel yollari (Tailscale yoksa da)
-if [[ -n "${PI_STATIC_IP:-}" && -f "${REMOTE_DIR}/config/caddy/Caddyfile" ]]; then
-  run_step_optional "LAN IP panel yollari" "$SCRIPT_DIR/setup-caddy-lan-ip.sh"
-fi
 if command -v tailscale >/dev/null 2>&1 && tailscale status >/dev/null 2>&1; then
   run_step_optional "Tailscale uzaktan erisim" "$SCRIPT_DIR/setup-tailscale-remote.sh"
   run_step_optional "Tailscale ACL" "$SCRIPT_DIR/setup-tailscale-acl.sh"
+  # setup-tailscale-serve.sh icinde setup-caddy-lan-ip.sh zaten cagirilir
   run_step_optional "Tailscale panel HTTPS" "$SCRIPT_DIR/setup-tailscale-serve.sh"
   run_step_optional "Tailscale global DNS" "$SCRIPT_DIR/setup-tailscale-dns.sh"
   # caddy-lan'dan SONRA — UFW ts-panel-* kurallari kalir
   run_step_optional "Tailscale panel portlari" "$SCRIPT_DIR/setup-ts-panel-ports-unit.sh"
+elif [[ -n "${PI_STATIC_IP:-}" && -f "${REMOTE_DIR}/config/caddy/Caddyfile" ]]; then
+  # LAN IP panel yollari (Tailscale yoksa)
+  run_step_optional "LAN IP panel yollari" "$SCRIPT_DIR/setup-caddy-lan-ip.sh"
+fi
+if [[ -x "$SCRIPT_DIR/setup-openbot-fleet.sh" ]]; then
+  REMOTE_DIR="$REMOTE_DIR" bash "$SCRIPT_DIR/setup-openbot-fleet.sh" --files-only \
+    || log "WARN: OpenBot filo dosya senkronu atlandi"
 fi
 run_step_soft "OpenBot Jarvis sync" "$SCRIPT_DIR/setup-openbot-jarvis-migration.sh"
 run_step_soft "OpenBot Jarvis automation" "$SCRIPT_DIR/setup-openbot-jarvis-automation.sh"

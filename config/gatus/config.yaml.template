@@ -1,5 +1,5 @@
 # Pi Gateway Gatus — config-as-code durum ve SLO izleme paneli
-# Render: render-config.sh — Telegram alarmlari tek kanaldan (notify.sh) yonetilir (cift bildirim yok)
+# Render: render-config.sh — sistem alarmlari tek kanaldan (notify.sh -> OpenBot Jarvis) yonetilir (cift bildirim yok)
 # UI: status.home (Caddy basic auth arkasi). Storage: ../data/gatus (sqlite)
 log:
   level: warn

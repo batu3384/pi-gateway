@@ -227,7 +227,8 @@ def load_names():
                                 if parsed_dt.tzinfo is None:
                                     ts_local = parsed_dt.timestamp()
                                     ts_utc = parsed_dt.replace(tzinfo=timezone.utc).timestamp()
-                                    ts = ts_utc if ts_local > now_cmp + 300 else ts_local
+                                    cands = [c for c in (ts_utc, ts_local) if c <= now_cmp + 300]
+                                    ts = min(cands, key=lambda c: abs(now_cmp - c)) if cands else min(ts_utc, ts_local)
                                 else:
                                     ts = parsed_dt.timestamp()
                             except ValueError:
@@ -236,12 +237,15 @@ def load_names():
                                         parsed_dt = datetime.strptime(txt, fmt)
                                         ts_local = parsed_dt.timestamp()
                                         ts_utc = parsed_dt.replace(tzinfo=timezone.utc).timestamp()
-                                        ts = ts_utc if ts_local > now_cmp + 300 else ts_local
+                                        cands = [c for c in (ts_utc, ts_local) if c <= now_cmp + 300]
+                                        ts = min(cands, key=lambda c: abs(now_cmp - c)) if cands else min(ts_utc, ts_local)
                                         break
                                     except ValueError:
                                         pass
                     if ts is not None:
-                        netalert_seen[ip] = ts
+                        prev_ts = netalert_seen.get(ip)
+                        if prev_ts is None or ts > prev_ts:
+                            netalert_seen[ip] = ts
             con.close()
             db_readable = True
         except Exception:
@@ -296,7 +300,7 @@ def query_is_recent(row):
     except (TypeError, ValueError):
         return False
     age = now_ts - query_ts
-    return 0 <= age <= query_recency_sec
+    return -300 <= age <= query_recency_sec
 
 for row in ql.get("data", []):
     if not query_is_recent(row):
@@ -331,7 +335,7 @@ query_ips = set(clients)
 observed_ips = online_ips | idle_ips
 recent_netalert_ips = {
     ip for ip, seen in netalert_seen.items()
-    if 0 <= now_ts - seen <= netalert_recency_sec
+    if -300 <= now_ts - seen <= netalert_recency_sec
 }
 snapshot_ips = set(modem["ips"])
 if modem["fresh"]:
@@ -355,7 +359,7 @@ using_ips = {ip for ip in active_ips if clients.get(ip, 0) >= min_queries}
 low = sorted(ip for ip in active_ips if 0 < clients.get(ip, 0) < min_queries)
 possible_bypass = sorted(ip for ip in active_ips if clients.get(ip, 0) == 0)
 unverified = sorted(set(low) | set(possible_bypass))
-report_ips = observed_ips | modem_ips | query_ips
+report_ips = observed_ips | modem_ips | query_ips | recent_netalert_ips
 total = len(report_ips)
 using = len(using_ips)
 strict_total = len(active_ips)
@@ -489,11 +493,12 @@ if modem_required and modem["fresh"] and unknown_ips:
     finish("unknown", 12)
 if strict_total and strict_cov < min_cov:
     print(f"COVERAGE_FAIL:{strict_cov}")
-    finish("fail", 10)
+    finish("warn" if bypass_check == "warn" else "fail", 10)
 if unverified:
     print("MISSING_DEVICES:" + ",".join(unverified))
     finish("warn" if bypass_check == "warn" else "fail", 11)
 if protocol_unknown:
+    # AdGuard API protokol alani vermediginde bilerek ok kalir (contract invariant)
     print("COVERAGE_OK")
     finish("ok", 0)
 print("COVERAGE_OK")
@@ -506,6 +511,9 @@ case "$rc" in
     case "$(coverage_state_status)" in
       ok)
         note_ok "DNS kapsami yeterli"
+        ;;
+      off)
+        note_ok "DNS bypass kontrolu kapali (off)"
         ;;
       warn)
         note_warn "DNS kapsami PASS degil — evidence WARN (protokol/bypass kaniti eksik olabilir)"

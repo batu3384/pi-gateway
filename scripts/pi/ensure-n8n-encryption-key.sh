@@ -9,7 +9,7 @@ PG_SCRIPT_NAME="$(basename "$0")"
 source "${_PG_ENV_LIB:?}"
 read_remote_dotenv || { echo "[${PG_SCRIPT_NAME:-script}] HATA: .env dotenv parser hatasi" >&2; exit 1; }
 log() { echo "[n8n-encryption-key] $*"; }
-[[ "${ENABLE_N8N:-true}" == "true" ]] || { log "n8n kapali"; exit 0; }
+[[ "${ENABLE_N8N:-false}" == "true" ]] || { log "n8n kapali"; exit 0; }
 if [[ -n "${N8N_ENCRYPTION_KEY:-}" && "${#N8N_ENCRYPTION_KEY}" -ge 32 ]]; then
   log "N8N_ENCRYPTION_KEY mevcut"
   exit 0
@@ -24,8 +24,8 @@ fi
 export N8N_ENCRYPTION_KEY="$key"
 log "N8N_ENCRYPTION_KEY olusturuldu (.env guncellendi)"
 if [[ "${created:-0}" -eq 1 ]] && docker ps --format '{{.Names}}' | grep -q '^n8n$'; then
-  log "n8n yeniden baslatiliyor (yeni encryption key)"
-  docker restart n8n >/dev/null 2>&1 || true
+  log "n8n yeniden olusturuluyor (yeni encryption key — .env yeniden okunur)"
+  (cd "$REMOTE_DIR/compose" && docker compose --env-file ../.env --profile n8n up -d --no-deps --force-recreate n8n) >/dev/null 2>&1 || true
   for _ in 1 2 3 4 5 6 7 8 9 10 11 12; do
     sleep 5
     curl -fsS "http://127.0.0.1:${N8N_PORT:-5678}/healthz" >/dev/null 2>&1 && break

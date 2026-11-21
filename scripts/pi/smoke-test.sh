@@ -147,7 +147,7 @@ if [[ "${ENABLE_MONITORING:-true}" == "true" ]]; then
   run_check "dns-rewrite-grafana" bash -c \
     "dig +time=3 +tries=1 @${PI_STATIC_IP} grafana.${LAN_DOMAIN} A +short | grep -qx '${PI_STATIC_IP}'"
 fi
-# Degraded: sadece DNS (+ opsiyonel caddy/homepage). App panel smoke yok.
+# Degraded: sadece DNS (+ opsiyonel caddy/glance). App panel smoke yok.
 if [[ "$DEGRADED" -eq 1 ]]; then
   run_check "adguard-ui" curl -fsS "http://127.0.0.1:${ADGUARD_WEB_PORT}/"
   run_check "privileged-lib-installed" test -x /usr/local/lib/pi-gateway/scripts/pi/recover-readonly-root.sh
@@ -173,11 +173,18 @@ if [[ "${ENABLE_CADDY:-true}" == "true" ]]; then
         run_caddy_auth_checks "n8n"
       fi
       if [[ "${ENABLE_NETALERTX:-true}" == "true" ]]; then
-        run_check "netalertx-caddy-no-basic-auth" bash -c \
-          'base="https://devices.'"${LAN_DOMAIN}"'"; resolve="--resolve devices.'"${LAN_DOMAIN}"':443:'"${PI_STATIC_IP}"'"; \
-          code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 $resolve "$base/"); \
-          [[ "$code" == "200" || "$code" == "302" ]] && \
-          ! curl -skI --max-time 5 $resolve "$base/" | grep -qi "www-authenticate: Basic"'
+        if [[ "${ENABLE_TLS:-true}" == "true" ]]; then
+          run_check "netalertx-caddy-no-basic-auth" bash -c \
+            'base="https://devices.'"${LAN_DOMAIN}"'"; resolve="--resolve devices.'"${LAN_DOMAIN}"':443:'"${PI_STATIC_IP}"'"; \
+            code=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 $resolve "$base/"); \
+            [[ "$code" == "200" || "$code" == "302" ]] && \
+            ! curl -skI --max-time 5 $resolve "$base/" | grep -qi "www-authenticate: Basic"'
+        else
+          run_check "netalertx-caddy-no-basic-auth" bash -c \
+            'code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 -H "Host: devices.'"${LAN_DOMAIN}"'" "http://'"${PI_STATIC_IP}"'/"); \
+            [[ "$code" == "200" || "$code" == "302" ]] && \
+            ! curl -sI --max-time 5 -H "Host: devices.'"${LAN_DOMAIN}"'" "http://'"${PI_STATIC_IP}"'/" | grep -qi "www-authenticate: Basic"'
+        fi
       fi
       ;;
   esac

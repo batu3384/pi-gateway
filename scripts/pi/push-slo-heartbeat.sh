@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Push SLO heartbeats to Gatus external endpoints (health timer)
-# Gatus v5.4+: POST /api/v1/endpoints/{group}_{name}/push?success=bool
+# Gatus v5.4+: POST /api/v1/endpoints/{group}_{name}/external?success=bool
 #              Authorization: Bearer <token>
 set -euo pipefail
 # shellcheck source=../lib/env-file.sh

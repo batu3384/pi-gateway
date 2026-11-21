@@ -290,10 +290,10 @@
       "id": 20,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
       "targets": [
-        { "expr": "pi_gateway_ibb_pm10", "legendFormat": "PM10 {{station}}", "refId": "A" },
-        { "expr": "pi_gateway_ibb_no2", "legendFormat": "NO2", "refId": "B" },
-        { "expr": "pi_gateway_ibb_so2", "legendFormat": "SO2", "refId": "C" },
-        { "expr": "pi_gateway_ibb_o3", "legendFormat": "O3", "refId": "D" }
+        { "expr": "pi_gateway_ibb_pm10 >= 0", "legendFormat": "PM10 {{station}}", "refId": "A" },
+        { "expr": "pi_gateway_ibb_no2 >= 0", "legendFormat": "NO2", "refId": "B" },
+        { "expr": "pi_gateway_ibb_so2 >= 0", "legendFormat": "SO2", "refId": "C" },
+        { "expr": "pi_gateway_ibb_o3 >= 0", "legendFormat": "O3", "refId": "D" }
       ],
       "title": "İBB concentrations (latest hour)",
       "type": "timeseries"
