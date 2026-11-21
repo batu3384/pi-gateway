@@ -1,0 +1,18 @@
+[Unit]
+Description=Pi Gateway CrowdSec host journald log feed (ssh + kernel/UFW)
+After=systemd-journald.service local-fs.target
+Before=docker.service
+
+[Service]
+Type=simple
+RuntimeDirectory=pi-gateway
+RuntimeDirectoryPreserve=yes
+ExecStart=/usr/bin/python3 /usr/local/lib/pi-gateway/scripts/lib/crowdsec-journal-feed.py
+Restart=always
+RestartSec=5
+MemoryMax=48M
+CPUQuota=15%
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

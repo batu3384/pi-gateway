@@ -36,7 +36,9 @@ configure_host_bouncer() {
       echo "CROWDSEC_BOUNCER_KEY=${key}" >> "$REMOTE_DIR/.env"
   fi
   sudo mkdir -p /etc/crowdsec/bouncers
-  sudo tee /etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml >/dev/null <<EOF
+  local tmp_bouncer
+  tmp_bouncer="$(umask 077 && mktemp)"
+  cat >"$tmp_bouncer" <<EOF
 mode: iptables
 api_url: ${LAPI_URL}/
 api_key: ${CROWDSEC_BOUNCER_KEY}
@@ -45,18 +47,19 @@ deny_action: DROP
 deny_log: true
 iptables_chains:
   - INPUT
+  - DOCKER-USER
 EOF
-  sudo chmod 600 /etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml 2>/dev/null || true
+  sudo install -o root -g root -m 600 "$tmp_bouncer" /etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml
+  rm -f "$tmp_bouncer"
   sudo systemctl enable --now crowdsec-firewall-bouncer 2>/dev/null
+  sudo systemctl restart crowdsec-firewall-bouncer 2>/dev/null || true
 }
 sync_ufw_decisions() {
-  local ip
-  while read -r ip; do
-    [[ -n "$ip" ]] || continue
-    sudo ufw status | grep -qF "$ip" && continue
-    sudo ufw deny from "$ip" comment "crowdsec" 2>/dev/null || true
-    log "UFW deny: $ip"
-  done < <(docker exec crowdsec cscli decisions list -o raw 2>/dev/null | awk '{print $1}' | grep -E '^[0-9]+\.' || true)
+  local sync_script="${SCRIPT_DIR}/sync-crowdsec-ufw.sh"
+  [[ -x "$sync_script" ]] || sync_script="${REMOTE_DIR}/scripts/pi/sync-crowdsec-ufw.sh"
+  if [[ -f "$sync_script" ]]; then
+    REMOTE_DIR="$REMOTE_DIR" bash "$sync_script"
+  fi
 }
 if install_host_bouncer && configure_host_bouncer; then
   log "Host firewall bouncer aktif"

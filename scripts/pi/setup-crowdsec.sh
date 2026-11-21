@@ -32,16 +32,32 @@ elif [[ ! -f "${CONFIG}/config.yaml" ]]; then
 fi
 
 # AdGuard host:8080 ile cakismasin — LAPI 8082 (network_mode: host)
+bootstrap_default_config() {
+  local cfg="${CONFIG}/config.yaml"
+  local lines=0
+  if [[ -f "$cfg" ]]; then
+    lines="$(wc -l <"$cfg" 2>/dev/null || echo 0)"
+  fi
+  if [[ ! -f "$cfg" || "${lines:-0}" -lt 20 ]]; then
+    log "Varsayilan config.yaml imajdan cikariliyor (/staging/etc/crowdsec/config.yaml)"
+    local tmp_cfg
+    tmp_cfg="$(mktemp)"
+    if (cd "${REMOTE_DIR}/compose" && docker compose --env-file ../.env --profile crowdsec \
+        run --rm --no-deps --entrypoint cat crowdsec /staging/etc/crowdsec/config.yaml >"$tmp_cfg" 2>/dev/null) \
+      && [[ -s "$tmp_cfg" ]]; then
+      mv "$tmp_cfg" "$cfg"
+    else
+      rm -f "$tmp_cfg"
+      log "HATA: CrowdSec varsayilan config.yaml imajdan alinamadi" >&2
+      return 1
+    fi
+  fi
+}
 ensure_lapi_listen_port() {
   local cfg="${CONFIG}/config.yaml"
-  if [[ -f "$cfg" ]] && grep -q 'listen_uri:' "$cfg"; then
-    sed -i 's|listen_uri:.*|listen_uri: 127.0.0.1:8082|' "$cfg"
-  elif [[ ! -f "$cfg" ]]; then
-    cat >"$cfg" <<'EOF'
-api:
-  server:
-    listen_uri: 127.0.0.1:8082
-EOF
+  bootstrap_default_config
+  if grep -qE '^[[:space:]]*listen_uri:' "$cfg"; then
+    sed -i -E 's|^([[:space:]]*)listen_uri:.*|\1listen_uri: 127.0.0.1:8082|' "$cfg"
   else
     printf '\napi:\n  server:\n    listen_uri: 127.0.0.1:8082\n' >>"$cfg"
   fi
@@ -52,8 +68,19 @@ ensure_lapi_credentials() {
     sed -i 's|^url:.*|url: http://127.0.0.1:8082|' "$cred"
   fi
 }
+ensure_journal_feed() {
+  sudo mkdir -p /run/pi-gateway/crowdsec-logs 2>/dev/null || mkdir -p /run/pi-gateway/crowdsec-logs 2>/dev/null || true
+  sudo chmod 755 /run/pi-gateway/crowdsec-logs 2>/dev/null || true
+  if [[ -f "${REMOTE_DIR}/config/crowdsec/acquis.yaml" ]]; then
+    cp "${REMOTE_DIR}/config/crowdsec/acquis.yaml" "${CONFIG}/acquis.yaml" 2>/dev/null || true
+  fi
+  if [[ -f /etc/systemd/system/pi-gateway-crowdsec-journal.service ]]; then
+    sudo systemctl enable --now pi-gateway-crowdsec-journal.service 2>/dev/null || true
+  fi
+}
 ensure_lapi_listen_port
 ensure_lapi_credentials
+ensure_journal_feed
 
 cd "${REMOTE_DIR}/compose"
 docker compose --env-file ../.env --profile crowdsec up -d crowdsec

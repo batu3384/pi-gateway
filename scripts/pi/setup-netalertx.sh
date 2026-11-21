@@ -141,7 +141,8 @@ log "NetAlertX TELEGRAM_RUN kapalı — yeni cihaz Jarvis timer"
 # ARP + AdGuard isim + zorunlu iskelet + TELEGRAM. ICMP/DIG/vendor/webhook yok.
 export NETALERTX_PLUGINS='["ARPSCAN","ADGUARDIMP","NEWDEV","NTFPRCS","DBCLNP","CUSTPROP","SETPWD","SYNC","UI","MAINT"]'
 export SCAN_SUBNET
-python3 <<'PY'
+_nax_py_rc=0
+python3 <<'PY' || _nax_py_rc=$?
 import json
 import os
 import re
@@ -230,8 +231,8 @@ updates = {
     "ADGUARDIMP_FAKE_MAC": "False",
     "NTFPRCS_INCLUDED_SECTIONS": included_sections,
     "TELEGRAM_RUN": telegram_run,
-    "TELEGRAM_HOST": q(tg_chat),
-    "TELEGRAM_URL": q(tg_token),
+    "TELEGRAM_HOST": "''",
+    "TELEGRAM_URL": "''",
     "SETPWD_enable_password": "True",
     "SETPWD_password": "'" + password_hash + "'",
     "BACKEND_API_URL": "'/server'",
@@ -242,7 +243,7 @@ for key, value in updates.items():
     pattern = rf"^{re.escape(key)}\s*=.*$"
     replacement = f"{key}={value}"
     if re.search(pattern, text, flags=re.MULTILINE):
-        new_text, n = re.subn(pattern, replacement, text, count=1, flags=re.MULTILINE)
+        new_text, n = re.subn(pattern, lambda _m, r=replacement: r, text, count=1, flags=re.MULTILINE)
         if n and new_text != text:
             text = new_text
             changed = True
@@ -251,25 +252,38 @@ for key, value in updates.items():
         changed = True
 if changed or not marker.is_file():
     import tempfile
-    with tempfile.NamedTemporaryFile("w", delete=False, suffix=".conf") as fh:
-        fh.write(text)
-        tmp_path = fh.name
-    subprocess.run(["sudo", "cp", tmp_path, str(conf)], check=True)
-    subprocess.run(["sudo", "chown", "20211:20211", str(conf)], check=True)
-    subprocess.run(["sudo", "chmod", "600", str(conf)], check=True)
-    Path(tmp_path).unlink(missing_ok=True)
+    old_umask = os.umask(0o077)
+    try:
+        with tempfile.NamedTemporaryFile("w", delete=False, suffix=".conf") as fh:
+            fh.write(text)
+            tmp_path = fh.name
+    finally:
+        os.umask(old_umask)
+    stage_conf = str(conf.parent / f".{conf.name}.tmp.{os.getpid()}")
+    try:
+        subprocess.run(
+            ["sudo", "install", "-o", "20211", "-g", "20211", "-m", "600", tmp_path, stage_conf],
+            check=True,
+        )
+        subprocess.run(["sudo", "mv", "-f", stage_conf, str(conf)], check=True)
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
+        subprocess.run(["sudo", "rm", "-f", stage_conf], check=False)
     subprocess.run(["sudo", "tee", str(marker)], input=b"ok\n", check=True, stdout=subprocess.DEVNULL)
     _u = os.environ.get("USER") or os.environ.get("PI_USER") or "pi"
     subprocess.run(["sudo", "chown", f"{_u}:{_u}", str(marker)], check=False)
     print(f"[netalertx-setup] app.conf guncellendi (SCAN_SUBNETS={subnet})")
     print(f"[netalertx-setup] TELEGRAM_RUN={telegram_run} WEBHOOK_RUN={webhook_run}")
+    raise SystemExit(10)
 else:
     print("[netalertx-setup] app.conf zaten guncel")
 PY
-if [[ "$(cat "$MARKER" 2>/dev/null)" == "ok" ]]; then
+if [[ "$_nax_py_rc" -eq 10 ]]; then
   _reap_netalert_binds
   docker start netalertx >/dev/null 2>&1 || true
   wait_http || true
+elif [[ "$_nax_py_rc" -ne 0 ]]; then
+  exit "$_nax_py_rc"
 fi
 # Isim sync: yalniz ADGUARDIMP plugin (*/5). Timer/import/enrich/geri-sync yok — cift yazici.
 DB_DIR="${DATA_DIR}/db"

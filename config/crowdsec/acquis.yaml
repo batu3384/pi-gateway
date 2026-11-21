@@ -1,0 +1,8 @@
+# CrowdSec acquisition: host systemd journal (ssh.service + kernel/UFW) streamed
+# into tmpfs by pi-gateway-crowdsec-journal.service (zero SD/SSD write wear).
+source: file
+filenames:
+  - /var/log/host-journal/host-syslog.log
+force_inotify: true
+labels:
+  type: syslog

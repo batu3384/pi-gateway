@@ -27,6 +27,8 @@ log() { echo "[caddy-lan-ip] $*"; }
 [[ -f "$CADDYFILE" ]] || { log "Caddyfile yok — atlandi"; exit 0; }
 [[ -n "$PI_IP" || -n "$TS_IP" ]] || { log "IP yok — atlandi"; exit 0; }
 python3 - "$CADDYFILE" "$PI_IP" "$TS_IP" "$ADGUARD_WEB_PORT" "$NETALERTX_PORT" "$NETALERTX_LISTEN_ADDR" "$ENABLE_N8N" <<'PY'
+import os
+import subprocess
 import sys
 from pathlib import Path
 caddyfile, pi_ip, ts_ip, agh_port, nax_port, nax_host, enable_n8n = sys.argv[1:8]
@@ -47,10 +49,13 @@ def path_proxy(prefix: str, backend: str) -> str:
 \t\t}}
 \t}}"""
 def panel_block(ip: str, with_auth: bool, auth: str) -> str:
-    auth_line = (auth if with_auth and auth else "\t# no basic_auth — Tailscale loopback :8088 (LAN erisemez)")
+    if with_auth and not auth:
+        raise SystemExit("[caddy-lan-ip] HATA: Caddyfile basic_auth blogu bos — LAN authsuz yazilamaz")
+    auth_line = (auth if with_auth else "\t# no basic_auth — Tailscale loopback :8088 (LAN erisemez)")
     site_addr = f"http://{ip}" if with_auth else f"http://{ip}:8088"
     parts = [
         f"{site_addr} {{",
+        "\timport security_headers",
         auth_line,
         path_proxy("p/status", "gatus:8080"),
         path_proxy("p/logs", "dozzle:8080"),
@@ -68,10 +73,11 @@ def panel_block(ip: str, with_auth: bool, auth: str) -> str:
     ])
     return "\n".join(parts)
 auth = ""
-for line in text.splitlines():
+lines = text.splitlines()
+for idx, line in enumerate(lines):
     if line.strip().startswith("basic_auth {"):
         auth_lines = [line]
-        for inner in text.splitlines()[text.splitlines().index(line) + 1:]:
+        for inner in lines[idx + 1:]:
             auth_lines.append(inner)
             if inner.strip() == "}":
                 break
@@ -97,15 +103,41 @@ if start in text:
     text = pre.rstrip() + "\n\n" + section + "\n" + post.lstrip()
 else:
     text = text.rstrip() + "\n\n" + section + "\n"
-path.write_text(text)
+
+# Caddy container calisiyorsa once caddy validate ile dogrula, sonra IN-PLACE yaz
+# (Docker single-file bind mount inode baglidir; os.replace/mv konteyner icinde eski inodu birakir!)
+running = subprocess.run(
+    ["docker", "ps", "--format", "{{.Names}}"],
+    capture_output=True, text=True, check=False,
+)
+if running.returncode == 0 and "caddy" in running.stdout.splitlines():
+    val = subprocess.run(
+        ["docker", "exec", "-i", "caddy", "caddy", "validate", "--adapter", "caddyfile", "--config", "-"],
+        input=text, text=True, capture_output=True, check=False,
+    )
+    if val.returncode != 0:
+        raise SystemExit(f"[caddy-lan-ip] HATA: caddy validate basarisiz:\n{val.stderr}")
+with open(path, "w", encoding="utf-8") as fh:
+    fh.write(text)
+os.chmod(path, 0o640)
+
 for ip in ips:
     mode = "auth" if not is_tailscale_ip(ip) else "no-auth"
     print(f"[caddy-lan-ip] http://{ip}/p/... ({mode})")
 PY
 # Not: 8080/20211 tailscale0 allow artik setup-tailscale-panel-ports.sh
 # (dogrudan :PORT — /p/ asset 404 yok). Eski strip loop silindi.
-docker exec caddy caddy reload --config /etc/caddy/Caddyfile 2>/dev/null \
-  || docker restart caddy >/dev/null 2>&1 || true
+_host_ino="$(stat -c %i "$CADDYFILE" 2>/dev/null || true)"
+_ctr_ino="$(docker exec caddy stat -c %i /etc/caddy/Caddyfile 2>/dev/null || true)"
+if [[ -n "$_host_ino" && -n "$_ctr_ino" && "$_host_ino" != "$_ctr_ino" ]]; then
+  log "Caddyfile inode degisti (${_ctr_ino} -> ${_host_ino}) — caddy recreate"
+  (cd "${REMOTE_DIR}/compose" && docker compose --env-file ../.env --profile caddy up -d --force-recreate --no-deps caddy) >/dev/null 2>&1 \
+    || docker restart caddy >/dev/null 2>&1 || true
+else
+  docker exec caddy caddy reload --config /etc/caddy/Caddyfile 2>/dev/null \
+    || docker restart caddy >/dev/null 2>&1 || true
+fi
+unset _host_ino _ctr_ino
 
 # Caddy Tailscale authless bloku yalniz 127.0.0.1:8088'te dinler — tailscale0 IP:80 -> 127.0.0.1:8088 DNAT
 # Phone: Tailscale Connected yeter (MagicDNS / Use Tailscale DNS gerekmez; LAN 192.168.x erisemez)
@@ -117,6 +149,13 @@ ensure_ts80_dnat() {
   sudo /usr/sbin/sysctl -w net.ipv4.conf.all.route_localnet=0 >/dev/null 2>&1 || true
   sudo /usr/sbin/sysctl -w net.ipv4.conf.default.route_localnet=0 >/dev/null 2>&1 || true
   sudo /usr/sbin/sysctl -w net.ipv4.conf.tailscale0.route_localnet=1 >/dev/null 2>&1 || true
+  local ts_sysctl="/etc/sysctl.d/99-pi-gateway-ts80.conf"
+  sudo tee "$ts_sysctl" >/dev/null <<'EOF'
+# Pi Gateway Tailscale :80 -> 127.0.0.1:8088 DNAT loopback isolation
+net.ipv4.conf.all.route_localnet = 0
+net.ipv4.conf.default.route_localnet = 0
+net.ipv4.conf.tailscale0.route_localnet = 1
+EOF
   if [[ -r "$marker" ]]; then
     old="$(cat "$marker" 2>/dev/null || true)"
   fi
@@ -143,12 +182,8 @@ ensure_ts80_dnat() {
     sudo ufw allow in on tailscale0 to any port 8088 proto tcp comment 'pi-gateway tailscale-8088' >/dev/null 2>&1 || true
   fi
   printf '%s\n' "$ts_ip" | sudo tee "$marker" >/dev/null
-  # reboot kaliciligi (varsa)
-  if command -v netfilter-persistent >/dev/null 2>&1; then
-    sudo netfilter-persistent save >/dev/null 2>&1 || true
-  elif [[ -d /etc/iptables ]]; then
-    sudo sh -c 'iptables-save > /etc/iptables/rules.v4' 2>/dev/null || true
-  fi
+  # Not: netfilter-persistent / iptables-save yapma (ephemeral Docker bridge zincirlerini dondurur);
+  # reboot kaliciligi pi-gateway-ts-panel-ports.service ile saglanir.
   log "TS HTTP: http://${ts_ip}/p/... -> ${target} (tailscale0 loopback isolation)"
 }
 if [[ -n "$TS_IP" && -n "$PI_IP" ]]; then

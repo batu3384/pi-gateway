@@ -11,6 +11,9 @@ services:
     container_name: unbound
     logging: *default-logging
     restart: unless-stopped
+    mem_limit: 192m
+    cpus: "1.5"
+    pids_limit: 128
     volumes:
       - ../config/unbound/unbound.conf:/etc/unbound/custom.conf.d/pi-gateway.conf:ro
     ports:
@@ -27,6 +30,9 @@ services:
     logging: *default-logging
     restart: unless-stopped
     network_mode: host
+    mem_limit: 512m
+    cpus: "2.0"
+    pids_limit: 256
     # service_healthy waits forever after WAN :53 drop (unbound-host SERVFAIL).
     depends_on:
       unbound:
@@ -35,7 +41,8 @@ services:
       - ../data/adguard/work:/opt/adguardhome/work
       - ../config/adguard:/opt/adguardhome/conf
     healthcheck:
-      test: ["CMD-SHELL", "nslookup -timeout=2 cloudflare.com 127.0.0.1 >/dev/null 2>&1"]
+      # Lokal rewrite testi: WAN kesintisinde AdGuard saglikli kalir (restart firtinasi yok)
+      test: ["CMD-SHELL", "nslookup -timeout=2 gateway.${LAN_DOMAIN:-home} 127.0.0.1 >/dev/null 2>&1"]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -46,6 +53,9 @@ services:
     container_name: docker-socket-proxy
     logging: *default-logging
     restart: unless-stopped
+    mem_limit: 64m
+    cpus: "0.5"
+    pids_limit: 64
     profiles: ["dozzle"]
     networks:
       - socket_proxy
@@ -64,6 +74,9 @@ services:
     container_name: caddy
     logging: *default-logging
     restart: unless-stopped
+    mem_limit: 192m
+    cpus: "1.0"
+    pids_limit: 128
     profiles: ["caddy"]
     ports:
       # Tailscale Serve 100.x:443 & tailscale0 DNAT yalniz loopback :8088'e gider (LAN erisemez)
@@ -87,6 +100,9 @@ services:
     container_name: gateway-state
     logging: *default-logging
     restart: unless-stopped
+    mem_limit: 64m
+    cpus: "0.5"
+    pids_limit: 64
     volumes:
       - /var/lib/pi-gateway/public:/usr/share/nginx/html:ro
     expose:
@@ -104,6 +120,9 @@ services:
     container_name: glance
     logging: *default-logging
     restart: unless-stopped
+    mem_limit: 128m
+    cpus: "1.0"
+    pids_limit: 128
     depends_on:
       gateway-state:
         condition: service_started
@@ -125,6 +144,9 @@ services:
     container_name: gatus
     logging: *default-logging
     restart: unless-stopped
+    mem_limit: 128m
+    cpus: "0.5"
+    pids_limit: 128
     profiles: ["gatus"]
     depends_on:
       - gateway-state
@@ -141,6 +163,9 @@ services:
     container_name: dozzle
     logging: *default-logging
     restart: unless-stopped
+    mem_limit: 128m
+    cpus: "0.5"
+    pids_limit: 128
     profiles: ["dozzle"]
     networks:
       - default
@@ -162,6 +187,9 @@ services:
     container_name: n8n
     logging: *default-logging
     restart: unless-stopped
+    mem_limit: 512m
+    cpus: "1.0"
+    pids_limit: 256
     profiles: ["n8n"]
     ports:
       - "127.0.0.1:${N8N_PORT:-5678}:5678"
@@ -211,7 +239,7 @@ services:
       - ../config/netalertx/ignore_plugin:/app/front/plugins/workflows/ignore_plugin:ro
     tmpfs:
       - /tmp:uid=20211,gid=20211,mode=1700
-    # CPU cap (cgroup memory bu kernel'de yok — Limitation discarded).
+    mem_limit: 384m
     cpus: "1.0"
     pids_limit: 256
 
@@ -221,6 +249,9 @@ services:
     logging: *default-logging
     restart: unless-stopped
     network_mode: host
+    mem_limit: 256m
+    cpus: "1.0"
+    pids_limit: 128
     profiles: ["crowdsec"]
     environment:
       GID: "1000"
@@ -229,7 +260,8 @@ services:
     volumes:
       - ../data/crowdsec/config:/etc/crowdsec
       - ../data/crowdsec/db:/var/lib/crowdsec/data
-      - /var/log/journal:/var/log/journal:ro
+      - ../config/crowdsec/acquis.yaml:/etc/crowdsec/acquis.yaml:ro
+      - /run/pi-gateway/crowdsec-logs:/var/log/host-journal:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -S -O /dev/null http://127.0.0.1:8082/v1/heartbeat 2>&1 | grep -qE 'HTTP/1\\.[01] (200|401)'"]
       interval: 30s
@@ -242,6 +274,9 @@ services:
     container_name: cloudflared
     logging: *default-logging
     restart: unless-stopped
+    mem_limit: 128m
+    cpus: "0.5"
+    pids_limit: 128
     profiles: ["cloudflare"]
     command: tunnel run
     environment:
@@ -253,6 +288,10 @@ services:
     container_name: node-exporter
     logging: *default-logging
     restart: unless-stopped
+    network_mode: host
+    mem_limit: 96m
+    cpus: "0.5"
+    pids_limit: 64
     profiles: ["monitoring"]
     command:
       - --path.procfs=/host/proc
@@ -260,19 +299,22 @@ services:
       - --path.rootfs=/rootfs
       - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
       - --collector.textfile.directory=/textfile
+      - --web.listen-address=127.0.0.1:9100
+      - --web.listen-address=172.17.0.1:9100
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /:/rootfs:ro
       - /var/lib/pi-gateway/metrics:/textfile:ro
-    ports:
-      - "127.0.0.1:9100:9100"
 
   victoriametrics:
     image: victoriametrics/victoria-metrics@sha256:da8a90ac0912f16589be2b96a6441a2fca4bca415c83783d972d92e3b5b66970
     container_name: victoriametrics
     logging: *default-logging
     restart: unless-stopped
+    mem_limit: 256m
+    cpus: "1.0"
+    pids_limit: 128
     profiles: ["monitoring"]
     depends_on:
       node-exporter:
@@ -287,12 +329,17 @@ services:
       - ../data/victoriametrics:/victoria-metrics-data
     ports:
       - "127.0.0.1:9090:8428"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   grafana:
     image: grafana/grafana:11.4.0@sha256:d8ea37798ccc41061a62ab080f2676dda6bf7815558499f901bdb0f533a456fb
     container_name: grafana
     logging: *default-logging
     restart: unless-stopped
+    mem_limit: 256m
+    cpus: "1.0"
+    pids_limit: 128
     profiles: ["monitoring"]
     depends_on:
       victoriametrics:

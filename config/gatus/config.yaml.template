@@ -40,9 +40,12 @@ endpoints:
     url: http://caddy:80/
     headers:
       Host: gateway.${LAN_DOMAIN}
+    client:
+      ignore-redirect: true
     interval: 2m
     conditions:
-      - "[STATUS] < 500"
+      - "[CONNECTED] == true"
+      - "[STATUS] == any(200, 301, 308, 401)"
 
   - name: Dozzle
     group: panels
@@ -81,7 +84,7 @@ endpoints:
 
   - name: node-exporter
     group: monitoring
-    url: http://node-exporter:9100/metrics
+    url: http://host.docker.internal:9100/metrics
     interval: 2m
     conditions:
       - "[STATUS] == 200"
