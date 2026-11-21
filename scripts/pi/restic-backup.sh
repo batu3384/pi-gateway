@@ -211,7 +211,7 @@ if ! run_restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune; 
   run_restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune \
     || log "WARN: prune hala basarisiz — snapshot alindi"
 fi
-run_restic snapshots --last
+run_restic snapshots --group-by "" --latest 1
 fix_repo_ownership
 # shellcheck source=../lib/notify.sh
 source "$SCRIPT_DIR/../lib/notify.sh"

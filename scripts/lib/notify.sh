@@ -81,9 +81,27 @@ notify_panel_url() {
   fi
 }
 
+notify_owner() {
+  local owner="${NOTIFY_OWNER:-${PI_USER:-}}"
+  if [[ -z "$owner" || "$owner" == "root" ]]; then
+    if [[ -n "${REMOTE_DIR:-}" && -d "${REMOTE_DIR}" ]]; then
+      owner="$(stat -c '%U' "${REMOTE_DIR}" 2>/dev/null || true)"
+    fi
+  fi
+  if [[ -z "$owner" || "$owner" == "root" ]]; then
+    if [[ -d "${NOTIFY_STATE_DIR}" ]]; then
+      owner="$(stat -c '%U' "${NOTIFY_STATE_DIR}" 2>/dev/null || true)"
+    fi
+  fi
+  if [[ -z "$owner" || "$owner" == "root" ]]; then
+    owner="pi"
+  fi
+  printf '%s' "$owner"
+}
+
 notify_ensure_dir() {
   local owner
-  owner="${NOTIFY_OWNER:-${PI_USER:-pi}}"
+  owner="$(notify_owner)"
   if [[ "$(id -u)" -eq 0 ]]; then
     install -d -m 0775 -o "$owner" -g "$owner" "$NOTIFY_STATE_DIR" 2>/dev/null \
       || mkdir -p "$NOTIFY_STATE_DIR"
@@ -98,7 +116,8 @@ notify_ensure_dir() {
 # root (recover-ro/hotplug) yazdigi state dosyasi batu health'i kilitlemesin
 notify_own() {
   [[ "$(id -u)" -eq 0 ]] || return 0
-  local owner="${NOTIFY_OWNER:-${PI_USER:-pi}}"
+  local owner
+  owner="$(notify_owner)"
   chown -h "$owner:$owner" "$@" 2>/dev/null || true
 }
 # notify_write <dosya> <icerik> — symlink takip etmeden atomik yaz
@@ -230,16 +249,20 @@ notify_global_allow() {
 }
 
 notify_global_commit() {
-  local now logf
+  local now logf kept updated
   notify_ensure_dir
   logf="${NOTIFY_STATE_DIR}/global-sent.log"
   now="$(date +%s)"
-  echo "$now" >> "$logf"
+  kept=""
   if [[ -f "$logf" ]]; then
-    awk -v c="$((now - 3600))" '$1+0 >= c' "$logf" > "${logf}.tmp" 2>/dev/null \
-      && mv "${logf}.tmp" "$logf" || true
+    kept="$(awk -v c="$((now - 3600))" '$1+0 >= c' "$logf" 2>/dev/null || true)"
   fi
-  notify_own "$logf"
+  if [[ -n "$kept" ]]; then
+    updated="${kept}"$'\n'"${now}"
+  else
+    updated="${now}"
+  fi
+  notify_write "$logf" "$updated" || true
 }
 
 notify_rate_ok() {

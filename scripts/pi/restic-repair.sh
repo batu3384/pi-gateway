@@ -24,11 +24,32 @@ RESTIC_TIMEOUT_SEC="${RESTIC_TIMEOUT_SEC:-7200}"
 [[ -d "$RESTIC_REPOSITORY" ]] || { log "repo yok — atlandi"; exit 0; }
 
 run_restic() {
-  timeout "$RESTIC_TIMEOUT_SEC" docker run --rm --network none \
+  local cname="pi-gateway-restic-repair-$$-${RANDOM}"
+  local rc=0
+  timeout "$RESTIC_TIMEOUT_SEC" docker run --rm --name "$cname" --network none \
     -e RESTIC_PASSWORD \
     -e RESTIC_REPOSITORY=local:/repo \
     -v "${RESTIC_REPOSITORY}:/repo" \
-    "$RESTIC_IMAGE" "$@"
+    "$RESTIC_IMAGE" "$@" || rc=$?
+  if [[ "$rc" -eq 124 || "$rc" -eq 137 ]]; then
+    docker rm -f "$cname" >/dev/null 2>&1 || true
+  fi
+  return "$rc"
+}
+
+fix_repo_ownership() {
+  local owner="${PI_USER:-}"
+  if [[ -z "$owner" || "$owner" == "root" ]]; then
+    owner="$(stat -c '%U' "$REMOTE_DIR" 2>/dev/null || echo "${USER:-root}")"
+  fi
+  [[ -n "$owner" && "$owner" != "root" ]] || return 0
+  if [[ "$(id -u)" -eq 0 ]]; then
+    timeout 120 chown -R "${owner}:${owner}" "$RESTIC_REPOSITORY" 2>/dev/null \
+      || log "WARN: chown atlandi — backup-pull rsync root dosyalarinda takilabilir"
+  else
+    timeout 120 sudo -n chown -R "${owner}:${owner}" "$RESTIC_REPOSITORY" 2>/dev/null \
+      || log "WARN: chown atlandi — backup-pull rsync root dosyalarinda takilabilir"
+  fi
 }
 
 export RESTIC_PASSWORD
@@ -40,7 +61,7 @@ log "repair snapshots"
 run_restic repair snapshots 2>/dev/null || true
 log "repair packs (yavas olabilir)"
 run_restic repair packs 2>/dev/null || log "WARN: repair packs — corrupt pack kalabilir"
-if run_restic snapshots --last >/dev/null 2>&1; then
+if run_restic snapshots --latest 1 >/dev/null 2>&1; then
   log "snapshots OK"
 else
   log "HATA: repo hala okunamiyor — restic-backup veya RESTIC_ALLOW_REINIT gerekli"
@@ -52,6 +73,5 @@ else
   log "HATA: restic check basarisiz — corrupt repo; yedek klasorunu .corrupt.* tasiyip RESTIC_ALLOW_REINIT=true ile yeniden init"
   exit 1
 fi
-timeout 120 sudo chown -R "${USER}:${USER}" "$RESTIC_REPOSITORY" 2>/dev/null \
-  || log "WARN: chown atlandi — backup-pull rsync root dosyalarinda takilabilir"
+fix_repo_ownership
 log "Tamamlandi"

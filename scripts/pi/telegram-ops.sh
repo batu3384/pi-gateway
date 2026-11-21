@@ -106,7 +106,7 @@ PY
 _cmd_backup() {
   export RESTIC_OFFSITE_ENABLED RESTIC_REPOSITORY RESTIC_PASSWORD RESTIC_IMAGE
   python3 - <<'PY'
-import html, os, subprocess, tempfile, time
+import html, json, os, subprocess, tempfile, time
 from pathlib import Path
 
 def age_days(path: str) -> int:
@@ -131,21 +131,34 @@ image = os.environ.get(
 )
 if pwd and Path(repo).is_dir():
     env_fd, env_path = tempfile.mkstemp(prefix="restic-env-", text=True)
+    cname = f"pi-gateway-restic-ops-{os.getpid()}"
     try:
         with os.fdopen(env_fd, "w", encoding="utf-8") as fh:
             fh.write(f"RESTIC_PASSWORD={pwd}\n")
-        out = subprocess.check_output(
+        raw = subprocess.check_output(
             [
-                "docker", "run", "--rm", "--network", "none",
+                "docker", "run", "--rm", "--name", cname, "--network", "none",
                 "--env-file", env_path,
                 "-e", "RESTIC_REPOSITORY=local:/repo",
                 "-v", f"{repo}:/repo:ro",
-                image, "snapshots", "--last",
+                image, "--no-lock", "snapshots", "--group-by", "", "--latest", "1", "--json",
             ],
             text=True, timeout=30, stderr=subprocess.DEVNULL,
-        ).strip().splitlines()
-        if out:
-            lines.append(html.escape(out[-1][:180]))
+        ).strip()
+        snaps = json.loads(raw) if raw else []
+        if isinstance(snaps, list) and snaps:
+            latest = max(snaps, key=lambda s: str(s.get("time") or ""))
+            sid = str(latest.get("short_id") or latest.get("id") or "?")[:8]
+            ts = str(latest.get("time") or "")[:19].replace("T", " ")
+            npaths = len(latest.get("paths") or [])
+            lines.append(
+                f"Son snapshot: <code>{html.escape(sid)}</code> · {html.escape(ts)} ({npaths} yol)"
+            )
+    except subprocess.TimeoutExpired:
+        subprocess.run(
+            ["docker", "rm", "-f", cname],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
+        )
     except (subprocess.SubprocessError, OSError, ValueError):
         pass
     finally:

@@ -32,7 +32,7 @@ RATELIMIT="${ADGUARD_RATELIMIT:-0}"
 # AGH default subnet /24 = tum LAN tek kova (donma). /32 = cihaz basi.
 RATE_V4="${ADGUARD_RATELIMIT_SUBNET_IPV4:-32}"
 RATE_V6="${ADGUARD_RATELIMIT_SUBNET_IPV6:-128}"
-CACHE_SIZE="${ADGUARD_CACHE_SIZE:-33554432}"
+CACHE_SIZE="${ADGUARD_CACHE_SIZE:-16777216}"
 # 0 = upstream TTL (Unbound zaten cache). 300 eski "min 5dk" yanlis IP'yi kilitler.
 CACHE_TTL_MIN="${ADGUARD_CACHE_TTL_MIN:-60}"
 # IPv6 Happy Eyeballs: yavaş AAAA (WAN) video açılışını bekletir. true = yalnız A.
